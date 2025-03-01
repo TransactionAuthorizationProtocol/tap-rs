@@ -1,0 +1,43 @@
+{
+  "tasks": {
+    "dev": "deno run --allow-read --allow-net --allow-env src/examples/server.ts",
+    "build": "deno run --allow-read --allow-write --allow-env --allow-run scripts/build.ts",
+    "test": "deno test --allow-read --allow-net --allow-env",
+    "wasm": "deno run --allow-read --allow-write --allow-env --allow-run scripts/build_wasm.ts",
+    "browser:test": "deno test --config deno.playwright.json",
+    "test:browser": "deno test --config=deno.playwright.json --allow-all",
+    "check": "deno check src/**/*.ts"
+  },
+  "importMap": {
+    "imports": {
+      "@std/": "https://deno.land/std@0.220.0/",
+      "did-resolver": "npm:did-resolver@4.1.0",
+      "did-jwt": "npm:did-jwt@8.0.0",
+      "did-method-key": "npm:@interop/did-method-key@0.2.2",
+      "did-method-web": "npm:@interop/did-method-web@0.1.0",
+      "did-method-pkh": "npm:@interop/did-method-pkh@0.1.0",
+      "did-jwt-vc": "npm:did-jwt-vc@3.2.15",
+      "jose": "npm:jose@5.2.2",
+      "uint8arrays": "npm:uint8arrays@4.0.10"
+    }
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "esnext"],
+    "allowJs": true,
+    "strict": true,
+    "strictNullChecks": true
+  },
+  "lint": {
+    "include": ["src/"],
+    "exclude": ["src/wasm/bindgen/"]
+  },
+  "fmt": {
+    "include": ["src/", "scripts/"],
+    "exclude": ["src/wasm/bindgen/"],
+    "indentWidth": 2,
+    "lineWidth": 100,
+    "semiColons": true,
+    "singleQuote": false,
+    "proseWrap": "preserve"
+  }
+}

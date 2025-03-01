@@ -1,0 +1,13 @@
+{
+  "tasks": {
+    "test": "deno test --allow-read --allow-write --allow-env --allow-run --allow-net tests/browser/"
+  },
+  "imports": {
+    "@std/": "https://deno.land/std@0.220.0/",
+    "@playwright/test": "npm:@playwright/test@1.41.2"
+  },
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom", "esnext"],
+    "strict": true
+  }
+}
