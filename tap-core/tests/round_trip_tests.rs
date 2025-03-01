@@ -3,7 +3,7 @@ use tap_core::didcomm::{pack_tap_message, unpack_didcomm_message};
 use tap_core::error::Result;
 use tap_core::message::{TapMessage, TapMessageType, TransactionProposalBody};
 use std::str::FromStr;
-use caip::{ChainId, AccountId, AssetId};
+use tap_caip::{ChainId, AccountId, AssetId};
 
 /// Test the round-trip conversion between TAP messages and DIDComm messages.
 ///

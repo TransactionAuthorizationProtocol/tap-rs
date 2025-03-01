@@ -1,5 +1,5 @@
 [package]
-name = "caip"
+name = "tap-caip"
 version = "0.1.0"
 edition = "2021"
 description = "Chain Agnostic Identifier Standard Implementation"

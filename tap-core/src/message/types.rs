@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fmt;
 use uuid;
 
-use caip::{ChainId, AccountId, AssetId};
+use tap_caip::{ChainId, AccountId, AssetId};
 
 /// Represents the type of TAP message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -3,7 +3,7 @@ use tap_core::didcomm::pack_tap_message;
 use tap_core::error::Result;
 use tap_core::message::types::{TapMessage, TapMessageType, TransactionProposalBody};
 use std::str::FromStr;
-use caip::{ChainId, AccountId, AssetId};
+use tap_caip::{ChainId, AccountId, AssetId};
 
 #[tokio::test]
 async fn test_pack_tap_message() -> Result<()> {

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 use tap_core::message::types::TransactionProposalBody;
-use caip::{ChainId, AccountId, AssetId};
+use tap_caip::{ChainId, AccountId, AssetId};
 
 #[test]
 fn test_valid_transaction_proposal() {

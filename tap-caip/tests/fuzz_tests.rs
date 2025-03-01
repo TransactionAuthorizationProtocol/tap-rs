@@ -1,4 +1,4 @@
-use caip::{AccountId, AssetId, ChainId};
+use tap_caip::{AccountId, AssetId, ChainId};
 use proptest::prelude::*;
 use std::str::FromStr;
 
@@ -127,13 +127,13 @@ proptest! {
         account_id in account_id_strategy(),
         asset_id in asset_id_strategy()
     ) {
-        let parsed_chain = caip::parse(&chain_id);
+        let parsed_chain = tap_caip::parse(&chain_id);
         prop_assert!(parsed_chain.is_ok());
         
-        let parsed_account = caip::parse(&account_id);
+        let parsed_account = tap_caip::parse(&account_id);
         prop_assert!(parsed_account.is_ok());
         
-        let parsed_asset = caip::parse(&asset_id);
+        let parsed_asset = tap_caip::parse(&asset_id);
         prop_assert!(parsed_asset.is_ok());
     }
 
@@ -144,7 +144,7 @@ proptest! {
         let _ = ChainId::from_str(&s);
         let _ = AccountId::from_str(&s);
         let _ = AssetId::from_str(&s);
-        let _ = caip::parse(&s);
+        let _ = tap_caip::parse(&s);
     }
 }
 

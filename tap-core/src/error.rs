@@ -24,7 +24,7 @@ pub enum Error {
     
     /// Error related to CAIP validation.
     #[error("CAIP error: {0}")]
-    CaipError(#[from] caip::error::Error),
+    CaipError(#[from] tap_caip::error::Error),
 }
 
 /// Custom Result type for TAP Core operations.

@@ -2,7 +2,7 @@ extern crate tap_core;
 
 use tap_core::message::types::{TapMessage, TapMessageType, TransactionProposalBody};
 use std::str::FromStr;
-use caip::{ChainId, AccountId, AssetId};
+use tap_caip::{ChainId, AccountId, AssetId};
 
 #[test]
 fn test_create_message() {

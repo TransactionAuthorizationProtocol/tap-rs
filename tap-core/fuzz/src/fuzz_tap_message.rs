@@ -5,7 +5,7 @@ use libfuzzer_sys::fuzz_target;
 use tap_core::message::{TapMessage, TapMessageType, Validate};
 use std::collections::HashMap;
 use std::str::FromStr;
-use caip::{ChainId, AccountId, AssetId};
+use tap_caip::{ChainId, AccountId, AssetId};
 
 // Define a custom structure for arbitrary generation
 #[derive(Arbitrary, Debug)]
