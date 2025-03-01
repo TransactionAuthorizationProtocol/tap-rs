@@ -8,6 +8,8 @@ use std::collections::HashMap;
 use std::fmt;
 use uuid;
 
+use caip::{ChainId, AccountId, AssetId};
+
 /// Represents the type of TAP message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -115,16 +117,16 @@ pub struct TransactionProposalBody {
     pub transaction_id: String,
 
     /// Network identifier (CAIP-2 format).
-    pub network: String,
+    pub network: ChainId,
 
     /// Sender account address (CAIP-10 format).
-    pub sender: String,
+    pub sender: AccountId,
 
     /// Recipient account address (CAIP-10 format).
-    pub recipient: String,
+    pub recipient: AccountId,
 
     /// Asset identifier (CAIP-19 format).
-    pub asset: String,
+    pub asset: AssetId,
 
     /// Amount of the asset (as a string to preserve precision).
     pub amount: String,
@@ -140,6 +142,47 @@ pub struct TransactionProposalBody {
     /// Additional metadata for the transaction.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl TransactionProposalBody {
+    /// Validates that the transaction proposal contains consistent CAIP identifiers
+    /// 
+    /// Specifically, checks that:
+    /// - The sender and recipient AccountId reference the same network as the network field
+    /// - The asset AssetId references the same network as the network field
+    ///
+    /// # Returns
+    /// 
+    /// Ok(()) if the validation passes, otherwise an Error
+    pub fn validate_caip_consistency(&self) -> crate::error::Result<()> {
+        // Check that sender and recipient are on the same network as specified
+        if self.sender.chain_id().namespace() != self.network.namespace() || 
+           self.sender.chain_id().reference() != self.network.reference() {
+            return Err(crate::error::Error::Validation(format!(
+                "Sender chain ID ({}) does not match network ({})",
+                self.sender.chain_id(), self.network
+            )));
+        }
+
+        if self.recipient.chain_id().namespace() != self.network.namespace() || 
+           self.recipient.chain_id().reference() != self.network.reference() {
+            return Err(crate::error::Error::Validation(format!(
+                "Recipient chain ID ({}) does not match network ({})",
+                self.recipient.chain_id(), self.network
+            )));
+        }
+
+        // Check that asset is on the same network as specified
+        if self.asset.chain_id().namespace() != self.network.namespace() || 
+           self.asset.chain_id().reference() != self.network.reference() {
+            return Err(crate::error::Error::Validation(format!(
+                "Asset chain ID ({}) does not match network ({})",
+                self.asset.chain_id(), self.network
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 /// Identity exchange message body.
@@ -397,5 +440,3 @@ impl TapMessageBuilder {
         })
     }
 }
-
-// The fmt::Display implementation for TapMessageType is already defined at the top of the file

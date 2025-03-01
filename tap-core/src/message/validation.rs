@@ -88,28 +88,18 @@ fn validate_transaction_proposal_body(body: &TransactionProposalBody) -> Result<
         return Err(Error::Validation("Transaction ID is required".to_string()));
     }
 
-    if body.network.is_empty() {
-        return Err(Error::Validation("Network is required".to_string()));
-    }
-
-    if body.sender.is_empty() {
-        return Err(Error::Validation("Sender is required".to_string()));
-    }
-
-    if body.recipient.is_empty() {
-        return Err(Error::Validation("Recipient is required".to_string()));
-    }
-
-    if body.asset.is_empty() {
-        return Err(Error::Validation("Asset is required".to_string()));
+    // CAIP types are already validated during deserialization
+    // and cannot be empty, so we don't need to check them here.
+    // Instead, validate that they're consistent with each other
+    if let Err(e) = body.validate_caip_consistency() {
+        return Err(e);
     }
 
     if body.amount.is_empty() {
         return Err(Error::Validation("Amount is required".to_string()));
     }
 
-    // TODO: Add validation for CAIP formats
-
+    // All validations passed
     Ok(())
 }
 
