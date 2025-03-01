@@ -1,0 +1,16 @@
+[workspace]
+members = [
+    "tap-core",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Notabene"]
+description = "Rust implementation of the Transaction Authorization Protocol (TAP)"
+repository = "https://github.com/notabene-id/tap-rs"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+# DIDComm v2 library

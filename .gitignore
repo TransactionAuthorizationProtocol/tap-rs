@@ -1,0 +1,43 @@
+# Rust build artifacts
+/target/
+**/target/
+Cargo.lock
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Generated documentation
+/doc/
+**/doc/
+
+# Debug and test artifacts
+**/*.rs.bk
+*.profraw
+**/*.profraw
+
+# WASM build output
+/pkg/
+**/pkg/
+**/dist/
+**/node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# Fuzzing artifacts
+**/fuzz/artifacts/
+**/fuzz/corpus/
+**/fuzz/target/
+
+# Benchmark results
+**/benches/results/
+
+# OS specific files
+.DS_Store
+Thumbs.db
+.windsurfrules
