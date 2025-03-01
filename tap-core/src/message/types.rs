@@ -98,6 +98,14 @@ pub struct TapMessage {
     /// Additional metadata for the message.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
+
+    /// From DID (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_did: Option<String>,
+
+    /// To DID (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub to_did: Option<String>,
 }
 
 /// Transaction proposal message body.
@@ -228,6 +236,8 @@ impl TapMessage {
             body: None,
             attachments: None,
             metadata: HashMap::new(),
+            from_did: None,
+            to_did: None,
         }
     }
 
@@ -264,6 +274,127 @@ impl TapMessage {
             Some(body) => serde_json::from_value(body.clone())
                 .map_err(|e| crate::error::Error::SerializationError(e.to_string())),
         }
+    }
+}
+
+/// Builder for TAP messages.
+#[derive(Debug, Clone, Default)]
+pub struct TapMessageBuilder {
+    id: Option<String>,
+    message_type: Option<TapMessageType>,
+    body: Option<serde_json::Value>,
+    from: Option<String>,
+    to: Option<String>,
+    attachments: Option<Vec<Attachment>>,
+    expires_time: Option<String>,
+    metadata: HashMap<String, serde_json::Value>,
+}
+
+impl TapMessageBuilder {
+    /// Create a new message builder.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the ID of the message.
+    pub fn id<S: Into<String>>(mut self, id: S) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Set the message type.
+    pub fn message_type(mut self, message_type: TapMessageType) -> Self {
+        self.message_type = Some(message_type);
+        self
+    }
+
+    /// Set the type field (legacy method).
+    #[deprecated(since = "0.2.0", note = "Use message_type instead")]
+    pub fn type_field(mut self, message_type: TapMessageType) -> Self {
+        self.message_type = Some(message_type);
+        self
+    }
+
+    /// Set the body of the message.
+    pub fn body<T: Serialize>(mut self, body: T) -> Self {
+        self.body = serde_json::to_value(body).ok();
+        self
+    }
+
+    /// Set the from DID.
+    pub fn from_did<S: Into<String>>(mut self, from: Option<S>) -> Self {
+        self.from = from.map(|s| s.into());
+        self
+    }
+
+    /// Set the from field (legacy method).
+    #[deprecated(since = "0.2.0", note = "Use from_did instead")]
+    pub fn from<S: Into<String>>(mut self, from: S) -> Self {
+        self.from = Some(from.into());
+        self
+    }
+
+    /// Set the to DID.
+    pub fn to_did<S: Into<String>>(mut self, to: Option<S>) -> Self {
+        self.to = to.map(|s| s.into());
+        self
+    }
+
+    /// Set the to field (legacy method).
+    #[deprecated(since = "0.2.0", note = "Use to_did instead")]
+    pub fn to<S: Into<String>>(mut self, to: S) -> Self {
+        self.to = Some(to.into());
+        self
+    }
+
+    /// Set the attachments.
+    pub fn attachments(mut self, attachments: Vec<Attachment>) -> Self {
+        self.attachments = Some(attachments);
+        self
+    }
+
+    /// Set the expiration time.
+    pub fn expires_time<S: Into<String>>(mut self, expires_time: S) -> Self {
+        self.expires_time = Some(expires_time.into());
+        self
+    }
+
+    /// Add metadata.
+    pub fn metadata<K: Into<String>, V: Serialize>(mut self, key: K, value: V) -> Self {
+        if let Ok(value) = serde_json::to_value(value) {
+            self.metadata.insert(key.into(), value);
+        }
+        self
+    }
+
+    /// Build the message.
+    pub fn build(self) -> crate::error::Result<TapMessage> {
+        if self.id.is_none() {
+            return Err(crate::error::Error::Validation(
+                "Message ID is required".to_string(),
+            ));
+        }
+
+        if self.message_type.is_none() {
+            return Err(crate::error::Error::Validation(
+                "Message type is required".to_string(),
+            ));
+        }
+
+        let now = chrono::Utc::now();
+
+        Ok(TapMessage {
+            id: self.id.unwrap(),
+            message_type: self.message_type.unwrap(),
+            version: "1.0".to_string(),
+            created_time: now.to_rfc3339(),
+            expires_time: self.expires_time,
+            body: self.body,
+            attachments: self.attachments,
+            metadata: self.metadata,
+            from_did: self.from,
+            to_did: self.to,
+        })
     }
 }
 
