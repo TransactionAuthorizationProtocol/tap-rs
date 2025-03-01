@@ -12,7 +12,6 @@ use crate::crypto::{DefaultMessagePacker, MessagePacker};
 use crate::did::{DidResolver, KeyResolver, MultiResolver, PkhResolver, WebResolver};
 use crate::error::{Error, Result};
 use crate::policy::{DefaultPolicyHandler, PolicyHandler};
-use crate::storage::{InMemoryMessageStore, MessageQuery, MessageStore};
 
 /// The primary trait for a TAP Agent
 #[async_trait]
@@ -28,15 +27,6 @@ pub trait Agent: Send + Sync {
 
     /// Receives a packed TAP message
     async fn receive_message(&self, packed_message: &str) -> Result<TapMessage>;
-
-    /// Queries for messages in the message store
-    async fn query_messages(&self, query: MessageQuery) -> Result<Vec<TapMessage>>;
-
-    /// Stores an outgoing message in the message store
-    async fn store_outgoing_message(&self, message: &TapMessage) -> Result<()>;
-
-    /// Gets a message by its ID
-    async fn get_message(&self, message_id: &str) -> Result<Option<TapMessage>>;
 
     /// Creates a new TAP message with this agent as the sender
     async fn create_message(
@@ -54,8 +44,6 @@ pub struct TapAgent {
     did: String,
     /// Agent's name
     name: Option<String>,
-    /// Message store for storing messages
-    message_store: Arc<dyn MessageStore>,
     /// DID resolver for resolving DIDs
     #[allow(dead_code)]
     resolver: Arc<dyn DidResolver>,
@@ -72,7 +60,6 @@ impl TapAgent {
         config: AgentConfig,
         did: String,
         name: Option<String>,
-        message_store: Arc<dyn MessageStore>,
         resolver: Arc<dyn DidResolver>,
         message_packer: Arc<dyn MessagePacker>,
         policy_handler: Arc<dyn PolicyHandler>,
@@ -81,7 +68,6 @@ impl TapAgent {
             config,
             did,
             name,
-            message_store,
             resolver,
             message_packer,
             policy_handler,
@@ -119,9 +105,6 @@ impl TapAgent {
 
     /// Creates a new TapAgent with default components
     pub fn with_defaults(config: AgentConfig, did: String, name: Option<String>) -> Result<Self> {
-        // Create a default message store
-        let message_store = Arc::new(InMemoryMessageStore::new());
-
         // Create a multi-resolver with default resolvers
         let key_resolver = KeyResolver;
         let web_resolver = WebResolver;
@@ -144,7 +127,6 @@ impl TapAgent {
             config,
             did,
             name,
-            message_store,
             resolver,
             message_packer,
             policy_handler,
@@ -172,9 +154,6 @@ impl Agent for TapAgent {
         // Pack the message for the recipient
         let packed = self.message_packer.pack_message(message, recipient).await?;
 
-        // Store the message in our store
-        self.message_store.store_message(message).await?;
-
         Ok(packed)
     }
 
@@ -189,10 +168,6 @@ impl Agent for TapAgent {
                 // In a real implementation, we would validate the sender's DID
                 // For now, just check if the message can be unpacked
                 let _unpacked = self.message_packer.unpack_message(packed_message).await?;
-
-                // Store the message if unpacking was successful
-                self.message_store.store_message(&message).await?;
-
                 Ok(message)
             } else {
                 Err(Error::Validation(
@@ -201,24 +176,8 @@ impl Agent for TapAgent {
             }
         } else {
             // No from field, assume it's a valid message for now
-            self.message_store.store_message(&message).await?;
             Ok(message)
         }
-    }
-
-    /// Queries for messages in the message store
-    async fn query_messages(&self, query: MessageQuery) -> Result<Vec<TapMessage>> {
-        self.message_store.query_messages(query).await
-    }
-
-    /// Stores an outgoing message in the message store
-    async fn store_outgoing_message(&self, message: &TapMessage) -> Result<()> {
-        self.message_store.store_message(message).await
-    }
-
-    /// Gets a message by its ID
-    async fn get_message(&self, message_id: &str) -> Result<Option<TapMessage>> {
-        self.message_store.get_message(message_id).await
     }
 
     /// Creates a new TAP message with this agent as the sender

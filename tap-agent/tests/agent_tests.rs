@@ -61,13 +61,4 @@ async fn test_message_creation() {
     assert!(message.body.is_some());
     assert!(!message.id.is_empty());
     assert!(!message.created_time.is_empty());
-
-    // Store and retrieve the message
-    agent.store_outgoing_message(&message).await.unwrap();
-    let retrieved = agent.get_message(&message.id).await.unwrap();
-
-    assert!(retrieved.is_some());
-    let retrieved = retrieved.unwrap();
-    assert_eq!(retrieved.id, message.id);
-    assert_eq!(retrieved.message_type, message.message_type);
 }

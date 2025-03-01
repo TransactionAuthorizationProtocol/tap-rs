@@ -26,10 +26,6 @@ pub enum Error {
     #[error("Validation error: {0}")]
     Validation(String),
 
-    /// Error related to message storage
-    #[error("Storage error: {0}")]
-    Storage(String),
-
     /// Error related to message processing
     #[error("Processing error: {0}")]
     Processing(String),

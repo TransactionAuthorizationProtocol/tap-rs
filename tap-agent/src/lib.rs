@@ -9,7 +9,6 @@ mod crypto;
 mod did;
 mod error;
 mod policy;
-mod storage;
 
 pub use agent::{Agent, TapAgent};
 pub use config::AgentConfig;
@@ -17,7 +16,6 @@ pub use crypto::MessagePacker;
 pub use did::{DidDoc, DidResolver};
 pub use error::{Error, Result};
 pub use policy::{PolicyHandler, PolicyResult};
-pub use storage::{MessageQuery, MessageStore};
 
 /// Version of the TAP Agent
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
