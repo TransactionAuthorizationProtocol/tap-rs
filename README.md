@@ -6,8 +6,8 @@ This repository contains a Rust implementation of the Transaction Authorization 
 
 TAP-RS is organized as a Rust workspace with multiple crates:
 
-- **tap-core**: Core message processing for TAP
-- **tap-agent**: TAP agent functionality and identity management
+- **[tap-core](./tap-core/README.md)**: Core message processing for TAP
+- **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **caip**: Implementation of Chain Agnostic Identifier Standards
 - **tap-node**: TAP node orchestration and message routing
 - **tap-server**: HTTP DIDComm server implementation
@@ -45,6 +45,45 @@ cargo test
 - Implementation of Chain Agnostic Standards (CAIP-2, CAIP-10, CAIP-19)
 - Multiple DID method support (did:key, did:web, did:pkh)
 - WASM compatibility for browser environments
+
+## Getting Started with tap-core
+
+```rust
+use tap_core::message::{TapMessage, TapMessageType};
+use serde_json::json;
+
+// Create a message using builder pattern
+let message = TapMessage::new()
+    .with_message_type(TapMessageType::TransactionProposal)
+    .with_body(json!({
+        "transaction": {
+            "amount": "100.00",
+            "currency": "USD"
+        }
+    }))
+    .build();
+```
+
+See the [tap-core README](./tap-core/README.md) for more detailed examples.
+
+## Getting Started with tap-agent
+
+```rust
+use tap_agent::{Agent, AgentConfig, TapAgent};
+
+// Configure and create an agent
+let config = AgentConfig::new()
+    .with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK")
+    .with_name("My TAP Agent");
+
+let agent = TapAgent::with_defaults(
+    config,
+    "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+    Some("My TAP Agent".to_string()),
+).unwrap();
+```
+
+See the [tap-agent README](./tap-agent/README.md) for more detailed examples.
 
 ## License
 

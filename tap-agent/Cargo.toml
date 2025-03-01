@@ -5,7 +5,8 @@ edition = "2021"
 authors = ["Notabene"]
 description = "Agent implementation for the Transaction Authorization Protocol (TAP)"
 repository = "https://github.com/notabene-id/tap-rs"
-license = "MIT OR Apache-2.0"
+license = "MIT"
+readme = "README.md"
 
 [dependencies]
 tap-core = { path = "../tap-core" }
@@ -19,7 +20,6 @@ chrono = "0.4"
 didcomm = "0.4.1"
 anyhow = "1.0.75"
 tracing = "0.1.37"
-futures = "0.3.28"
 
 [dev-dependencies]
 tokio-test = "0.4.3"
