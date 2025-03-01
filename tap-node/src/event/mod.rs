@@ -4,9 +4,9 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
+use tap_core::message::TapMessage;
 use tokio::sync::broadcast::{self, Receiver, Sender};
 use tokio::sync::RwLock;
-use tap_core::message::TapMessage;
 
 /// Event types that can be emitted by the TAP Node
 #[derive(Debug, Clone)]
@@ -79,7 +79,7 @@ impl EventBus {
     pub fn new() -> Self {
         // Create a channel with capacity for 100 events
         let (sender, _) = broadcast::channel(100);
-        
+
         Self {
             sender,
             subscribers: RwLock::new(Vec::new()),
@@ -137,7 +137,7 @@ impl EventBus {
     async fn publish_event(&self, event: NodeEvent) {
         // Send to channel
         let _ = self.sender.send(event.clone());
-        
+
         // Notify subscribers
         for subscriber in self.subscribers.read().await.iter() {
             subscriber.handle_event(event.clone()).await;

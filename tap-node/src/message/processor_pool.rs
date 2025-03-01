@@ -43,23 +43,20 @@ pub struct ProcessorPool<T: MessageProcessor> {
 
 impl<T: MessageProcessor + 'static> ProcessorPool<T> {
     /// Create a new processor pool
-    pub fn new(
-        processor: Arc<T>,
-        config: ProcessorPoolConfig,
-    ) -> Self {
+    pub fn new(processor: Arc<T>, config: ProcessorPoolConfig) -> Self {
         let (sender, receiver) = mpsc::channel::<TapMessage>(config.queue_size);
         let semaphore = Arc::new(Semaphore::new(config.max_concurrent_tasks));
-        
+
         // Create a mutex-wrapped receiver that can be shared among workers
         let shared_receiver = Arc::new(tokio::sync::Mutex::new(receiver));
-        
+
         // Spawn worker tasks
         let mut task_handles = Vec::with_capacity(config.max_concurrent_tasks);
         for i in 0..config.max_concurrent_tasks {
             let worker_processor = processor.clone();
             let worker_receiver = shared_receiver.clone();
             let worker_semaphore = semaphore.clone();
-            
+
             // Spawn a new worker task
             let handle = tokio::spawn(Self::worker_task(
                 i,
@@ -67,10 +64,10 @@ impl<T: MessageProcessor + 'static> ProcessorPool<T> {
                 worker_receiver,
                 worker_semaphore,
             ));
-            
+
             task_handles.push(handle);
         }
-        
+
         Self {
             _processor: processor,
             sender,
@@ -97,7 +94,7 @@ impl<T: MessageProcessor + 'static> ProcessorPool<T> {
         loop {
             // Acquire a permit from the semaphore
             let _permit = semaphore.acquire().await.unwrap();
-            
+
             // Get the next message
             let message = {
                 let mut receiver_guard = receiver.lock().await;

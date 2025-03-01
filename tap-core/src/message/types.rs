@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::fmt;
 use uuid;
 
-use tap_caip::{ChainId, AccountId, AssetId};
+use tap_caip::{AccountId, AssetId, ChainId};
 
 /// Represents the type of TAP message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -146,38 +146,44 @@ pub struct TransactionProposalBody {
 
 impl TransactionProposalBody {
     /// Validates that the transaction proposal contains consistent CAIP identifiers
-    /// 
+    ///
     /// Specifically, checks that:
     /// - The sender and recipient AccountId reference the same network as the network field
     /// - The asset AssetId references the same network as the network field
     ///
     /// # Returns
-    /// 
+    ///
     /// Ok(()) if the validation passes, otherwise an Error
     pub fn validate_caip_consistency(&self) -> crate::error::Result<()> {
         // Check that sender and recipient are on the same network as specified
-        if self.sender.chain_id().namespace() != self.network.namespace() || 
-           self.sender.chain_id().reference() != self.network.reference() {
+        if self.sender.chain_id().namespace() != self.network.namespace()
+            || self.sender.chain_id().reference() != self.network.reference()
+        {
             return Err(crate::error::Error::Validation(format!(
                 "Sender chain ID ({}) does not match network ({})",
-                self.sender.chain_id(), self.network
+                self.sender.chain_id(),
+                self.network
             )));
         }
 
-        if self.recipient.chain_id().namespace() != self.network.namespace() || 
-           self.recipient.chain_id().reference() != self.network.reference() {
+        if self.recipient.chain_id().namespace() != self.network.namespace()
+            || self.recipient.chain_id().reference() != self.network.reference()
+        {
             return Err(crate::error::Error::Validation(format!(
                 "Recipient chain ID ({}) does not match network ({})",
-                self.recipient.chain_id(), self.network
+                self.recipient.chain_id(),
+                self.network
             )));
         }
 
         // Check that asset is on the same network as specified
-        if self.asset.chain_id().namespace() != self.network.namespace() || 
-           self.asset.chain_id().reference() != self.network.reference() {
+        if self.asset.chain_id().namespace() != self.network.namespace()
+            || self.asset.chain_id().reference() != self.network.reference()
+        {
             return Err(crate::error::Error::Validation(format!(
                 "Asset chain ID ({}) does not match network ({})",
-                self.asset.chain_id(), self.network
+                self.asset.chain_id(),
+                self.network
             )));
         }
 

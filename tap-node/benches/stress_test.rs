@@ -1,18 +1,22 @@
 //! Stress testing for TAP Node
-//! 
+//!
 //! Run with: cargo bench --bench stress_test
 
 use std::sync::Arc;
 use std::time::Instant;
 use tap_agent::{AgentConfig, TapAgent};
 use tap_core::message::{TapMessageBuilder, TapMessageType};
-use tap_node::{NodeConfig, TapNode};
 use tap_node::message::ProcessorPoolConfig;
+use tap_node::{NodeConfig, TapNode};
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
 /// Create a test message
-fn create_test_message(from_did: &str, to_did: &str, index: usize) -> tap_core::message::TapMessage {
+fn create_test_message(
+    from_did: &str,
+    to_did: &str,
+    index: usize,
+) -> tap_core::message::TapMessage {
     TapMessageBuilder::new()
         .id(format!("test-message-{}", index))
         .message_type(TapMessageType::Error)

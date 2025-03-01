@@ -1,8 +1,8 @@
 extern crate tap_core;
 
-use tap_core::message::types::{TapMessage, TapMessageType, TransactionProposalBody};
 use std::str::FromStr;
-use tap_caip::{ChainId, AccountId, AssetId};
+use tap_caip::{AccountId, AssetId, ChainId};
+use tap_core::message::types::{TapMessage, TapMessageType, TransactionProposalBody};
 
 #[test]
 fn test_create_message() {
@@ -11,8 +11,10 @@ fn test_create_message() {
         transaction_id: "tx123".to_string(),
         network: ChainId::from_str("eip155:1").unwrap(),
         sender: AccountId::from_str("eip155:1:0x1234567890abcdef1234567890abcdef12345678").unwrap(),
-        recipient: AccountId::from_str("eip155:1:0xabcdef1234567890abcdef1234567890abcdef12").unwrap(),
-        asset: AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+        recipient: AccountId::from_str("eip155:1:0xabcdef1234567890abcdef1234567890abcdef12")
+            .unwrap(),
+        asset: AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7")
+            .unwrap(),
         amount: "100.00".to_string(),
         memo: Some("Test transaction".to_string()),
         tx_reference: None,

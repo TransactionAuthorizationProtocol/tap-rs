@@ -1,6 +1,6 @@
-use tap_caip::{AccountId, AssetId, ChainId};
 use proptest::prelude::*;
 use std::str::FromStr;
+use tap_caip::{AccountId, AssetId, ChainId};
 
 // Strategy for generating valid namespace strings
 fn namespace_strategy() -> impl Strategy<Value = String> {
@@ -19,23 +19,24 @@ fn address_strategy() -> impl Strategy<Value = String> {
 
 // Strategy for generating valid chain IDs
 fn chain_id_strategy() -> impl Strategy<Value = String> {
-    (namespace_strategy(), reference_strategy()).prop_map(|(ns, ref_str)| {
-        format!("{}:{}", ns, ref_str)
-    })
+    (namespace_strategy(), reference_strategy())
+        .prop_map(|(ns, ref_str)| format!("{}:{}", ns, ref_str))
 }
 
 // Strategy for generating valid account IDs
 fn account_id_strategy() -> impl Strategy<Value = String> {
-    (chain_id_strategy(), address_strategy()).prop_map(|(chain_id, addr)| {
-        format!("{}:{}", chain_id, addr)
-    })
+    (chain_id_strategy(), address_strategy())
+        .prop_map(|(chain_id, addr)| format!("{}:{}", chain_id, addr))
 }
 
 // Strategy for generating valid asset IDs
 fn asset_id_strategy() -> impl Strategy<Value = String> {
-    (chain_id_strategy(), namespace_strategy(), reference_strategy()).prop_map(|(chain_id, ns, ref_str)| {
-        format!("{}/{}:{}", chain_id, ns, ref_str)
-    })
+    (
+        chain_id_strategy(),
+        namespace_strategy(),
+        reference_strategy(),
+    )
+        .prop_map(|(chain_id, ns, ref_str)| format!("{}/{}:{}", chain_id, ns, ref_str))
 }
 
 // Strategies for generating invalid strings
@@ -53,7 +54,7 @@ proptest! {
     fn test_valid_chain_id_parsing(chain_id in chain_id_strategy()) {
         let parsed = ChainId::from_str(&chain_id);
         prop_assert!(parsed.is_ok());
-        
+
         // If parsing succeeded, ensure the string representation matches
         if let Ok(parsed_id) = parsed {
             prop_assert_eq!(parsed_id.to_string(), chain_id);
@@ -65,7 +66,7 @@ proptest! {
     fn test_valid_account_id_parsing(account_id in account_id_strategy()) {
         let parsed = AccountId::from_str(&account_id);
         prop_assert!(parsed.is_ok());
-        
+
         // If parsing succeeded, ensure the string representation matches
         if let Ok(parsed_id) = parsed {
             prop_assert_eq!(parsed_id.to_string(), account_id);
@@ -77,7 +78,7 @@ proptest! {
     fn test_valid_asset_id_parsing(asset_id in asset_id_strategy()) {
         let parsed = AssetId::from_str(&asset_id);
         prop_assert!(parsed.is_ok());
-        
+
         // If parsing succeeded, ensure the string representation matches
         if let Ok(parsed_id) = parsed {
             prop_assert_eq!(parsed_id.to_string(), asset_id);
@@ -129,10 +130,10 @@ proptest! {
     ) {
         let parsed_chain = tap_caip::parse(&chain_id);
         prop_assert!(parsed_chain.is_ok());
-        
+
         let parsed_account = tap_caip::parse(&account_id);
         prop_assert!(parsed_account.is_ok());
-        
+
         let parsed_asset = tap_caip::parse(&asset_id);
         prop_assert!(parsed_asset.is_ok());
     }
@@ -185,6 +186,9 @@ fn test_edge_case_asset_ids() {
     let max_reference1 = "A".repeat(64);
     let max_namespace2 = "abcdefgh";
     let max_reference2 = "B".repeat(64);
-    let max_asset_id = format!("{}:{}/{}:{}", max_namespace1, max_reference1, max_namespace2, max_reference2);
+    let max_asset_id = format!(
+        "{}:{}/{}:{}",
+        max_namespace1, max_reference1, max_namespace2, max_reference2
+    );
     assert!(AssetId::from_str(&max_asset_id).is_ok());
 }

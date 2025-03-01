@@ -27,15 +27,25 @@ impl MessageProcessor for LoggingMessageProcessor {
     async fn process_incoming(&self, message: TapMessage) -> Result<Option<TapMessage>> {
         let msg_id = message.id.clone();
         let msg_type = message.message_type.to_string();
-        let from = message.from_did.clone().unwrap_or_else(|| "unknown".to_string());
-        let to = message.to_did.clone().unwrap_or_else(|| "unknown".to_string());
+        let from = message
+            .from_did
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        let to = message
+            .to_did
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
 
         if self.log_content {
-            info!("Incoming message: ID={}, Type={}, From={}, To={}, Content={:?}", 
-                  msg_id, msg_type, from, to, message);
+            info!(
+                "Incoming message: ID={}, Type={}, From={}, To={}, Content={:?}",
+                msg_id, msg_type, from, to, message
+            );
         } else {
-            info!("Incoming message: ID={}, Type={}, From={}, To={}", 
-                  msg_id, msg_type, from, to);
+            info!(
+                "Incoming message: ID={}, Type={}, From={}, To={}",
+                msg_id, msg_type, from, to
+            );
         }
 
         Ok(Some(message))
@@ -44,15 +54,25 @@ impl MessageProcessor for LoggingMessageProcessor {
     async fn process_outgoing(&self, message: TapMessage) -> Result<Option<TapMessage>> {
         let msg_id = message.id.clone();
         let msg_type = message.message_type.to_string();
-        let from = message.from_did.clone().unwrap_or_else(|| "unknown".to_string());
-        let to = message.to_did.clone().unwrap_or_else(|| "unknown".to_string());
+        let from = message
+            .from_did
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
+        let to = message
+            .to_did
+            .clone()
+            .unwrap_or_else(|| "unknown".to_string());
 
         if self.log_content {
-            info!("Outgoing message: ID={}, Type={}, From={}, To={}, Content={:?}", 
-                  msg_id, msg_type, from, to, message);
+            info!(
+                "Outgoing message: ID={}, Type={}, From={}, To={}, Content={:?}",
+                msg_id, msg_type, from, to, message
+            );
         } else {
-            info!("Outgoing message: ID={}, Type={}, From={}, To={}", 
-                  msg_id, msg_type, from, to);
+            info!(
+                "Outgoing message: ID={}, Type={}, From={}, To={}",
+                msg_id, msg_type, from, to
+            );
         }
 
         Ok(Some(message))

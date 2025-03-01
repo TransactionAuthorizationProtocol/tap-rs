@@ -1,7 +1,7 @@
 [workspace]
 members = [
     "tap-core",
-    "tap-agent", "tap-caip", "tap-node",
+    "tap-agent", "tap-caip", "tap-node", "tap-http",
 ]
 resolver = "2"
 

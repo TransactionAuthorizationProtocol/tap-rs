@@ -15,8 +15,8 @@ pub use error::{Error, Result};
 use agent::AgentRegistry;
 use event::EventBus;
 use message::{
-    CompositeMessageProcessor, DefaultMessageRouter, LoggingMessageProcessor,
-    MessageProcessor, MessageRouter, ProcessorPool, ProcessorPoolConfig, ValidationMessageProcessor,
+    CompositeMessageProcessor, DefaultMessageRouter, LoggingMessageProcessor, MessageProcessor,
+    MessageRouter, ProcessorPool, ProcessorPoolConfig, ValidationMessageProcessor,
 };
 use resolver::NodeResolver;
 
@@ -161,20 +161,22 @@ impl TapNode {
     pub async fn register_agent(&self, agent: Arc<dyn Agent>) -> Result<()> {
         let agent_did = agent.did().to_string();
         self.agents.register_agent(agent_did.clone(), agent).await?;
-        
+
         // Publish event about agent registration
         self.event_bus.publish_agent_registered(agent_did).await;
-        
+
         Ok(())
     }
 
     /// Unregister an agent from the node
     pub async fn unregister_agent(&self, did: &str) -> Result<()> {
         self.agents.unregister_agent(did).await?;
-        
+
         // Publish event about agent unregistration
-        self.event_bus.publish_agent_unregistered(did.to_string()).await;
-        
+        self.event_bus
+            .publish_agent_unregistered(did.to_string())
+            .await;
+
         Ok(())
     }
 
@@ -196,18 +198,19 @@ impl TapNode {
     /// Dispatch a message to an agent by DID
     pub async fn dispatch_message(&self, target_did: &str, message: TapMessage) -> Result<()> {
         let agent = self.agents.get_agent(target_did).await?;
-        
+
         // Convert the message to a packed format for transport
-        let packed_message = serde_json::to_string(&message)
-            .map_err(Error::Serialization)?;
-        
+        let packed_message = serde_json::to_string(&message).map_err(Error::Serialization)?;
+
         // Have the agent process the message
-        let received = agent.receive_message(&packed_message).await
+        let received = agent
+            .receive_message(&packed_message)
+            .await
             .map_err(|e| Error::Agent(e.to_string()))?;
-        
+
         // Publish event about received message
         self.event_bus.publish_message_received(received).await;
-        
+
         Ok(())
     }
 
@@ -226,14 +229,18 @@ impl TapNode {
 
         // Get the sender agent
         let sender = self.agents.get_agent(from_did).await?;
-        
+
         // Pack and send the message
-        let packed_message = sender.send_message(&processed_message, to_did).await
+        let packed_message = sender
+            .send_message(&processed_message, to_did)
+            .await
             .map_err(|e| Error::Agent(e.to_string()))?;
-        
+
         // Publish event about sent message
-        self.event_bus.publish_message_sent(processed_message, from_did.to_string(), to_did.to_string()).await;
-        
+        self.event_bus
+            .publish_message_sent(processed_message, from_did.to_string(), to_did.to_string())
+            .await;
+
         Ok(packed_message)
     }
 }

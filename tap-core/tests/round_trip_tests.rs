@@ -1,9 +1,9 @@
 use std::collections::HashMap;
+use std::str::FromStr;
+use tap_caip::{AccountId, AssetId, ChainId};
 use tap_core::didcomm::{pack_tap_message, unpack_didcomm_message};
 use tap_core::error::Result;
 use tap_core::message::{TapMessage, TapMessageType, TransactionProposalBody};
-use std::str::FromStr;
-use tap_caip::{ChainId, AccountId, AssetId};
 
 /// Test the round-trip conversion between TAP messages and DIDComm messages.
 ///
@@ -19,8 +19,10 @@ async fn test_tap_didcomm_round_trip() -> Result<()> {
         transaction_id: transaction_id.to_string(),
         network: ChainId::from_str("eip155:1").unwrap(),
         sender: AccountId::from_str("eip155:1:0x1234567890abcdef1234567890abcdef12345678").unwrap(),
-        recipient: AccountId::from_str("eip155:1:0xabcdef1234567890abcdef1234567890abcdef12").unwrap(),
-        asset: AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+        recipient: AccountId::from_str("eip155:1:0xabcdef1234567890abcdef1234567890abcdef12")
+            .unwrap(),
+        asset: AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7")
+            .unwrap(),
         amount: "100.0".to_string(),
         memo: Some("Test transaction".to_string()),
         tx_reference: None,
@@ -71,8 +73,10 @@ fn test_serde_round_trip() {
         transaction_id: transaction_id.to_string(),
         network: ChainId::from_str("eip155:1").unwrap(),
         sender: AccountId::from_str("eip155:1:0x1234567890abcdef1234567890abcdef12345678").unwrap(),
-        recipient: AccountId::from_str("eip155:1:0xabcdef1234567890abcdef1234567890abcdef12").unwrap(),
-        asset: AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap(),
+        recipient: AccountId::from_str("eip155:1:0xabcdef1234567890abcdef1234567890abcdef12")
+            .unwrap(),
+        asset: AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7")
+            .unwrap(),
         amount: "100.0".to_string(),
         memo: Some("Test transaction".to_string()),
         tx_reference: None,

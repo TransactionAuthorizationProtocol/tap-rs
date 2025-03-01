@@ -84,7 +84,7 @@ async fn test_node_config() {
         log_message_content: true,
         processor_pool: None,
     };
-    
+
     let node = TapNode::new(config);
 
     // Verify config values

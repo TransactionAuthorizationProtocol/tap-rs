@@ -21,7 +21,7 @@ pub enum Error {
     /// Error related to validation failures.
     #[error("Validation error: {0}")]
     Validation(String),
-    
+
     /// Error related to CAIP validation.
     #[error("CAIP error: {0}")]
     CaipError(#[from] tap_caip::error::Error),

@@ -69,7 +69,7 @@ impl MessageProcessor for CompositeMessageProcessor {
         for processor in &self.processors {
             if let Some(msg) = current_message {
                 current_message = processor.process_incoming(msg).await?;
-                
+
                 // If a processor returns None, stop processing
                 if current_message.is_none() {
                     break;
@@ -89,7 +89,7 @@ impl MessageProcessor for CompositeMessageProcessor {
         for processor in &self.processors {
             if let Some(msg) = current_message {
                 current_message = processor.process_outgoing(msg).await?;
-                
+
                 // If a processor returns None, stop processing
                 if current_message.is_none() {
                     break;

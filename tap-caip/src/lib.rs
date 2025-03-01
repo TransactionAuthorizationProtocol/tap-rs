@@ -91,7 +91,10 @@ mod tests {
             CaipId::AccountId(account_id) => {
                 assert_eq!(account_id.chain_id().namespace(), "eip155");
                 assert_eq!(account_id.chain_id().reference(), "1");
-                assert_eq!(account_id.address(), "0x4b20993Bc481177ec7E8f571ceCaE8A9e22C02db");
+                assert_eq!(
+                    account_id.address(),
+                    "0x4b20993Bc481177ec7E8f571ceCaE8A9e22C02db"
+                );
             }
             _ => panic!("Expected AccountId"),
         }
@@ -124,8 +127,10 @@ mod tests {
     #[test]
     fn test_caip_id_to_string() {
         let chain_id = ChainId::from_str("eip155:1").unwrap();
-        let account_id = AccountId::from_str("eip155:1:0x4b20993Bc481177ec7E8f571ceCaE8A9e22C02db").unwrap();
-        let asset_id = AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
+        let account_id =
+            AccountId::from_str("eip155:1:0x4b20993Bc481177ec7E8f571ceCaE8A9e22C02db").unwrap();
+        let asset_id =
+            AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
 
         let chain_caip = CaipId::ChainId(chain_id);
         let account_caip = CaipId::AccountId(account_id);

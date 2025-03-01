@@ -2,11 +2,11 @@
 //!
 //! This module provides utilities for managing multiple TAP agents within a TAP Node.
 
-use std::sync::Arc;
 use dashmap::DashMap;
+use std::sync::Arc;
 
-use tap_agent::Agent;
 use crate::error::{Error, Result};
+use tap_agent::Agent;
 
 /// Registry of TAP agents
 pub struct AgentRegistry {
@@ -24,17 +24,17 @@ impl AgentRegistry {
             agents: DashMap::new(),
         }
     }
-    
+
     /// Get the current number of registered agents
     pub fn agent_count(&self) -> usize {
         self.agents.len()
     }
-    
+
     /// Check if the registry has an agent with the given DID
     pub fn has_agent(&self, did: &str) -> bool {
         self.agents.contains_key(did)
     }
-    
+
     /// Get an agent by DID
     pub async fn get_agent(&self, did: &str) -> Result<Arc<dyn Agent>> {
         self.agents
@@ -42,7 +42,7 @@ impl AgentRegistry {
             .map(|agent| agent.clone())
             .ok_or_else(|| Error::AgentNotFound(did.to_string()))
     }
-    
+
     /// Register a new agent
     pub async fn register_agent(&self, did: String, agent: Arc<dyn Agent>) -> Result<()> {
         // Check if we've reached the maximum number of agents
@@ -54,7 +54,7 @@ impl AgentRegistry {
                 )));
             }
         }
-        
+
         // Check if the agent is already registered
         if self.has_agent(&did) {
             return Err(Error::AgentRegistration(format!(
@@ -62,26 +62,26 @@ impl AgentRegistry {
                 did
             )));
         }
-        
+
         // Register the agent
         self.agents.insert(did, agent);
-        
+
         Ok(())
     }
-    
+
     /// Unregister an agent
     pub async fn unregister_agent(&self, did: &str) -> Result<()> {
         // Check if the agent exists
         if !self.has_agent(did) {
             return Err(Error::AgentNotFound(did.to_string()));
         }
-        
+
         // Unregister the agent
         self.agents.remove(did);
-        
+
         Ok(())
     }
-    
+
     /// Get all registered agent DIDs
     pub fn get_all_dids(&self) -> Vec<String> {
         self.agents
