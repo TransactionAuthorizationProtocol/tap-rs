@@ -1,11 +1,10 @@
 [package]
-name = "tap-wasm"
+name = "tap-ts-wasm"
 version.workspace = true
 edition.workspace = true
-authors.workspace = true
+description = "WebAssembly bindings for TAP-TS"
 repository.workspace = true
 license.workspace = true
-description = "WebAssembly bindings for the Transaction Authorization Protocol"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -13,20 +12,32 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 wasm-bindgen = { workspace = true }
 js-sys = { workspace = true }
+console_error_panic_hook = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde-wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
-console_error_panic_hook = { workspace = true, optional = true }
-tap-core = { path = "../tap-core", default-features = false, features = ["wasm"] }
-tap-agent = { path = "../tap-agent", default-features = false, features = ["wasm"] }
-# Exclude tap-node as it pulls in Tokio which doesn't work in WASM
-# tap-node = { path = "../tap-node" }
+serde-wasm-bindgen = { workspace = true }
+tap-core = { path = "../../../tap-core", default-features = false, features = ["wasm"] }
+tap-agent = { path = "../../../tap-agent", default-features = false, features = ["wasm"] }
+# Exclude tap-node and tap-caip as they pull in dependencies that don't work in WASM
+# tap-node = { path = "../../../tap-node" }
 didcomm = { workspace = true, default-features = false }
 uuid = { workspace = true }
 wee_alloc = { version = "0.4.5", optional = true }
 getrandom = { workspace = true, features = ["js"] }
-web-sys = { workspace = true }
+
+[dependencies.web-sys]
+workspace = true
+features = [
+  "console",
+  "Window",
+  "Document",
+  "HtmlElement",
+  "Node",
+  "Text",
+  "Performance",
+  "PerformanceTiming",
+]
 
 [features]
 default = ["console_error_panic_hook"]

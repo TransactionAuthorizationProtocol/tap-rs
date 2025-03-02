@@ -5,35 +5,27 @@
  */
 
 /**
- * Error types for TAP-TS
+ * TAP Error Types
  */
 export enum ErrorType {
-  // General errors
-  UNKNOWN = 'unknown',
-  NOT_IMPLEMENTED = 'not_implemented',
-  INVALID_ARGUMENT = 'invalid_argument',
-  INVALID_STATE = 'invalid_state',
-  
-  // WASM-related errors
-  WASM_LOAD_ERROR = 'wasm_load_error',
-  WASM_INIT_ERROR = 'wasm_init_error',
-  WASM_NOT_LOADED = 'wasm_not_loaded',
-  
-  // DID-related errors
-  DID_RESOLUTION_ERROR = 'did_resolution_error',
-  DID_NOT_FOUND = 'did_not_found',
-  DID_INVALID = 'did_invalid',
-  
-  // Message-related errors
-  MESSAGE_INVALID = 'message_invalid',
-  MESSAGE_SEND_ERROR = 'message_send_error',
-  
-  // Agent-related errors
-  AGENT_NOT_FOUND = 'agent_not_found',
-  AGENT_ALREADY_EXISTS = 'agent_already_exists',
-  
-  // Node-related errors
-  NODE_NOT_INITIALIZED = 'node_not_initialized',
+  UNKNOWN = "unknown",
+  AGENT_NOT_FOUND = "agent_not_found",
+  AGENT_ALREADY_EXISTS = "agent_already_exists",
+  AGENT_ALREADY_REGISTERED = "agent_already_registered",
+  INVALID_MESSAGE_TYPE = "invalid_message_type",
+  INVALID_MESSAGE = "message_invalid",
+  MESSAGE_INVALID = "message_invalid",
+  INVALID_ARGUMENT = "invalid_argument",
+  INVALID_DID = "did_invalid",
+  DID_RESOLUTION_ERROR = "did_resolution_error",
+  INTERNAL_ERROR = "internal_error",
+  NOT_IMPLEMENTED = "not_implemented",
+  NOT_SUPPORTED = "not_supported",
+  VALIDATION_ERROR = "validation_error",
+  WASM_ERROR = "wasm_error",
+  WASM_NOT_LOADED = "wasm_not_loaded",
+  WASM_LOAD_ERROR = "wasm_load_error",
+  WASM_INIT_ERROR = "wasm_init_error",
 }
 
 /**
@@ -61,7 +53,7 @@ export class TapError extends Error {
   readonly type: ErrorType;
   
   /** Optional underlying cause */
-  readonly cause?: unknown;
+  override readonly cause?: unknown;
   
   /** Optional additional data */
   readonly data?: Record<string, unknown>;
@@ -90,7 +82,7 @@ export class TapError extends Error {
    * 
    * @returns String representation of the error
    */
-  toString(): string {
+  override toString(): string {
     let result = `[${this.name}] ${this.type}: ${this.message}`;
     
     if (this.cause) {

@@ -6,10 +6,11 @@ This document tracks key learnings, decisions, and insights discovered during th
 - Following implementation order: tap-core, tap-agent, caip, tap-node, tap-server, tap-ts
 - Using test-driven development approach
 - Using didcomm v2 library from crates.io
-- Supporting did:key, did:web, and did:pkh methods initially
+- Supporting did:key and did:pkh methods by default with did:web only available in non-WASM environments
 
 ## Technical Decisions
-- WASM compatibility considerations are being taken into account throughout development
+- WASM compatibility is ensured throughout all core libraries with appropriate feature flags
+- Libraries are structured to avoid dependencies that don't work in WASM (e.g., tokio's full feature set)
 - Cryptographic libraries are aligned with those used by the didcomm v2 library
 - Message structures include flexible metadata fields to support extensions and custom data
 
@@ -18,12 +19,19 @@ This document tracks key learnings, decisions, and insights discovered during th
 - Implementing the `Validate` trait for message structures provides a clean interface for validation
 - DIDComm integration requires careful handling of message types and formats
 - Fuzzing is essential for identifying edge cases in message parsing and validation
+- WebAssembly compatibility requires careful management of dependencies and feature flags
 
 ## Message Structure Design
 - Base message structure with common fields shared across all TAP message types
 - Specific message body types for different TAP operations (transactions, identity, travel rule)
 - Use of enums for type-safe message handling
 - Flexible attachments system for including additional data
+
+## WASM Compatibility Strategy
+- Feature flags are used to conditionally include or exclude functionality based on compilation target
+- Network-dependent features like did:web resolution are only enabled in non-WASM environments
+- Core cryptographic operations use libraries that have WASM support
+- Dependencies with WASM issues (like full Tokio runtime) are properly managed with conditional compilation
 
 ## Testing Approach
 - Unit tests for individual message types and validation logic
@@ -41,3 +49,4 @@ This document tracks key learnings, decisions, and insights discovered during th
 - Implementing proper error handling with descriptive messages
 - Supporting multiple DID methods with different resolution requirements
 - Ensuring WASM compatibility while maintaining full functionality
+- Managing dependencies that aren't WASM-friendly (e.g., Tokio's full feature set, networking libraries)

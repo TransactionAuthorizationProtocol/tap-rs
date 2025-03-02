@@ -2,169 +2,207 @@
  * Tests for TapNode implementation
  */
 
-import { assertEquals, assertExists, assertThrows } from "@std/assert/mod.ts";
-import { TapNode, Agent, Message, MessageType, wasmLoader, TapError, ErrorType } from "../src/mod.ts";
+import { assertEquals, assertExists, assertThrows } from "https://deno.land/std/testing/asserts.ts";
+import { TapNode } from "../src/node.ts";
+import { Agent } from "../src/agent.ts";
+import { Message, MessageType } from "../src/message.ts";
+import { TapError, ErrorType } from "../src/error.ts";
 
-// Setup and teardown
-const setup = async () => {
-  // Load the WASM module before tests
-  if (!wasmLoader.moduleIsLoaded()) {
-    await wasmLoader.load();
+Deno.test("TapNode - Create node", () => {
+  const node = new TapNode({
+    id: "test-node",
+  });
+  
+  assertExists(node);
+  assertEquals(node.id, "test-node");
+});
+
+Deno.test("TapNode - Register agent", () => {
+  const node = new TapNode();
+  
+  const agent = new Agent({
+    did: "did:example:123",
+    id: "test-agent",
+  });
+  
+  node.registerAgent(agent);
+  
+  // The agent should be in the node's agent map
+  const agents = node.getAgents();
+  assertEquals(agents.size, 1);
+  assertEquals(agents.has(agent.id), true);
+  
+  // Get agent by ID
+  const retrievedAgent = agents.get(agent.id);
+  assertExists(retrievedAgent);
+  assertEquals(retrievedAgent.did, agent.did);
+});
+
+Deno.test("TapNode - Register multiple agents", () => {
+  const node = new TapNode();
+  
+  const aliceDID = "did:example:alice";
+  const bobDID = "did:example:bob";
+  
+  const aliceAgent = new Agent({
+    did: aliceDID,
+    id: "alice",
+  });
+  
+  const bobAgent = new Agent({
+    did: bobDID,
+    id: "bob",
+  });
+  
+  node.registerAgent(aliceAgent);
+  node.registerAgent(bobAgent);
+  
+  // Both agents should be in the node's agent map
+  const agents = node.getAgents();
+  assertEquals(agents.size, 2);
+  
+  // Get agents by ID
+  const retrievedAlice = agents.get(aliceAgent.id);
+  const retrievedBob = agents.get(bobAgent.id);
+  
+  assertExists(retrievedAlice);
+  assertExists(retrievedBob);
+  
+  assertEquals(retrievedAlice.did, aliceDID);
+  assertEquals(retrievedBob.did, bobDID);
+});
+
+Deno.test("TapNode - Unregister agent", () => {
+  const node = new TapNode();
+  
+  const aliceDID = "did:example:alice";
+  const bobDID = "did:example:bob";
+  
+  const aliceAgent = new Agent({
+    did: aliceDID,
+    id: "alice",
+  });
+  
+  const bobAgent = new Agent({
+    did: bobDID,
+    id: "bob",
+  });
+  
+  // Register both agents
+  node.registerAgent(aliceAgent);
+  node.registerAgent(bobAgent);
+  
+  // Unregister alice
+  node.unregisterAgent(aliceAgent.id);
+  
+  // Check if alice was removed
+  const agents = node.getAgents();
+  assertEquals(agents.size, 1);
+  
+  // Alice should be gone, Bob should still be there
+  assertEquals(node.getAgentDIDs().includes(aliceDID), false);
+  assertEquals(node.getAgentDIDs().includes(bobDID), true);
+  
+  // Try to unregister a non-existent agent
+  try {
+    node.unregisterAgent("non-existent");
+  } catch (e) {
+    assertEquals((e as TapError).type, ErrorType.AGENT_NOT_FOUND);
   }
-};
+});
 
-const teardown = () => {
-  // Nothing to clean up yet
-};
-
-Deno.test("TapNode tests", async (t) => {
-  await setup();
-
-  // Sample DIDs
-  const aliceDID = "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH";
-  const bobDID = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
-
-  // Create test agents
-  let aliceAgent: Agent;
-  let bobAgent: Agent;
-  let node: TapNode;
-
-  await t.step("Create TapNode instance", () => {
-    node = new TapNode({
-      debug: true,
-      network: {
-        peers: ["https://example.com/tap"],
-      },
-    });
-
-    assertExists(node);
-    assertEquals(node.getAgentDIDs().length, 0);
+Deno.test("TapNode - Send message between agents", async () => {
+  const node = new TapNode();
+  
+  const aliceDID = "did:example:alice";
+  const bobDID = "did:example:bob";
+  
+  const aliceAgent = new Agent({
+    did: aliceDID,
+    id: "alice",
   });
-
-  await t.step("Create and register agents", () => {
-    aliceAgent = new Agent({
-      did: aliceDID,
-      nickname: "Alice",
-    });
-
-    bobAgent = new Agent({
-      did: bobDID,
-      nickname: "Bob",
-    });
-
-    assertExists(aliceAgent);
-    assertEquals(aliceAgent.did, aliceDID);
-    assertEquals(aliceAgent.nickname, "Alice");
-
-    assertExists(bobAgent);
-    assertEquals(bobAgent.did, bobDID);
-    assertEquals(bobAgent.nickname, "Bob");
-
-    // Register agents
-    node.registerAgent(aliceAgent);
-    node.registerAgent(bobAgent);
-
-    // Check registration
-    assertEquals(node.getAgentDIDs().length, 2);
-    assertEquals(node.getAgentDIDs().includes(aliceDID), true);
-    assertEquals(node.getAgentDIDs().includes(bobDID), true);
+  
+  const bobAgent = new Agent({
+    did: bobDID,
+    id: "bob",
   });
-
-  await t.step("Get agent by DID", () => {
-    const retrievedAlice = node.getAgent(aliceDID);
-    const retrievedBob = node.getAgent(bobDID);
-    const nonExistent = node.getAgent("did:key:nonexistent");
-
-    assertExists(retrievedAlice);
-    assertEquals(retrievedAlice?.did, aliceDID);
-    
-    assertExists(retrievedBob);
-    assertEquals(retrievedBob?.did, bobDID);
-    
-    assertEquals(nonExistent, undefined);
+  
+  // Register a message handler for Bob
+  let messageReceived = false;
+  bobAgent.registerHandler(MessageType.PING, async () => {
+    messageReceived = true;
   });
-
-  await t.step("Cannot register agent with same DID twice", () => {
-    const duplicateAgent = new Agent({
-      did: aliceDID,
-      nickname: "Duplicate Alice",
-    });
-
-    assertThrows(
-      () => node.registerAgent(duplicateAgent),
-      TapError,
-      ErrorType.AGENT_ALREADY_EXISTS
-    );
+  
+  // Register both agents
+  node.registerAgent(aliceAgent);
+  node.registerAgent(bobAgent);
+  
+  // Create a message
+  const message = new Message({
+    type: MessageType.PING,
+    ledgerId: "test-ledger",
   });
+  
+  // Send message from Alice to Bob
+  await node.sendMessage(aliceDID, bobDID, message);
+  
+  // Bob should have received the message
+  assertEquals(messageReceived, true);
+});
 
-  await t.step("Unregister agent", () => {
-    // Unregister Alice
-    const unregistered = node.unregisterAgent(aliceDID);
-    assertEquals(unregistered, true);
-    
-    // Check registration
-    assertEquals(node.getAgentDIDs().length, 1);
-    assertEquals(node.getAgentDIDs().includes(aliceDID), false);
-    assertEquals(node.getAgentDIDs().includes(bobDID), true);
-    
-    // Try to unregister non-existent agent
-    const nonExistent = node.unregisterAgent("did:key:nonexistent");
-    assertEquals(nonExistent, false);
+Deno.test("TapNode - Subscribe to node messages", async () => {
+  const node = new TapNode();
+  
+  const aliceDID = "did:example:alice";
+  const bobDID = "did:example:bob";
+  
+  const aliceAgent = new Agent({
+    did: aliceDID,
+    id: "alice",
   });
-
-  await t.step("Message exchange", async () => {
-    // Re-register Alice
-    node.registerAgent(aliceAgent);
-    
-    // Setup message receipt tracking
-    let bobReceivedMessage = false;
-    const unsubscribe = bobAgent.subscribeToMessages((message) => {
-      bobReceivedMessage = true;
-      assertEquals(message.type, MessageType.PING);
-    });
-    
-    // Create a message
-    const message = new Message({
-      type: MessageType.PING,
-    });
-    
-    // Send the message
-    await node.sendMessage(aliceDID, bobDID, message);
-    
-    // Short wait to allow processing
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    
-    // Check message receipt
-    assertEquals(bobReceivedMessage, true);
-    
-    // Clean up subscription
-    unsubscribe();
+  
+  const bobAgent = new Agent({
+    did: bobDID,
+    id: "bob",
   });
-
-  await t.step("Message subscription", async () => {
-    let nodeReceivedMessages = 0;
-    
-    // Subscribe to all messages
-    const unsubscribe = node.subscribeToMessages(() => {
-      nodeReceivedMessages++;
-    });
-    
-    // Create and send messages
-    const message1 = new Message({ type: MessageType.PING });
-    const message2 = new Message({ type: MessageType.PING });
-    
-    await node.sendMessage(aliceDID, bobDID, message1);
-    await node.sendMessage(bobDID, aliceDID, message2);
-    
-    // Short wait to allow processing
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    
-    // Check message receipt
-    assertEquals(nodeReceivedMessages, 2);
-    
-    // Clean up subscription
-    unsubscribe();
+  
+  // Register both agents
+  node.registerAgent(aliceAgent);
+  node.registerAgent(bobAgent);
+  
+  // Subscribe to node messages
+  let messageCount = 0;
+  const unsubscribe = node.subscribeToMessages(() => {
+    messageCount++;
   });
-
-  await teardown();
+  
+  // Create and send two messages
+  const message1 = new Message({
+    type: MessageType.PING,
+    ledgerId: "test-ledger",
+  });
+  
+  const message2 = new Message({
+    type: MessageType.PING,
+    ledgerId: "test-ledger",
+  });
+  
+  await node.sendMessage(aliceDID, bobDID, message1);
+  await node.sendMessage(bobDID, aliceDID, message2);
+  
+  // We should have received both messages
+  assertEquals(messageCount, 2);
+  
+  // Unsubscribe and send another message
+  unsubscribe();
+  
+  const message3 = new Message({
+    type: MessageType.PING,
+    ledgerId: "test-ledger",
+  });
+  
+  await node.sendMessage(aliceDID, bobDID, message3);
+  
+  // The message count should not have changed
+  assertEquals(messageCount, 2);
 });

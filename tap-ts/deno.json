@@ -6,30 +6,26 @@
     "wasm": "deno run --allow-read --allow-write --allow-env --allow-run scripts/build_wasm.ts",
     "browser:test": "deno test --config deno.playwright.json",
     "test:browser": "deno test --config=deno.playwright.json --allow-all",
-    "check": "deno check src/**/*.ts"
+    "check": "deno check src/**/*.ts",
+    "clean": "deno run --allow-read --allow-write --allow-run scripts/clean.ts"
   },
-  "importMap": {
-    "imports": {
-      "@std/": "https://deno.land/std@0.220.0/",
-      "did-resolver": "npm:did-resolver@4.1.0",
-      "did-jwt": "npm:did-jwt@8.0.0",
-      "did-method-key": "npm:@interop/did-method-key@0.2.2",
-      "did-method-web": "npm:@interop/did-method-web@0.1.0",
-      "did-method-pkh": "npm:@interop/did-method-pkh@0.1.0",
-      "did-jwt-vc": "npm:did-jwt-vc@3.2.15",
-      "jose": "npm:jose@5.2.2",
-      "uint8arrays": "npm:uint8arrays@4.0.10"
-    }
+  "imports": {
+    "@std/": "https://deno.land/std@0.196.0/",
+    "did-resolver": "npm:did-resolver@4.1.0",
+    "key-did-resolver": "npm:key-did-resolver@3.0.0",
+    "web-did-resolver": "npm:web-did-resolver@2.0.0",
+    "ethr-did-resolver": "npm:ethr-did-resolver@8.0.0",
+    "pkh-did-resolver": "npm:pkh-did-resolver@1.0.2",
+    "uint8arrays": "npm:uint8arrays@4.0.10"
   },
   "compilerOptions": {
     "lib": ["deno.ns", "dom", "esnext"],
-    "allowJs": true,
     "strict": true,
     "strictNullChecks": true
   },
   "lint": {
     "include": ["src/"],
-    "exclude": ["src/wasm/bindgen/"]
+    "exclude": ["src/bindgen/"]
   },
   "fmt": {
     "include": ["src/", "scripts/"],

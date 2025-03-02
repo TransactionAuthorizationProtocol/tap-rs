@@ -9,7 +9,9 @@ use tap_core::message::{TapMessage, TapMessageType, Validate};
 
 use crate::config::AgentConfig;
 use crate::crypto::{DefaultMessagePacker, MessagePacker};
-use crate::did::{DidResolver, KeyResolver, MultiResolver, PkhResolver, WebResolver};
+use crate::did::{DidResolver, KeyResolver, MultiResolver, PkhResolver};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::did::WebResolver;
 use crate::error::{Error, Result};
 use crate::policy::{DefaultPolicyHandler, PolicyHandler};
 
@@ -107,12 +109,18 @@ impl TapAgent {
     pub fn with_defaults(config: AgentConfig, did: String, name: Option<String>) -> Result<Self> {
         // Create a multi-resolver with default resolvers
         let key_resolver = KeyResolver;
-        let web_resolver = WebResolver;
         let pkh_resolver = PkhResolver;
 
         let mut multi_resolver = MultiResolver::new();
         multi_resolver.add_resolver(key_resolver);
-        multi_resolver.add_resolver(web_resolver);
+        
+        // Only add web resolver if not in WASM environment
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let web_resolver = WebResolver;
+            multi_resolver.add_resolver(web_resolver);
+        }
+        
         multi_resolver.add_resolver(pkh_resolver);
 
         let resolver = Arc::new(multi_resolver);

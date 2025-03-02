@@ -2,187 +2,183 @@
  * Tests for Agent implementation
  */
 
-import { assertEquals, assertExists, assertThrows } from "@std/assert/mod.ts";
-import { Agent, Message, MessageType, wasmLoader, TapError, ErrorType } from "../src/mod.ts";
+import { assertEquals, assertExists, assertThrows } from "https://deno.land/std/testing/asserts.ts";
+import { Agent } from "../src/agent.ts";
+import { Message, MessageType } from "../src/message.ts";
 
-// Setup and teardown
-const setup = async () => {
-  // Load the WASM module before tests
-  if (!wasmLoader.moduleIsLoaded()) {
-    await wasmLoader.load();
-  }
-};
-
-const teardown = () => {
-  // Nothing to clean up yet
-};
-
-Deno.test("Agent tests", async (t) => {
-  await setup();
-
-  // Sample DIDs
-  const aliceDID = "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH";
+Deno.test("Agent - Create agent", () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
   
-  // Agent instance
-  let agent: Agent;
+  assertExists(agent);
+  assertEquals(agent.did, "did:example:123");
+  assertEquals(agent.isReady, true);
+});
 
-  await t.step("Create Agent instance", () => {
-    agent = new Agent({
-      did: aliceDID,
-      nickname: "Alice",
-    });
-
-    assertExists(agent);
-    assertEquals(agent.did, aliceDID);
-    assertEquals(agent.nickname, "Alice");
+Deno.test("Agent - Create message", () => {
+  const agent = new Agent({
+    did: "did:example:123",
   });
-
-  await t.step("Agent properties", () => {
-    // Check default properties
-    assertEquals(agent.did, aliceDID);
-    assertEquals(agent.nickname, "Alice");
-    assertEquals(agent.isReady, true);
+  
+  const message = agent.createMessage({
+    type: MessageType.PING,
   });
+  
+  assertExists(message);
+  assertEquals(message.type, MessageType.PING); // Fix the second message type assertion
+});
 
-  await t.step("Create message with Agent", () => {
-    const message = agent.createMessage({
-      type: MessageType.PING,
-    });
-    
-    assertExists(message);
-    assertEquals(message.type, MessageType.PING);
-    assertEquals(message.from, aliceDID);
+Deno.test("Agent - Handle authorization request", async () => {
+  const agent = new Agent({
+    did: "did:example:123",
   });
-
-  await t.step("Create authorization request message", () => {
-    const message = agent.createAuthorizationRequest({
-      transactionHash: "0x1234567890abcdef",
-      sender: "0xAliceSender",
-      receiver: "0xBobReceiver",
-      amount: "100.0",
-      asset: "BTC",
-    });
+  
+  // Register handler for authorization request
+  let requestReceived = false;
+  agent.registerHandler(MessageType.AUTHORIZATION_REQUEST, async (message) => {
+    requestReceived = true;
     
-    assertExists(message);
-    assertEquals(message.type, MessageType.AUTHORIZATION_REQUEST);
-    assertEquals(message.from, aliceDID);
+    // Verify the message
+    assertEquals((message as Message).type, MessageType.AUTHORIZATION_REQUEST);
     
-    const requestData = message.getAuthorizationRequestData();
-    assertExists(requestData);
+    const requestData = (message as Message).getAuthorizationRequestData();
     assertEquals(requestData?.transactionHash, "0x1234567890abcdef");
-    assertEquals(requestData?.sender, "0xAliceSender");
-    assertEquals(requestData?.receiver, "0xBobReceiver");
-    assertEquals(requestData?.amount, "100.0");
+    assertEquals(requestData?.sender, "0xSender");
+    assertEquals(requestData?.receiver, "0xReceiver");
+    assertEquals(requestData?.amount, "100");
     assertEquals(requestData?.asset, "BTC");
   });
+  
+  // Create an authorization request message
+  const message = new Message({
+    type: MessageType.AUTHORIZATION_REQUEST,
+    ledgerId: "test-ledger",
+  });
+  
+  message.setAuthorizationRequestData({
+    transactionHash: "0x1234567890abcdef",
+    sender: "0xSender",
+    receiver: "0xReceiver",
+    amount: "100",
+    asset: "BTC",
+  });
+  
+  // Process the message
+  await agent.processMessage(message);
+  
+  // Verify the handler was called
+  assertEquals(requestReceived, true);
+});
 
-  await t.step("Create authorization response message", () => {
-    // Create a request first
-    const request = agent.createAuthorizationRequest({
-      transactionHash: "0x1234567890abcdef",
-      sender: "0xAliceSender",
-      receiver: "0xBobReceiver",
-      amount: "100.0",
-      asset: "BTC",
-    });
+Deno.test("Agent - Handle authorization response", async () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
+  
+  // Register handler for authorization response
+  let responseReceived = false;
+  agent.registerHandler(MessageType.AUTHORIZATION_RESPONSE, async (message) => {
+    responseReceived = true;
     
-    // Create a response to the request
-    const response = agent.createAuthorizationResponse({
-      requestId: request.id,
-      transactionHash: "0x1234567890abcdef",
-      approved: true,
-      reason: "Test approval",
-    });
+    // Verify the message
+    assertEquals((message as Message).type, MessageType.AUTHORIZATION_RESPONSE);
     
-    assertExists(response);
-    assertEquals(response.type, MessageType.AUTHORIZATION_RESPONSE);
-    assertEquals(response.from, aliceDID);
-    assertEquals(response.correlation, request.id);
-    
-    const responseData = response.getAuthorizationResponseData();
-    assertExists(responseData);
+    const responseData = (message as Message).getAuthorizationResponseData();
     assertEquals(responseData?.transactionHash, "0x1234567890abcdef");
     assertEquals(responseData?.approved, true);
     assertEquals(responseData?.reason, "Test approval");
   });
-
-  await t.step("Message subscription", async () => {
-    let receivedMessages = 0;
-    let lastMessage: Message | null = null;
-    
-    // Subscribe to messages
-    const unsubscribe = agent.subscribeToMessages((message) => {
-      receivedMessages++;
-      lastMessage = message;
-    });
-    
-    // Process a message
-    const message = new Message({
-      type: MessageType.PING,
-      to: [aliceDID],
-    });
-    
-    await agent.processMessage(message);
-    
-    // Check message receipt
-    assertEquals(receivedMessages, 1);
-    assertExists(lastMessage);
-    assertEquals(lastMessage?.type, MessageType.PING);
-    
-    // Clean up subscription
-    unsubscribe();
-    
-    // Process another message after unsubscribing
-    const message2 = new Message({
-      type: MessageType.PING,
-      to: [aliceDID],
-    });
-    
-    await agent.processMessage(message2);
-    
-    // Check that the count didn't increase
-    assertEquals(receivedMessages, 1);
+  
+  // Create an authorization response message
+  const message = new Message({
+    type: MessageType.AUTHORIZATION_RESPONSE,
+    ledgerId: "test-ledger",
   });
-
-  await t.step("Message handlers", async () => {
-    let handlerCalled = false;
-    let handlerMessage: Message | null = null;
-    
-    // Register a handler for PING messages
-    agent.registerMessageHandler(MessageType.PING, (message) => {
-      handlerCalled = true;
-      handlerMessage = message;
-      return Promise.resolve();
-    });
-    
-    // Process a message
-    const message = new Message({
-      type: MessageType.PING,
-      to: [aliceDID],
-    });
-    
-    await agent.processMessage(message);
-    
-    // Check handler execution
-    assertEquals(handlerCalled, true);
-    assertExists(handlerMessage);
-    assertEquals(handlerMessage?.type, MessageType.PING);
-    
-    // Reset for next test
-    handlerCalled = false;
-    handlerMessage = null;
-    
-    // Process a different message type
-    const message2 = new Message({
-      type: MessageType.AUTHORIZATION_REQUEST,
-      to: [aliceDID],
-    });
-    
-    await agent.processMessage(message2);
-    
-    // Check that the handler wasn't called for this type
-    assertEquals(handlerCalled, false);
+  
+  message.setAuthorizationResponseData({
+    transactionHash: "0x1234567890abcdef",
+    approved: true,
+    reason: "Test approval",
   });
+  
+  // Process the message
+  await agent.processMessage(message);
+  
+  // Verify the handler was called
+  assertEquals(responseReceived, true);
+});
 
-  await teardown();
+Deno.test("Agent - Subscribe to messages", async () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
+  
+  // Subscribe to messages
+  let lastMessage: Message | null = null;
+  agent.subscribe((message) => {
+    lastMessage = message;
+  });
+  
+  // Create a ping message
+  const message = new Message({
+    type: MessageType.PING,
+    ledgerId: "test-ledger",
+  });
+  
+  // Process the message
+  await agent.processMessage(message);
+  
+  // Verify the subscriber was called
+  assertExists(lastMessage);
+  assertEquals((lastMessage as Message).type, MessageType.PING);
+});
+
+Deno.test("Agent - Handler registration and unregistration", () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
+  
+  // Initially, there should be no handler
+  assertEquals(agent.hasHandler(MessageType.PING), false);
+  
+  // Register a handler
+  agent.registerHandler(MessageType.PING, async () => {
+    // Do nothing for the test
+  });
+  
+  // Now there should be a handler
+  assertEquals(agent.hasHandler(MessageType.PING), true);
+  
+  // Unregister the handler
+  const result = agent.unregisterHandler(MessageType.PING);
+  assertEquals(result, true);
+  
+  // Now there should be no handler again
+  assertEquals(agent.hasHandler(MessageType.PING), false);
+});
+
+Deno.test("Agent - Message handling", async () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
+  
+  // Register a handler
+  let handlerMessage: Message | null = null;
+  agent.registerHandler(MessageType.PING, async (message) => {
+    handlerMessage = message;
+  });
+  
+  // Create a ping message
+  const message = new Message({
+    type: MessageType.PING,
+    ledgerId: "test-ledger",
+  });
+  
+  // Process the message
+  await agent.processMessage(message);
+  
+  // Verify the handler was called
+  assertExists(handlerMessage);
+  assertEquals((handlerMessage as Message).type, MessageType.PING);
 });

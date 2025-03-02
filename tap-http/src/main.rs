@@ -1,7 +1,7 @@
 //! Binary executable for the TAP HTTP server.
 
 use env_logger::Env;
-use log::{error, info};
+use tracing::{error, info};
 use std::env;
 use std::error::Error;
 use std::process;

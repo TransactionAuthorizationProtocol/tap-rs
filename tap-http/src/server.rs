@@ -3,13 +3,13 @@
 use crate::config::TapHttpConfig;
 use crate::error::{Error, Result};
 use crate::handler::{handle_didcomm, handle_health_check};
-use log::{error, info, warn};
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tap_node::TapNode;
 use tokio::sync::oneshot;
-use warp::{self, Filter, Rejection, Reply};
+use tracing::{error, info, warn};
+use warp::{Filter, Rejection, Reply};
 
 /// TAP HTTP server for handling DIDComm messages.
 pub struct TapHttpServer {

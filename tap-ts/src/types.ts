@@ -4,19 +4,6 @@
  * This module contains type definitions used across the TAP-TS library.
  */
 
-/**
- * Message type enum
- */
-export enum MessageType {
-  /** Authorization request message */
-  AUTHORIZATION_REQUEST = 'TAP_AUTHORIZATION_REQUEST',
-  
-  /** Authorization response message */
-  AUTHORIZATION_RESPONSE = 'TAP_AUTHORIZATION_RESPONSE',
-  
-  /** Ping message for testing */
-  PING = 'TAP_PING',
-}
 
 /**
  * DID Document type
@@ -106,13 +93,16 @@ export interface Service {
  * Agent configuration
  */
 export interface AgentConfig {
-  /** DID of the agent */
+  /** Agent DID */
   did: string;
   
-  /** Optional nickname for the agent */
+  /** Optional agent ID */
+  id?: string;
+  
+  /** Optional agent nickname */
   nickname?: string;
   
-  /** Debug mode flag */
+  /** Debug mode */
   debug?: boolean;
 }
 
@@ -120,6 +110,9 @@ export interface AgentConfig {
  * Node configuration
  */
 export interface NodeConfig {
+  /** Optional node ID */
+  id?: string;
+  
   /** Debug mode flag */
   debug?: boolean;
   
@@ -135,53 +128,104 @@ export interface NetworkConfig {
   peers?: string[];
 }
 
+import type { Message } from "./message.ts";
+
+/**
+ * Message metadata
+ */
+export interface MessageMetadata {
+  /**
+   * Additional message metadata
+   */
+  [key: string]: unknown;
+}
+
+/**
+ * Message callback function type
+ */
+export type MessageCallback = (message: Message, metadata?: MessageMetadata) => Promise<void>;
+
+/**
+ * Message subscriber function type
+ */
+export type MessageSubscriber = (message: Message, metadata?: MessageMetadata) => void;
+
 /**
  * Authorization request
  */
 export interface AuthorizationRequest {
-  /** Transaction hash */
+  /**
+   * Transaction hash to authorize
+   */
   transactionHash: string;
   
-  /** Sender address */
-  sender: string;
+  /**
+   * Transaction data (hex encoded)
+   */
+  transactionData?: string;
   
-  /** Receiver address */
-  receiver: string;
+  /**
+   * Source address
+   */
+  sourceAddress?: string;
   
-  /** Transaction amount */
-  amount: string;
+  /**
+   * Destination address
+   */
+  destinationAddress?: string;
+  
+  /**
+   * Transaction amount
+   */
+  amount?: string;
+  
+  /**
+   * Transaction fee
+   */
+  fee?: string;
+  
+  /**
+   * Network name
+   */
+  network?: string;
+  
+  /**
+   * Transaction reference
+   */
+  reference?: string;
+  
+  /**
+   * Authorized callback URL
+   */
+  callbackUrl?: string;
+  
+  /**
+   * Additional authorization data
+   */
+  [key: string]: unknown;
 }
 
 /**
  * Authorization response
  */
 export interface AuthorizationResponse {
-  /** Transaction hash that this response is for */
+  /**
+   * Transaction hash that was authorized
+   */
   transactionHash: string;
   
-  /** Authorization result (true=approved, false=rejected) */
-  authorizationResult: boolean;
+  /**
+   * Authorization result (string "true" or "false")
+   */
+  authorizationResult?: string | boolean;
   
-  /** Optional reason for the decision */
+  /**
+   * Whether the transaction was approved (legacy)
+   */
+  approved?: boolean;
+  
+  /**
+   * Reason for the decision
+   */
   reason?: string;
-}
-
-/**
- * Message metadata
- */
-export interface MessageMetadata {
-  /** Sender DID */
-  fromDid?: string;
-  
-  /** Recipient DID */
-  toDid?: string;
-  
-  /** Created timestamp */
-  created?: number;
-  
-  /** Expires timestamp */
-  expires?: number;
-  
-  /** Additional metadata */
-  [key: string]: unknown;
 }

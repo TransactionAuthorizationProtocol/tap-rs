@@ -1,10 +1,10 @@
 //! HTTP client for delivering DIDComm messages to external endpoints.
 
 use crate::error::{Error, Result};
-use log::{debug, error, info};
-use reqwest::{Client, StatusCode};
+use reqwest::{Client as ReqwestClient, StatusCode};
 use std::time::Duration;
 use tokio::time::timeout;
+use tracing::{debug, error, info};
 
 /// Default timeout for HTTP requests in seconds.
 const DEFAULT_TIMEOUT_SECS: u64 = 30;
@@ -12,7 +12,7 @@ const DEFAULT_TIMEOUT_SECS: u64 = 30;
 /// DIDComm HTTP Client for delivering messages to external endpoints.
 pub struct DIDCommClient {
     /// HTTP client.
-    client: Client,
+    client: ReqwestClient,
 
     /// Request timeout in seconds.
     timeout_secs: u64,
@@ -22,7 +22,7 @@ impl DIDCommClient {
     /// Creates a new DIDComm HTTP client.
     pub fn new(timeout_secs: Option<u64>) -> Self {
         Self {
-            client: Client::new(),
+            client: ReqwestClient::new(),
             timeout_secs: timeout_secs.unwrap_or(DEFAULT_TIMEOUT_SECS),
         }
     }

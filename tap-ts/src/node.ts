@@ -4,231 +4,244 @@
  * This module provides the TapNode class for TAP-TS.
  */
 
-import { TapError, ErrorType } from './error.ts';
-import { NodeConfig, MessageMetadata } from './types.ts';
-import { Message, MessageSubscriber } from './message.ts';
-import { Agent } from './agent.ts';
-import wasmLoader from './wasm/mod.ts';
+/**
+ * TAP Node implementation
+ * 
+ * @module node
+ */
+
+import { Agent } from "./agent.ts";
+import { Message } from "./message.ts";
+import { TapError, ErrorType } from "./error.ts";
+import { MessageMetadata, MessageSubscriber } from "./types.ts";
+import { wasmLoader } from "./wasm/loader.ts";
+
+/**
+ * TapNode configuration interface
+ */
+interface NodeConfig {
+  /**
+   * Node ID
+   */
+  id?: string;
+  
+  /**
+   * Debugging flag
+   */
+  debug?: boolean;
+}
 
 /**
  * TAP Node class
  * 
- * A Node represents a TAP network participant that can host multiple agents.
+ * A Node represents a participant in the TAP network that can host multiple agents.
  */
 export class TapNode {
-  private wasmNode: any;
+  private _id: string;
   private agents: Map<string, Agent> = new Map();
+  private didToIdMap: Map<string, string> = new Map();
   private messageSubscribers: Set<MessageSubscriber> = new Set();
   
   /**
    * Create a new TapNode instance
    * 
-   * @param config - Optional node configuration
+   * @param config - Node configuration
    */
-  constructor(config?: NodeConfig) {
+  constructor(config: NodeConfig = {}) {
     if (!wasmLoader.moduleIsLoaded()) {
       throw new TapError({
         type: ErrorType.WASM_NOT_LOADED,
-        message: 'WASM module is not loaded',
+        message: "WASM module not loaded",
       });
     }
     
-    const module = wasmLoader.getModule();
-    let wasmConfig: any;
-    
-    if (config) {
-      wasmConfig = new module.NodeConfig();
-      
-      if (config.debug) {
-        wasmConfig.set_debug(config.debug);
-      }
-      
-      if (config.network?.peers?.length) {
-        wasmConfig.set_network(config.network.peers);
-      }
-    }
-    
-    this.wasmNode = new module.TapNode(wasmConfig);
-    
-    // Set up the message handling
-    this.setupMessageHandling();
+    this._id = config.id || `node_${Date.now()}`;
   }
   
   /**
-   * Set up message handling
+   * Get the node's ID
+   * 
+   * @returns The node's ID
    */
-  private setupMessageHandling(): void {
-    // The WASM node will call this function when it receives a message
-    const messageCallback = async (wasmMessage: any, wasmMetadata: any) => {
-      try {
-        // Convert the WASM message to a Message instance
-        const message = Message.fromJSON(wasmMessage);
-        
-        // Convert the WASM metadata to a MessageMetadata object
-        const metadata: MessageMetadata = typeof wasmMetadata === 'object' ? wasmMetadata : {};
-        
-        // Notify all subscribers
-        for (const subscriber of this.messageSubscribers) {
-          try {
-            subscriber(message, metadata);
-          } catch (error) {
-            console.error('Error in message subscriber:', error);
-          }
-        }
-        
-        // If the message has a target agent, forward it
-        if (metadata.toDid && this.agents.has(metadata.toDid)) {
-          const agent = this.agents.get(metadata.toDid)!;
-          await agent.processMessage(message, metadata);
-        }
-      } catch (error) {
-        console.error('Error processing message:', error);
-      }
-    };
-    
-    // Register the callback with the WASM node
-    this.wasmNode.subscribe_to_messages(messageCallback);
+  get id(): string {
+    return this._id;
   }
   
   /**
    * Register an agent with this node
    * 
    * @param agent - Agent to register
-   * @throws {TapError} If the agent is already registered
+   * @throws If an agent with the same ID is already registered
    */
   registerAgent(agent: Agent): void {
-    const did = agent.did;
-    
-    if (this.agents.has(did)) {
+    if (this.agents.has(agent.id)) {
       throw new TapError({
-        type: ErrorType.AGENT_ALREADY_EXISTS,
-        message: `Agent with DID ${did} is already registered`,
+        type: ErrorType.AGENT_ALREADY_REGISTERED,
+        message: `Agent with ID ${agent.id} is already registered`,
       });
     }
     
-    // Register with the WASM node
-    try {
-      this.wasmNode.register_agent(agent.getWasmAgent());
-    } catch (error) {
-      throw new TapError({
-        type: ErrorType.INVALID_STATE,
-        message: 'Failed to register agent with WASM node',
-        cause: error,
-      });
-    }
+    this.agents.set(agent.id, agent);
+    this.didToIdMap.set(agent.did, agent.id);
     
-    // Add to our local map
-    this.agents.set(did, agent);
+    // Subscribe to the agent's messages
+    agent.subscribe((message, metadata) => {
+      this.broadcastMessage(message, metadata);
+    });
   }
   
   /**
    * Unregister an agent from this node
    * 
-   * @param did - DID of the agent to unregister
-   * @returns True if the agent was unregistered, false if not found
+   * @param agentId - ID of the agent to unregister
+   * @returns True if the agent was unregistered, false if it wasn't found
    */
-  unregisterAgent(did: string): boolean {
-    if (!this.agents.has(did)) {
-      return false;
+  unregisterAgent(agentId: string): boolean {
+    const agent = this.agents.get(agentId);
+    if (!agent) {
+      throw new TapError({
+        type: ErrorType.AGENT_NOT_FOUND,
+        message: `Agent with ID ${agentId} not found`,
+      });
     }
     
-    // Unregister from the WASM node
-    const result = this.wasmNode.unregister_agent(did);
+    this.agents.delete(agentId);
+    this.didToIdMap.delete(agent.did);
     
-    // Remove from our local map
-    this.agents.delete(did);
-    
-    return result;
+    return true;
   }
   
   /**
-   * Get an agent by DID
+   * Get all registered agents
    * 
-   * @param did - DID of the agent to get
-   * @returns Agent instance or undefined if not found
+   * @returns Map of agent IDs to agents
    */
-  getAgent(did: string): Agent | undefined {
-    return this.agents.get(did);
+  getAgents(): Map<string, Agent> {
+    return this.agents;
   }
   
   /**
-   * Get the DIDs of all registered agents
+   * Get DIDs of all registered agents
    * 
-   * @returns Array of agent DIDs
+   * @returns Array of DIDs
    */
   getAgentDIDs(): string[] {
-    return Array.from(this.agents.keys());
+    return Array.from(this.didToIdMap.keys());
+  }
+  
+  /**
+   * Find an agent by its DID
+   * 
+   * @param did - DID to search for
+   * @returns Agent with the matching DID, or undefined if not found
+   */
+  getAgentByDID(did: string): Agent | undefined {
+    const agentId = this.didToIdMap.get(did);
+    if (!agentId) {
+      return undefined;
+    }
+    
+    return this.agents.get(agentId);
   }
   
   /**
    * Send a message from one agent to another
    * 
-   * @param fromDid - DID of the sender
-   * @param toDid - DID of the recipient
+   * @param fromDID - DID of the sending agent
+   * @param toDID - DID of the receiving agent
    * @param message - Message to send
-   * @returns Promise that resolves to the packed message string
-   * @throws {TapError} If the sender agent is not found
+   * @throws If the sending or receiving agent is not found
    */
-  async sendMessage(fromDid: string, toDid: string, message: Message): Promise<string> {
-    if (!this.agents.has(fromDid)) {
+  async sendMessage(fromDID: string, toDID: string, message: Message): Promise<void> {
+    const fromAgent = this.getAgentByDID(fromDID);
+    if (!fromAgent) {
       throw new TapError({
         type: ErrorType.AGENT_NOT_FOUND,
-        message: `Agent with DID ${fromDid} not found`,
+        message: `Agent with DID ${fromDID} not found`,
       });
     }
     
-    try {
-      const packedMessage = await this.wasmNode.send_message(
-        fromDid,
-        toDid,
-        message.getWasmMessage()
-      );
-      
-      return packedMessage;
-    } catch (error) {
+    const toAgent = this.getAgentByDID(toDID);
+    if (!toAgent) {
       throw new TapError({
-        type: ErrorType.MESSAGE_SEND_ERROR,
-        message: 'Failed to send message',
-        cause: error,
+        type: ErrorType.AGENT_NOT_FOUND,
+        message: `Agent with DID ${toDID} not found`,
       });
     }
-  }
-  
-  /**
-   * Process a received message
-   * 
-   * @param message - Message to process
-   * @param metadata - Optional message metadata
-   * @returns Promise that resolves when the message is processed
-   */
-  async processMessage(message: Message | string, metadata?: MessageMetadata): Promise<void> {
-    const wasmMessage = typeof message === 'string' ? message : message.getWasmMessage();
-    const wasmMetadata = metadata || {};
     
-    await this.wasmNode.process_message(wasmMessage, wasmMetadata);
+    // Set message from/to if not already set
+    if (!message.from) {
+      message.from = fromDID;
+    }
+    
+    if (!message.to || message.to.length === 0) {
+      message.to = [toDID];
+    }
+    
+    // Deliver the message
+    await this.handleAgentMessage(fromAgent, toAgent, message);
   }
   
   /**
-   * Subscribe to all messages processed by this node
+   * Subscribe to messages
+   * 
+   * @param subscriber - Subscriber function
+   * @returns True if the subscriber was added, false if it was already subscribed
+   */
+  subscribe(subscriber: MessageSubscriber): boolean {
+    if (this.messageSubscribers.has(subscriber)) {
+      return false;
+    }
+    
+    this.messageSubscribers.add(subscriber);
+    return true;
+  }
+  
+  /**
+   * Unsubscribe from messages
+   * 
+   * @param subscriber - Subscriber function
+   * @returns True if the subscriber was removed, false if it wasn't found
+   */
+  unsubscribe(subscriber: MessageSubscriber): boolean {
+    return this.messageSubscribers.delete(subscriber);
+  }
+  
+  /**
+   * Subscribe to messages (compatibility method for tests)
    * 
    * @param subscriber - Subscriber function
    * @returns Unsubscribe function
    */
-  subscribeToMessages(subscriber: MessageSubscriber): () => void {
-    this.messageSubscribers.add(subscriber);
-    
-    // Return an unsubscribe function
-    return () => {
-      this.messageSubscribers.delete(subscriber);
-    };
+  subscribeToMessages(subscriber: MessageSubscriber): () => boolean {
+    this.subscribe(subscriber);
+    return () => this.unsubscribe(subscriber);
   }
   
   /**
-   * Get the underlying WASM node
+   * Broadcast a message to all subscribers
    * 
-   * @returns WASM node
+   * @param message - Message to broadcast
+   * @param metadata - Optional message metadata
    */
-  getWasmNode(): any {
-    return this.wasmNode;
+  private broadcastMessage(message: Message, metadata?: MessageMetadata): void {
+    for (const subscriber of this.messageSubscribers) {
+      try {
+        subscriber(message, metadata);
+      } catch (error) {
+        console.error("Error in message subscriber:", error);
+      }
+    }
+  }
+  
+  /**
+   * Handle sending a message from one agent to another
+   * 
+   * @param fromAgent - Source agent
+   * @param toAgent - Destination agent
+   * @param message - Message to send
+   */
+  private async handleAgentMessage(fromAgent: Agent, toAgent: Agent, message: Message): Promise<void> {
+    await toAgent.processMessage(message);
   }
 }

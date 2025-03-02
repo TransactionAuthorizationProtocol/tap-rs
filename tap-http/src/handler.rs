@@ -2,13 +2,13 @@
 
 use crate::error::{Error, Result};
 use bytes::Bytes;
-use log::{debug, error, info};
 use serde::Serialize;
 use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
 use tap_core::{didcomm::unpack_didcomm_message, message::TapMessage};
 use tap_node::TapNode;
+use tracing::{debug, error, info};
 use warp::{self, hyper::StatusCode, reply::json, Reply};
 
 /// Response structure for health checks.

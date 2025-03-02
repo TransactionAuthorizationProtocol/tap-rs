@@ -1,17 +1,79 @@
 /**
- * Message handling for TAP-TS
+ * Message module for TAP-TS
  * 
- * This module provides classes for creating and handling TAP messages.
+ * @module message
  */
 
-import { TapError, ErrorType } from './error.ts';
-import {
-  MessageType,
-  AuthorizationRequest,
-  AuthorizationResponse,
-  MessageMetadata,
-} from './types.ts';
-import wasmLoader from './wasm/mod.ts';
+import * as uuid from "@std/uuid/mod.ts";
+import { TapError, ErrorType } from "./error.ts";
+import type { MessageMetadata } from "./types.ts";
+import { wasmLoader } from "./wasm/loader.ts";
+
+// Local interface definitions to avoid import conflicts
+interface AuthorizationRequest {
+  transactionHash: string;
+  transactionData?: string;
+  sourceAddress?: string;
+  destinationAddress?: string;
+  amount?: string;
+  fee?: string;
+  network?: string;
+  reference?: string;
+  callbackUrl?: string;
+  [key: string]: unknown;
+}
+
+interface AuthorizationResponse {
+  transactionHash: string;
+  authorizationResult?: string | boolean;
+  approved?: boolean;
+  reason?: string;
+}
+
+/**
+ * Message types for TAP
+ */
+export enum MessageType {
+  PING = 'ping',
+  PONG = 'pong',
+  AUTHORIZATION_REQUEST = 'authorization_request',
+  AUTHORIZATION_RESPONSE = 'authorization_response',
+}
+
+/**
+ * Options for creating a new message
+ */
+export interface MessageOptions {
+  /** Message type */
+  type: MessageType;
+  
+  /** Optional message ID (auto-generated if not provided) */
+  id?: string;
+  
+  /** Optional sender DID */
+  from?: string;
+  
+  /** Optional recipient DIDs */
+  to?: string[];
+  
+  /** Optional creation timestamp (defaults to now) */
+  created?: number;
+  
+  /** Optional expiration timestamp */
+  expires?: number;
+  
+  /** Optional thread ID for message threading */
+  threadId?: string;
+  
+  /** Optional correlation ID for related messages */
+  correlation?: string;
+  
+  /** Optional custom data */
+  customData?: Record<string, unknown>;
+  
+  /** Optional ledger ID */
+  ledgerId?: string;
+}
 
 /**
  * TAP Message class
@@ -19,41 +81,93 @@ import wasmLoader from './wasm/mod.ts';
 export class Message {
   private wasmMessage: any;
   
+  /** Message type */
+  type: MessageType;
+  
+  /** Message ID */
+  id: string;
+  
+  /** Message version */
+  version = "1.0";
+  
+  /** Ledger ID */
+  ledgerId?: string;
+  
+  /** Custom data */
+  customData?: Record<string, unknown>;
+  
+  /** Thread ID for message threading */
+  threadId?: string;
+  
+  /** Correlation ID for related messages */
+  correlation?: string;
+  
+  /** Creation timestamp */
+  created: number;
+  
+  /** Expiration timestamp */
+  expires?: number;
+  
+  /** Authorization request data */
+  private authorizationRequest?: AuthorizationRequest;
+  
+  /** Authorization response data */
+  private _data: Record<string, unknown> = {};
+  
   /**
    * Create a new Message instance
    * 
-   * @param messageType - Type of message to create
-   * @param ledgerId - Ledger identifier
+   * @param options - Options for creating a new message
    */
-  constructor(messageType: MessageType, ledgerId: string) {
+  constructor(options: MessageOptions) {
     if (!wasmLoader.moduleIsLoaded()) {
       throw new TapError({
         type: ErrorType.WASM_NOT_LOADED,
-        message: 'WASM module is not loaded',
+        message: "WASM module not loaded",
       });
     }
     
+    // Get the WASM module
     const module = wasmLoader.getModule();
-    let wasmMessageType;
     
-    switch (messageType) {
+    // Convert the message type to a WASM message type
+    let wasmMessageType;
+    switch (options.type) {
+      case MessageType.PING:
+        wasmMessageType = module.MessageType.Ping;
+        break;
+      case MessageType.PONG:
+        wasmMessageType = module.MessageType.Pong;
+        break;
       case MessageType.AUTHORIZATION_REQUEST:
         wasmMessageType = module.MessageType.AuthorizationRequest;
         break;
       case MessageType.AUTHORIZATION_RESPONSE:
         wasmMessageType = module.MessageType.AuthorizationResponse;
         break;
-      case MessageType.PING:
-        wasmMessageType = module.MessageType.Ping;
-        break;
       default:
-        throw new TapError({
-          type: ErrorType.INVALID_ARGUMENT,
-          message: `Invalid message type: ${messageType}`,
-        });
+        wasmMessageType = module.MessageType.Unknown;
+        break;
     }
     
-    this.wasmMessage = new module.Message(wasmMessageType, ledgerId);
+    this.type = options.type;
+    this.id = options.id || `msg_${generateUuid()}`;
+    this.ledgerId = options.ledgerId;
+    this.customData = options.customData;
+    this.threadId = options.threadId;
+    this.correlation = options.correlation;
+    this.created = options.created || Date.now();
+    this.expires = options.expires;
+    
+    this.wasmMessage = new module.Message(wasmMessageType, options.ledgerId);
+    
+    if (options.from) {
+      this.from = options.from;
+    }
+    
+    if (options.to) {
+      this.to = options.to;
+    }
   }
   
   /**
@@ -61,8 +175,8 @@ export class Message {
    * 
    * @returns Message ID
    */
-  get id(): string {
-    return this.wasmMessage.id;
+  get getId(): string {
+    return this.id;
   }
   
   /**
@@ -70,8 +184,8 @@ export class Message {
    * 
    * @returns Message type
    */
-  get type(): MessageType {
-    return this.wasmMessage.message_type as MessageType;
+  get getType(): MessageType {
+    return this.type;
   }
   
   /**
@@ -79,8 +193,8 @@ export class Message {
    * 
    * @returns Message version
    */
-  get version(): string {
-    return this.wasmMessage.version;
+  get getVersion(): string {
+    return this.version;
   }
   
   /**
@@ -88,8 +202,8 @@ export class Message {
    * 
    * @returns Ledger ID
    */
-  get ledgerId(): string {
-    return this.wasmMessage.ledger_id;
+  get getLedgerId(): string | undefined {
+    return this.ledgerId;
   }
   
   /**
@@ -97,7 +211,7 @@ export class Message {
    * 
    * @returns Authorization request data or undefined
    */
-  get authorizationRequest(): AuthorizationRequest | undefined {
+  get getAuthorizationRequest(): AuthorizationRequest | undefined {
     const request = this.wasmMessage.authorization_request;
     if (!request) {
       return undefined;
@@ -105,8 +219,8 @@ export class Message {
     
     return {
       transactionHash: request.transaction_hash,
-      sender: request.sender,
-      receiver: request.receiver,
+      sourceAddress: request.source_address,
+      destinationAddress: request.destination_address,
       amount: request.amount,
     };
   }
@@ -116,7 +230,7 @@ export class Message {
    * 
    * @returns Authorization response data or undefined
    */
-  get authorizationResponse(): AuthorizationResponse | undefined {
+  get getAuthorizationResponse(): AuthorizationResponse | undefined {
     const response = this.wasmMessage.authorization_response;
     if (!response) {
       return undefined;
@@ -130,25 +244,41 @@ export class Message {
   }
   
   /**
-   * Set authorization request data
+   * Set authorization request properties
    * 
    * @param transactionHash - Transaction hash
-   * @param sender - Sender address
-   * @param receiver - Receiver address
+   * @param sourceAddress - Source address
+   * @param destinationAddress - Destination address
    * @param amount - Transaction amount
+   * @param additionalData - Additional data
+   * @throws If the message type is not AUTHORIZATION_REQUEST
    */
   setAuthorizationRequest(
     transactionHash: string,
-    sender: string,
-    receiver: string,
-    amount: string
+    sourceAddress: string,
+    destinationAddress: string,
+    amount: string,
+    additionalData?: Record<string, unknown>
   ): void {
-    this.wasmMessage.set_authorization_request(
+    if (this.type !== MessageType.AUTHORIZATION_REQUEST) {
+      throw new TapError({
+        type: ErrorType.MESSAGE_INVALID,
+        message: `Cannot set authorization request data on message type ${this.type}`,
+      });
+    }
+    
+    // Prepare request data
+    if (!this._data) {
+      this._data = {};
+    }
+    
+    this._data.authorization_request = {
       transactionHash,
-      sender,
-      receiver,
-      amount
-    );
+      sourceAddress,
+      destinationAddress,
+      amount,
+      ...additionalData
+    };
   }
   
   /**
@@ -171,12 +301,175 @@ export class Message {
   }
   
   /**
+   * Set authorization request data (compatibility method for tests)
+   * 
+   * @param requestData - Authorization request data
+   */
+  setAuthorizationRequestData(requestData: AuthorizationRequest): void {
+    this.setAuthorizationRequest(
+      requestData.transactionHash || '',
+      requestData.sourceAddress || '',
+      requestData.destinationAddress || '',
+      requestData.amount || ''
+    );
+  }
+  
+  /**
+   * Get authorization request data
+   * 
+   * @returns Authorization request data object
+   * @throws If the message type is not AUTHORIZATION_REQUEST
+   */
+  getAuthorizationRequestData(): AuthorizationRequest | undefined {
+    if (this.type !== MessageType.AUTHORIZATION_REQUEST) {
+      throw new TapError({
+        type: ErrorType.MESSAGE_INVALID,
+        message: `Cannot get authorization request data from message type ${this.type}`,
+      });
+    }
+    
+    if (!this._data || !this._data.authorization_request) {
+      return undefined;
+    }
+    
+    const request = this._data.authorization_request as Record<string, unknown>;
+    
+    return {
+      transactionHash: request.transaction_hash as string,
+      sourceAddress: request.source_address as string,
+      destinationAddress: request.destination_address as string,
+      amount: request.amount as string,
+      // Include any additional fields from the request
+      ...Object.fromEntries(
+        Object.entries(request)
+          .filter(([key]) => !['transaction_hash', 'source_address', 'destination_address', 'amount'].includes(key))
+          .map(([key, value]) => [key, value])
+      )
+    };
+  }
+  
+  /**
+   * Set authorization response data
+   * 
+   * @param data - Authorization response data
+   * @throws If the message type is not AUTHORIZATION_RESPONSE
+   */
+  setAuthorizationResponseData(data: AuthorizationResponse): void {
+    if (this.type !== MessageType.AUTHORIZATION_RESPONSE) {
+      throw new TapError({
+        type: ErrorType.MESSAGE_INVALID,
+        message: `Cannot set authorization response data on message type ${this.type}`,
+      });
+    }
+    
+    // Store data in the message
+    if (!this._data) {
+      this._data = {};
+    }
+    
+    if (!this._data.authorization_response) {
+      this._data.authorization_response = {};
+    }
+    
+    const responseData = this._data.authorization_response as Record<string, unknown>;
+    
+    responseData.transactionHash = data.transactionHash;
+    responseData.authorizationResult = data.authorizationResult !== undefined 
+      ? String(data.authorizationResult)
+      : (data.approved ? "true" : "false");
+    responseData.reason = data.reason || "";
+    
+    // Set the approved property for backward compatibility
+    if (data.approved !== undefined) {
+      responseData.approved = data.approved;
+    } else if (data.authorizationResult !== undefined) {
+      // Convert string "true"/"false" to boolean if needed
+      responseData.approved = 
+        typeof data.authorizationResult === 'string'
+          ? data.authorizationResult === 'true'
+          : Boolean(data.authorizationResult);
+    }
+  }
+  
+  /**
+   * Get authorization response data
+   * 
+   * @returns Authorization response data or undefined if not set
+   * @throws If the message type is not AUTHORIZATION_RESPONSE
+   */
+  getAuthorizationResponseData(): AuthorizationResponse | undefined {
+    if (this.type !== MessageType.AUTHORIZATION_RESPONSE) {
+      throw new TapError({
+        type: ErrorType.MESSAGE_INVALID,
+        message: `Cannot get authorization response data from message type ${this.type}`,
+      });
+    }
+    
+    if (!this._data || !this._data.authorization_response) {
+      return undefined;
+    }
+    
+    const responseData = this._data.authorization_response as Record<string, unknown>;
+    
+    return {
+      transactionHash: responseData.transactionHash as string,
+      authorizationResult: responseData.authorizationResult as string,
+      approved: responseData.approved !== undefined 
+        ? Boolean(responseData.approved)
+        : (responseData.authorizationResult as string) === 'true',
+      reason: responseData.reason as string,
+    };
+  }
+  
+  /**
    * Get the underlying WASM message
    * 
    * @returns WASM message
    */
   getWasmMessage(): any {
     return this.wasmMessage;
+  }
+  
+  /**
+   * Recipient DIDs for the message
+   */
+  get to(): string[] | undefined {
+    if (!this._data.to) {
+      return undefined;
+    }
+    
+    return Array.isArray(this._data.to) ? this._data.to : [this._data.to as string];
+  }
+  
+  /**
+   * Set recipient DIDs for the message
+   */
+  set to(value: string[] | undefined) {
+    if (!value) {
+      delete this._data.to;
+      return;
+    }
+    
+    this._data.to = value;
+  }
+  
+  /**
+   * Sender DID for the message
+   */
+  get from(): string | undefined {
+    return this._data.from as string;
+  }
+  
+  /**
+   * Set sender DID for the message
+   */
+  set from(value: string | undefined) {
+    if (!value) {
+      delete this._data.from;
+      return;
+    }
+    
+    this._data.from = value;
   }
   
   /**
@@ -243,44 +536,47 @@ export class Message {
         });
     }
     
-    const message = new Message(messageType, typed.ledger_id as string);
+    const message = new Message({
+      type: messageType,
+      ledgerId: typed.ledger_id as string,
+    });
     
     // Set authorization request data if present
     if (typed.authorization_request && typeof typed.authorization_request === 'object') {
       const req = typed.authorization_request as Record<string, unknown>;
       
-      if (!req.transaction_hash || typeof req.transaction_hash !== 'string') {
+      if (req.transaction_hash && typeof req.transaction_hash !== 'string') {
         throw new TapError({
           type: ErrorType.MESSAGE_INVALID,
-          message: 'Invalid authorization request: missing or invalid transaction_hash',
+          message: 'Invalid authorization request: invalid transaction_hash',
         });
       }
       
-      if (!req.sender || typeof req.sender !== 'string') {
+      if (req.source_address && typeof req.source_address !== 'string') {
         throw new TapError({
           type: ErrorType.MESSAGE_INVALID,
-          message: 'Invalid authorization request: missing or invalid sender',
+          message: 'Invalid authorization request: invalid source_address',
         });
       }
       
-      if (!req.receiver || typeof req.receiver !== 'string') {
+      if (req.destination_address && typeof req.destination_address !== 'string') {
         throw new TapError({
           type: ErrorType.MESSAGE_INVALID,
-          message: 'Invalid authorization request: missing or invalid receiver',
+          message: 'Invalid authorization request: invalid destination_address',
         });
       }
       
-      if (!req.amount || typeof req.amount !== 'string') {
+      if (req.amount && typeof req.amount !== 'string') {
         throw new TapError({
           type: ErrorType.MESSAGE_INVALID,
-          message: 'Invalid authorization request: missing or invalid amount',
+          message: 'Invalid authorization request: invalid amount',
         });
       }
       
       message.setAuthorizationRequest(
         req.transaction_hash as string,
-        req.sender as string,
-        req.receiver as string,
+        req.source_address as string,
+        req.destination_address as string,
         req.amount as string
       );
     }
@@ -289,66 +585,71 @@ export class Message {
     if (typed.authorization_response && typeof typed.authorization_response === 'object') {
       const res = typed.authorization_response as Record<string, unknown>;
       
-      if (!res.transaction_hash || typeof res.transaction_hash !== 'string') {
+      if (res.transaction_hash && typeof res.transaction_hash !== 'string') {
         throw new TapError({
           type: ErrorType.MESSAGE_INVALID,
-          message: 'Invalid authorization response: missing or invalid transaction_hash',
+          message: 'Invalid authorization response: invalid transaction_hash',
         });
       }
       
-      if (typeof res.authorization_result !== 'boolean') {
+      if (res.authorization_result && typeof res.authorization_result !== 'string') {
         throw new TapError({
           type: ErrorType.MESSAGE_INVALID,
-          message: 'Invalid authorization response: missing or invalid authorization_result',
+          message: 'Invalid authorization response: invalid authorization_result',
         });
       }
       
       message.setAuthorizationResponse(
         res.transaction_hash as string,
-        res.authorization_result as boolean,
+        res.authorization_result === 'true',
         res.reason as string | undefined
       );
+    }
+    
+    // Set from and to fields
+    if (typed.from) {
+      message.from = typed.from as string;
+    }
+    
+    if (typed.to) {
+      message.to = Array.isArray(typed.to) ? typed.to : [typed.to as string];
     }
     
     return message;
   }
   
   /**
-   * Convert the message to a JSON string
+   * Convert to JSON
    * 
-   * @returns JSON string representation of the message
+   * @returns JSON representation of the message
    */
-  toJSON(): string {
-    // In a full implementation, we would convert the WASM message to a JSON string
-    // For now, we'll create a simple representation
+  toJSON(): Record<string, unknown> {
+    // Basic properties
     const result: Record<string, unknown> = {
       id: this.id,
-      message_type: this.type,
-      version: this.version,
-      ledger_id: this.ledgerId,
+      type: this.type,
+      ledgerId: this.ledgerId,
     };
     
+    // Optional properties
+    if (this.from) result.from = this.from;
+    if (this.to?.length) result.to = this.to;
+    if (this.created) result.created = this.created;
+    if (this.expires) result.expires = this.expires;
+    if (this.threadId) result.threadId = this.threadId;
+    if (this.correlation) result.correlation = this.correlation;
+    if (this.customData) result.customData = this.customData;
+    
+    // Authorization data
     if (this.authorizationRequest) {
-      result.authorization_request = {
-        transaction_hash: this.authorizationRequest.transactionHash,
-        sender: this.authorizationRequest.sender,
-        receiver: this.authorizationRequest.receiver,
-        amount: this.authorizationRequest.amount,
-      };
+      result.authorization_request = this.authorizationRequest;
     }
     
-    if (this.authorizationResponse) {
-      result.authorization_response = {
-        transaction_hash: this.authorizationResponse.transactionHash,
-        authorization_result: this.authorizationResponse.authorizationResult,
-      };
-      
-      if (this.authorizationResponse.reason) {
-        result.authorization_response.reason = this.authorizationResponse.reason;
-      }
+    if (this._data.authorization_response) {
+      result.authorization_response = this._data.authorization_response;
     }
     
-    return JSON.stringify(result);
+    return result;
   }
 }
 
@@ -361,3 +662,12 @@ export type MessageHandler = (message: Message, metadata?: MessageMetadata) => P
  * Type for message subscriber functions
  */
 export type MessageSubscriber = (message: Message, metadata?: MessageMetadata) => void;
+
+/**
+ * Generate a UUID
+ * 
+ * @returns A UUID string
+ */
+function generateUuid(): string {
+  return crypto.randomUUID();
+}
