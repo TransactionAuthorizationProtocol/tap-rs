@@ -1,0 +1,3 @@
+[submodule "prds/taips"]
+	path = prds/taips
+	url = https://github.com/TransactionAuthorizationProtocol/TAIPs.git
