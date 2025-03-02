@@ -1,17 +1,28 @@
-//! TAP Core - Core library for the Transaction Authorization Protocol
+//! Implementation of the Transaction Authorization Protocol (TAP)
 //!
-//! This library provides the core functionality for working with
-//! Transaction Authorization Protocol (TAP) messages, including
-//! serialization, validation, and DIDComm integration.
+//! This crate provides the core functionality for the Transaction Authorization
+//! Protocol (TAP), including message definitions, serialization, validation,
+//! and DIDComm integration.
+//!
+//! The Transaction Authorization Protocol (TAP) is a multi-party protocol for
+//! authorizing, documenting, and recording financial transactions for
+//! cryptocurrency asset transfers.
 
-// Re-export modules
-pub mod didcomm;
+// Re-export the didcomm crate for convenience to users of tap-core
+pub use didcomm;
+
+// Internal modules
 pub mod error;
 pub mod message;
+pub mod utils;
 
-// Re-export main types
+// Re-export public types for easier access
 pub use error::{Error, Result};
-pub use message::TapMessage;
+pub use message::{
+    AddAgentsBody, Agent, Attachment, AttachmentData, AuthorizeBody, ErrorBody,
+    PresentationBody, RejectBody, RequestPresentationBody, SettleBody, 
+    TapMessageType, TransferBody, Validate, TapMessage, TapMessageBody, create_tap_message
+};
 
 // Conditional compilation for WASM targets
 #[cfg(target_arch = "wasm32")]

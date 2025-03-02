@@ -9,10 +9,10 @@ resolver = "2"
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["Notabene"]
+authors = ["Pelle Braendgaard <pelle@notabene.id>"]
 description = "Rust implementation of the Transaction Authorization Protocol (TAP)"
 repository = "https://github.com/TransactionAuthorizationProtocol/tap-rs"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [workspace.dependencies]
 # Serialization

@@ -5,6 +5,16 @@
 
 pub mod types;
 pub mod validation;
+pub mod tap_message_trait;
 
-// Re-export all types from the types module
-pub use types::*;
+// Re-export specific types to avoid ambiguity
+pub use types::{
+    AddAgentsBody, Agent, Attachment, AttachmentData, AuthorizeBody, ErrorBody,
+    PresentationBody, RejectBody, RequestPresentationBody, SettleBody, 
+    TapMessageType, TransferBody, Validate
+};
+
+// Re-export the TapMessage trait and related functionality
+pub use tap_message_trait::{
+    TapMessage, TapMessageBody, create_tap_message
+};

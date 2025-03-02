@@ -10,35 +10,51 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Error types for TAP Agent
 #[derive(Error, Debug)]
 pub enum Error {
-    /// Error related to configuration
-    #[error("Configuration error: {0}")]
-    Configuration(String),
+    /// Core TAP errors
+    #[error("Core error: {0}")]
+    Core(#[from] tap_core::error::Error),
 
-    /// Error related to DID resolution
+    /// Validation errors
+    #[error("Validation error: {0}")]
+    Validation(String),
+
+    /// DID resolution errors
     #[error("DID resolution error: {0}")]
     DidResolution(String),
+
+    /// Error related to DID not found
+    #[error("DID not found: {0}")]
+    DidNotFound(String),
+
+    /// Error related to missing configuration
+    #[error("Missing configuration: {0}")]
+    MissingConfig(String),
 
     /// Error related to cryptographic operations
     #[error("Crypto error: {0}")]
     Crypto(String),
 
-    /// Error related to message validation
-    #[error("Validation error: {0}")]
-    Validation(String),
-
     /// Error related to message processing
-    #[error("Processing error: {0}")]
-    Processing(String),
+    #[error("Message error: {0}")]
+    Message(String),
 
-    /// Error related to invalid data
-    #[error("Invalid data: {0}")]
-    InvalidData(String),
+    /// Error related to policy evaluation
+    #[error("Policy error: {0}")]
+    Policy(String),
 
-    /// Error from TAP Core
-    #[error("TAP Core error: {0}")]
-    Core(#[from] tap_core::error::Error),
+    /// Error related to storage
+    #[error("Storage error: {0}")]
+    Storage(String),
 
-    /// Other generic errors
-    #[error("Other error: {0}")]
-    Other(String),
+    /// IO errors
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
+
+    /// Feature not implemented
+    #[error("Feature not implemented: {0}")]
+    NotImplemented(String),
+
+    /// Serialization error
+    #[error("Serialization error: {0}")]
+    SerializationError(String),
 }

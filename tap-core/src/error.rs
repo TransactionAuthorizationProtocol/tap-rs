@@ -22,6 +22,10 @@ pub enum Error {
     #[error("Validation error: {0}")]
     Validation(String),
 
+    /// Error related to mismatched message types.
+    #[error("Invalid message type: {0}")]
+    InvalidMessageType(String),
+
     /// Error related to CAIP validation.
     #[error("CAIP error: {0}")]
     CaipError(#[from] tap_caip::error::Error),

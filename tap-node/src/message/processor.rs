@@ -1,135 +1,159 @@
-//! Message processors for TAP Node
+//! Message processor implementations for TAP Node
 //!
-//! This module provides various message processors for handling messages.
+//! This module provides message processing functionality for TAP Node messages.
 
 use async_trait::async_trait;
-use tap_core::message::TapMessage;
-use tracing::{debug, info};
+use log::{debug, info};
+use std::sync::Arc;
+use tap_core::didcomm::Message;
 
 use crate::error::Result;
-use crate::message::MessageProcessor;
+
+/// Trait for processing messages
+#[async_trait]
+pub trait MessageProcessor: Send + Sync + Clone {
+    /// Process an incoming message
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>>;
+
+    /// Process an outgoing message
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>>;
+}
 
 /// A message processor that logs messages
-pub struct LoggingMessageProcessor {
-    /// Whether to log full message content
-    log_content: bool,
-}
-
-impl LoggingMessageProcessor {
-    /// Create a new logging message processor
-    pub fn new(log_content: bool) -> Self {
-        Self { log_content }
-    }
-}
+#[derive(Debug, Clone)]
+pub struct LoggingMessageProcessor;
 
 #[async_trait]
 impl MessageProcessor for LoggingMessageProcessor {
-    async fn process_incoming(&self, message: TapMessage) -> Result<Option<TapMessage>> {
-        let msg_id = message.id.clone();
-        let msg_type = message.message_type.to_string();
-        let from = message
-            .from_did
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
-        let to = message
-            .to_did
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
-
-        if self.log_content {
-            info!(
-                "Incoming message: ID={}, Type={}, From={}, To={}, Content={:?}",
-                msg_id, msg_type, from, to, message
-            );
-        } else {
-            info!(
-                "Incoming message: ID={}, Type={}, From={}, To={}",
-                msg_id, msg_type, from, to
-            );
-        }
-
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+        info!("Incoming message: {}", message.id);
+        debug!("Message content: {:?}", message);
         Ok(Some(message))
     }
 
-    async fn process_outgoing(&self, message: TapMessage) -> Result<Option<TapMessage>> {
-        let msg_id = message.id.clone();
-        let msg_type = message.message_type.to_string();
-        let from = message
-            .from_did
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
-        let to = message
-            .to_did
-            .clone()
-            .unwrap_or_else(|| "unknown".to_string());
-
-        if self.log_content {
-            info!(
-                "Outgoing message: ID={}, Type={}, From={}, To={}, Content={:?}",
-                msg_id, msg_type, from, to, message
-            );
-        } else {
-            info!(
-                "Outgoing message: ID={}, Type={}, From={}, To={}",
-                msg_id, msg_type, from, to
-            );
-        }
-
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+        info!("Outgoing message: {}", message.id);
+        debug!("Message content: {:?}", message);
         Ok(Some(message))
     }
 }
 
-/// Validates incoming messages to ensure they have the required fields
+/// A message processor that validates messages
 #[derive(Debug, Clone)]
 pub struct ValidationMessageProcessor;
 
-impl Default for ValidationMessageProcessor {
-    fn default() -> Self {
-        Self::new()
+#[async_trait]
+impl MessageProcessor for ValidationMessageProcessor {
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+        // TODO: Implement validation
+        debug!("Validating incoming message: {}", message.id);
+        Ok(Some(message))
+    }
+
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+        // TODO: Implement validation
+        debug!("Validating outgoing message: {}", message.id);
+        Ok(Some(message))
     }
 }
 
-impl ValidationMessageProcessor {
-    /// Create a new validation message processor
-    pub fn new() -> Self {
-        Self
+/// Default message processor with core functionality
+#[derive(Debug, Clone)]
+pub struct DefaultMessageProcessor;
+
+#[async_trait]
+impl MessageProcessor for DefaultMessageProcessor {
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+        // By default, we just pass the message through
+        Ok(Some(message))
+    }
+
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+        // By default, we just pass the message through
+        Ok(Some(message))
+    }
+}
+
+/// A composite message processor that chains multiple processors together
+#[derive(Debug, Clone)]
+pub struct CompositeMessageProcessor {
+    /// The processors to use, in order
+    processors: Vec<Arc<dyn MessageProcessor>>,
+}
+
+impl CompositeMessageProcessor {
+    /// Create a new composite message processor
+    pub fn new(processors: Vec<Arc<dyn MessageProcessor>>) -> Self {
+        Self { processors }
+    }
+
+    /// Add a processor to the chain
+    pub fn add_processor(&mut self, processor: Arc<dyn MessageProcessor>) {
+        self.processors.push(processor);
     }
 }
 
 #[async_trait]
-impl MessageProcessor for ValidationMessageProcessor {
-    async fn process_incoming(&self, message: TapMessage) -> Result<Option<TapMessage>> {
-        // Validate required fields
-        if message.id.is_empty() {
-            debug!("Dropping message without ID");
-            return Ok(None);
+impl MessageProcessor for CompositeMessageProcessor {
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+        let mut current_message = Some(message);
+
+        for processor in &self.processors {
+            if let Some(msg) = current_message {
+                current_message = processor.process_incoming(msg).await?;
+            } else {
+                // Message was filtered out by a previous processor
+                break;
+            }
         }
 
-        if message.to_did.is_none() {
-            debug!("Dropping message without recipient (to_did field)");
-            return Ok(None);
-        }
-
-        Ok(Some(message))
+        Ok(current_message)
     }
 
-    async fn process_outgoing(&self, message: TapMessage) -> Result<Option<TapMessage>> {
-        // Validate required fields
-        if message.id.is_empty() {
-            debug!("Dropping outgoing message without ID");
-            return Ok(None);
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+        let mut current_message = Some(message);
+
+        for processor in &self.processors {
+            if let Some(msg) = current_message {
+                current_message = processor.process_outgoing(msg).await?;
+            } else {
+                // Message was filtered out by a previous processor
+                break;
+            }
         }
 
-        if message.to_did.is_none() {
-            debug!("Dropping outgoing message without recipient (to_did field)");
-            return Ok(None);
-        }
+        Ok(current_message)
+    }
+}
 
-        if message.from_did.is_none() {
-            debug!("Dropping outgoing message without sender (from_did field)");
-            return Ok(None);
-        }
+/// Default message processor that logs and validates messages
+pub struct DefaultMessageProcessorImpl {
+    /// The internal composite processor
+    processor: CompositeMessageProcessor,
+}
 
-        Ok(Some(message))
+impl DefaultMessageProcessorImpl {
+    /// Create a new default message processor
+    pub fn new() -> Self {
+        let logging_processor = Arc::new(LoggingMessageProcessor);
+        let validation_processor = Arc::new(ValidationMessageProcessor);
+
+        let processor = CompositeMessageProcessor::new(vec![
+            logging_processor,
+            validation_processor,
+        ]);
+
+        Self { processor }
+    }
+}
+
+#[async_trait]
+impl MessageProcessor for DefaultMessageProcessorImpl {
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+        self.processor.process_incoming(message).await
+    }
+
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+        self.processor.process_outgoing(message).await
     }
 }

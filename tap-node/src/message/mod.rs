@@ -1,104 +1,154 @@
-//! Message handling for TAP Node
+//! Message processing and routing for TAP Node
 //!
-//! This module provides message handling utilities for TAP Node.
+//! This module provides functionality for processing and routing TAP messages between agents.
 
-mod processor;
-mod processor_pool;
-mod router;
+pub mod processor;
+pub mod processor_pool;
+pub mod router;
+pub mod sender;
 
-pub use processor::*;
-pub use processor_pool::ProcessorPool;
-pub use processor_pool::ProcessorPoolConfig;
-pub use router::*;
+// Re-export processors, routers, and senders
+pub use processor::{DefaultMessageProcessor, LoggingMessageProcessor, ValidationMessageProcessor, MessageProcessor};
+pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
+pub use router::{DefaultMessageRouter};
+pub use sender::{HttpMessageSender, NodeMessageSender};
+pub use tap_agent::MessageSender;
 
+// Import the Message type from tap-core
+use tap_core::didcomm::Message;
+use crate::error::{Error, Result};
 use async_trait::async_trait;
-use tap_core::message::TapMessage;
-
-use crate::error::Result;
-
-/// Message processor for intercepting and processing messages
-#[async_trait]
-pub trait MessageProcessor: Send + Sync {
-    /// Process an incoming message before it's dispatched to an agent
-    ///
-    /// Returns the processed message or None if the message should be dropped
-    async fn process_incoming(&self, message: TapMessage) -> Result<Option<TapMessage>>;
-
-    /// Process an outgoing message before it's sent
-    ///
-    /// Returns the processed message or None if the message should be dropped
-    async fn process_outgoing(&self, message: TapMessage) -> Result<Option<TapMessage>>;
-}
 
 /// Router to determine the destination agent for a message
-#[async_trait]
 pub trait MessageRouter: Send + Sync {
-    /// Determine the agent DID that should receive this message
-    ///
-    /// Returns the DID of the agent that should receive the message
-    async fn route_message(&self, message: &TapMessage) -> Result<String>;
+    /// Route a message to determine the target agent DID
+    fn route_message_impl(&self, message: &Message) -> Result<String>;
+}
+
+/// Async extension trait for the MessageRouter
+#[async_trait]
+pub trait RouterAsyncExt: MessageRouter {
+    /// Route a message asynchronously
+    async fn route_message(&self, message: &Message) -> Result<String>;
+}
+
+#[async_trait]
+impl<T: MessageRouter + Sync> RouterAsyncExt for T {
+    async fn route_message(&self, message: &Message) -> Result<String> {
+        self.route_message_impl(message)
+    }
+}
+
+/// Processor enum to replace trait objects
+#[derive(Clone)]
+pub enum MessageProcessorType {
+    Default(DefaultMessageProcessor),
+    Logging(LoggingMessageProcessor),
+    Validation(ValidationMessageProcessor),
+}
+
+/// Router enum to replace trait objects
+#[derive(Clone)]
+pub enum MessageRouterType {
+    Default(DefaultMessageRouter),
 }
 
 /// A message processor that applies multiple processors in sequence
-#[derive(Default)]
+#[derive(Clone)]
 pub struct CompositeMessageProcessor {
-    /// The processors to apply in sequence
-    processors: Vec<Box<dyn MessageProcessor>>,
+    processors: Vec<MessageProcessorType>,
 }
 
 impl CompositeMessageProcessor {
     /// Create a new composite message processor
-    pub fn new() -> Self {
-        Self {
-            processors: Vec::new(),
-        }
+    pub fn new(processors: Vec<MessageProcessorType>) -> Self {
+        Self { processors }
     }
 
     /// Add a processor to the chain
-    pub fn add_processor(&mut self, processor: Box<dyn MessageProcessor>) {
+    pub fn add_processor(&mut self, processor: MessageProcessorType) {
         self.processors.push(processor);
     }
 }
 
 #[async_trait]
 impl MessageProcessor for CompositeMessageProcessor {
-    async fn process_incoming(&self, message: TapMessage) -> Result<Option<TapMessage>> {
-        let mut current_message = Some(message);
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+        let mut current_message = message;
 
-        // Apply each processor in sequence
         for processor in &self.processors {
-            if let Some(msg) = current_message {
-                current_message = processor.process_incoming(msg).await?;
+            let processed = match processor {
+                MessageProcessorType::Default(p) => p.process_incoming(current_message).await?,
+                MessageProcessorType::Logging(p) => p.process_incoming(current_message).await?,
+                MessageProcessorType::Validation(p) => p.process_incoming(current_message).await?,
+            };
 
-                // If a processor returns None, stop processing
-                if current_message.is_none() {
-                    break;
-                }
+            if let Some(msg) = processed {
+                current_message = msg;
             } else {
-                break;
+                // Message was filtered out
+                return Ok(None);
             }
         }
 
-        Ok(current_message)
+        Ok(Some(current_message))
     }
 
-    async fn process_outgoing(&self, message: TapMessage) -> Result<Option<TapMessage>> {
-        let mut current_message = Some(message);
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+        let mut current_message = message;
 
-        // Apply each processor in sequence
         for processor in &self.processors {
-            if let Some(msg) = current_message {
-                current_message = processor.process_outgoing(msg).await?;
+            let processed = match processor {
+                MessageProcessorType::Default(p) => p.process_outgoing(current_message).await?,
+                MessageProcessorType::Logging(p) => p.process_outgoing(current_message).await?,
+                MessageProcessorType::Validation(p) => p.process_outgoing(current_message).await?,
+            };
 
-                // If a processor returns None, stop processing
-                if current_message.is_none() {
-                    break;
-                }
+            if let Some(msg) = processed {
+                current_message = msg;
             } else {
-                break;
+                // Message was filtered out
+                return Ok(None);
             }
         }
 
-        Ok(current_message)
+        Ok(Some(current_message))
+    }
+}
+
+/// A composite router that tries multiple routers in sequence
+#[derive(Clone)]
+pub struct CompositeMessageRouter {
+    routers: Vec<MessageRouterType>,
+}
+
+impl CompositeMessageRouter {
+    /// Create a new composite router
+    pub fn new(routers: Vec<MessageRouterType>) -> Self {
+        Self { routers }
+    }
+
+    /// Add a router to the chain
+    pub fn add_router(&mut self, router: MessageRouterType) {
+        self.routers.push(router);
+    }
+}
+
+impl MessageRouter for CompositeMessageRouter {
+    fn route_message_impl(&self, message: &Message) -> Result<String> {
+        // Try each router in sequence until one succeeds
+        for router in &self.routers {
+            let result = match router {
+                MessageRouterType::Default(r) => r.route_message_impl(message),
+            };
+
+            match result {
+                Ok(did) => return Ok(did),
+                Err(_) => continue, // Try the next router
+            }
+        }
+
+        // If we get here, all routers failed
+        Err(crate::error::Error::Routing("No router could handle the message".to_string()))
     }
 }

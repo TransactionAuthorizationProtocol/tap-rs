@@ -8,7 +8,7 @@ use std::sync::Arc;
 use base58::ToBase58;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tap_agent::DidResolver;
+use tap_agent::did::DidResolver;
 use tokio::sync::RwLock;
 
 use crate::error::{Error, Result};

@@ -47,11 +47,11 @@ pub struct Service {
     pub service_endpoint: String,
 }
 
-/// DID Resolution trait
+/// A trait for resolving DIDs to DID documents
 #[async_trait]
 pub trait DidResolver: Send + Sync + Debug {
-    /// Resolves a DID to a DID Document
-    async fn resolve(&self, did: &str) -> Result<DidDoc>;
+    /// Resolve a DID to a DID document
+    async fn resolve(&self, did: &str) -> Result<String>;
 }
 
 /// A basic resolver that resolves DIDs using a static map
@@ -59,6 +59,12 @@ pub trait DidResolver: Send + Sync + Debug {
 pub struct BasicResolver {
     /// Map of DIDs to DID documents
     map: HashMap<String, DidDoc>,
+}
+
+impl Default for BasicResolver {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BasicResolver {
@@ -73,9 +79,9 @@ impl BasicResolver {
 
 #[async_trait]
 impl DidResolver for BasicResolver {
-    async fn resolve(&self, did: &str) -> Result<DidDoc> {
+    async fn resolve(&self, did: &str) -> Result<String> {
         if let Some(doc) = self.map.get(did) {
-            return Ok(doc.clone());
+            return Ok(serde_json::to_string(doc).unwrap());
         }
 
         Err(Error::DidResolution(format!(
@@ -91,7 +97,7 @@ pub struct KeyResolver;
 
 #[async_trait]
 impl DidResolver for KeyResolver {
-    async fn resolve(&self, did: &str) -> Result<DidDoc> {
+    async fn resolve(&self, did: &str) -> Result<String> {
         if !did.starts_with("did:key:") {
             return Err(Error::DidResolution(format!(
                 "Invalid did:key format: {}",
@@ -101,11 +107,12 @@ impl DidResolver for KeyResolver {
 
         // A real implementation would handle proper did:key parsing and key extraction
         // For now, just return a placeholder DID Doc
-        Ok(DidDoc {
+        let doc = DidDoc {
             id: did.to_string(),
             verification_method: vec![],
             service: None,
-        })
+        };
+        Ok(serde_json::to_string(&doc).unwrap())
     }
 }
 
@@ -115,7 +122,7 @@ pub struct WebResolver;
 
 #[async_trait]
 impl DidResolver for WebResolver {
-    async fn resolve(&self, did: &str) -> Result<DidDoc> {
+    async fn resolve(&self, did: &str) -> Result<String> {
         if !did.starts_with("did:web:") {
             return Err(Error::DidResolution(format!(
                 "Invalid did:web format: {}",
@@ -125,11 +132,12 @@ impl DidResolver for WebResolver {
 
         // A real implementation would fetch the DID document from the web
         // For now, just return a placeholder DID Doc
-        Ok(DidDoc {
+        let doc = DidDoc {
             id: did.to_string(),
             verification_method: vec![],
             service: None,
-        })
+        };
+        Ok(serde_json::to_string(&doc).unwrap())
     }
 }
 
@@ -139,7 +147,7 @@ pub struct PkhResolver;
 
 #[async_trait]
 impl DidResolver for PkhResolver {
-    async fn resolve(&self, did: &str) -> Result<DidDoc> {
+    async fn resolve(&self, did: &str) -> Result<String> {
         if !did.starts_with("did:pkh:") {
             return Err(Error::DidResolution(format!(
                 "Invalid did:pkh format: {}",
@@ -149,11 +157,12 @@ impl DidResolver for PkhResolver {
 
         // A real implementation would handle proper did:pkh parsing and key derivation
         // For now, just return a placeholder DID Doc
-        Ok(DidDoc {
+        let doc = DidDoc {
             id: did.to_string(),
             verification_method: vec![],
             service: None,
-        })
+        };
+        Ok(serde_json::to_string(&doc).unwrap())
     }
 }
 
@@ -179,7 +188,7 @@ impl MultiResolver {
 
 #[async_trait]
 impl DidResolver for MultiResolver {
-    async fn resolve(&self, did: &str) -> Result<DidDoc> {
+    async fn resolve(&self, did: &str) -> Result<String> {
         for resolver in &self.resolvers {
             match resolver.resolve(did).await {
                 Ok(doc) => return Ok(doc),
@@ -191,5 +200,69 @@ impl DidResolver for MultiResolver {
             "No resolver found for DID: {}",
             did
         )))
+    }
+}
+
+/// Default implementation of [DidResolver]
+#[derive(Debug)]
+pub struct DefaultDIDResolver {
+    /// Cache of resolved DID documents
+    cache: Arc<std::sync::RwLock<HashMap<String, String>>>,
+}
+
+impl Default for DefaultDIDResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DefaultDIDResolver {
+    /// Creates a new [DefaultDIDResolver]
+    pub fn new() -> Self {
+        Self {
+            cache: Arc::new(std::sync::RwLock::new(HashMap::new())),
+        }
+    }
+}
+
+#[async_trait]
+impl DidResolver for DefaultDIDResolver {
+    /// Resolves a DID to a DID document
+    async fn resolve(&self, did: &str) -> Result<String> {
+        // Check cache first
+        if let Some(doc) = self.cache.read().unwrap().get(did) {
+            return Ok(doc.clone());
+        }
+
+        // Simple mock resolver for testing
+        // In a real implementation, this would delegate to specific resolvers based on the DID method
+        let doc = match did {
+            did if did.starts_with("did:key:") => {
+                format!("{{ \"id\": \"{}\", \"authentication\": [{{ \"id\": \"#{}\", \"type\": \"Ed25519VerificationKey2018\" }}] }}", did, did)
+            }
+            did if did.starts_with("did:web:") => {
+                format!("{{ \"id\": \"{}\", \"authentication\": [{{ \"id\": \"#{}\", \"type\": \"Ed25519VerificationKey2018\" }}] }}", did, did)
+            }
+            did if did.starts_with("did:pkh:") => {
+                format!("{{ \"id\": \"{}\", \"authentication\": [{{ \"id\": \"#{}\", \"type\": \"EcdsaSecp256k1VerificationKey2019\" }}] }}", did, did)
+            }
+            did if did.starts_with("did:example:") => {
+                format!("{{ \"id\": \"{}\", \"authentication\": [{{ \"id\": \"#{}\", \"type\": \"Ed25519VerificationKey2018\" }}] }}", did, did)
+            }
+            _ => {
+                return Err(Error::DidResolution(format!(
+                    "Unsupported DID method for {}",
+                    did
+                )))
+            }
+        };
+
+        // Update cache
+        self.cache
+            .write()
+            .unwrap()
+            .insert(did.to_string(), doc.clone());
+
+        Ok(doc)
     }
 }

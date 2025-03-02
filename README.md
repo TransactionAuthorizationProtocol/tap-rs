@@ -6,7 +6,7 @@ This repository contains a Rust implementation of the Transaction Authorization 
 
 TAP-RS is organized as a Rust workspace with multiple crates:
 
-- **[tap-core](./tap-core/README.md)**: Core message processing for TAP
+- **[tap-core](./tap-core/README.md)**: Core message processing for TAP with integrated DIDComm support
 - **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **caip**: Implementation of Chain Agnostic Identifier Standards
 - **tap-node**: TAP node orchestration and message routing
@@ -40,7 +40,7 @@ cargo test
 
 ## Features
 
-- DIDComm v2 integration for secure, encrypted messaging
+- Direct DIDComm v2 integration in TAP message types for secure, encrypted messaging
 - Support for all TAP message types
 - Implementation of Chain Agnostic Standards (CAIP-2, CAIP-10, CAIP-19)
 - Multiple DID method support (did:key, did:web, did:pkh)

@@ -173,9 +173,15 @@ pub fn validate_transfer_body(body: &TransferBody) -> Result<()> {
 /// Validates a request presentation body.
 fn validate_request_presentation_body(body: &RequestPresentationBody) -> Result<()> {
     // Validate required fields
-    if body.presentation_definition.is_empty() {
+    if body.presentation_id.is_empty() {
         return Err(Error::Validation(
-            "Presentation definition is required".to_string(),
+            "Presentation ID is required".to_string(),
+        ));
+    }
+    
+    if body.credentials.is_empty() {
+        return Err(Error::Validation(
+            "At least one credential request is required".to_string(),
         ));
     }
 
@@ -184,10 +190,16 @@ fn validate_request_presentation_body(body: &RequestPresentationBody) -> Result<
 
 /// Validates a presentation body.
 fn validate_presentation_body(body: &PresentationBody) -> Result<()> {
-    // Validate that the presentation submission exists
-    if body.presentation_submission.is_null() {
+    // Validate required fields
+    if body.presentation_id.is_empty() {
         return Err(Error::Validation(
-            "Presentation submission is required".to_string(),
+            "Presentation ID is required".to_string(),
+        ));
+    }
+    
+    if body.credentials.is_empty() {
+        return Err(Error::Validation(
+            "Credentials are required".to_string(),
         ));
     }
 
@@ -197,12 +209,8 @@ fn validate_presentation_body(body: &PresentationBody) -> Result<()> {
 /// Validates an authorize body.
 fn validate_authorize_body(body: &AuthorizeBody) -> Result<()> {
     // Validate required fields
-    if body.id.is_empty() {
-        return Err(Error::Validation("ID is required".to_string()));
-    }
-
-    if body.transaction.is_empty() {
-        return Err(Error::Validation("Transaction is required".to_string()));
+    if body.transfer_id.is_empty() {
+        return Err(Error::Validation("Transfer ID is required".to_string()));
     }
 
     Ok(())
@@ -211,16 +219,16 @@ fn validate_authorize_body(body: &AuthorizeBody) -> Result<()> {
 /// Validates a reject body.
 fn validate_reject_body(body: &RejectBody) -> Result<()> {
     // Validate required fields
-    if body.id.is_empty() {
-        return Err(Error::Validation("ID is required".to_string()));
+    if body.transfer_id.is_empty() {
+        return Err(Error::Validation("Transfer ID is required".to_string()));
     }
 
-    if body.transaction.is_empty() {
-        return Err(Error::Validation("Transaction is required".to_string()));
+    if body.code.is_empty() {
+        return Err(Error::Validation("Rejection code is required".to_string()));
     }
-
-    if body.reason.is_empty() {
-        return Err(Error::Validation("Reason is required".to_string()));
+    
+    if body.description.is_empty() {
+        return Err(Error::Validation("Description is required".to_string()));
     }
 
     Ok(())
@@ -229,20 +237,12 @@ fn validate_reject_body(body: &RejectBody) -> Result<()> {
 /// Validates a settle body.
 fn validate_settle_body(body: &SettleBody) -> Result<()> {
     // Validate required fields
-    if body.id.is_empty() {
-        return Err(Error::Validation("ID is required".to_string()));
+    if body.transfer_id.is_empty() {
+        return Err(Error::Validation("Transfer ID is required".to_string()));
     }
 
-    if body.transaction.is_empty() {
-        return Err(Error::Validation("Transaction is required".to_string()));
-    }
-
-    if body.settlement_id.is_empty() {
-        return Err(Error::Validation("Settlement ID is required".to_string()));
-    }
-
-    if body.timestamp.is_empty() {
-        return Err(Error::Validation("Timestamp is required".to_string()));
+    if body.transaction_id.is_empty() {
+        return Err(Error::Validation("Transaction ID is required".to_string()));
     }
 
     Ok(())
@@ -251,8 +251,8 @@ fn validate_settle_body(body: &SettleBody) -> Result<()> {
 /// Validates an add agents body.
 fn validate_add_agents_body(body: &AddAgentsBody) -> Result<()> {
     // Validate required fields
-    if body.transaction.is_empty() {
-        return Err(Error::Validation("Transaction is required".to_string()));
+    if body.transfer_id.is_empty() {
+        return Err(Error::Validation("Transfer ID is required".to_string()));
     }
 
     if body.agents.is_empty() {
@@ -271,8 +271,8 @@ fn validate_error_body(body: &ErrorBody) -> Result<()> {
         return Err(Error::Validation("Error code is required".to_string()));
     }
 
-    if body.message.is_empty() {
-        return Err(Error::Validation("Error message is required".to_string()));
+    if body.description.is_empty() {
+        return Err(Error::Validation("Error description is required".to_string()));
     }
 
     Ok(())

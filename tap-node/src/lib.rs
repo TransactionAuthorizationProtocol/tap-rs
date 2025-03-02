@@ -12,20 +12,23 @@ pub mod resolver;
 
 pub use error::{Error, Result};
 
+use std::sync::Arc;
+
+use tap_agent::Agent;
+use tap_core::didcomm::Message;
+
 use agent::AgentRegistry;
 use event::EventBus;
 use message::{
-    CompositeMessageProcessor, DefaultMessageRouter, LoggingMessageProcessor, MessageProcessor,
-    MessageRouter, ProcessorPool, ProcessorPoolConfig, ValidationMessageProcessor,
+    CompositeMessageProcessor, CompositeMessageRouter, MessageProcessorType, MessageRouterType,
 };
+use message::processor::{
+    DefaultMessageProcessor, LoggingMessageProcessor, MessageProcessor, ValidationMessageProcessor
+};
+use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
+use message::router::DefaultMessageRouter;
+use message::RouterAsyncExt;
 use resolver::NodeResolver;
-
-use std::sync::Arc;
-use tap_agent::Agent;
-use tap_core::message::TapMessage;
-
-/// Version of the TAP Node
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Configuration for a TAP Node
 #[derive(Debug, Clone, Default)]
@@ -42,71 +45,68 @@ pub struct NodeConfig {
     pub processor_pool: Option<ProcessorPoolConfig>,
 }
 
-/// Main TAP Node implementation
+/// The TAP Node
+///
+/// The TAP Node is responsible for coordinating message processing, routing, and delivery
+/// to TAP Agents. It serves as a central hub for all TAP communications.
+#[derive(Clone)]
 pub struct TapNode {
     /// Configuration for the node
     config: NodeConfig,
     /// Registry of agents
     agents: Arc<AgentRegistry>,
-    /// DID resolver for the node
-    resolver: Arc<NodeResolver>,
-    /// Event bus for node events
+    /// Event bus for notifications
     event_bus: Arc<EventBus>,
-    /// Message router
-    router: Arc<dyn MessageRouter>,
-    /// Message processor for incoming messages
-    incoming_processor: Arc<dyn MessageProcessor>,
-    /// Message processor for outgoing messages
-    outgoing_processor: Arc<dyn MessageProcessor>,
+    /// Router for determining message recipients
+    router: CompositeMessageRouter,
+    /// Processor for incoming messages
+    incoming_processor: CompositeMessageProcessor,
+    /// Processor for outgoing messages
+    outgoing_processor: CompositeMessageProcessor,
     /// Processor pool for concurrent message processing
-    processor_pool: Option<ProcessorPool<CompositeMessageProcessor>>,
+    processor_pool: Option<ProcessorPool>,
+    /// Node resolver for DID resolution
+    resolver: Arc<NodeResolver>,
 }
 
 impl TapNode {
     /// Create a new TAP Node with the provided configuration
     pub fn new(config: NodeConfig) -> Self {
         let agents = Arc::new(AgentRegistry::new(config.max_agents));
-        let resolver = Arc::new(NodeResolver::new());
         let event_bus = Arc::new(EventBus::new());
+        let resolver = Arc::new(NodeResolver::new());
 
-        // Set up the router
-        let router = Arc::new(DefaultMessageRouter::new(agents.clone()));
+        // Create default router
+        let default_router = MessageRouterType::Default(DefaultMessageRouter::new(Arc::clone(&agents)));
+        let router = CompositeMessageRouter::new(vec![default_router]);
 
-        // Set up the processors
-        let mut incoming_processor = CompositeMessageProcessor::new();
-        let mut outgoing_processor = CompositeMessageProcessor::new();
+        // Create default processors
+        let logging_processor = MessageProcessorType::Logging(LoggingMessageProcessor);
+        let validation_processor = MessageProcessorType::Validation(ValidationMessageProcessor);
+        let default_processor = MessageProcessorType::Default(DefaultMessageProcessor);
 
-        // Add validation processor
-        incoming_processor.add_processor(Box::new(ValidationMessageProcessor::new()));
-        outgoing_processor.add_processor(Box::new(ValidationMessageProcessor::new()));
+        // Create incoming and outgoing processors
+        let incoming_processor = CompositeMessageProcessor::new(vec![
+            logging_processor.clone(),
+            validation_processor.clone(),
+            default_processor.clone(),
+        ]);
 
-        // Add logging processor if enabled
-        if config.enable_message_logging {
-            incoming_processor.add_processor(Box::new(LoggingMessageProcessor::new(
-                config.log_message_content,
-            )));
-            outgoing_processor.add_processor(Box::new(LoggingMessageProcessor::new(
-                config.log_message_content,
-            )));
-        }
-
-        let incoming_processor_arc = Arc::new(incoming_processor);
-        let outgoing_processor_arc = Arc::new(outgoing_processor);
-
-        // Set up the processor pool if configured
-        let processor_pool = config.processor_pool.as_ref().map(|pool_config| {
-            ProcessorPool::new(incoming_processor_arc.clone(), pool_config.clone())
-        });
+        let outgoing_processor = CompositeMessageProcessor::new(vec![
+            logging_processor,
+            validation_processor,
+            default_processor,
+        ]);
 
         Self {
             config,
             agents,
-            resolver,
             event_bus,
-            router: router as Arc<dyn MessageRouter>,
-            incoming_processor: incoming_processor_arc,
-            outgoing_processor: outgoing_processor_arc,
-            processor_pool,
+            router,
+            incoming_processor,
+            outgoing_processor,
+            processor_pool: None,
+            resolver,
         }
     }
 
@@ -115,51 +115,119 @@ impl TapNode {
         &self.config
     }
 
-    /// Get access to the agent registry
-    pub fn agents(&self) -> Arc<AgentRegistry> {
-        self.agents.clone()
+    /// Get a reference to the agent registry
+    pub fn agents(&self) -> &AgentRegistry {
+        &self.agents
     }
 
-    /// Get access to the node resolver
-    pub fn resolver(&self) -> Arc<NodeResolver> {
-        self.resolver.clone()
+    /// Get a reference to the event bus
+    pub fn event_bus(&self) -> &EventBus {
+        &self.event_bus
     }
 
-    /// Get access to the event bus
-    pub fn event_bus(&self) -> Arc<EventBus> {
-        self.event_bus.clone()
+    /// Get a reference to the resolver
+    pub fn resolver(&self) -> &NodeResolver {
+        &self.resolver
     }
 
-    /// Set a custom message router
-    pub fn set_router(&mut self, router: Arc<dyn MessageRouter>) {
-        self.router = router;
+    /// Configure the processor pool for the tap node
+    pub fn configure_processor_pool(&mut self, config: ProcessorPoolConfig) -> Result<()> {
+        self.processor_pool = Some(ProcessorPool::new(config));
+        Ok(())
     }
 
-    /// Set a custom incoming message processor
-    pub fn set_incoming_processor(&mut self, processor: Arc<dyn MessageProcessor>) {
-        self.incoming_processor = processor;
+    /// Set the router for the node
+    pub fn set_router(&mut self, router: MessageRouterType) {
+        self.router.add_router(router);
     }
 
-    /// Set a custom outgoing message processor
-    pub fn set_outgoing_processor(&mut self, processor: Arc<dyn MessageProcessor>) {
-        self.outgoing_processor = processor;
+    /// Add a processor to the incoming processor chain
+    pub fn add_incoming_processor(&mut self, processor: MessageProcessorType) {
+        self.incoming_processor.add_processor(processor);
+    }
+
+    /// Add a processor to the outgoing processor chain
+    pub fn add_outgoing_processor(&mut self, processor: MessageProcessorType) {
+        self.outgoing_processor.add_processor(processor);
     }
 
     /// Submit a message for concurrent processing
-    pub async fn submit_message(&self, message: TapMessage) -> Result<()> {
+    pub async fn submit_message(&self, message: Message) -> Result<()> {
         match &self.processor_pool {
-            Some(pool) => pool.submit(message).await,
+            Some(pool) => {
+                pool.submit(message).await?;
+                Ok(())
+            }
             None => {
-                // If no processor pool is configured, process synchronously
                 self.process_message(message).await?;
                 Ok(())
             }
         }
     }
 
+    /// Process and dispatch a message to an agent
+    pub async fn process_message(&self, message: Message) -> Result<()> {
+        // Process the incoming message
+        let processed_message = match self.incoming_processor.process_incoming(message).await? {
+            Some(msg) => msg,
+            None => return Ok(()), // Message was dropped
+        };
+
+        // Route the message to the appropriate agent
+        let target_did = self.router.route_message(&processed_message).await?;
+
+        // Dispatch the message to the agent
+        self.dispatch_message(target_did, processed_message).await
+    }
+
+    /// Dispatch a message to an agent by DID
+    pub async fn dispatch_message(&self, target_did: String, message: Message) -> Result<()> {
+        let agent = self.agents.get_agent(&target_did).await?;
+
+        // Convert the message to a packed format for transport
+        let packed = agent.send_serialized_message(&message, &target_did).await?;
+
+        // Publish an event for the dispatched message
+        self.event_bus
+            .publish_agent_message(target_did, packed.into_bytes())
+            .await;
+
+        Ok(())
+    }
+
+    /// Send a message from one agent to another
+    ///
+    /// This method handles the processing, routing, and delivery of a message
+    /// from one agent to another. It returns the packed message.
+    pub async fn send_message(
+        &self,
+        from_did: &str,
+        to_did: &str,
+        message: Message,
+    ) -> Result<String> {
+        // Process the outgoing message
+        let processed_message = match self.outgoing_processor.process_outgoing(message).await? {
+            Some(msg) => msg,
+            None => return Err(Error::Processing("Message was dropped".to_string())),
+        };
+
+        // Get the sending agent
+        let agent = self.agents.get_agent(from_did).await?;
+
+        // Pack the message
+        let packed = agent.send_serialized_message(&processed_message, to_did).await?;
+
+        // Publish an event for the sent message
+        self.event_bus
+            .publish_message_sent(processed_message, from_did.to_string(), to_did.to_string())
+            .await;
+
+        Ok(packed)
+    }
+
     /// Register a new agent with the node
     pub async fn register_agent(&self, agent: Arc<dyn Agent>) -> Result<()> {
-        let agent_did = agent.did().to_string();
+        let agent_did = agent.get_agent_did().to_string();
         self.agents.register_agent(agent_did.clone(), agent).await?;
 
         // Publish event about agent registration
@@ -178,69 +246,5 @@ impl TapNode {
             .await;
 
         Ok(())
-    }
-
-    /// Process and dispatch a message to an agent
-    pub async fn process_message(&self, message: TapMessage) -> Result<()> {
-        // Process the incoming message
-        let processed_message = match self.incoming_processor.process_incoming(message).await? {
-            Some(msg) => msg,
-            None => return Ok(()), // Message was filtered out
-        };
-
-        // Route the message to determine the target agent
-        let target_did = self.router.route_message(&processed_message).await?;
-
-        // Dispatch the message to the agent
-        self.dispatch_message(&target_did, processed_message).await
-    }
-
-    /// Dispatch a message to an agent by DID
-    pub async fn dispatch_message(&self, target_did: &str, message: TapMessage) -> Result<()> {
-        let agent = self.agents.get_agent(target_did).await?;
-
-        // Convert the message to a packed format for transport
-        let packed_message = serde_json::to_string(&message).map_err(Error::Serialization)?;
-
-        // Have the agent process the message
-        let received = agent
-            .receive_message(&packed_message)
-            .await
-            .map_err(|e| Error::Agent(e.to_string()))?;
-
-        // Publish event about received message
-        self.event_bus.publish_message_received(received).await;
-
-        Ok(())
-    }
-
-    /// Send a message from one agent to another
-    pub async fn send_message(
-        &self,
-        from_did: &str,
-        to_did: &str,
-        message: TapMessage,
-    ) -> Result<String> {
-        // Process the outgoing message
-        let processed_message = match self.outgoing_processor.process_outgoing(message).await? {
-            Some(msg) => msg,
-            None => return Err(Error::Dispatch("Message was filtered out".to_string())),
-        };
-
-        // Get the sender agent
-        let sender = self.agents.get_agent(from_did).await?;
-
-        // Pack and send the message
-        let packed_message = sender
-            .send_message(&processed_message, to_did)
-            .await
-            .map_err(|e| Error::Agent(e.to_string()))?;
-
-        // Publish event about sent message
-        self.event_bus
-            .publish_message_sent(processed_message, from_did.to_string(), to_did.to_string())
-            .await;
-
-        Ok(packed_message)
     }
 }

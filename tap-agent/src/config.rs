@@ -1,89 +1,56 @@
 //! Configuration for the TAP Agent
 
 use crate::error::Result;
+use std::collections::HashMap;
 
 /// Configuration options for a TAP Agent
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct AgentConfig {
-    /// Endpoint URL where the agent can receive messages
-    pub endpoint: Option<String>,
-
-    /// Agent name
-    pub name: Option<String>,
-
     /// Agent DID
-    pub did: Option<String>,
+    pub agent_did: String,
 
-    /// Whether to verify sender's DID in incoming messages
-    pub verify_sender: bool,
+    /// Security mode for messages
+    pub security_mode: Option<String>,
 
-    /// Whether to use authenticated encryption (authcrypt) by default
-    /// If false, anonymous encryption (anoncrypt) will be used
-    pub use_authcrypt: bool,
+    /// Additional configuration parameters
+    pub parameters: HashMap<String, String>,
 }
 
 impl AgentConfig {
-    /// Creates a new agent configuration with default values
-    pub fn new() -> Self {
+    /// Creates a new AgentConfig with the specified DID
+    pub fn new(did: String) -> Self {
         Self {
-            endpoint: None,
-            name: None,
-            did: None,
-            verify_sender: true,
-            use_authcrypt: true,
+            agent_did: did,
+            security_mode: Some("PLAIN".to_string()),
+            parameters: HashMap::new(),
         }
     }
 
-    /// Creates a new agent configuration with the specified DID
-    pub fn new_with_did(did: impl Into<String>) -> Self {
-        Self {
-            endpoint: None,
-            name: None,
-            did: Some(did.into()),
-            verify_sender: true,
-            use_authcrypt: true,
-        }
+    /// Sets a configuration parameter
+    pub fn set_parameter(&mut self, key: &str, value: &str) {
+        self.parameters.insert(key.to_string(), value.to_string());
     }
 
-    /// Sets the agent's endpoint
-    pub fn with_endpoint(mut self, endpoint: impl Into<String>) -> Self {
-        self.endpoint = Some(endpoint.into());
+    /// Gets a configuration parameter
+    pub fn get_parameter(&self, key: &str) -> Option<&String> {
+        self.parameters.get(key)
+    }
+
+    /// Sets the security mode
+    pub fn with_security_mode(mut self, mode: &str) -> Self {
+        self.security_mode = Some(mode.to_string());
         self
-    }
-
-    /// Sets the agent's name
-    pub fn with_name(mut self, name: impl Into<String>) -> Self {
-        self.name = Some(name.into());
-        self
-    }
-
-    /// Sets the agent's DID
-    pub fn with_did(mut self, did: impl Into<String>) -> Self {
-        self.did = Some(did.into());
-        self
-    }
-
-    /// Sets whether to verify sender's DID in incoming messages
-    pub fn with_verify_sender(mut self, verify: bool) -> Self {
-        self.verify_sender = verify;
-        self
-    }
-
-    /// Sets whether to use authenticated encryption (authcrypt) by default
-    pub fn with_authcrypt(mut self, use_authcrypt: bool) -> Self {
-        self.use_authcrypt = use_authcrypt;
-        self
-    }
-
-    /// Validates the configuration
-    pub fn validate(&self) -> Result<()> {
-        // Add validation logic as needed
-        Ok(())
     }
 }
 
 impl Default for AgentConfig {
     fn default() -> Self {
-        Self::new()
+        Self::new("default_did".to_string())
     }
+}
+
+/// Validates an Agent configuration for required fields
+pub fn validate(_config: &AgentConfig) -> Result<()> {
+    // TODO: Add validation logic here
+    Ok(())
 }

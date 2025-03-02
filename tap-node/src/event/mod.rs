@@ -3,10 +3,10 @@
 //! This module provides event handling and subscription functionality for TAP Node events.
 
 use async_trait::async_trait;
+use tap_core::didcomm::Message;
+use serde_json::Value;
 use std::sync::Arc;
-use tap_core::message::TapMessage;
-use tokio::sync::broadcast::{self, Receiver, Sender};
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 
 /// Event types that can be emitted by the TAP Node
 #[derive(Debug, Clone)]
@@ -14,12 +14,12 @@ pub enum NodeEvent {
     /// A message was received by an agent
     MessageReceived {
         /// The received message
-        message: TapMessage,
+        message: Value,
     },
     /// A message was sent by an agent
     MessageSent {
         /// The sent message
-        message: TapMessage,
+        message: Value,
         /// The sender DID
         from: String,
         /// The recipient DID
@@ -42,6 +42,13 @@ pub enum NodeEvent {
         /// Whether the resolution was successful
         success: bool,
     },
+    /// An agent message event
+    AgentMessage {
+        /// The agent's DID
+        did: String,
+        /// The message
+        message: Vec<u8>,
+    },
 }
 
 /// Event subscriber trait for receiving node events
@@ -54,7 +61,7 @@ pub trait EventSubscriber: Send + Sync {
 /// Event bus for publishing and subscribing to node events
 pub struct EventBus {
     /// Sender for events
-    sender: Sender<NodeEvent>,
+    sender: broadcast::Sender<NodeEvent>,
     /// Subscribers
     subscribers: RwLock<Vec<Arc<dyn EventSubscriber>>>,
 }
@@ -93,7 +100,7 @@ impl EventBus {
     }
 
     /// Get a receiver for node events
-    pub fn subscribe_channel(&self) -> Receiver<NodeEvent> {
+    pub fn subscribe_channel(&self) -> broadcast::Receiver<NodeEvent> {
         self.sender.subscribe()
     }
 
@@ -104,14 +111,14 @@ impl EventBus {
     }
 
     /// Publish a message received event
-    pub async fn publish_message_received(&self, message: TapMessage) {
-        let event = NodeEvent::MessageReceived { message };
+    pub async fn publish_message_received(&self, message: Message) {
+        let event = NodeEvent::MessageReceived { message: serde_json::to_value(message).unwrap() };
         self.publish_event(event).await;
     }
 
     /// Publish a message sent event
-    pub async fn publish_message_sent(&self, message: TapMessage, from: String, to: String) {
-        let event = NodeEvent::MessageSent { message, from, to };
+    pub async fn publish_message_sent(&self, message: Message, from: String, to: String) {
+        let event = NodeEvent::MessageSent { message: serde_json::to_value(message).unwrap(), from, to };
         self.publish_event(event).await;
     }
 
@@ -124,6 +131,12 @@ impl EventBus {
     /// Publish an agent unregistered event
     pub async fn publish_agent_unregistered(&self, did: String) {
         let event = NodeEvent::AgentUnregistered { did };
+        self.publish_event(event).await;
+    }
+
+    /// Publish an agent message event
+    pub async fn publish_agent_message(&self, did: String, message: Vec<u8>) {
+        let event = NodeEvent::AgentMessage { did, message };
         self.publish_event(event).await;
     }
 

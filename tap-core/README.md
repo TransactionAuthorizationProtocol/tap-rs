@@ -7,7 +7,7 @@ The `tap-core` crate provides core message processing functionality for the Tran
 - Comprehensive implementation of all TAP message types
 - Message validation according to the TAP protocol specification
 - Serialization and deserialization of TAP messages
-- DIDComm v2 integration for secure, encrypted messaging
+- DIDComm v2 integration directly built into TAP message types
 - WASM compatibility for browser environments
 
 ## Usage
@@ -73,6 +73,64 @@ fn parse_message_example(json_string: &str) -> Result<(), Box<dyn std::error::Er
         println!("Transaction details: {:#?}", transaction);
     }
     
+    Ok(())
+}
+```
+
+### Converting TAP Messages to DIDComm Messages
+
+The TAP message types implement `TapMessageBody` trait which provides methods to convert to and from DIDComm messages:
+
+```rust
+use tap_core::message::{Agent, TransferBody, TapMessageBody};
+use tap_caip::AssetId;
+use std::str::FromStr;
+use std::collections::HashMap;
+
+fn didcomm_conversion_example() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a TAP transfer message
+    let asset = AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7")?;
+    
+    let originator = Agent {
+        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+        role: Some("originator".to_string()),
+    };
+    
+    let beneficiary = Agent {
+        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
+        role: Some("beneficiary".to_string()),
+    };
+    
+    let transfer_body = TransferBody {
+        asset,
+        originator: originator.clone(),
+        beneficiary: Some(beneficiary.clone()),
+        amount_subunits: "100000000".to_string(),
+        agents: vec![originator, beneficiary],
+        settlement_id: None,
+        memo: Some("Test transaction".to_string()),
+        metadata: HashMap::new(),
+    };
+    
+    // Convert to DIDComm message for a specific recipient
+    let from_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
+    let to_did = "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6";
+    
+    // Convert TAP message to DIDComm
+    let didcomm_message = transfer_body.to_didcomm()?;
+    
+    // Or send to multiple recipients
+    let to_dids = ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6", 
+                  "did:key:z6MkwYyuTCaaDKnMGHpMkteuFpj1KrsFgGXwW3nXdT7k3RQP"];
+    let multi_recipient_message = transfer_body.to_didcomm_with_route(
+        Some(from_did), 
+        to_dids.iter().copied()
+    )?;
+    
+    // Convert DIDComm message back to TAP message
+    let extracted_body = TransferBody::from_didcomm(&didcomm_message)?;
+    
+    println!("Successfully converted TAP message to and from DIDComm!");
     Ok(())
 }
 ```

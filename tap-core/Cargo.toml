@@ -45,10 +45,5 @@ proptest = "1.2"
 
 [features]
 default = []
-wasm = [
-  "wasm-bindgen", 
-  "console_error_panic_hook", 
-  "js-sys", 
-  "web-sys", 
-  "getrandom"
-]
+wasm = ["wasm-bindgen", "js-sys", "web-sys", "getrandom/js", "console_error_panic_hook"]
+examples = []

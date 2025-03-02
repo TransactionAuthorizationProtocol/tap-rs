@@ -1,213 +1,159 @@
-//! Agent implementation for TAP
-//!
-//! This module provides the TAP Agent implementation for handling messages.
+use std::fmt::Debug;
+use std::sync::Arc;
 
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::Arc;
-use tap_core::message::{TapMessage, TapMessageType, Validate};
+use serde::{de::DeserializeOwned, Serialize as SerdeSerialize};
+use tap_core::message::tap_message_trait::TapMessageBody;
 
 use crate::config::AgentConfig;
-use crate::crypto::{DefaultMessagePacker, MessagePacker};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::did::WebResolver;
-use crate::did::{DidResolver, KeyResolver, MultiResolver, PkhResolver};
+use crate::crypto::{MessagePacker, SecurityMode};
 use crate::error::{Error, Result};
-use crate::policy::{DefaultPolicyHandler, PolicyHandler};
+use crate::policy::PolicyHandler;
 
-/// The primary trait for a TAP Agent
+/// A trait for sending messages to recipients
 #[async_trait]
-pub trait Agent: Send + Sync {
-    /// Returns the DID of the agent
-    fn did(&self) -> &str;
-
-    /// Returns the name of the agent, if any
-    fn name(&self) -> Option<&str>;
-
-    /// Sends a TAP message to a recipient
-    async fn send_message(&self, message: &TapMessage, recipient: &str) -> Result<String>;
-
-    /// Receives a packed TAP message
-    async fn receive_message(&self, packed_message: &str) -> Result<TapMessage>;
-
-    /// Creates a new TAP message with this agent as the sender
-    async fn create_message(
-        &self,
-        message_type: TapMessageType,
-        body: Option<serde_json::Value>,
-    ) -> Result<TapMessage>;
+pub trait MessageSender: Send + Sync + Debug {
+    /// Send a packed message to one or more recipients
+    async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()>;
 }
 
-/// TAP Agent implementation
-pub struct TapAgent {
-    /// Configuration for the agent
+/// Agent trait defining the core functionality of a TAP Agent
+#[async_trait]
+pub trait Agent: Send + Sync + Debug {
+    /// Get the agent's DID
+    fn get_agent_did(&self) -> &str;
+
+    /// Send a serialized message to a recipient
+    async fn send_serialized_message(
+        &self, 
+        message: &(dyn erased_serde::Serialize + Sync), 
+        to: &str
+    ) -> Result<String>;
+
+    /// Receive and unpack a serialized message
+    async fn receive_serialized_message(
+        &self,
+        packed_message: &str,
+    ) -> Result<serde_json::Value>;
+}
+
+/// Default implementation of a TAP Agent
+#[derive(Debug)]
+pub struct DefaultAgent {
+    /// Agent configuration
     config: AgentConfig,
-    /// Agent's DID
-    did: String,
-    /// Agent's name
-    name: Option<String>,
-    /// DID resolver for resolving DIDs
-    #[allow(dead_code)]
-    resolver: Arc<dyn DidResolver>,
+
     /// Message packer for packing and unpacking messages
     message_packer: Arc<dyn MessagePacker>,
+
     /// Policy handler for evaluating policies
-    #[allow(dead_code)]
     policy_handler: Arc<dyn PolicyHandler>,
 }
 
-impl TapAgent {
-    /// Creates a new TapAgent with the specified configuration
+impl DefaultAgent {
+    /// Create a new DefaultAgent
     pub fn new(
         config: AgentConfig,
-        did: String,
-        name: Option<String>,
-        resolver: Arc<dyn DidResolver>,
         message_packer: Arc<dyn MessagePacker>,
         policy_handler: Arc<dyn PolicyHandler>,
     ) -> Self {
         Self {
             config,
-            did,
-            name,
-            resolver,
             message_packer,
             policy_handler,
         }
     }
-
-    /// Returns the DID of the agent
-    pub fn did(&self) -> &str {
-        &self.did
-    }
-
-    /// Returns the name of the agent, if any
-    pub fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    /// Returns the configuration of the agent
-    pub fn config(&self) -> &AgentConfig {
-        &self.config
-    }
-
-    /// Extracts the body of a TAP message as a specific type
-    pub fn extract_body<T: serde::de::DeserializeOwned>(
+    
+    /// Send a TAP message to a recipient
+    pub async fn send_message<T: TapMessageBody + SerdeSerialize + Send + Sync>(
         &self,
-        message: &TapMessage,
-    ) -> Result<Option<T>> {
-        if let Some(body) = &message.body {
-            let parsed = serde_json::from_value(body.clone())
-                .map_err(|e| Error::Other(format!("Failed to parse message body: {}", e)))?;
-            Ok(Some(parsed))
+        message: &T,
+        to: &str,
+    ) -> Result<String> {
+        // Check policy before sending
+        self.policy_handler.evaluate_outgoing(message).await?;
+
+        // Use message packer to pack the message
+        let security_mode = if let Some(mode) = &self.config.security_mode {
+            match mode.as_str() {
+                "PLAIN" => SecurityMode::Plain,
+                "AUTHCRYPT" => SecurityMode::Authcrypt,
+                "ANONCRYPT" => SecurityMode::Anoncrypt,
+                _ => SecurityMode::Plain,
+            }
         } else {
-            Ok(None)
-        }
-    }
+            SecurityMode::Plain
+        };
 
-    /// Creates a new TapAgent with default components
-    pub fn with_defaults(config: AgentConfig, did: String, name: Option<String>) -> Result<Self> {
-        // Create a multi-resolver with default resolvers
-        let key_resolver = KeyResolver;
-        let pkh_resolver = PkhResolver;
-
-        let mut multi_resolver = MultiResolver::new();
-        multi_resolver.add_resolver(key_resolver);
-
-        // Only add web resolver if not in WASM environment
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let web_resolver = WebResolver;
-            multi_resolver.add_resolver(web_resolver);
-        }
-
-        multi_resolver.add_resolver(pkh_resolver);
-
-        let resolver = Arc::new(multi_resolver);
-
-        // Create a default message packer
-        let message_packer = Arc::new(DefaultMessagePacker::new(did.clone(), resolver.clone()));
-
-        // Create a default policy handler
-        let policy_handler = Arc::new(DefaultPolicyHandler::new());
-
-        Ok(Self::new(
-            config,
-            did,
-            name,
-            resolver,
-            message_packer,
-            policy_handler,
-        ))
-    }
-}
-
-#[async_trait]
-impl Agent for TapAgent {
-    /// Gets the DID of the agent
-    fn did(&self) -> &str {
-        &self.did
-    }
-
-    /// Gets the name of the agent, if set
-    fn name(&self) -> Option<&str> {
-        self.name.as_deref()
-    }
-
-    /// Sends a TAP message to a recipient
-    async fn send_message(&self, message: &TapMessage, recipient: &str) -> Result<String> {
-        // Validate the message before sending
-        message.validate().map_err(Error::Core)?;
-
-        // Pack the message for the recipient
-        let packed = self.message_packer.pack_message(message, recipient).await?;
+        let packed = self
+            .message_packer
+            .pack_message(message, to, Some(self.get_agent_did()), security_mode)
+            .await?;
 
         Ok(packed)
     }
 
-    /// Receives a packed TAP message
-    async fn receive_message(&self, packed_message: &str) -> Result<TapMessage> {
-        // Unpack the message
-        let message = self.message_packer.unpack_message(packed_message).await?;
-
-        // Check if the sender exists in metadata
-        if let Some(from_val) = message.metadata.get("from") {
-            if let Some(_sender) = from_val.as_str() {
-                // In a real implementation, we would validate the sender's DID
-                // For now, just check if the message can be unpacked
-                let _unpacked = self.message_packer.unpack_message(packed_message).await?;
-                Ok(message)
-            } else {
-                Err(Error::Validation(
-                    "Invalid 'from' field in message".to_string(),
-                ))
-            }
-        } else {
-            // No from field, assume it's a valid message for now
-            Ok(message)
-        }
-    }
-
-    /// Creates a new TAP message with this agent as the sender
-    async fn create_message(
+    /// Receive and unpack a TAP message
+    pub async fn receive_message<T: TapMessageBody + DeserializeOwned + Send + Sync>(
         &self,
-        message_type: TapMessageType,
-        body: Option<serde_json::Value>,
-    ) -> Result<TapMessage> {
-        let mut message = TapMessage::new(message_type);
+        packed_message: &str,
+    ) -> Result<T> {
+        // Unpack the message
+        let (body_value, _sender) = self.message_packer.unpack_message(packed_message).await?;
 
-        if let Some(body_value) = body {
-            message.body = Some(body_value);
-        }
+        // Deserialize the body
+        let message: T = serde_json::from_value(body_value.clone()).map_err(|e| {
+            Error::SerializationError(format!("Failed to deserialize message body: {}", e))
+        })?;
 
-        // Add sender information to metadata
-        let mut metadata = HashMap::new();
-        metadata.insert(
-            "from".to_string(),
-            serde_json::Value::String(self.did.clone()),
-        );
-        message.metadata = metadata;
+        // Apply policy
+        self.policy_handler.evaluate_incoming(&body_value).await?;
 
         Ok(message)
+    }
+}
+
+#[async_trait]
+impl Agent for DefaultAgent {
+    fn get_agent_did(&self) -> &str {
+        &self.config.agent_did
+    }
+
+    async fn send_serialized_message(
+        &self, 
+        message: &(dyn erased_serde::Serialize + Sync), 
+        to: &str
+    ) -> Result<String> {
+        // Use message packer to pack the message
+        let security_mode = if let Some(mode) = &self.config.security_mode {
+            match mode.as_str() {
+                "PLAIN" => SecurityMode::Plain,
+                "AUTHCRYPT" => SecurityMode::Authcrypt,
+                "ANONCRYPT" => SecurityMode::Anoncrypt,
+                _ => SecurityMode::Plain,
+            }
+        } else {
+            SecurityMode::Plain
+        };
+
+        let packed = self
+            .message_packer
+            .pack_message(message, to, Some(self.get_agent_did()), security_mode)
+            .await?;
+
+        Ok(packed)
+    }
+
+    async fn receive_serialized_message(
+        &self,
+        packed_message: &str,
+    ) -> Result<serde_json::Value> {
+        // Unpack the message
+        let (body_value, _sender) = self.message_packer.unpack_message(packed_message).await?;
+
+        // Apply policy
+        self.policy_handler.evaluate_incoming(&body_value).await?;
+
+        Ok(body_value)
     }
 }

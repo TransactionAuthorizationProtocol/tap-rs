@@ -38,6 +38,8 @@ futures = "0.3"
 sha2 = "0.10"
 base58 = "0.2"
 chrono = { workspace = true }
+log = "0.4"
+didcomm = "0.4"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
