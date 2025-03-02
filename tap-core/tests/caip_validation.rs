@@ -24,7 +24,7 @@ fn test_valid_transfer_body() {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "100000000".to_string(),
+        amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
         memo: Some("Test transaction".to_string()),
@@ -59,7 +59,7 @@ fn test_transfer_with_empty_asset() {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "100000000".to_string(),
+        amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
         memo: Some("Test transaction".to_string()),
@@ -89,7 +89,7 @@ fn test_transfer_with_empty_amount() {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "".to_string(), // Empty amount
+        amount: "".to_string(), // Empty amount
         agents: vec![originator, beneficiary],
         settlement_id: None,
         memo: Some("Test transaction".to_string()),

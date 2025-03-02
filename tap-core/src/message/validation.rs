@@ -163,7 +163,7 @@ pub fn validate_transfer_body(body: &TransferBody) -> Result<()> {
         return Err(Error::Validation("Asset is required".to_string()));
     }
 
-    if body.amount_subunits.is_empty() {
+    if body.amount.is_empty() {
         return Err(Error::Validation("Amount is required".to_string()));
     }
 

@@ -147,9 +147,9 @@ pub struct TransferBody {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub beneficiary: Option<Agent>,
 
-    /// Amount in subunits (as a string to preserve precision).
-    #[serde(rename = "amountSubunits")]
-    pub amount_subunits: String,
+    /// Amount as a decimal string (to preserve precision).
+    #[serde(rename = "amount")]
+    pub amount: String,
 
     /// Agents involved in the transaction.
     pub agents: Vec<Agent>,

@@ -24,7 +24,7 @@ async fn test_pack_tap_body() -> Result<()> {
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "100000000".to_string(),
+        amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
         memo: Some("Test transaction".to_string()),
@@ -49,7 +49,7 @@ async fn test_pack_tap_body() -> Result<()> {
     // Verify the body contains our data
     let body_value = packed_msg.body.as_object().unwrap();
     assert!(body_value.contains_key("asset"));
-    assert!(body_value.contains_key("amountSubunits"));
+    assert!(body_value.contains_key("amount"));
     assert!(body_value.contains_key("originator"));
 
     // Now test extracting the body back using from_didcomm
@@ -57,7 +57,7 @@ async fn test_pack_tap_body() -> Result<()> {
     
     // Verify the extracted body matches the original
     assert_eq!(extracted_body.asset, asset);
-    assert_eq!(extracted_body.amount_subunits, body.amount_subunits);
+    assert_eq!(extracted_body.amount, body.amount);
     assert_eq!(extracted_body.originator.id, body.originator.id);
     assert_eq!(extracted_body.beneficiary.as_ref().unwrap().id, body.beneficiary.as_ref().unwrap().id);
 
@@ -83,7 +83,7 @@ async fn test_extract_tap_body() -> Result<()> {
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "1000000".to_string(),
+        amount: "1.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
         memo: Some("Test USDC transfer".to_string()),
@@ -102,7 +102,7 @@ async fn test_extract_tap_body() -> Result<()> {
     
     // Verify extraction was successful
     assert_eq!(extracted.asset, asset);
-    assert_eq!(extracted.amount_subunits, "1000000");
+    assert_eq!(extracted.amount, "1.00");
     assert_eq!(extracted.memo.as_ref().unwrap(), "Test USDC transfer");
     
     Ok(())

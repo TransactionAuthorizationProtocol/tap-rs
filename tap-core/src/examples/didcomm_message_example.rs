@@ -27,7 +27,7 @@ pub async fn create_transfer_message_example() -> Result<Message> {
         asset: AssetId::parse("eip155:1/erc20:0x123456789abcdef").unwrap(),
         originator,
         beneficiary: Some(beneficiary),
-        amount_subunits: "100000000".to_string(),
+        amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
         memo: Some("Payment for services".to_string()),
@@ -65,7 +65,7 @@ pub fn process_transfer_message_example(message: &Message) -> Result<()> {
         if let Some(ref beneficiary) = transfer_body.beneficiary {
             println!("To beneficiary: {:?}", beneficiary);
         }
-        println!("Amount: {} {}", transfer_body.amount_subunits, transfer_body.asset);
+        println!("Amount: {}", transfer_body.amount);
         
         // Create a response message (either Authorize or Reject)
         let authorize_body = AuthorizeBody {

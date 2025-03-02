@@ -33,7 +33,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "100000000".to_string(),
+        amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
         memo: Some("Test transaction".to_string()),
@@ -62,7 +62,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(unpacked_body.asset.to_string(), asset.to_string());
     assert_eq!(unpacked_body.originator.id, from_did);
     assert_eq!(unpacked_body.beneficiary.as_ref().unwrap().id, to_did);
-    assert_eq!(unpacked_body.amount_subunits, "100000000");
+    assert_eq!(unpacked_body.amount, "100.00");
     assert_eq!(unpacked_body.memo.as_ref().unwrap(), "Test transaction");
 
     Ok(())

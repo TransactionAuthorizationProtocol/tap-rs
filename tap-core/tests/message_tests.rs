@@ -25,7 +25,7 @@ fn test_create_message() {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "100000000".to_string(),
+        amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
         memo: Some("Test transaction".to_string()),
