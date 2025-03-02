@@ -1,12 +1,12 @@
 //! Binary executable for the TAP HTTP server.
 
 use env_logger::Env;
-use tracing::{error, info};
 use std::env;
 use std::error::Error;
 use std::process;
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
+use tracing::{error, info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

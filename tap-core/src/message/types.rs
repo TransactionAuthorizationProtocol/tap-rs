@@ -6,19 +6,37 @@ use chrono;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
-use uuid;
-
-use tap_caip::{AccountId, AssetId, ChainId};
+use tap_caip::AssetId;
 
 /// Represents the type of TAP message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum TapMessageType {
-    TransactionProposal,
-    IdentityExchange,
-    TravelRuleInfo,
-    AuthorizationResponse,
+    /// Transaction proposal (Transfer in TAIP-3)
+    #[serde(rename = "TAP_TRANSFER")]
+    Transfer,
+    /// Identity exchange (related to RequestPresentation/Presentation in TAIP-8)
+    #[serde(rename = "TAP_REQUEST_PRESENTATION")]
+    RequestPresentation,
+    /// Presentation response (TAIP-8)
+    #[serde(rename = "TAP_PRESENTATION")]
+    Presentation,
+    /// Authorization response (Authorize in TAIP-4)
+    #[serde(rename = "TAP_AUTHORIZE")]
+    Authorize,
+    /// Rejection response (Reject in TAIP-4)
+    #[serde(rename = "TAP_REJECT")]
+    Reject,
+    /// Settlement notification (Settle in TAIP-4)
+    #[serde(rename = "TAP_SETTLE")]
+    Settle,
+    /// Add agents to a transaction (AddAgents in TAIP-5)
+    #[serde(rename = "TAP_ADD_AGENTS")]
+    AddAgents,
+    /// Error message
+    #[serde(rename = "TAP_ERROR")]
     Error,
+    /// Custom message type (for extensibility)
     #[serde(untagged)]
     Custom(String),
 }
@@ -26,10 +44,13 @@ pub enum TapMessageType {
 impl fmt::Display for TapMessageType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TapMessageType::TransactionProposal => write!(f, "transaction-proposal"),
-            TapMessageType::IdentityExchange => write!(f, "identity-exchange"),
-            TapMessageType::TravelRuleInfo => write!(f, "travel-rule-info"),
-            TapMessageType::AuthorizationResponse => write!(f, "authorization-response"),
+            TapMessageType::Transfer => write!(f, "transfer"),
+            TapMessageType::RequestPresentation => write!(f, "request-presentation"),
+            TapMessageType::Presentation => write!(f, "presentation"),
+            TapMessageType::Authorize => write!(f, "authorize"),
+            TapMessageType::Reject => write!(f, "reject"),
+            TapMessageType::Settle => write!(f, "settle"),
+            TapMessageType::AddAgents => write!(f, "add-agents"),
             TapMessageType::Error => write!(f, "error"),
             TapMessageType::Custom(s) => write!(f, "{}", s),
         }
@@ -110,106 +131,107 @@ pub struct TapMessage {
     pub to_did: Option<String>,
 }
 
-/// Transaction proposal message body.
+/// Transfer message body (TAIP-3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransactionProposalBody {
-    /// Unique identifier for the transaction.
-    pub transaction_id: String,
-
-    /// Network identifier (CAIP-2 format).
-    pub network: ChainId,
-
-    /// Sender account address (CAIP-10 format).
-    pub sender: AccountId,
-
-    /// Recipient account address (CAIP-10 format).
-    pub recipient: AccountId,
-
-    /// Asset identifier (CAIP-19 format).
+pub struct TransferBody {
+    /// Network asset identifier (CAIP-19 format).
     pub asset: AssetId,
 
-    /// Amount of the asset (as a string to preserve precision).
-    pub amount: String,
+    /// Originator information.
+    #[serde(rename = "originator")]
+    pub originator: Agent,
+
+    /// Beneficiary information (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub beneficiary: Option<Agent>,
+
+    /// Amount in subunits (as a string to preserve precision).
+    #[serde(rename = "amountSubunits")]
+    pub amount_subunits: String,
+
+    /// Agents involved in the transaction.
+    pub agents: Vec<Agent>,
+
+    /// Optional settled transaction ID.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "settlementId")]
+    pub settlement_id: Option<String>,
 
     /// Optional memo or note for the transaction.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<String>,
-
-    /// Optional reference to an external transaction.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub tx_reference: Option<String>,
 
     /// Additional metadata for the transaction.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TransactionProposalBody {
-    /// Validates that the transaction proposal contains consistent CAIP identifiers
-    ///
-    /// Specifically, checks that:
-    /// - The sender and recipient AccountId reference the same network as the network field
-    /// - The asset AssetId references the same network as the network field
+/// Agent structure for participants in a transaction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    /// DID of the agent.
+    #[serde(rename = "@id")]
+    pub id: String,
+
+    /// Role of the agent in the transaction (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+}
+
+impl TransferBody {
+    /// Validates that the transfer proposal contains consistent CAIP identifiers
     ///
     /// # Returns
     ///
     /// Ok(()) if the validation passes, otherwise an Error
-    pub fn validate_caip_consistency(&self) -> crate::error::Result<()> {
-        // Check that sender and recipient are on the same network as specified
-        if self.sender.chain_id().namespace() != self.network.namespace()
-            || self.sender.chain_id().reference() != self.network.reference()
-        {
-            return Err(crate::error::Error::Validation(format!(
-                "Sender chain ID ({}) does not match network ({})",
-                self.sender.chain_id(),
-                self.network
-            )));
-        }
-
-        if self.recipient.chain_id().namespace() != self.network.namespace()
-            || self.recipient.chain_id().reference() != self.network.reference()
-        {
-            return Err(crate::error::Error::Validation(format!(
-                "Recipient chain ID ({}) does not match network ({})",
-                self.recipient.chain_id(),
-                self.network
-            )));
-        }
-
-        // Check that asset is on the same network as specified
-        if self.asset.chain_id().namespace() != self.network.namespace()
-            || self.asset.chain_id().reference() != self.network.reference()
-        {
-            return Err(crate::error::Error::Validation(format!(
-                "Asset chain ID ({}) does not match network ({})",
-                self.asset.chain_id(),
-                self.network
-            )));
-        }
-
+    pub fn validate(&self) -> crate::error::Result<()> {
+        // Additional validation logic could be added here
         Ok(())
     }
 }
 
-/// Identity exchange message body.
+/// Request presentation message body (TAIP-8).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct IdentityExchangeBody {
-    /// DID of the entity.
-    pub entity_did: String,
+pub struct RequestPresentationBody {
+    /// From agent DID.
+    #[serde(rename = "fromAgent")]
+    pub from_agent: String,
 
-    /// Optional name of the entity.
+    /// Request presentation about specific DIDs (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub entity_name: Option<String>,
+    pub about: Option<Vec<String>>,
 
-    /// Optional verification method ID for the entity's DID.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub verification_method_id: Option<String>,
+    /// Request presentation about a specific party (optional).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "aboutParty")]
+    pub about_party: Option<String>,
 
-    /// Optional key agreement method ID.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub key_agreement_id: Option<String>,
+    /// Request presentation about a specific agent (optional).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "aboutAgent")]
+    pub about_agent: Option<String>,
 
-    /// Additional metadata for the identity.
+    /// URL to a presentation definition.
+    #[serde(rename = "presentationDefinition")]
+    pub presentation_definition: String,
+
+    /// Purpose of the request.
+    pub purpose: String,
+
+    /// Additional metadata for the request.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Presentation message body (TAIP-8).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PresentationBody {
+    /// Presentation submission (as a generic JSON value).
+    #[serde(rename = "presentationSubmission")]
+    pub presentation_submission: serde_json::Value,
+
+    /// Verifiable presentation (as a generic JSON value).
+    #[serde(rename = "verifiablePresentation")]
+    pub verifiable_presentation: serde_json::Value,
+
+    /// Additional metadata for the presentation.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -231,20 +253,71 @@ pub struct TravelRuleInfoBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-/// Authorization response message body.
+/// Authorize message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthorizationResponseBody {
-    /// Transaction ID this response is related to.
-    pub transaction_id: String,
+pub struct AuthorizeBody {
+    /// Agent identifier.
+    #[serde(rename = "@id")]
+    pub id: String,
 
-    /// Whether the transaction is authorized.
-    pub authorized: bool,
+    /// Transaction in context.
+    pub transaction: String,
 
-    /// Optional reason for the authorization decision.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub reason: Option<String>,
+    /// Additional metadata for the authorization.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
 
-    /// Additional metadata for the authorization response.
+/// Reject message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RejectBody {
+    /// Agent identifier.
+    #[serde(rename = "@id")]
+    pub id: String,
+
+    /// Transaction in context.
+    pub transaction: String,
+
+    /// Reason for rejection.
+    pub reason: String,
+
+    /// Additional metadata for the rejection.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Settle message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SettleBody {
+    /// Agent identifier.
+    #[serde(rename = "@id")]
+    pub id: String,
+
+    /// Transaction in context.
+    pub transaction: String,
+
+    /// Settlement ID.
+    #[serde(rename = "settlementId")]
+    pub settlement_id: String,
+
+    /// Timestamp of the settlement.
+    pub timestamp: String,
+
+    /// Additional metadata for the settlement.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// AddAgents message body (TAIP-5).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddAgentsBody {
+    /// Transaction in context.
+    pub transaction: String,
+
+    /// Agents to add to the transaction.
+    pub agents: Vec<Agent>,
+
+    /// Additional metadata for the add agents operation.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
 }

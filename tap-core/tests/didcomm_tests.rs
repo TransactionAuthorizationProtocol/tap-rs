@@ -1,29 +1,38 @@
 use std::collections::HashMap;
 use std::str::FromStr;
-use tap_caip::{AccountId, AssetId, ChainId};
+use tap_caip::AssetId;
 use tap_core::didcomm::pack_tap_message;
 use tap_core::error::Result;
-use tap_core::message::types::{TapMessage, TapMessageType, TransactionProposalBody};
+use tap_core::message::types::{Agent, TapMessage, TapMessageType, TransferBody};
 
 #[tokio::test]
 async fn test_pack_tap_message() -> Result<()> {
-    // Create a valid transaction proposal
-    let transaction_id = "123e4567-e89b-12d3-a456-426614174000";
-    let body = TransactionProposalBody {
-        transaction_id: transaction_id.to_string(),
-        network: ChainId::from_str("eip155:1").unwrap(),
-        sender: AccountId::from_str("eip155:1:0x1234567890abcdef1234567890abcdef12345678").unwrap(),
-        recipient: AccountId::from_str("eip155:1:0xabcdef1234567890abcdef1234567890abcdef12")
-            .unwrap(),
-        asset: AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7")
-            .unwrap(),
-        amount: "100.0".to_string(),
+    // Create a valid transfer message
+    let asset =
+        AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap();
+
+    let originator = Agent {
+        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+        role: Some("originator".to_string()),
+    };
+
+    let beneficiary = Agent {
+        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
+        role: Some("beneficiary".to_string()),
+    };
+
+    let body = TransferBody {
+        asset,
+        originator: originator.clone(),
+        beneficiary: Some(beneficiary.clone()),
+        amount_subunits: "100000000".to_string(),
+        agents: vec![originator, beneficiary],
+        settlement_id: None,
         memo: Some("Test transaction".to_string()),
-        tx_reference: None,
         metadata: HashMap::new(),
     };
 
-    let message = TapMessage::new(TapMessageType::TransactionProposal)
+    let message = TapMessage::new(TapMessageType::Transfer)
         .with_id("msg-id-1")
         .with_body(&body);
 

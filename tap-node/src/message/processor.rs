@@ -3,8 +3,8 @@
 //! This module provides various message processors for handling messages.
 
 use async_trait::async_trait;
-use tracing::{debug, info};
 use tap_core::message::TapMessage;
+use tracing::{debug, info};
 
 use crate::error::Result;
 use crate::message::MessageProcessor;

@@ -1,7 +1,7 @@
-use wasm_bindgen::prelude::*;
+use js_sys::{Array, Function, Object, Promise, Reflect};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use serde::{Serialize, Deserialize};
-use js_sys::{Promise, Function, Object, Reflect, Array};
+use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
@@ -58,12 +58,12 @@ impl NetworkConfig {
     pub fn new() -> Self {
         Self { peers: Vec::new() }
     }
-    
+
     /// Sets the peers
     pub fn set_peers(&mut self, peers: Vec<String>) {
         self.peers = peers;
     }
-    
+
     /// Gets the peers
     #[wasm_bindgen(getter)]
     pub fn get_peers(&self) -> js_sys::Array {
@@ -154,7 +154,7 @@ impl AgentConfig {
     pub fn get_nickname(&self) -> Option<String> {
         self.nickname.clone()
     }
-    
+
     /// Sets debug mode
     pub fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
@@ -219,11 +219,12 @@ impl Message {
     }
 
     /// Sets the authorization request data
-    pub fn set_authorization_request(&mut self, 
-        transaction_hash: String, 
-        sender: String, 
-        receiver: String, 
-        amount: String
+    pub fn set_authorization_request(
+        &mut self,
+        transaction_hash: String,
+        sender: String,
+        receiver: String,
+        amount: String,
     ) {
         self.authorization_request = Some(AuthorizationRequest {
             transaction_hash,
@@ -234,10 +235,11 @@ impl Message {
     }
 
     /// Sets the authorization response data
-    pub fn set_authorization_response(&mut self, 
-        transaction_hash: String, 
-        authorization_result: bool, 
-        reason: Option<String>
+    pub fn set_authorization_response(
+        &mut self,
+        transaction_hash: String,
+        authorization_result: bool,
+        reason: Option<String>,
     ) {
         self.authorization_response = Some(AuthorizationResponse {
             transaction_hash,
@@ -327,7 +329,11 @@ impl Agent {
     }
 
     /// Registers a message handler function
-    pub fn register_message_handler(&mut self, message_type: MessageType, handler: js_sys::Function) {
+    pub fn register_message_handler(
+        &mut self,
+        message_type: MessageType,
+        handler: js_sys::Function,
+    ) {
         let message_type_str = match message_type {
             MessageType::AuthorizationRequest => "TAP_AUTHORIZATION_REQUEST".to_string(),
             MessageType::AuthorizationResponse => "TAP_AUTHORIZATION_RESPONSE".to_string(),
@@ -349,7 +355,7 @@ impl Agent {
                 let args = Array::new_with_length(2);
                 args.set(0, message.clone());
                 args.set(1, metadata_clone.clone());
-                
+
                 let _result = subscriber.apply(&JsValue::NULL, &args)?;
             }
 
@@ -361,8 +367,11 @@ impl Agent {
     pub fn subscribe_to_messages(&mut self, callback: js_sys::Function) -> js_sys::Function {
         let callback = callback.clone();
         self.message_subscribers.push(callback);
-        
-        Function::new_no_args(&format!("return () => {{ console.log('Unsubscribing from agent messages'); }}")).into()
+
+        Function::new_no_args(&format!(
+            "return () => {{ console.log('Unsubscribing from agent messages'); }}"
+        ))
+        .into()
     }
 
     /// Deep clones this agent (needed for async operations)
@@ -392,7 +401,7 @@ impl TapNode {
     #[wasm_bindgen(constructor)]
     pub fn new(config: Option<NodeConfig>) -> Self {
         let config = config.unwrap_or_default();
-        
+
         Self {
             debug: config.debug,
             agents: HashMap::new(),
@@ -404,9 +413,12 @@ impl TapNode {
     /// Registers an agent with this node
     pub fn register_agent(&mut self, agent: Agent) -> Result<(), JsValue> {
         if self.agents.contains_key(&agent.did) {
-            return Err(JsValue::from_str(&format!("Agent with DID {} is already registered", agent.did)));
+            return Err(JsValue::from_str(&format!(
+                "Agent with DID {} is already registered",
+                agent.did
+            )));
         }
-        
+
         self.agents.insert(agent.did.clone(), agent);
         Ok(())
     }
@@ -424,28 +436,37 @@ impl TapNode {
     /// Gets all registered agents
     pub fn get_agent_dids(&self) -> js_sys::Array {
         let result = js_sys::Array::new();
-        
+
         for (i, did) in self.agents.keys().enumerate() {
             result.set(i as u32, JsValue::from_str(did));
         }
-        
+
         result
     }
 
     /// Sends a message from one agent to another
-    pub fn send_message(&self, from_did: String, to_did: String, message: Message) -> Result<String, JsValue> {
+    pub fn send_message(
+        &self,
+        from_did: String,
+        to_did: String,
+        message: Message,
+    ) -> Result<String, JsValue> {
         if !self.agents.contains_key(&from_did) {
-            return Err(JsValue::from_str(&format!("Agent with DID {} not found", from_did)));
+            return Err(JsValue::from_str(&format!(
+                "Agent with DID {} not found",
+                from_did
+            )));
         }
-        
+
         if !self.agents.contains_key(&to_did) && self.debug {
             // In debug mode, we allow sending to non-existent agents (for testing)
             // In a real implementation, we would try to resolve the DID and send the message
-            web_sys::console::warn_1(&JsValue::from_str(
-                &format!("Agent with DID {} not found, but sending message anyway (debug mode)", to_did)
-            ));
+            web_sys::console::warn_1(&JsValue::from_str(&format!(
+                "Agent with DID {} not found, but sending message anyway (debug mode)",
+                to_did
+            )));
         }
-        
+
         // In a real implementation, we would use DIDComm to pack the message
         // For now, just create a JSON string
         let packed_message = serde_json::json!({
@@ -453,7 +474,7 @@ impl TapNode {
             "to": to_did,
             "message": message
         });
-        
+
         Ok(serde_json::to_string(&packed_message).unwrap())
     }
 
@@ -469,28 +490,36 @@ impl TapNode {
                 let args = Array::new_with_length(2);
                 args.set(0, message_clone.clone());
                 args.set(1, metadata_clone.clone());
-                
+
                 let _result = subscriber.apply(&JsValue::NULL, &args)?;
             }
 
             // Try to get the metadata object
-            let metadata_obj: HashMap<String, String> = match serde_wasm_bindgen::from_value(metadata_clone.clone()) {
-                Ok(metadata) => metadata,
-                Err(err) => {
-                    return Err(JsValue::from_str(&format!("Failed to parse metadata: {}", err)));
-                }
-            };
-            
+            let metadata_obj: HashMap<String, String> =
+                match serde_wasm_bindgen::from_value(metadata_clone.clone()) {
+                    Ok(metadata) => metadata,
+                    Err(err) => {
+                        return Err(JsValue::from_str(&format!(
+                            "Failed to parse metadata: {}",
+                            err
+                        )));
+                    }
+                };
+
             // Get the target agent
             if let Some(to_did) = metadata_obj.get("toDid") {
                 if let Some(agent) = this.agents.get(to_did) {
                     // Create a new Promise from the agent's process_message call
-                    let promise = agent.process_message(message_clone.clone(), metadata_clone.clone());
-                    
+                    let promise =
+                        agent.process_message(message_clone.clone(), metadata_clone.clone());
+
                     // Convert the Promise to a JsValue to return
                     Ok(promise.into())
                 } else {
-                    Err(JsValue::from_str(&format!("Agent with DID {} not found", to_did)))
+                    Err(JsValue::from_str(&format!(
+                        "Agent with DID {} not found",
+                        to_did
+                    )))
                 }
             } else {
                 Err(JsValue::from_str("Missing 'toDid' in metadata"))
@@ -500,10 +529,15 @@ impl TapNode {
 
     /// Subscribes to all messages processed by this node
     pub fn subscribe_to_messages(&mut self, callback: js_sys::Function) -> js_sys::Function {
-        let id = self.next_subscriber_id.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let id = self
+            .next_subscriber_id
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.message_subscribers.insert(id, callback);
-        
-        let unsubscribe_fn = Function::new_no_args(&format!("return () => {{ console.log('Unsubscribing from node messages, id: {}'); }}", id));
+
+        let unsubscribe_fn = Function::new_no_args(&format!(
+            "return () => {{ console.log('Unsubscribing from node messages, id: {}'); }}",
+            id
+        ));
         unsubscribe_fn
     }
 
@@ -513,7 +547,10 @@ impl TapNode {
             debug: self.debug,
             agents: self.agents.clone(),
             message_subscribers: self.message_subscribers.clone(),
-            next_subscriber_id: std::sync::atomic::AtomicUsize::new(self.next_subscriber_id.load(std::sync::atomic::Ordering::SeqCst)),
+            next_subscriber_id: std::sync::atomic::AtomicUsize::new(
+                self.next_subscriber_id
+                    .load(std::sync::atomic::Ordering::SeqCst),
+            ),
         }
     }
 }
@@ -523,10 +560,17 @@ impl TapNode {
 pub fn create_did_key() -> Result<JsValue, JsValue> {
     // In a real implementation, this would generate a key pair and return a DID
     // For now, just return a mock DID
-    let mock_did = format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
-    
+    let mock_did = format!(
+        "did:key:z6Mk{}",
+        uuid::Uuid::new_v4().to_string().replace("-", "")
+    );
+
     let result = Object::new();
-    Reflect::set(&result, &JsValue::from_str("did"), &JsValue::from_str(&mock_did))?;
-    
+    Reflect::set(
+        &result,
+        &JsValue::from_str("did"),
+        &JsValue::from_str(&mock_did),
+    )?;
+
     Ok(result.into())
 }
