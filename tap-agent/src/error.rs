@@ -22,9 +22,9 @@ pub enum Error {
     #[error("DID resolution error: {0}")]
     DidResolution(String),
 
-    /// Error related to DID not found
-    #[error("DID not found: {0}")]
-    DidNotFound(String),
+    /// Error related to invalid DID
+    #[error("Invalid DID: {0}")]
+    InvalidDID(String),
 
     /// Error related to missing configuration
     #[error("Missing configuration: {0}")]
@@ -50,11 +50,24 @@ pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Serialization errors
+    #[error("Serialization error: {0}")]
+    Serialization(String),
+
     /// Feature not implemented
     #[error("Feature not implemented: {0}")]
     NotImplemented(String),
 
-    /// Serialization error
-    #[error("Serialization error: {0}")]
-    SerializationError(String),
+    /// DIDComm specific errors
+    #[error("DIDComm error: {0}")]
+    DIDComm(#[from] didcomm::error::Error),
+
+    /// DID Resolution error
+    #[error("DID Resolution error: {0}")]
+    DIDResolution(String),
+
+    /// JavaScript error (WASM)
+    #[cfg(target_arch = "wasm32")]
+    #[error("JavaScript error: {0}")]
+    JsError(String),
 }

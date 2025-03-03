@@ -23,6 +23,7 @@ tracing = { workspace = true }
 erased-serde = "0.3"
 uuid = { workspace = true }
 base64 = "0.21"
+multibase = "0.9.1"
 
 # WASM support
 wasm-bindgen = { workspace = true, optional = true }

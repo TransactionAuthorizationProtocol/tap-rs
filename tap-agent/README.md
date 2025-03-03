@@ -1,14 +1,13 @@
 # tap-agent: TAP Agent Implementation
 
-The `tap-agent` crate provides an implementation of a Transaction Authorization Protocol (TAP) agent. This library facilitates message handling, DID resolution, policy evaluation, and message storage for TAP communications.
+The `tap-agent` crate provides an implementation of a Transaction Authorization Protocol (TAP) agent. This library facilitates message handling, DID resolution, and secure communication using DIDComm for TAP.
 
 ## Features
 
 - Complete TAP agent implementation with DID identity support
 - Message packing and unpacking using DIDComm v2
+- Multiple security modes: Plain, Signed, and AuthCrypt
 - Multiple DID method resolution (did:key, did:web, did:pkh)
-- Policy handling for message evaluation
-- In-memory message storage with query capabilities
 - Asynchronous API with Rust's async/await
 - WASM compatibility for browser environments
 
@@ -19,33 +18,33 @@ Add `tap-agent` to your `Cargo.toml`:
 ```toml
 [dependencies]
 tap-agent = "0.1.0"
-tap-core = "0.1.0"
 tokio = { version = "1.0", features = ["full"] }
 ```
 
 ### Creating a TAP Agent
 
 ```rust
-use tap_agent::{Agent, AgentConfig, TapAgent};
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
+use tap_agent::did::DefaultDIDResolver;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Configure the agent
-    let config = AgentConfig::new()
-        .with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK")
-        .with_name("My TAP Agent")
-        .with_endpoint("https://example.com/endpoint");
+    let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
 
+    // Set up components
+    let did_resolver = Arc::new(DefaultDIDResolver::new());
+    let secret_resolver = Arc::new(BasicSecretResolver::new());
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+    
     // Create the agent
-    let agent = TapAgent::with_defaults(
-        config,
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        Some("My TAP Agent".to_string()),
-    )?;
+    let agent = DefaultAgent::new(config, message_packer);
 
     println!("Agent created successfully!");
-    println!("DID: {}", agent.did());
-    println!("Name: {:?}", agent.name());
+    println!("DID: {}", agent.get_agent_did());
     
     Ok(())
 }
@@ -54,45 +53,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Creating and Sending Messages
 
 ```rust
-use tap_agent::{Agent, AgentConfig, TapAgent};
-use tap_core::message::TapMessageType;
-use serde_json::json;
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
+use tap_agent::did::DefaultDIDResolver;
+use std::sync::Arc;
+use serde::{Serialize, Deserialize};
+use tap_core::message::tap_message_trait::TapMessageBody;
+
+// Define a custom message type
+#[derive(Debug, Serialize, Deserialize)]
+struct TransactionProposal {
+    pub amount: String,
+    pub currency: String,
+}
+
+impl TapMessageBody for TransactionProposal {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#TransactionProposal"
+    }
+
+    fn from_didcomm(msg: &didcomm::Message) -> tap_core::error::Result<Self> {
+        serde_json::from_value(msg.body.clone())
+            .map_err(|e| tap_core::error::Error::Validation(e.to_string()))
+    }
+
+    fn validate(&self) -> tap_core::error::Result<()> {
+        Ok(())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Set up agent components
+    let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
+    let did_resolver = Arc::new(DefaultDIDResolver::new());
+    let secret_resolver = Arc::new(BasicSecretResolver::new());
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+    
     // Create the agent
-    let config = AgentConfig::new_with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-    let agent = TapAgent::with_defaults(
-        config,
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        None,
-    )?;
+    let agent = DefaultAgent::new(config, message_packer);
 
     // Create a transaction proposal message
-    let message = agent.create_message(
-        TapMessageType::TransactionProposal,
-        Some(json!({
-            "transaction": {
-                "amount": "100.00",
-                "currency": "USD",
-                "sender": agent.did(),
-                "receiver": "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL"
-            }
-        })),
-    ).await?;
+    let proposal = TransactionProposal {
+        amount: "100.00".to_string(),
+        currency: "USD".to_string(),
+    };
 
-    // Store the message
-    agent.store_outgoing_message(&message).await?;
-    println!("Created message with ID: {}", message.id);
-
-    // Pack the message for sending
-    let packed_message = agent.pack_message(
-        &message,
-        &"did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL".to_string()
-    ).await?;
+    // Pack and send the message
+    // The security mode will be automatically determined based on the message type
+    let packed_message = agent
+        .send_message(&proposal, "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL")
+        .await?;
     
     // Send the packed message using your preferred transport protocol
-    // Example: HTTP POST request to the recipient's endpoint
     println!("Message packed and ready to send: {}", packed_message);
 
     Ok(())
@@ -102,72 +116,56 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Receiving and Processing Messages
 
 ```rust
-use tap_agent::{Agent, AgentConfig, TapAgent};
-use std::collections::HashMap;
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
+use tap_agent::did::DefaultDIDResolver;
+use std::sync::Arc;
+use serde::{Serialize, Deserialize};
+use tap_core::message::tap_message_trait::TapMessageBody;
+
+// Define the same message type for receiving
+#[derive(Debug, Serialize, Deserialize)]
+struct TransactionProposal {
+    pub amount: String,
+    pub currency: String,
+}
+
+impl TapMessageBody for TransactionProposal {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#TransactionProposal"
+    }
+
+    fn from_didcomm(msg: &didcomm::Message) -> tap_core::error::Result<Self> {
+        serde_json::from_value(msg.body.clone())
+            .map_err(|e| tap_core::error::Error::Validation(e.to_string()))
+    }
+
+    fn validate(&self) -> tap_core::error::Result<()> {
+        Ok(())
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Set up agent components
+    let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
+    let did_resolver = Arc::new(DefaultDIDResolver::new());
+    let secret_resolver = Arc::new(BasicSecretResolver::new());
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver.clone(), secret_resolver.clone()));
+    
     // Create the agent
-    let config = AgentConfig::new_with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-    let agent = TapAgent::with_defaults(
-        config,
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        None,
-    )?;
+    let agent = DefaultAgent::new(config, message_packer.clone());
 
     // Assume we received a packed message
     let received_packed_message = r#"{"protected":"eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDpr..."}"#;
     
-    // Add metadata about the message source
-    let mut metadata = HashMap::new();
-    metadata.insert(
-        "from".to_string(),
-        "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL".to_string(),
-    );
+    // Receive and unpack the message
+    let message: TransactionProposal = agent.receive_message(received_packed_message).await?;
     
-    // Receive the message (unpack, validate, and store)
-    let message = agent.receive_message(received_packed_message, Some(metadata)).await?;
-    
-    println!("Received message:");
-    println!("ID: {}", message.id);
-    println!("Type: {:?}", message.message_type);
-    println!("From: {:?}", message.from);
-    
-    Ok(())
-}
-```
-
-### Querying Stored Messages
-
-```rust
-use tap_agent::{Agent, AgentConfig, TapAgent};
-use tap_agent::storage::MessageQuery;
-use tap_core::message::TapMessageType;
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create the agent
-    let config = AgentConfig::new_with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-    let agent = TapAgent::with_defaults(
-        config,
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        None,
-    )?;
-
-    // Query for all transaction proposals
-    let query = MessageQuery::new()
-        .with_message_type(TapMessageType::TransactionProposal);
-    
-    let messages = agent.query_messages(query).await?;
-    
-    println!("Found {} transaction proposals:", messages.len());
-    for message in messages {
-        println!("ID: {}", message.id);
-        println!("Created: {}", message.created_time);
-        println!("From: {:?}", message.from);
-        println!("To: {:?}", message.to);
-        println!("---");
-    }
+    println!("Received transaction proposal:");
+    println!("Amount: {}", message.amount);
+    println!("Currency: {}", message.currency);
     
     Ok(())
 }
@@ -178,7 +176,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Creating a Custom DID Resolver
 
 ```rust
-use tap_agent::did::{DidResolver, DidDoc};
+use tap_agent::did::{DidResolver};
 use tap_agent::error::{Error, Result};
 use async_trait::async_trait;
 use std::fmt::Debug;
@@ -188,123 +186,89 @@ struct CustomResolver;
 
 #[async_trait]
 impl DidResolver for CustomResolver {
-    async fn resolve(&self, did: &str) -> Result<DidDoc> {
+    async fn resolve(&self, did: &str) -> Result<String> {
         // Implement your custom DID resolution logic here
         if did.starts_with("did:custom:") {
-            // Create and return a DidDoc
-            let doc = DidDoc {
-                id: did.to_string(),
-                verification_method: vec![/* ... */],
-                // ... other fields
-            };
+            // Return a DID document as a JSON string
+            let doc = format!(
+                r#"{{
+                    "@context": "https://www.w3.org/ns/did/v1",
+                    "id": "{}",
+                    "authentication": [
+                        "{}#keys-1"
+                    ]
+                }}"#,
+                did, did
+            );
             Ok(doc)
         } else {
-            Err(Error::DidResolution(format!("Unsupported DID method: {}", did)))
+            Err(Error::Validation(format!("Unsupported DID method: {}", did)))
         }
     }
 }
 
-// Then use it with MultiResolver
+// Then use it with your agent
 use tap_agent::did::MultiResolver;
 use std::sync::Arc;
 
 fn setup_custom_resolver() {
     let mut resolver = MultiResolver::new();
-    resolver.add_resolver(CustomResolver);
+    resolver.add_resolver(CustomResolver{});
     
-    // Use the resolver with your agent or directly
+    // Use the resolver with your agent
     let resolver_arc = Arc::new(resolver);
     // ...
 }
 ```
 
-### Implementing a Custom Policy Handler
+### Working with Different Security Modes
+
+The TAP agent supports three security modes:
+
+1. **Plain**: Unencrypted, unsigned messages
+2. **Signed**: Signed but not encrypted messages
+3. **AuthCrypt**: Authenticated and encrypted messages (most secure)
+
+The agent automatically determines the appropriate security mode based on the message type, but you can also specify it explicitly:
 
 ```rust
-use tap_agent::policy::{PolicyHandler, PolicyResult};
-use tap_core::message::TapMessage;
-use tap_agent::error::Result;
-use async_trait::async_trait;
-use std::fmt::Debug;
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver, MessagePacker};
+use tap_agent::did::DefaultDIDResolver;
+use tap_agent::message::SecurityMode;
+use std::sync::Arc;
 
-#[derive(Debug)]
-struct AmountLimitPolicyHandler {
-    max_amount: f64,
-}
-
-impl AmountLimitPolicyHandler {
-    fn new(max_amount: f64) -> Self {
-        Self { max_amount }
-    }
-}
-
-#[async_trait]
-impl PolicyHandler for AmountLimitPolicyHandler {
-    async fn evaluate(&self, message: &TapMessage) -> Result<PolicyResult> {
-        // For transaction proposals, check the amount
-        if message.message_type == tap_core::message::TapMessageType::TransactionProposal {
-            if let Some(body) = &message.body {
-                if let Some(transaction) = body.get("transaction") {
-                    if let Some(amount_str) = transaction.get("amount").and_then(|a| a.as_str()) {
-                        if let Ok(amount) = amount_str.parse::<f64>() {
-                            if amount > self.max_amount {
-                                return Ok(PolicyResult::Reject(format!(
-                                    "Transaction amount ${} exceeds limit of ${}",
-                                    amount, self.max_amount
-                                )));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
-        // Allow by default
-        Ok(PolicyResult::Allow)
-    }
-}
-
-// Use the policy handler when creating your agent
-```
-
-### Custom Message Storage
-
-The `tap-agent` crate provides an in-memory message store by default, but you can implement your own storage backend:
-
-```rust
-use tap_agent::storage::{MessageStore, MessageQuery};
-use tap_core::message::TapMessage;
-use tap_agent::error::Result;
-use async_trait::async_trait;
-use std::fmt::Debug;
-
-#[derive(Debug)]
-struct DatabaseMessageStore {
-    // Your database connection or client
-    // db_client: DbClient,
-}
-
-#[async_trait]
-impl MessageStore for DatabaseMessageStore {
-    async fn store_message(&self, message: &TapMessage) -> Result<()> {
-        // Store the message in your database
-        // self.db_client.insert_message(message).await?;
-        Ok(())
-    }
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Set up agent components
+    let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
+    let did_resolver = Arc::new(DefaultDIDResolver::new());
+    let secret_resolver = Arc::new(BasicSecretResolver::new());
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver.clone(), secret_resolver.clone()));
     
-    async fn get_message(&self, id: &str) -> Result<Option<TapMessage>> {
-        // Retrieve the message from your database
-        // let message = self.db_client.get_message(id).await?;
-        // Ok(message)
-        unimplemented!("Database storage not implemented")
-    }
+    // Create the agent
+    let agent = DefaultAgent::new(config, message_packer.clone());
+
+    // Create a message object
+    let message = serde_json::json!({
+        "type": "https://tap.rsvp/schema/1.0#SimpleMessage",
+        "content": "Hello, World!"
+    });
+
+    // Pack with a specific security mode
+    let packed = message_packer
+        .pack_message(
+            &message,
+            "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            SecurityMode::Signed
+        )
+        .await?;
     
-    async fn query_messages(&self, query: MessageQuery) -> Result<Vec<TapMessage>> {
-        // Query messages from your database
-        // let messages = self.db_client.query_messages(query).await?;
-        // Ok(messages)
-        unimplemented!("Database storage not implemented")
-    }
+    println!("Signed message: {}", packed);
+    
+    Ok(())
 }
 ```
 

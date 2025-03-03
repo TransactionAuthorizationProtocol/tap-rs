@@ -19,8 +19,8 @@ pub mod did;
 /// Error types
 pub mod error;
 
-/// Policy handling
-pub mod policy;
+/// Message types and utilities
+pub mod message;
 
 /// A trait for types that can be serialized to JSON in an type-erased way
 pub trait ErasedSerialize {
@@ -35,12 +35,13 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 }
 
 // Re-export key types for convenience
-pub use agent::{Agent, DefaultAgent, MessageSender};
+pub use agent::{Agent, DefaultAgent};
 pub use config::AgentConfig;
-pub use crypto::{DefaultMessagePacker, MessagePacker, SecurityMode};
-pub use did::{BasicResolver, DefaultDIDResolver};
+pub use crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
+pub use did::{DIDMethodResolver, MultiResolver, KeyResolver, SyncDIDResolver};
+pub use didcomm::did::{DIDDoc, DIDResolver};
 pub use error::{Error, Result};
-pub use policy::{DefaultPolicyHandler, PolicyHandler};
+pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
 
 /// Version of the TAP Agent
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
