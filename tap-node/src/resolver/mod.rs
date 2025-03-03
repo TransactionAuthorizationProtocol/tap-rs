@@ -8,7 +8,7 @@ use std::sync::Arc;
 use base58::ToBase58;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tap_agent::did::DidResolver;
+use tap_agent::did::SyncDIDResolver;
 use tokio::sync::RwLock;
 
 use crate::error::{Error, Result};
@@ -27,7 +27,7 @@ fn hash_did(did: &str) -> Result<String> {
 #[derive(Default)]
 pub struct NodeResolver {
     /// Resolvers for different DID methods
-    resolvers: RwLock<HashMap<String, Arc<dyn DidResolver>>>,
+    resolvers: RwLock<HashMap<String, Arc<dyn SyncDIDResolver>>>,
 }
 
 impl NodeResolver {
@@ -41,9 +41,9 @@ impl NodeResolver {
         //     use tap_agent::{KeyResolver, MultiResolver, PkhResolver, WebResolver};
         //
         //     let mut resolvers_map = HashMap::new();
-        //     resolvers_map.insert("key".to_string(), Arc::new(KeyResolver::new()) as Arc<dyn DidResolver>);
-        //     resolvers_map.insert("web".to_string(), Arc::new(WebResolver::new()) as Arc<dyn DidResolver>);
-        //     resolvers_map.insert("pkh".to_string(), Arc::new(PkhResolver::new()) as Arc<dyn DidResolver>);
+        //     resolvers_map.insert("key".to_string(), Arc::new(KeyResolver::new()) as Arc<dyn SyncDIDResolver>);
+        //     resolvers_map.insert("web".to_string(), Arc::new(WebResolver::new()) as Arc<dyn SyncDIDResolver>);
+        //     resolvers_map.insert("pkh".to_string(), Arc::new(PkhResolver::new()) as Arc<dyn SyncDIDResolver>);
         //
         //     resolvers = RwLock::new(resolvers_map);
         // }
@@ -52,13 +52,13 @@ impl NodeResolver {
     }
 
     /// Add a resolver for a DID method
-    pub async fn add_resolver(&self, method: String, resolver: Arc<dyn DidResolver>) {
+    pub async fn add_resolver(&self, method: String, resolver: Arc<dyn SyncDIDResolver>) {
         let mut resolvers = self.resolvers.write().await;
         resolvers.insert(method, resolver);
     }
 
     /// Get a resolver for a DID method
-    pub async fn get_resolver(&self, did: &str) -> Option<Arc<dyn DidResolver>> {
+    pub async fn get_resolver(&self, did: &str) -> Option<Arc<dyn SyncDIDResolver>> {
         // Extract the method from the DID
         let parts: Vec<&str> = did.split(':').collect();
         if parts.len() < 3 || parts[0] != "did" {

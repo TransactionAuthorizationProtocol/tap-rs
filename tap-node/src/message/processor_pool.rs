@@ -44,7 +44,9 @@ impl ProcessorPool {
     /// Create a new processor pool
     pub fn new(config: ProcessorPoolConfig) -> Self {
         let (tx, mut rx) = channel::<Message>(config.channel_capacity);
-        let processor = CompositeMessageProcessor::new(Vec::new());
+        let processors: Vec<MessageProcessorType> = Vec::new();
+        let processor = CompositeMessageProcessor::new(processors);
+        let processor_for_workers = processor.clone();
         
         // Spawn a single task to distribute messages to workers
         tokio::spawn(async move {
@@ -54,7 +56,7 @@ impl ProcessorPool {
                 let (worker_tx, mut worker_rx) = channel::<Message>(config.channel_capacity);
                 worker_channels.push(worker_tx);
                 
-                let worker_processor = processor.clone();
+                let worker_processor = processor_for_workers.clone();
                 let worker_timeout = config.worker_timeout;
                 
                 // Spawn a worker to process messages from its channel

@@ -12,7 +12,6 @@ pub use processor::{DefaultMessageProcessor, LoggingMessageProcessor, Validation
 pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
 pub use router::{DefaultMessageRouter};
 pub use sender::{HttpMessageSender, NodeMessageSender};
-pub use tap_agent::MessageSender;
 
 // Import the Message type from tap-core
 use tap_core::didcomm::Message;

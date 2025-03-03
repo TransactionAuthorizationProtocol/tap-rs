@@ -7,7 +7,13 @@ use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
-use tap_agent::MessageSender;
+
+/// Message sender trait for sending packed messages to recipients
+#[async_trait]
+pub trait MessageSender: Send + Sync + Debug {
+    /// Send a packed message to one or more recipients
+    async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()>;
+}
 
 /// Node message sender implementation
 pub struct NodeMessageSender {

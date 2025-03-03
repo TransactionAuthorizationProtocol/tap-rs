@@ -74,71 +74,20 @@ impl MessageProcessor for DefaultMessageProcessor {
     }
 }
 
-/// A composite message processor that chains multiple processors together
-#[derive(Debug, Clone)]
-pub struct CompositeMessageProcessor {
-    /// The processors to use, in order
-    processors: Vec<Arc<dyn MessageProcessor>>,
-}
-
-impl CompositeMessageProcessor {
-    /// Create a new composite message processor
-    pub fn new(processors: Vec<Arc<dyn MessageProcessor>>) -> Self {
-        Self { processors }
-    }
-
-    /// Add a processor to the chain
-    pub fn add_processor(&mut self, processor: Arc<dyn MessageProcessor>) {
-        self.processors.push(processor);
-    }
-}
-
-#[async_trait]
-impl MessageProcessor for CompositeMessageProcessor {
-    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
-        let mut current_message = Some(message);
-
-        for processor in &self.processors {
-            if let Some(msg) = current_message {
-                current_message = processor.process_incoming(msg).await?;
-            } else {
-                // Message was filtered out by a previous processor
-                break;
-            }
-        }
-
-        Ok(current_message)
-    }
-
-    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
-        let mut current_message = Some(message);
-
-        for processor in &self.processors {
-            if let Some(msg) = current_message {
-                current_message = processor.process_outgoing(msg).await?;
-            } else {
-                // Message was filtered out by a previous processor
-                break;
-            }
-        }
-
-        Ok(current_message)
-    }
-}
-
 /// Default message processor that logs and validates messages
+#[derive(Clone)]
 pub struct DefaultMessageProcessorImpl {
     /// The internal composite processor
-    processor: CompositeMessageProcessor,
+    processor: crate::message::CompositeMessageProcessor,
 }
 
 impl DefaultMessageProcessorImpl {
     /// Create a new default message processor
     pub fn new() -> Self {
-        let logging_processor = Arc::new(LoggingMessageProcessor);
-        let validation_processor = Arc::new(ValidationMessageProcessor);
+        let logging_processor = crate::message::MessageProcessorType::Logging(LoggingMessageProcessor);
+        let validation_processor = crate::message::MessageProcessorType::Validation(ValidationMessageProcessor);
 
-        let processor = CompositeMessageProcessor::new(vec![
+        let processor = crate::message::CompositeMessageProcessor::new(vec![
             logging_processor,
             validation_processor,
         ]);

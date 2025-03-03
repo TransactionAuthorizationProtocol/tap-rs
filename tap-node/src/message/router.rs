@@ -14,13 +14,19 @@ use crate::message::MessageRouter;
 #[derive(Clone)]
 pub struct DefaultMessageRouter {
     /// Registry of agents
-    agents: Arc<AgentRegistry>,
+    agents: Option<Arc<AgentRegistry>>,
 }
 
 impl DefaultMessageRouter {
     /// Create a new default message router
-    pub fn new(agents: Arc<AgentRegistry>) -> Self {
-        Self { agents }
+    pub fn new() -> Self {
+        Self { agents: None }
+    }
+    
+    /// Set the agent registry
+    pub fn with_agents(mut self, agents: Arc<AgentRegistry>) -> Self {
+        self.agents = Some(agents);
+        self
     }
 }
 
@@ -31,8 +37,16 @@ impl MessageRouter for DefaultMessageRouter {
             if !to.is_empty() {
                 // Check if the first to DID exists in our registry
                 let to_did = to[0].clone();
-                if self.agents.has_agent(&to_did) {
-                    debug!("Routing message to: {}", to_did);
+                
+                // If we have an agent registry, check if the agent exists
+                if let Some(agents) = &self.agents {
+                    if agents.has_agent(&to_did) {
+                        debug!("Routing message to: {}", to_did);
+                        return Ok(to_did);
+                    }
+                } else {
+                    // If we don't have an agent registry, just return the first DID
+                    debug!("No agent registry available, routing to: {}", to_did);
                     return Ok(to_did);
                 }
             }
@@ -49,12 +63,13 @@ impl MessageRouter for DefaultMessageRouter {
 /// A message router that combines multiple routers
 #[derive(Clone)]
 pub struct CompositeMessageRouter {
+    /// The routers to use, in order
     routers: Vec<Arc<dyn MessageRouter>>,
 }
 
 impl Default for CompositeMessageRouter {
     fn default() -> Self {
-        Self::new(Vec::new())
+        Self { routers: Vec::new() }
     }
 }
 
@@ -75,12 +90,15 @@ impl MessageRouter for CompositeMessageRouter {
         // Try each router in sequence
         for router in &self.routers {
             match router.route_message_impl(message) {
-                Ok(did) => return Ok(did),
+                Ok(target) => return Ok(target),
                 Err(_) => continue, // Try the next router
             }
         }
 
-        // If we get here, none of the routers worked
-        Err(Error::Dispatch("No suitable route found for message".into()))
+        // If we get here, no router could handle the message
+        Err(Error::Dispatch(format!(
+            "No route found for message: {}",
+            message.id
+        )))
     }
 }

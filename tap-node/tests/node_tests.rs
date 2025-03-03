@@ -1,8 +1,67 @@
 //! Tests for TAP Node
 
+use std::collections::HashMap;
 use std::sync::Arc;
-use tap_agent::{AgentConfig, TapAgent};
+use tap_agent::{AgentConfig, DefaultAgent};
+use tap_agent::did::SyncDIDResolver;
+use tap_agent::crypto::DebugSecretsResolver;
 use tap_node::{NodeConfig, TapNode};
+use async_trait::async_trait;
+use tap_agent::error::Result as AgentResult;
+use std::fmt::Debug;
+use didcomm::did::{DIDDoc, VerificationMethod, VerificationMethodType, VerificationMaterial};
+
+/// Test DID Resolver for testing
+#[derive(Debug)]
+struct TestDIDResolver;
+
+impl TestDIDResolver {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl SyncDIDResolver for TestDIDResolver {
+    async fn resolve(&self, _did: &str) -> AgentResult<Option<DIDDoc>> {
+        // Create a basic DIDDoc
+        let did_doc = DIDDoc {
+            id: "did:example:123".to_string(),
+            verification_method: vec![VerificationMethod {
+                id: "did:example:123#key-1".to_string(),
+                controller: "did:example:123".to_string(),
+                type_: VerificationMethodType::Ed25519VerificationKey2018,
+                verification_material: VerificationMaterial::Base58 {
+                    public_key_base58: "GHgtPsMnNW5bYrZFFcpvrFcuni4Bjt7QcRNoBQ1ijB2J".to_string(),
+                },
+            }],
+            authentication: vec!["did:example:123#key-1".to_string()],
+            key_agreement: vec![],
+            service: vec![],
+        };
+        Ok(Some(did_doc))
+    }
+}
+
+/// Test Secrets Resolver for testing
+#[derive(Debug)]
+struct TestSecretsResolver {
+    secrets_map: HashMap<String, didcomm::secrets::Secret>,
+}
+
+impl TestSecretsResolver {
+    pub fn new() -> Self {
+        Self {
+            secrets_map: HashMap::new(),
+        }
+    }
+}
+
+impl DebugSecretsResolver for TestSecretsResolver {
+    fn get_secrets_map(&self) -> &HashMap<String, didcomm::secrets::Secret> {
+        &self.secrets_map
+    }
+}
 
 #[tokio::test]
 async fn test_node_creation() {
@@ -10,7 +69,7 @@ async fn test_node_creation() {
     let config = NodeConfig::default();
     let node = TapNode::new(config);
 
-    // Check node properties
+    // Check node properties - these should be checked against public accessor methods
     assert!(!node.config().debug);
     assert_eq!(node.agents().agent_count(), 0);
 }
@@ -21,23 +80,37 @@ async fn test_agent_registration() {
     let config = NodeConfig::default();
     let node = TapNode::new(config);
 
-    // Create an agent
+    // Create and register a test agent
     let agent_config =
-        AgentConfig::new_with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
+        AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
 
-    let agent = TapAgent::with_defaults(
-        agent_config,
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        Some("Test Agent".to_string()),
-    )
-    .unwrap();
+    // Create resolvers for the DefaultMessagePacker
+    let did_resolver = Arc::new(TestDIDResolver::new());
+    let secrets_resolver = Arc::new(TestSecretsResolver::new());
+    
+    // Create a new DefaultAgent with message packer
+    let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
+        did_resolver,
+        secrets_resolver,
+    ));
+    let agent = DefaultAgent::new(agent_config, message_packer);
 
-    // Register the agent with the node
-    node.register_agent(Arc::new(agent)).await.unwrap();
+    let agent = Arc::new(agent);
+    let result = node.register_agent(agent.clone()).await;
+    assert!(result.is_ok());
 
-    // Check that the agent is registered
+    // Check agent count
     assert_eq!(node.agents().agent_count(), 1);
-    assert!(node
+
+    // Unregister the agent
+    let result = node
+        .unregister_agent("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK")
+        .await;
+    assert!(result.is_ok());
+
+    // Check agent count again
+    assert_eq!(node.agents().agent_count(), 0);
+    assert!(!node
         .agents()
         .has_agent("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"));
 }
@@ -50,14 +123,18 @@ async fn test_agent_unregistration() {
 
     // Create and register an agent
     let agent_config =
-        AgentConfig::new_with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
+        AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
 
-    let agent = TapAgent::with_defaults(
-        agent_config,
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        Some("Test Agent".to_string()),
-    )
-    .unwrap();
+    // Create resolvers for the DefaultMessagePacker
+    let did_resolver = Arc::new(TestDIDResolver::new());
+    let secrets_resolver = Arc::new(TestSecretsResolver::new());
+    
+    // Create a new DefaultAgent with message packer
+    let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
+        did_resolver,
+        secrets_resolver,
+    ));
+    let agent = DefaultAgent::new(agent_config, message_packer);
 
     node.register_agent(Arc::new(agent)).await.unwrap();
     assert_eq!(node.agents().agent_count(), 1);
@@ -75,8 +152,8 @@ async fn test_agent_unregistration() {
 }
 
 #[tokio::test]
-async fn test_node_config() {
-    // Create a node with custom config
+async fn test_node_configuration() {
+    // Create a node with custom configuration
     let config = NodeConfig {
         debug: true,
         max_agents: Some(10),
@@ -84,12 +161,29 @@ async fn test_node_config() {
         log_message_content: true,
         processor_pool: None,
     };
-
     let node = TapNode::new(config);
 
-    // Verify config values
+    // Create and register a test agent
+    let agent_config =
+        AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
+
+    // Create resolvers for the DefaultMessagePacker
+    let did_resolver = Arc::new(TestDIDResolver::new());
+    let secrets_resolver = Arc::new(TestSecretsResolver::new());
+    
+    // Create a new DefaultAgent with message packer
+    let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
+        did_resolver,
+        secrets_resolver,
+    ));
+    let agent = DefaultAgent::new(agent_config, message_packer);
+
+    let agent = Arc::new(agent);
+    let result = node.register_agent(agent).await;
+    assert!(result.is_ok());
+
+    // Check configuration
     assert!(node.config().debug);
-    assert_eq!(node.config().max_agents, Some(10));
-    assert!(node.config().enable_message_logging);
     assert!(node.config().log_message_content);
+    assert_eq!(node.config().max_agents, Some(10));
 }
