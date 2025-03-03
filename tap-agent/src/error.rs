@@ -23,8 +23,16 @@ pub enum Error {
     DidResolution(String),
 
     /// Error related to invalid DID
-    #[error("Invalid DID: {0}")]
-    InvalidDID(String),
+    #[error("Invalid DID")]
+    InvalidDID,
+
+    /// Error for unsupported DID method
+    #[error("Unsupported DID method: {0}")]
+    UnsupportedDIDMethod(String),
+
+    /// Error when failed to acquire resolver read lock
+    #[error("Failed to acquire resolver read lock")]
+    FailedToAcquireResolverReadLock,
 
     /// Error related to missing configuration
     #[error("Missing configuration: {0}")]
@@ -70,4 +78,9 @@ pub enum Error {
     #[cfg(target_arch = "wasm32")]
     #[error("JavaScript error: {0}")]
     JsError(String),
+
+    /// JavaScript resolver error (WASM)
+    #[cfg(target_arch = "wasm32")]
+    #[error("JavaScript resolver error: {0}")]
+    JsResolverError(String),
 }

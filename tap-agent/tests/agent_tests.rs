@@ -2,7 +2,6 @@
 
 use async_trait::async_trait;
 use didcomm::did::DIDDoc;
-use didcomm::error::Result as DidcommResult;
 use didcomm::secrets::{Secret, SecretType, SecretMaterial};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -10,6 +9,7 @@ use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker, DebugSecretsResolver};
 use tap_agent::did::{MultiResolver, SyncDIDResolver, DIDMethodResolver};
+use tap_agent::error::{Error, Result};
 use tap_core::error::{Error as TapCoreError, Result as TapCoreResult};
 use tap_core::message::tap_message_trait::TapMessageBody;
 use uuid::Uuid;
@@ -140,24 +140,28 @@ impl DIDMethodResolver for TestDIDResolver {
         "example"
     }
     
-    async fn resolve_method(&self, did: &str) -> tap_agent::error::Result<Option<DIDDoc>> {
-        // For testing, just return a minimal DID document
-        let verification_method = didcomm::did::VerificationMethod {
-            id: format!("{}#keys-1", did),
+    async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
+        if !did.starts_with("did:example:") {
+            return Err(Error::UnsupportedDIDMethod(format!("Unsupported DID method for test resolver: {}", did)));
+        }
+        
+        // Create a test DID document
+        let id = format!("{}#keys-1", did);
+        
+        let auth_method = didcomm::did::VerificationMethod {
+            id: id.clone(),
             type_: didcomm::did::VerificationMethodType::Ed25519VerificationKey2018,
             controller: did.to_string(),
-            verification_material: didcomm::did::VerificationMaterial::JWK { public_key_jwk: serde_json::json!({
-                "kty": "OKP",
-                "crv": "Ed25519",
-                "x": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo"
-            })},
+            verification_material: didcomm::did::VerificationMaterial::Base58 {
+                public_key_base58: "H3C2AVvLMv6gmMNam3uVAjZpfkcJCwDwnZn6z3wXmqPV".to_string(),
+            },
         };
         
         let doc = DIDDoc {
             id: did.to_string(),
-            verification_method: vec![verification_method.clone()],
-            authentication: vec![format!("{}#keys-1", did)],
-            key_agreement: vec![format!("{}#keys-1", did)],
+            verification_method: vec![auth_method.clone()],
+            authentication: vec![id.clone()],
+            key_agreement: vec![id],
             service: vec![],
         };
         
@@ -167,10 +171,8 @@ impl DIDMethodResolver for TestDIDResolver {
 
 #[async_trait]
 impl SyncDIDResolver for TestDIDResolver {
-    async fn resolve(&self, did: &str) -> DidcommResult<Option<DIDDoc>> {
-        self.resolve_method(did)
-            .await
-            .map_err(|e| didcomm::error::Error::new(didcomm::error::ErrorKind::InvalidState, e))
+    async fn resolve(&self, did: &str) -> Result<Option<DIDDoc>> {
+        self.resolve_method(did).await
     }
 }
 

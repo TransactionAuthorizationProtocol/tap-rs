@@ -147,8 +147,9 @@ impl DefaultMessagePacker {
     /// # Returns
     /// The DID document as a JSON string
     async fn resolve_did(&self, did: &str) -> Result<String> {
-        let doc = self.did_resolver.resolve(did).await.map_err(Error::DIDComm)?
-            .ok_or_else(|| Error::InvalidDID(format!("Could not resolve DID: {}", did)))?;
+        // Our SyncDIDResolver returns our own error type, so we don't need to convert it
+        let doc_option = self.did_resolver.resolve(did).await?;
+        let doc = doc_option.ok_or_else(|| Error::DidResolution(format!("Could not resolve DID: {}", did)))?;
             
         // Convert the DID doc to a JSON string
         serde_json::to_string(&doc).map_err(|e| Error::Serialization(e.to_string()))
