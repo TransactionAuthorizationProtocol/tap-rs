@@ -55,13 +55,13 @@ impl MessageSender for NodeMessageSender {
 #[derive(Debug)]
 pub struct HttpMessageSender {
     /// Base URL for the HTTP endpoint
-    base_url: String,
+    _base_url: String,
 }
 
 impl HttpMessageSender {
     /// Create a new HttpMessageSender with the given base URL
     pub fn new(base_url: String) -> Self {
-        Self { base_url }
+        Self { _base_url: base_url }
     }
 }
 

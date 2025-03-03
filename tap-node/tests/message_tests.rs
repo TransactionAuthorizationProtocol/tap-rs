@@ -134,7 +134,7 @@ fn create_test_message(from_did: &str, to_did: &str) -> Message {
 async fn test_message_routing() {
     // Create a node
     let config = NodeConfig::default();
-    let node = TapNode::new(config);
+    let _node = TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -144,14 +144,14 @@ async fn test_message_routing() {
     let agent_2 = create_test_agent(agent_2_did);
 
     // Register agents with the node
-    node.register_agent(agent_1.clone()).await.unwrap();
-    node.register_agent(agent_2.clone()).await.unwrap();
+    _node.register_agent(agent_1.clone()).await.unwrap();
+    _node.register_agent(agent_2.clone()).await.unwrap();
 
     // Create a message from agent 1 to agent 2
     let message = create_test_message(agent_1_did, agent_2_did);
 
     // Process the message
-    let result = node.receive_message(message).await;
+    let result = _node.receive_message(message).await;
     assert!(result.is_ok());
 }
 
@@ -159,7 +159,7 @@ async fn test_message_routing() {
 async fn test_message_with_unregistered_agent() {
     // Create a node
     let config = NodeConfig::default();
-    let node = TapNode::new(config);
+    let _node = TapNode::new(config);
 
     // Create a test agent
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -168,13 +168,13 @@ async fn test_message_with_unregistered_agent() {
     let agent_1 = create_test_agent(agent_1_did);
 
     // Register the first agent only
-    node.register_agent(agent_1.clone()).await.unwrap();
+    _node.register_agent(agent_1.clone()).await.unwrap();
 
     // Create a message from registered agent to unregistered agent
     let message = create_test_message(agent_1_did, unregistered_did);
 
     // Process the message - should fail because target agent is not registered
-    let result = node.receive_message(message).await;
+    let result = _node.receive_message(message).await;
     assert!(result.is_err());
 }
 
@@ -182,14 +182,14 @@ async fn test_message_with_unregistered_agent() {
 async fn test_invalid_message() {
     // Create a node
     let config = NodeConfig::default();
-    let node = TapNode::new(config);
+    let _node = TapNode::new(config);
 
     // Create a test agent
     let agent_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
     let agent = create_test_agent(agent_did);
 
     // Register the agent with the node
-    node.register_agent(agent.clone()).await.unwrap();
+    _node.register_agent(agent.clone()).await.unwrap();
     
     // Create invalid message with missing to field
     let message = Message {
@@ -209,7 +209,7 @@ async fn test_invalid_message() {
     };
 
     // Process the message - this should be filtered out by validation
-    let result = node.receive_message(message).await;
+    let result = _node.receive_message(message).await;
     assert!(result.is_err());
 }
 
@@ -217,7 +217,7 @@ async fn test_invalid_message() {
 async fn test_custom_node_middleware() {
     // Create a node with custom middleware
     let config = NodeConfig::default();
-    let node = TapNode::new(config);
+    let _node = TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -227,14 +227,14 @@ async fn test_custom_node_middleware() {
     let agent_2 = create_test_agent(agent_2_did);
 
     // Register agents with the node
-    node.register_agent(agent_1.clone()).await.unwrap();
-    node.register_agent(agent_2.clone()).await.unwrap();
+    _node.register_agent(agent_1.clone()).await.unwrap();
+    _node.register_agent(agent_2.clone()).await.unwrap();
 
     // Create a message from agent 1 to agent 2
     let message = create_test_message(agent_1_did, agent_2_did);
 
     // Process the message - the default middleware should handle this correctly
-    let result = node.receive_message(message).await;
+    let result = _node.receive_message(message).await;
     assert!(result.is_ok());
 }
 
@@ -242,7 +242,7 @@ async fn test_custom_node_middleware() {
 async fn test_node_agent_communication() {
     // Create a node
     let config = NodeConfig::default();
-    let node = TapNode::new(config);
+    let _node = TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -252,14 +252,14 @@ async fn test_node_agent_communication() {
     let agent_2 = create_test_agent(agent_2_did);
 
     // Register agents with the node
-    node.register_agent(agent_1.clone()).await.unwrap();
-    node.register_agent(agent_2.clone()).await.unwrap();
+    _node.register_agent(agent_1.clone()).await.unwrap();
+    _node.register_agent(agent_2.clone()).await.unwrap();
 
     // Create a message from agent 1 to agent 2
     let message = create_test_message(agent_1_did, agent_2_did);
 
     // Send the message
-    let result = node.send_message(agent_1_did, agent_2_did, message).await;
+    let result = _node.send_message(agent_1_did, agent_2_did, message).await;
     assert!(result.is_ok());
 }
 
@@ -267,7 +267,7 @@ async fn test_node_agent_communication() {
 async fn test_error_message() {
     // Create a node
     let config = NodeConfig::default();
-    let node = TapNode::new(config);
+    let _node = TapNode::new(config);
 
     // Create an error message
     let error_body = ErrorBody {

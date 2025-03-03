@@ -4,7 +4,6 @@
 
 use async_trait::async_trait;
 use log::{debug, info};
-use std::sync::Arc;
 use tap_core::didcomm::Message;
 
 use crate::error::Result;

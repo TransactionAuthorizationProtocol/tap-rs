@@ -1,4 +1,12 @@
 //! HTTP server implementation for TAP DIDComm messages.
+//!
+//! This module provides a complete HTTP server implementation for the Transaction Authorization
+//! Protocol (TAP). The server exposes endpoints for:
+//! 
+//! - Processing DIDComm messages for TAP operations
+//! - Health checks for monitoring system availability
+//!
+//! The server is built using the Warp web framework and provides graceful shutdown capabilities.
 
 use crate::config::TapHttpConfig;
 use crate::error::{Error, Result};
@@ -12,6 +20,13 @@ use tracing::{error, info, warn};
 use warp::{Filter, Rejection, Reply};
 
 /// TAP HTTP server for handling DIDComm messages.
+///
+/// This server implementation provides endpoints for:
+/// - `/didcomm` - For processing DIDComm messages via the TAP protocol
+/// - `/health` - For checking the server's operational status
+///
+/// The server requires a configuration and a TapNode instance to function.
+/// The TapNode is responsible for the actual message processing logic.
 pub struct TapHttpServer {
     /// Server configuration.
     config: TapHttpConfig,
@@ -19,12 +34,19 @@ pub struct TapHttpServer {
     /// TAP Node for message processing.
     node: Arc<TapNode>,
 
-    /// Shutdown channel.
+    /// Shutdown channel for graceful server termination.
     shutdown_tx: Option<oneshot::Sender<()>>,
 }
 
 impl TapHttpServer {
     /// Creates a new HTTP server with the given configuration and TAP Node.
+    ///
+    /// # Parameters
+    /// * `config` - The server configuration including host, port, and endpoint settings
+    /// * `node` - The TAP Node instance used for processing DIDComm messages
+    ///
+    /// # Returns
+    /// A new TapHttpServer instance that can be started with the `start` method
     pub fn new(config: TapHttpConfig, node: TapNode) -> Self {
         Self {
             config,
@@ -34,6 +56,17 @@ impl TapHttpServer {
     }
 
     /// Starts the HTTP server.
+    ///
+    /// This method:
+    /// 1. Configures the server routes based on the provided configuration
+    /// 2. Sets up a graceful shutdown channel
+    /// 3. Starts the server in a separate Tokio task
+    ///
+    /// The server runs until the `stop` method is called.
+    ///
+    /// # Returns
+    /// * `Ok(())` - If the server started successfully
+    /// * `Err(Error)` - If there was an error starting the server
     pub async fn start(&mut self) -> Result<()> {
         let addr: SocketAddr = self
             .config
@@ -88,6 +121,12 @@ impl TapHttpServer {
     }
 
     /// Stops the HTTP server.
+    ///
+    /// This method sends a shutdown signal to the server, allowing it to terminate gracefully.
+    ///
+    /// # Returns
+    /// * `Ok(())` - If the server was stopped successfully
+    /// * `Err(Error)` - If there was an error stopping the server
     pub async fn stop(&mut self) -> Result<()> {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
@@ -99,11 +138,15 @@ impl TapHttpServer {
     }
 
     /// Returns a reference to the underlying TAP Node.
+    ///
+    /// The TAP Node is responsible for processing DIDComm messages.
     pub fn node(&self) -> &Arc<TapNode> {
         &self.node
     }
 
     /// Returns a reference to the server configuration.
+    ///
+    /// The server configuration includes settings for the host, port, and endpoint.
     pub fn config(&self) -> &TapHttpConfig {
         &self.config
     }

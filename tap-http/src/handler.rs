@@ -1,4 +1,10 @@
 //! Request handlers for the TAP HTTP server.
+//! 
+//! This module provides HTTP request handlers for the Transaction Authorization Protocol (TAP)
+//! server, including endpoints for DIDComm message processing and health checks.
+//! 
+//! The handlers leverage the TAP Node for message processing, which handles message validation,
+//! verification, and routing through the appropriate agent.
 
 use crate::error::{Error, Result};
 use bytes::Bytes;
@@ -6,7 +12,8 @@ use serde::Serialize;
 use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
-use tap_core::{didcomm::unpack_didcomm_message, message::TapMessage};
+use tap_core::didcomm;
+use didcomm::Message;
 use tap_node::TapNode;
 use tracing::{debug, error, info};
 use warp::{self, hyper::StatusCode, reply::json, Reply};
@@ -14,11 +21,16 @@ use warp::{self, hyper::StatusCode, reply::json, Reply};
 /// Response structure for health checks.
 #[derive(Serialize)]
 struct HealthResponse {
+    /// Status of the server, always "ok" when reachable
     status: String,
+    /// Current version of the tap-http package
     version: String,
 }
 
 /// Handler for health check requests.
+/// 
+/// Returns a simple response with the status "ok" and the current version number.
+/// This endpoint allows monitoring systems to verify that the TAP HTTP server is operational.
 pub async fn handle_health_check() -> std::result::Result<impl Reply, Infallible> {
     info!("Health check request received");
 
@@ -32,6 +44,13 @@ pub async fn handle_health_check() -> std::result::Result<impl Reply, Infallible
 }
 
 /// Handler for DIDComm messages.
+/// 
+/// This function processes incoming DIDComm messages by:
+/// 1. Converting the raw bytes to a UTF-8 string
+/// 2. Parsing the string as a DIDComm message
+/// 3. Forwarding the message to the TAP Node for further processing
+/// 
+/// The handler returns appropriate success or error responses based on the outcome.
 pub async fn handle_didcomm(
     body: Bytes,
     node: Arc<TapNode>,
@@ -48,12 +67,12 @@ pub async fn handle_didcomm(
         }
     };
 
-    // Parse and unpack the DIDComm message
-    debug!("Processing DIDComm message");
-    let (tap_message, _metadata) = match unpack_didcomm_message(message_str).await {
-        Ok(result) => result,
+    // Parse the DIDComm message
+    debug!("Parsing DIDComm message");
+    let didcomm_message: Message = match serde_json::from_str(message_str) {
+        Ok(msg) => msg,
         Err(e) => {
-            error!("Failed to unpack DIDComm message: {}", e);
+            error!("Failed to parse DIDComm message: {}", e);
             return Ok(json_error_response(
                 StatusCode::BAD_REQUEST,
                 "Invalid DIDComm message format",
@@ -62,7 +81,7 @@ pub async fn handle_didcomm(
     };
 
     // Process the message using the TAP Node
-    match process_tap_message(tap_message, node).await {
+    match process_tap_message(didcomm_message, node).await {
         Ok(_) => {
             info!("DIDComm message processed successfully");
             Ok(json_success_response())
@@ -78,15 +97,31 @@ pub async fn handle_didcomm(
 }
 
 /// Process a TAP message using the TAP Node.
-async fn process_tap_message(message: TapMessage, node: Arc<TapNode>) -> Result<()> {
-    // Process the message through the TAP Node
-    node.process_message(message)
+/// 
+/// This function forwards the DIDComm message to the TAP Node for processing.
+/// The TapNode.receive_message method will:
+/// 1. Validate and verify the message
+/// 2. Route the message to the appropriate agent
+/// 3. Process the message according to the TAP protocol
+///
+/// # Parameters
+/// * `message` - The DIDComm message to process
+/// * `node` - The TAP Node instance that will process the message
+///
+/// # Returns
+/// * `Ok(())` if processing succeeded
+/// * `Err(Error)` if message processing failed
+async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()> {
+    // Process the message through the TAP Node using the receive_message method
+    node.receive_message(message)
         .await
         .map_err(|e| Error::Node(e.to_string()))?;
     Ok(())
 }
 
 /// Create a JSON success response.
+/// 
+/// Returns a standardized success response with a 200 status code.
 fn json_success_response() -> warp::reply::Response {
     warp::reply::with_status(
         json(&json!({
@@ -99,6 +134,12 @@ fn json_success_response() -> warp::reply::Response {
 }
 
 /// Create a JSON error response.
+/// 
+/// Returns a standardized error response with the specified status code and error message.
+/// 
+/// # Parameters
+/// * `status` - The HTTP status code to return
+/// * `message` - The error message to include in the response
 fn json_error_response(status: StatusCode, message: &str) -> warp::reply::Response {
     warp::reply::with_status(
         json(&json!({

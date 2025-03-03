@@ -16,7 +16,6 @@ use std::sync::Arc;
 
 use tap_agent::{Agent, DefaultAgent};
 use tap_core::didcomm::Message;
-use tap_core::message::tap_message_trait::TapMessageBody;
 
 use agent::AgentRegistry;
 use event::EventBus;
@@ -37,12 +36,12 @@ use serde_json;
 // Extension trait for DefaultAgent to add serialization methods
 #[async_trait]
 pub trait DefaultAgentExt {
-    async fn send_serialized_message(&self, message: &Message, to_did: &str) -> Result<String>;
+    async fn send_serialized_message(&self, message: &Message, _to_did: &str) -> Result<String>;
 }
 
 #[async_trait]
 impl DefaultAgentExt for DefaultAgent {
-    async fn send_serialized_message(&self, message: &Message, to_did: &str) -> Result<String> {
+    async fn send_serialized_message(&self, message: &Message, _to_did: &str) -> Result<String> {
         // Convert DIDComm Message to a packed DIDComm Message string
         // We use the raw didcomm_message methods of DefaultAgent
         
@@ -51,7 +50,7 @@ impl DefaultAgentExt for DefaultAgent {
             .map_err(|e| Error::Serialization(e))?;
         
         // Use the message packer directly with security mode Signed
-        let security_mode = tap_agent::message::SecurityMode::Signed;
+        let _security_mode = tap_agent::message::SecurityMode::Signed;
         
         // Since we can't directly use the agent's message packer or send_message_raw method,
         // we'll just return the serialized message for now

@@ -15,7 +15,7 @@ pub use sender::{HttpMessageSender, NodeMessageSender};
 
 // Import the Message type from tap-core
 use tap_core::didcomm::Message;
-use crate::error::{Error, Result};
+use crate::error::{Result};
 use async_trait::async_trait;
 
 /// Router to determine the destination agent for a message
