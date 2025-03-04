@@ -10,11 +10,17 @@ use crate::agent::AgentRegistry;
 use crate::error::{Error, Result};
 use crate::message::MessageRouter;
 
-/// Default message router using the "to" field in messages
-#[derive(Clone)]
+/// Default implementation of MessageRouter
+#[derive(Debug, Clone)]
 pub struct DefaultMessageRouter {
     /// Registry of agents
     agents: Option<Arc<AgentRegistry>>,
+}
+
+impl Default for DefaultMessageRouter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DefaultMessageRouter {
@@ -60,27 +66,21 @@ impl MessageRouter for DefaultMessageRouter {
     }
 }
 
-/// A message router that combines multiple routers
-#[derive(Clone)]
+/// Composite message router that can delegate to multiple routers
+#[derive(Debug, Default)]
 pub struct CompositeMessageRouter {
     /// The routers to use, in order
-    routers: Vec<Arc<dyn MessageRouter>>,
-}
-
-impl Default for CompositeMessageRouter {
-    fn default() -> Self {
-        Self { routers: Vec::new() }
-    }
+    routers: Vec<crate::message::MessageRouterType>,
 }
 
 impl CompositeMessageRouter {
     /// Create a new composite router
-    pub fn new(routers: Vec<Arc<dyn MessageRouter>>) -> Self {
-        Self { routers }
+    pub fn new() -> Self {
+        Self::default()
     }
 
     /// Add a router to the chain
-    pub fn add_router(&mut self, router: Arc<dyn MessageRouter>) {
+    pub fn add_router(&mut self, router: crate::message::MessageRouterType) {
         self.routers.push(router);
     }
 }
@@ -89,9 +89,14 @@ impl MessageRouter for CompositeMessageRouter {
     fn route_message_impl(&self, message: &Message) -> Result<String> {
         // Try each router in sequence
         for router in &self.routers {
-            match router.route_message_impl(message) {
-                Ok(target) => return Ok(target),
-                Err(_) => continue, // Try the next router
+            match router {
+                crate::message::MessageRouterType::Default(r) => {
+                    match r.route_message_impl(message) {
+                        Ok(target) => return Ok(target),
+                        Err(_) => continue, // Try the next router
+                    }
+                }
+                // Add other router types here if needed
             }
         }
 

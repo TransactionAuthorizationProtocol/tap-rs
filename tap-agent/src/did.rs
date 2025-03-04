@@ -52,8 +52,53 @@ pub trait DIDMethodResolver: Send + Sync + Debug {
 }
 
 /// A resolver for the did:key method.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct KeyResolver;
+
+impl KeyResolver {
+    /// Create a new KeyResolver
+    pub fn new() -> Self {
+        Self
+    }
+    
+    /// Convert an Ed25519 public key to an X25519 public key
+    /// 
+    /// This follows the conversion process described in RFC 7748
+    /// https://datatracker.ietf.org/doc/html/rfc7748#section-5
+    fn ed25519_to_x25519(ed25519_pubkey: &[u8]) -> Option<[u8; 32]> {
+        // The Ed25519 public key should be 32 bytes
+        if ed25519_pubkey.len() != 32 {
+            return None;
+        }
+        
+        // Add debugging
+        println!("Ed25519 pubkey: {:?}", ed25519_pubkey);
+        
+        // Try to create a CompressedEdwardsY from the bytes
+        let edwards_y = match CompressedEdwardsY::try_from(ed25519_pubkey) {
+            Ok(point) => point,
+            Err(e) => {
+                println!("Error converting to CompressedEdwardsY: {:?}", e);
+                return None;
+            },
+        };
+        
+        // Try to decompress to get the Edwards point
+        let edwards_point = match edwards_y.decompress() {
+            Some(point) => point,
+            None => {
+                println!("Failed to decompress Edwards point");
+                return None;
+            },
+        };
+        
+        // Convert to Montgomery form
+        let montgomery_point = edwards_point.to_montgomery();
+        
+        // Get the raw bytes representation of the X25519 key
+        Some(montgomery_point.to_bytes())
+    }
+}
 
 #[async_trait]
 impl DIDMethodResolver for KeyResolver {
@@ -140,51 +185,6 @@ impl DIDMethodResolver for KeyResolver {
         };
         
         Ok(Some(did_doc))
-    }
-}
-
-impl KeyResolver {
-    // Create a new KeyResolver
-    pub fn new() -> Self {
-        Self
-    }
-    
-    /// Convert an Ed25519 public key to an X25519 public key
-    /// 
-    /// This follows the conversion process described in RFC 7748
-    /// https://datatracker.ietf.org/doc/html/rfc7748#section-5
-    fn ed25519_to_x25519(ed25519_pubkey: &[u8]) -> Option<[u8; 32]> {
-        // The Ed25519 public key should be 32 bytes
-        if ed25519_pubkey.len() != 32 {
-            return None;
-        }
-        
-        // Add debugging
-        println!("Ed25519 pubkey: {:?}", ed25519_pubkey);
-        
-        // Try to create a CompressedEdwardsY from the bytes
-        let edwards_y = match CompressedEdwardsY::try_from(ed25519_pubkey) {
-            Ok(point) => point,
-            Err(e) => {
-                println!("Error converting to CompressedEdwardsY: {:?}", e);
-                return None;
-            },
-        };
-        
-        // Try to decompress to get the Edwards point
-        let edwards_point = match edwards_y.decompress() {
-            Some(point) => point,
-            None => {
-                println!("Failed to decompress Edwards point");
-                return None;
-            },
-        };
-        
-        // Convert to Montgomery form
-        let montgomery_point = edwards_point.to_montgomery();
-        
-        // Get the raw bytes representation of the X25519 key
-        Some(montgomery_point.to_bytes())
     }
 }
 

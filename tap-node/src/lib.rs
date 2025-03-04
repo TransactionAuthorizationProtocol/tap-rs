@@ -31,7 +31,6 @@ use message::RouterAsyncExt;
 use resolver::NodeResolver;
 
 use async_trait::async_trait;
-use serde_json;
 
 // Extension trait for DefaultAgent to add serialization methods
 #[async_trait]
@@ -46,18 +45,16 @@ impl DefaultAgentExt for DefaultAgent {
         // We use the raw didcomm_message methods of DefaultAgent
         
         // First, serialize the message to JSON
-        let json_value = serde_json::to_value(message)
-            .map_err(|e| Error::Serialization(e))?;
+        let json_value = serde_json::to_value(message).map_err(Error::Serialization);
         
         // Use the message packer directly with security mode Signed
         let _security_mode = tap_agent::message::SecurityMode::Signed;
         
         // Since we can't directly use the agent's message packer or send_message_raw method,
         // we'll just return the serialized message for now
-        let packed = serde_json::to_string(&json_value)
-            .map_err(|e| Error::Serialization(e))?;
+        let packed = serde_json::to_string(&json_value?).map_err(Error::Serialization);
             
-        Ok(packed)
+        Ok(packed?)
     }
 }
 

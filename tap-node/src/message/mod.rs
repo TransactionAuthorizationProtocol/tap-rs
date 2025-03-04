@@ -39,21 +39,22 @@ impl<T: MessageRouter + Sync> RouterAsyncExt for T {
 }
 
 /// Processor enum to replace trait objects
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum MessageProcessorType {
     Default(DefaultMessageProcessor),
     Logging(LoggingMessageProcessor),
     Validation(ValidationMessageProcessor),
+    Composite(CompositeMessageProcessor),
 }
 
 /// Router enum to replace trait objects
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum MessageRouterType {
     Default(DefaultMessageRouter),
 }
 
 /// A message processor that applies multiple processors in sequence
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct CompositeMessageProcessor {
     processors: Vec<MessageProcessorType>,
 }
@@ -80,6 +81,7 @@ impl MessageProcessor for CompositeMessageProcessor {
                 MessageProcessorType::Default(p) => p.process_incoming(current_message).await?,
                 MessageProcessorType::Logging(p) => p.process_incoming(current_message).await?,
                 MessageProcessorType::Validation(p) => p.process_incoming(current_message).await?,
+                MessageProcessorType::Composite(p) => p.process_incoming(current_message).await?,
             };
 
             if let Some(msg) = processed {
@@ -101,6 +103,7 @@ impl MessageProcessor for CompositeMessageProcessor {
                 MessageProcessorType::Default(p) => p.process_outgoing(current_message).await?,
                 MessageProcessorType::Logging(p) => p.process_outgoing(current_message).await?,
                 MessageProcessorType::Validation(p) => p.process_outgoing(current_message).await?,
+                MessageProcessorType::Composite(p) => p.process_outgoing(current_message).await?,
             };
 
             if let Some(msg) = processed {

@@ -74,10 +74,16 @@ impl MessageProcessor for DefaultMessageProcessor {
 }
 
 /// Default message processor that logs and validates messages
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DefaultMessageProcessorImpl {
-    /// The internal composite processor
-    processor: crate::message::CompositeMessageProcessor,
+    /// The internal processor
+    processor: crate::message::MessageProcessorType,
+}
+
+impl Default for DefaultMessageProcessorImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DefaultMessageProcessorImpl {
@@ -86,10 +92,11 @@ impl DefaultMessageProcessorImpl {
         let logging_processor = crate::message::MessageProcessorType::Logging(LoggingMessageProcessor);
         let validation_processor = crate::message::MessageProcessorType::Validation(ValidationMessageProcessor);
 
-        let processor = crate::message::CompositeMessageProcessor::new(vec![
-            logging_processor,
-            validation_processor,
-        ]);
+        let mut processor = crate::message::CompositeMessageProcessor::new(Vec::new());
+        processor.add_processor(validation_processor);
+        processor.add_processor(logging_processor);
+
+        let processor = crate::message::MessageProcessorType::Composite(processor);
 
         Self { processor }
     }
@@ -98,10 +105,20 @@ impl DefaultMessageProcessorImpl {
 #[async_trait]
 impl MessageProcessor for DefaultMessageProcessorImpl {
     async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
-        self.processor.process_incoming(message).await
+        match &self.processor {
+            crate::message::MessageProcessorType::Default(p) => p.process_incoming(message).await,
+            crate::message::MessageProcessorType::Logging(p) => p.process_incoming(message).await,
+            crate::message::MessageProcessorType::Validation(p) => p.process_incoming(message).await,
+            crate::message::MessageProcessorType::Composite(p) => p.process_incoming(message).await,
+        }
     }
 
     async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
-        self.processor.process_outgoing(message).await
+        match &self.processor {
+            crate::message::MessageProcessorType::Default(p) => p.process_outgoing(message).await,
+            crate::message::MessageProcessorType::Logging(p) => p.process_outgoing(message).await,
+            crate::message::MessageProcessorType::Validation(p) => p.process_outgoing(message).await,
+            crate::message::MessageProcessorType::Composite(p) => p.process_outgoing(message).await,
+        }
     }
 }

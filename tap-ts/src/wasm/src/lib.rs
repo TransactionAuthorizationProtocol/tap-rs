@@ -368,10 +368,7 @@ impl Agent {
         let callback = callback.clone();
         self.message_subscribers.push(callback);
 
-        Function::new_no_args(&format!(
-            "return () => {{ console.log('Unsubscribing from agent messages'); }}"
-        ))
-        .into()
+        Function::new_no_args("return () => { console.log('Unsubscribing from agent messages'); }")
     }
 
     /// Deep clones this agent (needed for async operations)
@@ -534,11 +531,10 @@ impl TapNode {
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         self.message_subscribers.insert(id, callback);
 
-        let unsubscribe_fn = Function::new_no_args(&format!(
+        Function::new_no_args(&format!(
             "return () => {{ console.log('Unsubscribing from node messages, id: {}'); }}",
             id
-        ));
-        unsubscribe_fn
+        ))
     }
 
     /// Deep clones this node (needed for async operations)

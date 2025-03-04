@@ -9,6 +9,7 @@ use crate::error::{Error, Result};
 use tap_agent::DefaultAgent;
 
 /// Registry of TAP agents
+#[derive(Debug)]
 pub struct AgentRegistry {
     /// Maximum number of agents that can be registered
     max_agents: Option<usize>,
