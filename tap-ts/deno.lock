@@ -208,11 +208,8 @@
   },
   "workspace": {
     "dependencies": [
-      "npm:did-jwt-vc@3.2.15",
-      "npm:did-jwt@8.0.0",
       "npm:did-resolver@4.1.0",
       "npm:ethr-did-resolver@8.0.0",
-      "npm:jose@5.2.2",
       "npm:key-did-resolver@3.0.0",
       "npm:pkh-did-resolver@1.0.2",
       "npm:uint8arrays@4.0.10",

@@ -83,4 +83,8 @@ pub enum Error {
     #[cfg(target_arch = "wasm32")]
     #[error("JavaScript resolver error: {0}")]
     JsResolverError(String),
+
+    /// Serde JSON error
+    #[error("Serde JSON error: {0}")]
+    SerdeError(#[from] serde_json::Error),
 }

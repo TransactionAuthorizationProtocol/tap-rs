@@ -282,6 +282,12 @@ impl DIDResolver for MultiResolver {
 use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
+use js_sys::{Function, Promise};
+
+#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
+use wasm_bindgen_futures::JsFuture;
+
+#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(typescript_type = "Promise<string>")]
@@ -294,15 +300,19 @@ extern "C" {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct JsDIDResolver {
-    resolve_fn: js_sys::Function,
+    method: String,
+    resolve_fn: Function,
 }
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 impl JsDIDResolver {
     #[wasm_bindgen(constructor)]
-    pub fn new(resolve_fn: js_sys::Function) -> Self {
-        Self { resolve_fn }
+    pub fn new(resolve_fn: Function) -> Self {
+        Self {
+            method: "".to_string(),
+            resolve_fn,
+        }
     }
     
     #[wasm_bindgen]
@@ -318,18 +328,35 @@ impl JsDIDResolver {
     }
 }
 
+/// A resolver for a specific DID method without Send+Sync requirements (for WASM usage)
+#[cfg(target_arch = "wasm32")]
+#[async_trait(?Send)]
+pub trait WasmDIDMethodResolver: Debug {
+    /// Returns the method name this resolver handles (e.g., "key", "web", "pkh").
+    fn method(&self) -> &str;
+    
+    /// Resolve a DID to a DID document.
+    ///
+    /// # Parameters
+    /// * `did` - The DID to resolve
+    ///
+    /// # Returns
+    /// The DID document as an Option
+    async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>>;
+}
+
 /// A wrapper for JavaScript DID resolvers.
 #[cfg(target_arch = "wasm32")]
 #[derive(Debug)]
 pub struct JsDIDMethodResolver {
     method: String,
-    resolve_fn: js_sys::Function,
+    resolve_fn: Function,
 }
 
 #[cfg(target_arch = "wasm32")]
 impl JsDIDMethodResolver {
     /// Create a new JavaScript DID method resolver from a function in the global context
-    pub fn new(method: &str, resolve_fn: js_sys::Function) -> Self {
+    pub fn new(method: &str, resolve_fn: Function) -> Self {
         Self {
             method: method.to_string(),
             resolve_fn,
@@ -339,11 +366,12 @@ impl JsDIDMethodResolver {
 
 #[cfg(target_arch = "wasm32")]
 #[async_trait(?Send)]
-impl DIDMethodResolver for JsDIDMethodResolver {
+impl WasmDIDMethodResolver for JsDIDMethodResolver {
     fn method(&self) -> &str {
         &self.method
     }
     
+    #[cfg(feature = "wasm")]
     async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
         // Ensure the DID is for the method that this resolver is for
         let parts: Vec<&str> = did.split(':').collect();
@@ -357,8 +385,8 @@ impl DIDMethodResolver for JsDIDMethodResolver {
         let promise = self.resolve_fn.call1(&this, &js_did)
             .map_err(|e| Error::JsResolverError(format!("Error calling JS resolver: {:?}", e)))?;
         
-        let promise = js_sys::Promise::from(promise);
-        let doc_json = wasm_bindgen_futures::JsFuture::from(promise)
+        let promise = Promise::from(promise);
+        let doc_json = JsFuture::from(promise)
             .await
             .map_err(|e| Error::JsResolverError(format!("Error from JS promise: {:?}", e)))?;
         
@@ -369,11 +397,16 @@ impl DIDMethodResolver for JsDIDMethodResolver {
         let doc_str = doc_json
             .as_string()
             .ok_or_else(|| Error::JsResolverError("JS resolver did not return a string".to_string()))?;
-        
-        let doc: DIDDoc = serde_json::from_str(&doc_str)
-            .map_err(|e| Error::JsResolverError(format!("Invalid DID document: {}", e)))?;
-        
-        Ok(Some(doc))
+            
+        // Parse the JSON string into a DIDDoc
+        serde_json::from_str(&doc_str)
+            .map(Some)
+            .map_err(|e| Error::SerdeError(e))
+    }
+    
+    #[cfg(not(feature = "wasm"))]
+    async fn resolve_method(&self, _did: &str) -> Result<Option<DIDDoc>> {
+        Err(Error::NotImplemented("JavaScript DID Method resolver is only available with the 'wasm' feature".to_string()))
     }
 }
 

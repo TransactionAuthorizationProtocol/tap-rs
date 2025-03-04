@@ -4,333 +4,235 @@
  * @module agent
  */
 
-import { Message, MessageType } from "./message.ts";
+import { Message, MessageHandler, MessageSubscriber, MessageType } from "./message.ts";
 import { TapError, ErrorType } from "./error.ts";
-import { MessageCallback, MessageMetadata, MessageSubscriber } from "./types.ts";
+import type { AgentOptions, MessageMetadata } from "./types.ts";
 import { wasmLoader } from "./wasm/loader.ts";
 
 /**
- * Generate a UUID
+ * Agent class for TAP
  * 
- * @returns A UUID string
- */
-function generateUuid(): string {
-  return crypto.randomUUID();
-}
-
-/**
- * Message handler function type
- */
-export type MessageHandler = (message: Message, metadata?: MessageMetadata) => Promise<void>;
-
-/**
- * TAP Agent class
- * 
- * An Agent represents a participant in the TAP network.
+ * This class represents a TAP agent, which is a participant in the TAP network.
+ * It can send and receive messages, and handle authorization requests and responses.
  */
 export class Agent {
-  private _id: string;
-  private _did: string;
-  private _nickname?: string;
-  private messageHandlers: Map<MessageType, MessageCallback> = new Map();
-  private messageSubscribers: Set<MessageSubscriber> = new Set();
-  /** WASM agent instance */
   private wasmAgent: any;
+  private did: string;
+  private messageHandlers: Map<MessageType, Set<MessageHandler>> = new Map();
+  private messageSubscribers: Set<MessageSubscriber> = new Set();
+  private isInitialized = false;
 
   /**
    * Create a new Agent instance
    * 
-   * @param config - Agent configuration
+   * @param options - Agent options
    */
-  constructor(config: any) {
+  constructor(options: AgentOptions) {
     if (!wasmLoader.moduleIsLoaded()) {
       throw new TapError({
         type: ErrorType.WASM_NOT_LOADED,
-        message: 'WASM module not loaded',
+        message: "WASM module not loaded",
       });
     }
     
-    this._did = config.did || this.generateDid();
-    this._id = config.id || `agent_${generateUuid()}`;
-    this._nickname = config.nickname;
-    
+    this.did = options.did;
     const module = wasmLoader.getModule();
     
-    // Create the WASM agent instance
-    this.wasmAgent = new module.Agent(config);
+    // Create a new WASM agent instance
+    this.wasmAgent = new module.Agent(this.did);
     
-    // Set up the message handling
-    this.setupMessageHandling();
+    // Initialize message handler maps for each message type
+    this.messageHandlers.set(MessageType.PING, new Set());
+    this.messageHandlers.set(MessageType.PONG, new Set());
+    this.messageHandlers.set(MessageType.AUTHORIZATION_REQUEST, new Set());
+    this.messageHandlers.set(MessageType.AUTHORIZATION_RESPONSE, new Set());
+    
+    this.isInitialized = true;
   }
-  
+
   /**
-   * Set up message handling
+   * Register a handler for a specific message type
+   * 
+   * @param type - Message type to handle
+   * @param handler - Handler function to call when a message of the given type is received
+   * @returns This agent instance for chaining
    */
-  private setupMessageHandling(): void {
-    // The WASM agent will call this function when it receives a message
-    const messageCallback = async (wasmMessage: any, wasmMetadata: any) => {
-      try {
-        // Convert the WASM message to a Message instance
-        const message = Message.fromJSON(wasmMessage);
-        
-        // Convert the WASM metadata to a MessageMetadata object
-        const metadata: MessageMetadata = typeof wasmMetadata === 'object' ? wasmMetadata : {};
-        
-        // Call the appropriate message handler
-        const handler = this.messageHandlers.get(message.type);
-        if (handler) {
-          await handler(message, metadata);
-        }
-        
-        // Notify all subscribers
-        for (const subscriber of this.messageSubscribers) {
-          try {
-            subscriber(message, metadata);
-          } catch (error) {
-            console.error('Error in message subscriber:', error);
-          }
-        }
-      } catch (error) {
-        console.error('Error processing message:', error);
-      }
-    };
-    
-    // Register the callback with the WASM agent
-    this.wasmAgent.subscribe_to_messages(messageCallback);
+  registerHandler(type: MessageType, handler: MessageHandler): this {
+    const handlers = this.messageHandlers.get(type);
+    if (handlers) {
+      handlers.add(handler);
+    }
+    return this;
   }
-  
+
+  /**
+   * Subscribe to all messages
+   * 
+   * @param subscriber - Subscriber function to call for all messages
+   * @returns This agent instance for chaining
+   */
+  subscribe(subscriber: MessageSubscriber): this {
+    this.messageSubscribers.add(subscriber);
+    return this;
+  }
+
+  /**
+   * Unsubscribe from all messages
+   * 
+   * @param subscriber - Subscriber function to remove
+   * @returns This agent instance for chaining
+   */
+  unsubscribe(subscriber: MessageSubscriber): this {
+    this.messageSubscribers.delete(subscriber);
+    return this;
+  }
+
+  /**
+   * Unregister a handler for a specific message type
+   * 
+   * @param type - Message type to unregister the handler for
+   * @param handler - Handler function to remove
+   * @returns This agent instance for chaining
+   */
+  unregisterHandler(type: MessageType, handler: MessageHandler): this {
+    const handlers = this.messageHandlers.get(type);
+    if (handlers) {
+      handlers.delete(handler);
+    }
+    return this;
+  }
+
+  /**
+   * Process a message
+   * 
+   * This method routes the message to the appropriate handlers and subscribers.
+   * 
+   * @param message - Message to process
+   * @param metadata - Optional metadata to pass to handlers
+   * @returns Promise that resolves when all handlers have processed the message
+   */
+  async processMessage(message: Message, metadata?: MessageMetadata): Promise<void> {
+    // First call the WASM agent to process the message
+    try {
+      this.wasmAgent.process_message(message.getWasmMessage());
+    } catch (error) {
+      console.error("Error processing message:", error);
+      throw new TapError({
+        type: ErrorType.MESSAGE_PROCESSING_ERROR,
+        message: "Error processing message",
+        cause: error,
+      });
+    }
+    
+    // Then call message handlers for the specific type
+    const type = message.getType();
+    const handlers = this.messageHandlers.get(type);
+    
+    if (handlers && handlers.size > 0) {
+      const handlerPromises = Array.from(handlers).map(handler => 
+        Promise.resolve().then(() => handler(message, metadata))
+      );
+      
+      await Promise.all(handlerPromises);
+    }
+    
+    // Finally, call all subscribers
+    if (this.messageSubscribers.size > 0) {
+      const subscriberPromises = Array.from(this.messageSubscribers).map(subscriber => 
+        Promise.resolve().then(() => subscriber(message, metadata))
+      );
+      
+      await Promise.all(subscriberPromises);
+    }
+  }
+
+  /**
+   * Send a message
+   * 
+   * @param message - Message to send
+   * @param options - Optional send options
+   * @returns Promise that resolves when the message has been sent
+   */
+  async sendMessage(message: Message): Promise<void> {
+    // Ensure the message has our DID as the sender
+    message.from(this.did);
+    
+    try {
+      // Sign the message
+      message.sign(this);
+      
+      // Send the message using the WASM agent
+      await this.wasmAgent.send_message(message.getWasmMessage());
+      
+      return Promise.resolve();
+    } catch (error) {
+      console.error("Error sending message:", error);
+      throw new TapError({
+        type: ErrorType.MESSAGE_SENDING_ERROR,
+        message: "Error sending message",
+        cause: error,
+      });
+    }
+  }
+
+  /**
+   * Sign a message
+   * 
+   * @param message - Message or WASM message to sign
+   * @returns The signed message
+   */
+  signMessage(message: Message | any): Message | any {
+    try {
+      if (message instanceof Message) {
+        // If it's a Message instance, get the WASM message
+        const wasmMessage = message.getWasmMessage();
+        this.wasmAgent.sign_message(wasmMessage);
+        return message;
+      } else {
+        // Otherwise, assume it's a WASM message
+        this.wasmAgent.sign_message(message);
+        return message;
+      }
+    } catch (error) {
+      console.error("Error signing message:", error);
+      throw new TapError({
+        type: ErrorType.MESSAGE_SIGNING_ERROR,
+        message: "Error signing message",
+        cause: error,
+      });
+    }
+  }
+
+  /**
+   * Create a new message
+   * 
+   * @param type - Message type
+   * @param options - Additional message options
+   * @returns A new Message instance
+   */
+  createMessage(type: MessageType, options?: Record<string, any>): Message {
+    return new Message({
+      type,
+      from: this.did,
+      ...options,
+    });
+  }
+
   /**
    * Get the agent's DID
    * 
    * @returns The agent's DID
    */
-  get did(): string {
-    return this._did;
+  getDid(): string {
+    return this.did;
   }
-  
-  /**
-   * Get the agent's nickname
-   * 
-   * @returns The agent's nickname, if set
-   */
-  get nickname(): string | undefined {
-    return this._nickname;
-  }
-  
-  /**
-   * Set the agent's nickname
-   */
-  set nickname(value: string | undefined) {
-    this._nickname = value;
-  }
-  
-  /**
-   * Get the agent's id
-   * 
-   * @returns The agent's id
-   */
-  get id(): string {
-    return this._id;
-  }
-  
-  /**
-   * Register a message handler for a specific message type
-   * 
-   * @param messageType - Message type to handle
-   * @param handler - Handler function
-   */
-  registerMessageHandler(messageType: MessageType, handler: MessageHandler): void {
-    this.messageHandlers.set(messageType, handler);
-    
-    // Also register with the WASM agent
-    const module = wasmLoader.getModule();
-    let wasmMessageType;
-    
-    switch (messageType) {
-      case MessageType.AUTHORIZATION_REQUEST:
-        wasmMessageType = module.MessageType.AuthorizationRequest;
-        break;
-      case MessageType.AUTHORIZATION_RESPONSE:
-        wasmMessageType = module.MessageType.AuthorizationResponse;
-        break;
-      case MessageType.PING:
-        wasmMessageType = module.MessageType.Ping;
-        break;
-      default:
-        throw new TapError({
-          type: ErrorType.INVALID_ARGUMENT,
-          message: `Invalid message type: ${messageType}`,
-        });
-    }
-    
-    this.wasmAgent.register_message_handler(wasmMessageType, async (wasmMessage: any) => {
-      // This callback is used internally by the WASM agent
-      // The actual handling is done in setupMessageHandling
-    });
-  }
-  
-  /**
-   * Process a received message
-   * 
-   * @param message - Message to process
-   * @param metadata - Optional message metadata
-   * @returns A promise that resolves when the message is processed
-   */
-  async processMessage(message: Message, metadata?: MessageMetadata): Promise<void> {
-    const wasmMessage = message.getWasmMessage();
-    const wasmMetadata = metadata || {};
-    
-    await this.wasmAgent.process_message(wasmMessage, wasmMetadata);
-  }
-  
-  /**
-   * Handle a message
-   * 
-   * @param message - Message to handle
-   * @param metadata - Optional message metadata
-   * @returns Promise that resolves when the message is handled
-   */
-  async handleMessage(message: Message, metadata?: MessageMetadata): Promise<void> {
-    return this.processMessage(message, metadata);
-  }
-  
-  /**
-   * Subscribe to all messages processed by this agent
-   * 
-   * @param subscriber - Subscriber function
-   * @returns An unsubscribe function
-   */
-  subscribeToMessages(subscriber: MessageSubscriber): () => void {
-    this.messageSubscribers.add(subscriber);
-    
-    // Return an unsubscribe function
-    return () => {
-      this.messageSubscribers.delete(subscriber);
-    };
-  }
-  
-  /**
-   * Subscribe to messages received by this agent
-   * 
-   * @param subscriber - Subscriber function
-   */
-  subscribe(subscriber: MessageSubscriber): void {
-    this.messageSubscribers.add(subscriber);
-  }
-  
-  /**
-   * Check if the agent is ready
-   * 
-   * @returns True if the agent is ready, false otherwise
-   */
-  get isReady(): boolean {
-    return true; // Assume the agent is always ready in this implementation
-  }
-  
+
   /**
    * Get the underlying WASM agent
    * 
-   * @returns WASM agent
+   * @returns The WASM agent
    */
   getWasmAgent(): any {
     return this.wasmAgent;
-  }
-  
-  /**
-   * Create a new message
-   * 
-   * @param options - Message options
-   * @returns A new Message instance
-   */
-  createMessage(options: {
-    type: MessageType;
-    to?: string[];
-    data?: Record<string, unknown>;
-  }): Message {
-    return new Message({
-      type: options.type,
-      from: this.did,
-      to: options.to,
-      customData: options.data,
-    });
-  }
-  
-  /**
-   * Create an authorization request message
-   * 
-   * @param options - Authorization request options
-   * @returns A new Message instance
-   */
-  createAuthorizationRequest(options: {
-    to: string[];
-    protocol: string;
-    callbackUrl?: string;
-    resources?: string[];
-    purpose?: string;
-    expires?: number;
-  }): Message {
-    const message = this.createMessage({
-      type: MessageType.AUTHORIZATION_REQUEST,
-      to: options.to,
-    });
-    
-    // In a real implementation, we would set the authorization request data
-    
-    return message;
-  }
-  
-  /**
-   * Create an authorization response message
-   * 
-   * @param options - Authorization response options
-   * @returns A new Message instance
-   */
-  createAuthorizationResponse(options: {
-    requestId: string;
-    approved: boolean;
-    reason?: string;
-  }): Message {
-    const message = this.createMessage({
-      type: MessageType.AUTHORIZATION_RESPONSE,
-    });
-    
-    // In a real implementation, we would set the authorization response data
-    
-    return message;
-  }
-  
-  /**
-   * Register a handler for a specific message type
-   * 
-   * @param type - Message type to handle
-   * @param handler - Handler function
-   */
-  registerHandler(type: MessageType, handler: MessageCallback): void {
-    this.messageHandlers.set(type, handler);
-  }
-  
-  /**
-   * Unregister a handler for a specific message type
-   * 
-   * @param type - Message type
-   * @returns True if the handler was unregistered, false if it wasn't found
-   */
-  unregisterHandler(type: MessageType): boolean {
-    return this.messageHandlers.delete(type);
-  }
-  
-  /**
-   * Check if a handler exists for a specific message type
-   * 
-   * @param type - Message type to check
-   * @returns True if a handler exists for the message type
-   */
-  hasHandler(type: MessageType): boolean {
-    return this.messageHandlers.has(type);
-  }
-  
-  private generateDid(): string {
-    // In a real implementation, we would generate a DID
-    return 'did:example:1234567890';
   }
 }

@@ -128,7 +128,7 @@ export interface NetworkConfig {
   peers?: string[];
 }
 
-import type { Message } from "./message.ts";
+import { Message } from "./message.ts";
 
 /**
  * Message metadata
@@ -228,4 +228,127 @@ export interface AuthorizationResponse {
    * Reason for the decision
    */
   reason?: string;
+}
+
+/**
+ * Options for creating a new agent
+ */
+export interface AgentOptions {
+  /** DID for the agent */
+  did: string;
+  
+  /** Optional nickname for the agent */
+  nickname?: string;
+  
+  /** Optional agent ID (auto-generated if not provided) */
+  id?: string;
+  
+  /** Optional private key as JWK for signing messages */
+  privateKeyJwk?: Record<string, unknown>;
+}
+
+/**
+ * Metadata for a message
+ */
+export interface MessageMetadata {
+  /** The DID of the sender */
+  senderDid?: string;
+  
+  /** The timestamp when the message was received */
+  receivedTimestamp?: number;
+  
+  /** Transport-specific metadata */
+  transport?: Record<string, unknown>;
+}
+
+/**
+ * Storage options
+ */
+export interface StorageOptions {
+  /** The type of storage to use */
+  type: 'memory' | 'indexeddb' | 'localstorage';
+  
+  /** The name of the storage (for persistent storage) */
+  name?: string;
+}
+
+/**
+ * Keypair for signing and encrypting messages
+ */
+export interface Keypair {
+  /** The public key in JWK format */
+  publicKeyJwk: Record<string, unknown>;
+  
+  /** The private key in JWK format */
+  privateKeyJwk: Record<string, unknown>;
+  
+  /** The key ID */
+  kid: string;
+  
+  /** The key type */
+  kty: string;
+  
+  /** The key algorithm */
+  alg: string;
+}
+
+/**
+ * DID Resolution Result
+ */
+export interface DidResolutionResult {
+  /** The DID resolution metadata */
+  didResolutionMetadata: Record<string, unknown>;
+  
+  /** The DID document */
+  didDocument: {
+    id: string;
+    verificationMethod?: Array<{
+      id: string;
+      type: string;
+      controller: string;
+      publicKeyJwk?: Record<string, unknown>;
+      publicKeyMultibase?: string;
+    }>;
+    authentication?: Array<string | Record<string, unknown>>;
+    assertionMethod?: Array<string | Record<string, unknown>>;
+    keyAgreement?: Array<string | Record<string, unknown>>;
+    capabilityInvocation?: Array<string | Record<string, unknown>>;
+    capabilityDelegation?: Array<string | Record<string, unknown>>;
+    service?: Array<{
+      id: string;
+      type: string;
+      serviceEndpoint: string | Record<string, unknown>;
+    }>;
+  };
+  
+  /** The DID document metadata */
+  didDocumentMetadata: Record<string, unknown>;
+}
+
+/**
+ * Authorization result
+ */
+export interface AuthorizationResult {
+  /** Whether the authorization was approved */
+  approved: boolean;
+  
+  /** Optional reason for the decision */
+  reason?: string;
+  
+  /** Optional signature or proof of the decision */
+  proof?: Record<string, unknown>;
+}
+
+/**
+ * Options for sending messages
+ */
+export interface SendMessageOptions {
+  /** Whether to wait for a response */
+  waitForResponse?: boolean;
+  
+  /** Timeout in milliseconds for waiting for a response */
+  responseTimeout?: number;
+  
+  /** Transport-specific options */
+  transportOptions?: Record<string, unknown>;
 }
