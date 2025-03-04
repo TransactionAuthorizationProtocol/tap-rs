@@ -10,6 +10,7 @@ license.workspace = true
 # Internal dependencies
 tap-core = { path = "../tap-core" }
 tap-agent = { path = "../tap-agent" }
+tap-caip = { path = "../tap-caip" }
 
 # Async runtime
 tokio = { workspace = true }
@@ -45,6 +46,10 @@ didcomm = "0.4"
 tokio-test = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
 futures = "0.3"
+
+[[bench]]
+name = "stress_test"
+harness = false
 
 [features]
 default = ["native"]

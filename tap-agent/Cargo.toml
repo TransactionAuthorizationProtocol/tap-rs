@@ -10,6 +10,7 @@ readme = "README.md"
 
 [dependencies]
 tap-core = { path = "../tap-core" }
+tap-caip = { path = "../tap-caip" }
 async-trait = { workspace = true }
 thiserror = "1.0"
 serde = { workspace = true }
@@ -38,6 +39,11 @@ web-sys = { workspace = true, optional = true }
 tokio-test = { workspace = true }
 assert_matches = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+criterion = "0.5"
+
+[[bench]]
+name = "agent_benchmark"
+harness = false
 
 [features]
 default = ["native"]

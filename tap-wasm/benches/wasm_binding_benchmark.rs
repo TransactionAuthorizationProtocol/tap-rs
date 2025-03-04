@@ -1,0 +1,173 @@
+//! Benchmarks for tap-wasm native binding functions
+//!
+//! These benchmarks test the Rust functions that will be exposed to WASM
+//! without the overhead of the WASM bridge, to measure core performance.
+//!
+//! Run with: cargo bench --bench wasm_binding_benchmark
+
+use criterion::{criterion_group, criterion_main, Criterion};
+use didcomm::{Message as DIDCommMessage};
+use std::collections::HashMap;
+use std::str::FromStr;
+use tap_caip::AssetId;
+use tap_core::message::{
+    TapMessageBody, TransferBody, AuthorizeBody, RejectBody,
+    Agent as MessageAgent, 
+};
+
+/// Create a test transfer message body
+fn create_transfer_body() -> TransferBody {
+    // Create originator and beneficiary agents
+    let originator = MessageAgent {
+        id: "did:example:alice".to_string(),
+        role: Some("originator".to_string()),
+    };
+    
+    let beneficiary = MessageAgent {
+        id: "did:example:bob".to_string(),
+        role: Some("beneficiary".to_string()),
+    };
+    
+    // Create a transfer body
+    TransferBody {
+        asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+        originator,
+        beneficiary: Some(beneficiary),
+        amount: "10.00".to_string(),
+        agents: vec![],
+        settlement_id: None,
+        memo: Some("Payment for services".to_string()),
+        metadata: HashMap::new(),
+    }
+}
+
+/// Create a message for testing
+fn create_test_message() -> DIDCommMessage {
+    let transfer_body = create_transfer_body();
+    let message = transfer_body.to_didcomm().unwrap();
+    message
+}
+
+/// Benchmark JSON serialization and deserialization performance
+fn bench_serialization(c: &mut Criterion) {
+    let mut group = c.benchmark_group("wasm_serialization");
+    
+    // Create a test message
+    let message = create_test_message();
+    
+    // Test JSON serialization (mimics WASM export)
+    group.bench_function("message_to_json", |b| {
+        b.iter(|| {
+            let json = serde_json::to_string(&message).unwrap();
+            assert!(!json.is_empty());
+        })
+    });
+    
+    // Serialize once for deserialization test
+    let json = serde_json::to_string(&message).unwrap();
+    
+    // Test JSON deserialization (mimics WASM import)
+    group.bench_function("json_to_message", |b| {
+        b.iter(|| {
+            let _: DIDCommMessage = serde_json::from_str(&json).unwrap();
+        })
+    });
+    
+    group.finish();
+}
+
+/// Benchmark message type detection and conversion
+fn bench_message_conversion(c: &mut Criterion) {
+    let mut group = c.benchmark_group("wasm_message_conversion");
+    
+    // Create messages of different types
+    let transfer_body = create_transfer_body();
+    let transfer_message = transfer_body.to_didcomm().unwrap();
+    
+    let authorize_body = AuthorizeBody {
+        transfer_id: "test-transfer-id".to_string(),
+        note: Some("Transfer authorized".to_string()),
+        metadata: HashMap::new(),
+    };
+    let authorize_message = authorize_body.to_didcomm().unwrap();
+    
+    let reject_body = RejectBody {
+        transfer_id: "test-transfer-id".to_string(),
+        code: "COMPLIANCE_FAILURE".to_string(),
+        description: "Unable to comply with transfer requirements".to_string(),
+        note: Some("Transfer rejected for testing".to_string()),
+        metadata: HashMap::new(),
+    };
+    let reject_message = reject_body.to_didcomm().unwrap();
+    
+    // Serialize messages
+    let transfer_json = serde_json::to_string(&transfer_message).unwrap();
+    let authorize_json = serde_json::to_string(&authorize_message).unwrap();
+    let reject_json = serde_json::to_string(&reject_message).unwrap();
+    
+    // Benchmark message type detection and conversion
+    group.bench_function("detect_transfer", |b| {
+        b.iter(|| {
+            let parsed: DIDCommMessage = serde_json::from_str(&transfer_json).unwrap();
+            let _: TransferBody = TransferBody::from_didcomm(&parsed).unwrap();
+        })
+    });
+    
+    group.bench_function("detect_authorize", |b| {
+        b.iter(|| {
+            let parsed: DIDCommMessage = serde_json::from_str(&authorize_json).unwrap();
+            let _: AuthorizeBody = AuthorizeBody::from_didcomm(&parsed).unwrap();
+        })
+    });
+    
+    group.bench_function("detect_reject", |b| {
+        b.iter(|| {
+            let parsed: DIDCommMessage = serde_json::from_str(&reject_json).unwrap();
+            let _: RejectBody = RejectBody::from_didcomm(&parsed).unwrap();
+        })
+    });
+    
+    group.finish();
+}
+
+/// Benchmark common WASM operations
+fn bench_wasm_operations(c: &mut Criterion) {
+    let mut group = c.benchmark_group("wasm_operations");
+    
+    // Benchmark string handling
+    let test_string = "did:example:alice".to_string();
+    
+    group.bench_function("string_clone", |b| {
+        b.iter(|| {
+            let cloned = test_string.clone();
+            assert_eq!(cloned, "did:example:alice");
+        })
+    });
+    
+    // Benchmark JSON object creation (common for WASM bridge)
+    group.bench_function("create_json_object", |b| {
+        b.iter(|| {
+            let obj = serde_json::json!({
+                "id": "test-id",
+                "from": "did:example:alice",
+                "to": ["did:example:bob"],
+                "type": "https://example.com/protocols/test/1.0",
+                "body": {
+                    "amount": "10.00",
+                    "note": "Test payment"
+                }
+            });
+            assert!(obj.is_object());
+        })
+    });
+    
+    group.finish();
+}
+
+criterion_group!(
+    wasm_benches, 
+    bench_serialization,
+    bench_message_conversion,
+    bench_wasm_operations
+);
+criterion_main!(wasm_benches);

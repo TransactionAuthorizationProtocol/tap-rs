@@ -7,7 +7,8 @@
     "browser:test": "deno test --config deno.playwright.json",
     "test:browser": "deno test --config=deno.playwright.json --allow-all",
     "check": "deno check src/**/*.ts",
-    "clean": "deno run --allow-read --allow-write --allow-run scripts/clean.ts"
+    "clean": "deno run --allow-read --allow-write --allow-run scripts/clean.ts",
+    "benchmark": "deno run --allow-read --allow-net --allow-env benchmark/benchmark.ts"
   },
   "imports": {
     "@std/": "https://deno.land/std@0.196.0/",

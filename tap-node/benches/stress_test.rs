@@ -4,35 +4,47 @@
 
 use std::sync::Arc;
 use std::time::Instant;
-use tap_agent::{AgentConfig, TapAgent};
-use tap_core::message::{TapMessageBuilder, TapMessageType};
-use tap_node::message::ProcessorPoolConfig;
+use std::str::FromStr;
+use tap_agent::{DefaultAgent, AgentConfig, DefaultMessagePacker, BasicSecretResolver};
+use didcomm::Message as DIDCommMessage;
+use didcomm::secrets::{Secret, SecretType, SecretMaterial};
+use tap_agent::did::MultiResolver;
+use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
+use tap_core::message::TransferBody;
+use tap_core::message::TapMessageBody;
 
 use criterion::{criterion_group, criterion_main, Criterion};
+use tokio::time::Duration;
+use std::collections::HashMap;
 
 /// Create a test message
-fn create_test_message(
+async fn create_test_message(
     from_did: &str,
     to_did: &str,
     index: usize,
-) -> tap_core::message::TapMessage {
-    TapMessageBuilder::new()
-        .id(format!("test-message-{}", index))
-        .message_type(TapMessageType::Error)
-        .from_did(Some(from_did.to_string()))
-        .to_did(Some(to_did.to_string()))
-        .body(serde_json::json!({
-            "code": format!("TEST_ERROR_{}", index),
-            "message": format!("Test error message {}", index),
-            "transaction_id": None::<String>,
-            "metadata": {
-                "index": index,
-                "timestamp": chrono::Utc::now().to_rfc3339()
-            }
-        }))
-        .build()
-        .unwrap()
+) -> (DIDCommMessage, TransferBody) {
+    // Create a simple transfer message
+    let body = TransferBody {
+        asset: tap_caip::AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+        originator: tap_core::message::Agent {
+            id: from_did.to_string(),
+            role: Some("originator".to_string()),
+        },
+        beneficiary: Some(tap_core::message::Agent {
+            id: to_did.to_string(),
+            role: Some("beneficiary".to_string()),
+        }),
+        amount: format!("{}.00", index),
+        agents: vec![],
+        settlement_id: None,
+        memo: Some(format!("Test message {}", index)),
+        metadata: HashMap::new(),
+    };
+    
+    // Convert to DIDComm message
+    let message = body.to_didcomm().unwrap();
+    (message, body)
 }
 
 fn stress_test(c: &mut Criterion) {
@@ -40,8 +52,9 @@ fn stress_test(c: &mut Criterion) {
 
     // Setup a node with processing pool
     let pool_config = ProcessorPoolConfig {
-        max_concurrent_tasks: 16,
-        queue_size: 1000,
+        workers: 16,
+        channel_capacity: 1000,
+        worker_timeout: Duration::from_secs(30),
     };
 
     let node_config = NodeConfig {
@@ -52,9 +65,7 @@ fn stress_test(c: &mut Criterion) {
         processor_pool: Some(pool_config),
     };
 
-    let agent1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
-    let agent2_did = "did:key:z6MkgYAFipwyqebCJagYs8XP6EPwXjiwLy8GZ6M1YyYAXMbh";
-
+    // For testing, we'll create some DIDs that don't rely on external resolvers
     let mut group = c.benchmark_group("tap_node_stress");
     group.sample_size(10); // Reduce sample size for stress tests
 
@@ -66,47 +77,91 @@ fn stress_test(c: &mut Criterion) {
                     // Create a new node for each benchmark iteration
                     let node = TapNode::new(node_config.clone());
 
-                    // Create and register agents
-                    let agent_config1 = AgentConfig::new_with_did(agent1_did);
-                    let agent1 = TapAgent::with_defaults(
-                        agent_config1,
-                        agent1_did.to_string(),
-                        Some("Agent 1".to_string()),
-                    )
-                    .unwrap();
+                    // Create and register two test agents
+                    // Create a test DID and keys for agent 1
+                    let agent1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
+                    let agent2_did = "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string();
+                    
+                    // Create secret resolvers
+                    let mut resolver1 = BasicSecretResolver::new();
+                    let mut resolver2 = BasicSecretResolver::new();
+                    
+                    // Add test keys
+                    let secret1 = Secret {
+                        id: format!("{}#keys-1", agent1_did),
+                        type_: SecretType::JsonWebKey2020,
+                        secret_material: SecretMaterial::JWK {
+                            private_key_jwk: serde_json::json!({
+                                "kty": "OKP",
+                                "kid": format!("{}#keys-1", agent1_did),
+                                "crv": "Ed25519",
+                                "x": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                                "d": "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh"
+                            })
+                        },
+                    };
+                    
+                    let secret2 = Secret {
+                        id: format!("{}#keys-1", agent2_did),
+                        type_: SecretType::JsonWebKey2020,
+                        secret_material: SecretMaterial::JWK {
+                            private_key_jwk: serde_json::json!({
+                                "kty": "OKP",
+                                "kid": format!("{}#keys-1", agent2_did),
+                                "crv": "Ed25519",
+                                "x": "G1j6ccPJpxWGqOLEEUQYqrNHRF7xBWqfZPjxWQ2Aj6c",
+                                "d": "Hk-QnVOyk2yd6PkY5-qpqJdJHe_lDmn7-3RVsLZR9QI"
+                            })
+                        },
+                    };
+                    
+                    resolver1.add_secret(&agent1_did, secret1);
+                    resolver2.add_secret(&agent2_did, secret2);
+                    
+                    // Create DID resolver
+                    let did_resolver1 = Arc::new(MultiResolver::default());
+                    let did_resolver2 = Arc::new(MultiResolver::default());
+                    
+                    // Create agents
+                    let agent1_config = AgentConfig::new(agent1_did.clone());
+                    let message_packer1 = Arc::new(DefaultMessagePacker::new(
+                        did_resolver1,
+                        Arc::new(resolver1)
+                    ));
+                    let agent1 = Arc::new(DefaultAgent::new(agent1_config, message_packer1));
+                    
+                    let agent2_config = AgentConfig::new(agent2_did.clone());
+                    let message_packer2 = Arc::new(DefaultMessagePacker::new(
+                        did_resolver2,
+                        Arc::new(resolver2)
+                    ));
+                    let agent2 = Arc::new(DefaultAgent::new(agent2_config, message_packer2));
 
-                    let agent_config2 = AgentConfig::new_with_did(agent2_did);
-                    let agent2 = TapAgent::with_defaults(
-                        agent_config2,
-                        agent2_did.to_string(),
-                        Some("Agent 2".to_string()),
-                    )
-                    .unwrap();
-
-                    node.register_agent(Arc::new(agent1)).await.unwrap();
-                    node.register_agent(Arc::new(agent2)).await.unwrap();
+                    // Register the agents with the node
+                    node.register_agent(agent1).await.unwrap();
+                    node.register_agent(agent2).await.unwrap();
 
                     // Submit messages
                     let start = Instant::now();
                     let mut futures = Vec::with_capacity(batch_size);
 
                     for i in 0..batch_size {
-                        let message = create_test_message(agent1_did, agent2_did, i);
-                        futures.push(node.submit_message(message));
+                        let (message, _) = create_test_message(&agent1_did, &agent2_did, i).await;
+                        futures.push(node.receive_message(message));
                     }
 
                     // Wait for all messages to be processed
-                    futures::future::join_all(futures).await;
+                    for future in futures {
+                        let _ = future.await;
+                    }
 
                     let duration = start.elapsed();
-                    println!(
-                        "Processed {} messages in {:.2?} ({:.2} msgs/sec)",
-                        batch_size,
-                        duration,
-                        batch_size as f64 / duration.as_secs_f64()
-                    );
+                    println!("Processed {} messages in {:?} ({:.2} msg/s)", 
+                             batch_size, 
+                             duration,
+                             batch_size as f64 / duration.as_secs_f64());
                 });
-            })
+            });
         });
     }
 
