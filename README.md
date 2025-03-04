@@ -88,6 +88,22 @@ let agent = TapAgent::with_defaults(
 
 See the [tap-agent README](./tap-agent/README.md) for more detailed examples.
 
+## Documentation
+
+Comprehensive documentation for TAP-RS is available in the [docs](./docs) directory:
+
+### Tutorials
+- [Getting Started](./docs/tutorials/getting_started.md) - Learn how to set up and start using TAP-RS
+- [Implementing TAP Flows](./docs/tutorials/implementing_tap_flows.md) - Guide to implementing various TAP message flows
+- [Security Best Practices](./docs/tutorials/security_best_practices.md) - Guidelines for securing your implementation
+- [WASM Integration](./docs/tutorials/wasm_integration.md) - Using TAP-RS in browser and Node.js environments
+
+### API Reference
+- [API Documentation](./docs/api/index.md) - Complete API reference for all TAP-RS crates
+
+### Examples
+- [Complete Transfer Flow](./docs/examples/complete_transfer_flow.md) - End-to-end example integrating multiple TAP-RS components
+
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
