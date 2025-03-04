@@ -9,6 +9,8 @@ A Deno-based TypeScript wrapper for the Transaction Authorization Protocol (TAP)
 - **Message Handling:** Create, process, and manage TAP messages.
 - **Agent Implementation:** Create and manage TAP agents that can send and receive messages.
 - **Node Implementation:** Create TAP nodes that can host multiple agents and route messages.
+- **Cryptographic Operations:** Secure key management with DIDComm SecretsResolver integration.
+- **Message Signing and Verification:** Support for Ed25519 and other key types.
 - **Minimal Dependencies:** Built with minimal external dependencies.
 - **Browser Compatibility:** Works in both Deno and browser environments.
 
@@ -125,6 +127,58 @@ if (canResolveDID("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH")) {
   const resolution = await resolveDID("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
   console.log(resolution.didDocument);
 }
+```
+
+### Key Management and Message Signing
+
+The TAP-TS library includes built-in support for cryptographic key management and message signing through the DIDComm SecretsResolver integration:
+
+```typescript
+import {
+  Agent,
+  Message,
+  MessageType,
+  wasmLoader,
+} from "https://deno.land/x/tap_ts/mod.ts";
+
+// Load the WASM module
+await wasmLoader.load();
+
+// Create an agent with a DID
+const agent = new Agent({
+  did: "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
+  nickname: "Alice",
+});
+
+// Add a custom key to the agent
+const privateKeyBytes = new Uint8Array([/* private key bytes */]);
+const publicKeyBytes = new Uint8Array([/* public key bytes */]);
+agent.addKey("did:key:z6MkCustomKey", "Ed25519", privateKeyBytes, publicKeyBytes);
+
+// Get information about available keys
+const keysInfo = agent.getKeysInfo();
+console.log("Available keys:", keysInfo);
+
+// Create and sign a message
+const message = new Message({
+  type: MessageType.AUTHORIZATION_REQUEST,
+});
+
+// Set message data
+message.setAuthorizationRequestData({
+  transactionHash: "0x1234567890abcdef",
+  sender: "0xAliceSender",
+  receiver: "0xBobReceiver",
+  amount: "100.0",
+  asset: "BTC",
+});
+
+// Sign the message
+agent.signMessage(message);
+
+// Verify a message signature
+const isValid = agent.verifyMessage(message);
+console.log("Signature is valid:", isValid);
 ```
 
 ## License

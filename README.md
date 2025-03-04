@@ -11,7 +11,8 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 - **caip**: Implementation of Chain Agnostic Identifier Standards
 - **tap-node**: TAP node orchestration and message routing
 - **tap-server**: HTTP DIDComm server implementation
-- **tap-ts**: TypeScript/WASM wrapper for browser and Node.js environments
+- **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
+- **[tap-ts](./tap-ts/README.md)**: TypeScript/WASM wrapper for browser and Node.js environments
 
 ## Development Status
 
@@ -45,6 +46,8 @@ cargo test
 - Implementation of Chain Agnostic Standards (CAIP-2, CAIP-10, CAIP-19)
 - Multiple DID method support (did:key, did:web, did:pkh)
 - WASM compatibility for browser environments
+- Secure key management with DIDComm SecretsResolver implementation
+- Message signing and verification with Ed25519 and other key types
 
 ## Getting Started with tap-core
 
