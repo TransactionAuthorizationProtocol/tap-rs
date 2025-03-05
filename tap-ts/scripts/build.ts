@@ -4,7 +4,7 @@
  * This script builds the TypeScript code and WASM bindings
  */
 
-import { ensureDir, emptyDir } from "@std/fs/mod.ts";
+import { ensureDir, emptyDir, exists } from "@std/fs/mod.ts";
 import { join } from "@std/path/mod.ts";
 
 // Ensure dist directory exists
@@ -30,12 +30,18 @@ if (!wasmBuildStatus.success) {
 
 // Now bundle the TypeScript code
 console.log("Bundling TypeScript code...");
-const bundleProcess = new Deno.Command(Deno.execPath(), {
+const bundleProcess = new Deno.Command("deno", {
   args: [
-    "bundle",
-    "--config", "./deno.json",
+    "run",
+    "--allow-read",
+    "--allow-write",
+    "--allow-env",
+    "--allow-run",
+    "npm:esbuild",
     "./src/mod.ts",
-    "./dist/tap-ts.js",
+    "--bundle",
+    "--outfile=./dist/tap-ts.js",
+    "--format=esm",
   ],
   stdout: "inherit",
   stderr: "inherit",
@@ -49,25 +55,18 @@ if (!bundleStatus.success) {
 
 // Create the TypeScript type definitions
 console.log("Generating type definitions...");
-const typesProcess = new Deno.Command(Deno.execPath(), {
-  args: [
-    "types",
-    "--unstable",
-    "./src/mod.ts",
-  ],
-  stdout: "piped",
-  stderr: "inherit",
-});
 
-const typesOutput = await typesProcess.output();
-if (!typesOutput.success) {
-  console.error("Failed to generate type definitions");
+// Copy type definitions from WASM bindgen output
+const wasmBindgenDir = join(Deno.cwd(), "src", "wasm", "bindgen");
+const wasmTypesPath = join(wasmBindgenDir, "tap_ts_wasm.d.ts");
+
+if (await exists(wasmTypesPath)) {
+  const wasmTypes = await Deno.readTextFile(wasmTypesPath);
+  await Deno.writeTextFile(join(distDir, "tap-ts.d.ts"), wasmTypes);
+} else {
+  console.error("WASM types file not found at", wasmTypesPath);
   Deno.exit(1);
 }
-
-// Write the type definitions to a file
-const typeDefs = new TextDecoder().decode(typesOutput.stdout);
-await Deno.writeTextFile(join(distDir, "tap-ts.d.ts"), typeDefs);
 
 // Create a package.json for npm compatibility
 console.log("Creating package.json...");

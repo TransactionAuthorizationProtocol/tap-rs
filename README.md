@@ -18,6 +18,17 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 
 This project is under active development. See the [PRD](./prds/v1.md) for the complete roadmap and status.
 
+## Development Guide
+
+### Dependencies
+
+This project has some specific dependency version requirements:
+
+- **UUID v0.8.2**: Required for compatibility with the didcomm crate. Do not upgrade! See [DEPENDENCIES.md](./DEPENDENCIES.md) for details.
+- **WASM Support**: Several dependencies require special features for WebAssembly compatibility.
+
+Please review the [DEPENDENCIES.md](./DEPENDENCIES.md) file before updating any dependencies or adding new crates to the workspace.
+
 ## Getting Started
 
 ### Prerequisites

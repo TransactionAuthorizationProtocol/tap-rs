@@ -30,6 +30,9 @@ thiserror = "1.0"
 anyhow = "1.0.75"
 
 # UUID generation with WASM support
+# IMPORTANT: Do not upgrade uuid beyond 0.8.2!
+# The didcomm crate (v0.4.1) requires this specific version.
+# Upgrading will cause incompatibilities and build failures.
 uuid = { version = "0.8.2", features = ["v4", "serde", "wasm-bindgen"] }
 
 # Time handling with serde support

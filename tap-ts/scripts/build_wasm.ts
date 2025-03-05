@@ -44,7 +44,7 @@ tap-msg = { path = "../../tap-msg" }
 tap-agent = { path = "../../tap-agent" }
 tap-node = { path = "../../tap-node" }
 didcomm = "0.3"
-uuid = { version = "1.5", features = ["v4", "js"] }
+uuid = { version = "0.8.2", features = ["v4", "wasm-bindgen"] }
 getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies.web-sys]

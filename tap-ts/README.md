@@ -14,6 +14,17 @@ A Deno-based TypeScript wrapper for the Transaction Authorization Protocol (TAP)
 - **Minimal Dependencies:** Built with minimal external dependencies.
 - **Browser Compatibility:** Works in both Deno and browser environments.
 
+## Development Notes
+
+### Dependency Requirements
+
+The TAP-TS module has specific dependency requirements that must be followed:
+
+- **UUID Version**: The underlying Rust code requires UUID v0.8.2 due to compatibility with the didcomm crate.
+- **WASM Dependencies**: The build process requires specific feature flags for WASM compatibility.
+
+When building or modifying the WASM module, please consult the project's [DEPENDENCIES.md](../DEPENDENCIES.md) for important version constraints.
+
 ## Prerequisites
 
 - [Deno](https://deno.land/) 2.2 or higher
