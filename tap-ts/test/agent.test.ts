@@ -21,47 +21,49 @@ Deno.test("Agent - Create message", () => {
     did: "did:example:123",
   });
   
-  const message = agent.createMessage({
-    type: MessageType.PING,
-  });
+  const message = agent.createMessage(MessageType.TRANSFER);
   
   assertExists(message);
-  assertEquals(message.type, MessageType.PING); // Fix the second message type assertion
+  assertEquals(message.type, MessageType.TRANSFER); 
 });
 
-Deno.test("Agent - Handle authorization request", async () => {
+Deno.test("Agent - Handle transfer message", async () => {
   const agent = new Agent({
     did: "did:example:123",
   });
   
-  // Register handler for authorization request
+  // Register handler for transfer message
   let requestReceived = false;
-  agent.registerHandler(MessageType.AUTHORIZATION_REQUEST, async (message) => {
+  agent.registerHandler(MessageType.TRANSFER, async (message) => {
     requestReceived = true;
     
     // Verify the message
-    assertEquals((message as Message).type, MessageType.AUTHORIZATION_REQUEST);
+    assertEquals((message as Message).type, MessageType.TRANSFER);
     
-    const requestData = (message as Message).getAuthorizationRequestData();
-    assertEquals(requestData?.transactionHash, "0x1234567890abcdef");
-    assertEquals(requestData?.sender, "0xSender");
-    assertEquals(requestData?.receiver, "0xReceiver");
-    assertEquals(requestData?.amount, "100");
-    assertEquals(requestData?.asset, "BTC");
+    const transferData = (message as Message).getTransferData();
+    assertEquals(transferData?.asset, "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+    assertEquals(transferData?.originator["@id"], "did:key:alice");
+    assertEquals(transferData?.amount, "100.00");
   });
   
-  // Create an authorization request message
+  // Create a transfer message
   const message = new Message({
-    type: MessageType.AUTHORIZATION_REQUEST,
-    ledgerId: "test-ledger",
+    type: MessageType.TRANSFER,
   });
   
-  message.setAuthorizationRequestData({
-    transactionHash: "0x1234567890abcdef",
-    sender: "0xSender",
-    receiver: "0xReceiver",
+  message.setTransferData({
+    asset: "eip155:1/erc20:0x1234567890abcdef",
+    originator: {
+      "@id": "did:example:originator",
+      role: "originator"
+    },
     amount: "100",
-    asset: "BTC",
+    agents: [
+      {
+        "@id": "did:example:originator",
+        role: "originator"
+      }
+    ]
   });
   
   // Process the message
@@ -71,35 +73,32 @@ Deno.test("Agent - Handle authorization request", async () => {
   assertEquals(requestReceived, true);
 });
 
-Deno.test("Agent - Handle authorization response", async () => {
+Deno.test("Agent - Handle authorize message", async () => {
   const agent = new Agent({
     did: "did:example:123",
   });
   
-  // Register handler for authorization response
+  // Register handler for authorize message
   let responseReceived = false;
-  agent.registerHandler(MessageType.AUTHORIZATION_RESPONSE, async (message) => {
+  agent.registerHandler(MessageType.AUTHORIZE, async (message) => {
     responseReceived = true;
     
     // Verify the message
-    assertEquals((message as Message).type, MessageType.AUTHORIZATION_RESPONSE);
+    assertEquals((message as Message).type, MessageType.AUTHORIZE);
     
-    const responseData = (message as Message).getAuthorizationResponseData();
-    assertEquals(responseData?.transactionHash, "0x1234567890abcdef");
-    assertEquals(responseData?.approved, true);
-    assertEquals(responseData?.reason, "Test approval");
+    const authorizeData = (message as Message).getAuthorizeData();
+    assertEquals(authorizeData?.transfer_id, "test-transfer-id");
+    assertEquals(authorizeData?.note, "Test authorization");
   });
   
-  // Create an authorization response message
+  // Create an authorize message
   const message = new Message({
-    type: MessageType.AUTHORIZATION_RESPONSE,
-    ledgerId: "test-ledger",
+    type: MessageType.AUTHORIZE,
   });
   
-  message.setAuthorizationResponseData({
-    transactionHash: "0x1234567890abcdef",
-    approved: true,
-    reason: "Test approval",
+  message.setAuthorizeData({
+    transfer_id: "mocked-transfer-id",
+    note: "mocked-note"
   });
   
   // Process the message
@@ -120,10 +119,9 @@ Deno.test("Agent - Subscribe to messages", async () => {
     lastMessage = message;
   });
   
-  // Create a ping message
+  // Create an error message for testing subscription
   const message = new Message({
-    type: MessageType.PING,
-    ledgerId: "test-ledger",
+    type: MessageType.ERROR,
   });
   
   // Process the message
@@ -131,7 +129,7 @@ Deno.test("Agent - Subscribe to messages", async () => {
   
   // Verify the subscriber was called
   assertExists(lastMessage);
-  assertEquals((lastMessage as Message).type, MessageType.PING);
+  assertEquals((lastMessage as Message).type, MessageType.ERROR);
 });
 
 Deno.test("Agent - Handler registration and unregistration", () => {
@@ -139,23 +137,23 @@ Deno.test("Agent - Handler registration and unregistration", () => {
     did: "did:example:123",
   });
   
-  // Initially, there should be no handler
-  assertEquals(agent.hasHandler(MessageType.PING), false);
+  // Initially, there should be no handler for ERROR type
+  assertEquals(agent.hasHandler(MessageType.ERROR), false);
   
   // Register a handler
-  agent.registerHandler(MessageType.PING, async () => {
+  agent.registerHandler(MessageType.ERROR, async () => {
     // Do nothing for the test
   });
   
   // Now there should be a handler
-  assertEquals(agent.hasHandler(MessageType.PING), true);
+  assertEquals(agent.hasHandler(MessageType.ERROR), true);
   
   // Unregister the handler
-  const result = agent.unregisterHandler(MessageType.PING);
+  const result = agent.unregisterAllHandlers(MessageType.ERROR);
   assertEquals(result, true);
   
   // Now there should be no handler again
-  assertEquals(agent.hasHandler(MessageType.PING), false);
+  assertEquals(agent.hasHandler(MessageType.ERROR), false);
 });
 
 Deno.test("Agent - Message handling", async () => {
@@ -165,14 +163,13 @@ Deno.test("Agent - Message handling", async () => {
   
   // Register a handler
   let handlerMessage: Message | null = null;
-  agent.registerHandler(MessageType.PING, async (message) => {
+  agent.registerHandler(MessageType.ERROR, async (message) => {
     handlerMessage = message;
   });
   
-  // Create a ping message
+  // Create an error message
   const message = new Message({
-    type: MessageType.PING,
-    ledgerId: "test-ledger",
+    type: MessageType.ERROR,
   });
   
   // Process the message
@@ -180,5 +177,5 @@ Deno.test("Agent - Message handling", async () => {
   
   // Verify the handler was called
   assertExists(handlerMessage);
-  assertEquals((handlerMessage as Message).type, MessageType.PING);
+  assertEquals((handlerMessage as Message).type, MessageType.ERROR);
 });

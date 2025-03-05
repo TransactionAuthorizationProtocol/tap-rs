@@ -4,40 +4,65 @@
  * @module message
  */
 
-import * as uuid from "@std/uuid/mod.ts";
 import { TapError, ErrorType } from "./error.ts";
 import type { MessageMetadata } from "./types.ts";
 import { wasmLoader } from "./wasm/loader.ts";
 
-// Local interface definitions to avoid import conflicts
-interface AuthorizationRequest {
-  transactionHash: string;
-  transactionData?: string;
-  sourceAddress?: string;
-  destinationAddress?: string;
-  amount?: string;
-  fee?: string;
-  network?: string;
-  reference?: string;
-  callbackUrl?: string;
-  [key: string]: unknown;
-}
 
-interface AuthorizationResponse {
-  transactionHash: string;
-  authorizationResult?: string | boolean;
-  approved?: boolean;
-  reason?: string;
+/**
+ * Agent involved in a transaction
+ */
+interface Agent {
+  /** DID of the agent */
+  "@id": string;
+  
+  /** Optional role of the agent in the transaction */
+  role?: string;
 }
 
 /**
- * Message types for TAP
+ * Transfer message data structure (TAIP-3)
+ */
+interface TransferData {
+  /** Asset ID in CAIP-19 format */
+  asset: string;
+  
+  /** Originator information */
+  originator: Agent;
+  
+  /** Beneficiary information (optional) */
+  beneficiary?: Agent;
+  
+  /** Amount as a decimal string */
+  amount: string;
+  
+  /** Agents involved in the transaction */
+  agents: Agent[];
+  
+  /** Optional settled transaction ID */
+  settlementId?: string;
+  
+  /** Optional memo or note for the transaction */
+  memo?: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Message types for TAP following the standard specifications
+ * These are the official message types as defined in the TAP protocol
  */
 export enum MessageType {
-  PING = 'TAP_PING',
-  PONG = 'TAP_PONG',
-  AUTHORIZATION_REQUEST = 'TAP_AUTHORIZATION_REQUEST',
-  AUTHORIZATION_RESPONSE = 'TAP_AUTHORIZATION_RESPONSE',
+  // Core message types based on TAP standard
+  TRANSFER = 'https://tap.rsvp/schema/1.0#Transfer',
+  REQUEST_PRESENTATION = 'https://tap.rsvp/schema/1.0#RequestPresentation',
+  PRESENTATION = 'https://tap.rsvp/schema/1.0#Presentation',
+  AUTHORIZE = 'https://tap.rsvp/schema/1.0#Authorize',
+  REJECT = 'https://tap.rsvp/schema/1.0#Reject',
+  SETTLE = 'https://tap.rsvp/schema/1.0#Settle',
+  ADD_AGENTS = 'https://tap.rsvp/schema/1.0#AddAgents',
+  ERROR = 'https://tap.rsvp/schema/1.0#Error',
 }
 
 /**
@@ -59,8 +84,8 @@ export interface MessageOptions {
   /** Optional message ID (auto-generated if not provided) */
   id?: string;
   
-  /** Ledger ID */
-  ledgerId?: string;
+  /** Asset ID in CAIP-19 format (for Transfer messages) */
+  assetId?: string;
   
   /** Custom data to include with the message */
   customData?: Record<string, unknown>;
@@ -97,14 +122,14 @@ export class Message {
   type: MessageType;
   id: string;
   version = "1.0";
-  ledgerId?: string;
   customData?: Record<string, unknown>;
   threadId?: string;
   correlation?: string;
   created: number;
   expires?: number;
   securityMode: SecurityMode = SecurityMode.PLAIN;
-  private _data: Record<string, unknown> = {};
+  // This is made public to allow the agent to set asset information directly
+  _data: Record<string, unknown> = {};
 
   /**
    * Create a new TAP message
@@ -124,7 +149,6 @@ export class Message {
     
     this.type = options.type;
     this.id = options.id || `msg_${generateUuid()}`;
-    this.ledgerId = options.ledgerId || "";
     this.customData = options.customData;
     this.threadId = options.threadId;
     this.correlation = options.correlation;
@@ -136,21 +160,25 @@ export class Message {
     this.wasmMessage = new module.Message(
       this.id,
       this.type,
-      this.version,
-      this.ledgerId || ""
+      this.version
     );
     
     // Set sender and recipient if provided
     if (options.from) {
-      this.from(options.from);
+      this.from = options.from;
     }
     
     if (options.to) {
       const toArray = Array.isArray(options.to) ? options.to : [options.to];
       if (toArray.length > 0) {
-        // Set the first recipient (WASM binding limitation for now)
-        this.to([toArray[0]]);
+        // Set recipients
+        this.to = toArray;
       }
+    }
+    
+    // Set assetId if provided (for Transfer messages)
+    if (options.assetId && this.type === MessageType.TRANSFER) {
+      this.setAssetId(options.assetId);
     }
   }
 
@@ -182,191 +210,276 @@ export class Message {
   }
 
   /**
-   * Get the ledger ID
+   * Set the asset ID (CAIP-19 format) for Transfer messages
    * 
-   * @returns Ledger ID
+   * @param assetId - Asset ID in CAIP-19 format (e.g., "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")
+   * @returns This message for chaining
+   * @throws If the message type is not Transfer
    */
-  getLedgerId(): string | undefined {
-    return this.wasmMessage.ledger_id();
+  setAssetId(assetId: string): this {
+    if (this.type !== MessageType.TRANSFER) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set asset ID on ${this.type} message`,
+      });
+    }
+    
+    this._data.asset = assetId;
+    return this;
   }
-
+  
   /**
-   * Get the authorization request data (if any)
+   * Get the asset ID for Transfer messages
    * 
-   * @returns Authorization request data or undefined
+   * @returns The CAIP-19 asset ID or undefined if not set
    */
-  getAuthorizationRequest(): AuthorizationRequest | undefined {
-    if (this.type !== MessageType.AUTHORIZATION_REQUEST) {
+  getAssetId(): string | undefined {
+    return this._data.asset as string | undefined;
+  }
+  
+  /**
+   * Set Transfer data according to TAIP-3
+   * 
+   * @param data - Transfer data object
+   * @returns This message for chaining
+   * @throws If the message type is not Transfer
+   */
+  setTransferData(data: TransferData): this {
+    if (this.type !== MessageType.TRANSFER) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set Transfer data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_transfer_body) {
+      try {
+        this.wasmMessage.set_transfer_body(data);
+      } catch (error) {
+        console.warn("Error setting transfer body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get Transfer data for TAIP-3 Transfer messages
+   * 
+   * @returns TransferData object or undefined if not set or not a Transfer message
+   */
+  getTransferData(): TransferData | undefined {
+    if (this.type !== MessageType.TRANSFER) {
       return undefined;
     }
     
-    const wasmData = this.wasmMessage.authorization_request();
-    if (!wasmData) {
+    // Try to get from WASM first
+    if (this.wasmMessage.get_transfer_body) {
+      try {
+        const wasmTransferData = this.wasmMessage.get_transfer_body();
+        if (wasmTransferData) {
+          return wasmTransferData as TransferData;
+        }
+      } catch (error) {
+        console.warn("Error getting transfer body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields for a Transfer
+    if (!this._data.asset || !this._data.originator) {
       return undefined;
     }
     
-    return wasmData as AuthorizationRequest;
+    return this._data as unknown as TransferData;
   }
-
+  
   /**
-   * Get the authorization response data (if any)
+   * Set Authorize data according to TAIP-4
    * 
-   * @returns Authorization response data or undefined
+   * @param data - Authorize data object
+   * @returns This message for chaining
+   * @throws If the message type is not Authorize
    */
-  getAuthorizationResponse(): AuthorizationResponse | undefined {
-    if (this.type !== MessageType.AUTHORIZATION_RESPONSE) {
+  setAuthorizeData(data: { transfer_id: string; note?: string; metadata?: Record<string, unknown> }): this {
+    if (this.type !== MessageType.AUTHORIZE) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set Authorize data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_authorize_body) {
+      try {
+        this.wasmMessage.set_authorize_body(data);
+      } catch (error) {
+        console.warn("Error setting authorize body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get Authorize data for TAIP-4 Authorize messages
+   * 
+   * @returns Authorize data object or undefined if not set or not an Authorize message
+   */
+  getAuthorizeData(): { transfer_id: string; note?: string; metadata?: Record<string, unknown> } | undefined {
+    if (this.type !== MessageType.AUTHORIZE) {
       return undefined;
     }
     
-    const wasmData = this.wasmMessage.authorization_response();
-    if (!wasmData) {
+    // Try to get from WASM first
+    if (this.wasmMessage.get_authorize_body) {
+      try {
+        const wasmAuthorizeData = this.wasmMessage.get_authorize_body();
+        if (wasmAuthorizeData) {
+          return wasmAuthorizeData as { transfer_id: string; note?: string; metadata?: Record<string, unknown> };
+        }
+      } catch (error) {
+        console.warn("Error getting authorize body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields
+    if (!this._data.transfer_id) {
       return undefined;
     }
     
-    return wasmData as AuthorizationResponse;
+    return this._data as { transfer_id: string; note?: string; metadata?: Record<string, unknown> };
   }
-
+  
   /**
-   * Set authorization request properties
+   * Set Reject data according to TAIP-4
    * 
-   * @param transactionHash - Transaction hash
-   * @param sourceAddress - Source address
-   * @param destinationAddress - Destination address
-   * @param amount - Transaction amount
-   * @param additionalData - Additional data
-   * @throws If the message type is not AUTHORIZATION_REQUEST
+   * @param data - Reject data object
+   * @returns This message for chaining
+   * @throws If the message type is not Reject
    */
-  setAuthorizationRequest(
-    transactionHash: string,
-    sourceAddress: string,
-    destinationAddress: string,
-    amount: string,
-    additionalData?: Record<string, unknown>
-  ): void {
-    if (this.type !== MessageType.AUTHORIZATION_REQUEST) {
+  setRejectData(data: { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> }): this {
+    if (this.type !== MessageType.REJECT) {
       throw new TapError({
         type: ErrorType.INVALID_MESSAGE_TYPE,
-        message: `Cannot set authorization request on ${this.type} message`,
+        message: `Cannot set Reject data on ${this.type} message`,
       });
     }
     
-    const request: AuthorizationRequest = {
-      transactionHash,
-      sourceAddress,
-      destinationAddress,
-      amount,
-      ...additionalData,
-    };
+    // Store the data
+    Object.assign(this._data, data);
     
-    this.setAuthorizationRequestData(request);
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_reject_body) {
+      try {
+        this.wasmMessage.set_reject_body(data);
+      } catch (error) {
+        console.warn("Error setting reject body in WASM", error);
+      }
+    }
+    
+    return this;
   }
-
+  
   /**
-   * Set authorization response data
+   * Get Reject data for TAIP-4 Reject messages
    * 
-   * @param transactionHash - Transaction hash
-   * @param authorizationResult - Authorization result
-   * @param reason - Optional reason for the decision
+   * @returns Reject data object or undefined if not set or not a Reject message
    */
-  setAuthorizationResponse(
-    transactionHash: string,
-    authorizationResult: boolean,
-    reason?: string
-  ): void {
-    if (this.type !== MessageType.AUTHORIZATION_RESPONSE) {
+  getRejectData(): { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> } | undefined {
+    if (this.type !== MessageType.REJECT) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_reject_body) {
+      try {
+        const wasmRejectData = this.wasmMessage.get_reject_body();
+        if (wasmRejectData) {
+          return wasmRejectData as { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> };
+        }
+      } catch (error) {
+        console.warn("Error getting reject body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields
+    if (!this._data.transfer_id || !this._data.code || !this._data.description) {
+      return undefined;
+    }
+    
+    return this._data as { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> };
+  }
+  
+  /**
+   * Set Settle data according to TAIP-4
+   * 
+   * @param data - Settle data object
+   * @returns This message for chaining
+   * @throws If the message type is not Settle
+   */
+  setSettleData(data: { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> }): this {
+    if (this.type !== MessageType.SETTLE) {
       throw new TapError({
         type: ErrorType.INVALID_MESSAGE_TYPE,
-        message: `Cannot set authorization response on ${this.type} message`,
+        message: `Cannot set Settle data on ${this.type} message`,
       });
     }
     
-    const response: AuthorizationResponse = {
-      transactionHash,
-      authorizationResult: authorizationResult.toString(),
-      approved: authorizationResult,
-      reason,
-    };
+    // Store the data
+    Object.assign(this._data, data);
     
-    this.setAuthorizationResponseData(response);
-  }
-
-  /**
-   * Set authorization request data (compatibility method for tests)
-   * 
-   * @param requestData - Authorization request data
-   */
-  setAuthorizationRequestData(requestData: AuthorizationRequest): void {
-    if (this.type !== MessageType.AUTHORIZATION_REQUEST) {
-      throw new TapError({
-        type: ErrorType.INVALID_MESSAGE_TYPE,
-        message: `Cannot set authorization request on ${this.type} message`,
-      });
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_settle_body) {
+      try {
+        this.wasmMessage.set_settle_body(data);
+      } catch (error) {
+        console.warn("Error setting settle body in WASM", error);
+      }
     }
     
-    this._data = { ...this._data, ...requestData };
-    this.wasmMessage.set_authorization_request(requestData);
+    return this;
   }
-
+  
   /**
-   * Get authorization request data
+   * Get Settle data for TAIP-4 Settle messages
    * 
-   * @returns Authorization request data object
-   * @throws If the message type is not AUTHORIZATION_REQUEST
+   * @returns Settle data object or undefined if not set or not a Settle message
    */
-  getAuthorizationRequestData(): AuthorizationRequest | undefined {
-    if (this.type !== MessageType.AUTHORIZATION_REQUEST) {
-      throw new TapError({
-        type: ErrorType.INVALID_MESSAGE_TYPE,
-        message: `Cannot get authorization request from ${this.type} message`,
-      });
+  getSettleData(): { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> } | undefined {
+    if (this.type !== MessageType.SETTLE) {
+      return undefined;
     }
     
-    return this.getAuthorizationRequest();
-  }
-
-  /**
-   * Set authorization response data
-   * 
-   * @param data - Authorization response data
-   * @throws If the message type is not AUTHORIZATION_RESPONSE
-   */
-  setAuthorizationResponseData(data: AuthorizationResponse): void {
-    if (this.type !== MessageType.AUTHORIZATION_RESPONSE) {
-      throw new TapError({
-        type: ErrorType.INVALID_MESSAGE_TYPE,
-        message: `Cannot set authorization response on ${this.type} message`,
-      });
+    // Try to get from WASM first
+    if (this.wasmMessage.get_settle_body) {
+      try {
+        const wasmSettleData = this.wasmMessage.get_settle_body();
+        if (wasmSettleData) {
+          return wasmSettleData as { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> };
+        }
+      } catch (error) {
+        console.warn("Error getting settle body from WASM", error);
+      }
     }
     
-    this._data = { ...this._data, ...data };
-    
-    // We need to generate the signed date in ISO format
-    const signedDate = new Date().toISOString();
-    
-    // Set valid until to 24 hours from now by default
-    const validUntil = this.expires 
-      ? new Date(this.expires).toISOString() 
-      : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    
-    this.wasmMessage.set_authorization_response(data, signedDate, validUntil);
-  }
-
-  /**
-   * Get authorization response data
-   * 
-   * @returns Authorization response data or undefined if not set
-   * @throws If the message type is not AUTHORIZATION_RESPONSE
-   */
-  getAuthorizationResponseData(): AuthorizationResponse | undefined {
-    if (this.type !== MessageType.AUTHORIZATION_RESPONSE) {
-      throw new TapError({
-        type: ErrorType.INVALID_MESSAGE_TYPE,
-        message: `Cannot get authorization response from ${this.type} message`,
-      });
+    // Check if we have the minimum required fields
+    if (!this._data.transfer_id || !this._data.transaction_id) {
+      return undefined;
     }
     
-    return this.getAuthorizationResponse();
+    return this._data as { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> };
   }
+  
+
+  // Legacy authorization methods have been removed and replaced with standard TAP types
+  // If you need authorization functionality, use the AUTHORIZE and REJECT message types
 
   /**
    * Get the underlying WASM message
@@ -377,45 +490,70 @@ export class Message {
     return this.wasmMessage;
   }
 
+  private _fromDid?: string;
+  private _toDids?: string[];
+
   /**
-   * Get or set recipient DIDs for the message
-   * 
-   * @param value - DIDs to set or undefined to get current value
-   * @returns Current recipient DIDs if getting, this if setting
+   * Get the sender DID
    */
-  to(value?: string[] | undefined): string[] | undefined | this {
-    if (value === undefined) {
-      const toDid = this.wasmMessage.to_did();
-      return toDid ? [toDid] : undefined;
-    }
-    
+  get from(): string | undefined {
+    return this._fromDid || this.wasmMessage.from_did();
+  }
+
+  /**
+   * Set the sender DID
+   */
+  set from(value: string) {
+    this._fromDid = value;
+    this.wasmMessage.set_from_did(value);
+  }
+
+  /**
+   * Get the recipient DIDs
+   */
+  get to(): string[] | undefined {
+    const toDid = this.wasmMessage.to_did();
+    return toDid ? [toDid] : this._toDids;
+  }
+
+  /**
+   * Set the recipient DIDs
+   */
+  set to(value: string[]) {
+    this._toDids = value;
     // Support only the first recipient for now (WASM binding limitation)
-    if (value.length > 0) {
+    if (value && value.length > 0) {
       this.wasmMessage.set_to_did(value[0]);
     } else {
       this.wasmMessage.set_to_did(null);
     }
-    
+  }
+
+  /**
+   * Set recipient DIDs for the message (method form)
+   * 
+   * @param value - DIDs to set
+   * @returns This message for chaining
+   */
+  toRecipients(value: string[]): this {
+    this.to = value;
     return this;
   }
 
   /**
-   * Get or set sender DID for the message
+   * Set sender DID for the message (method form)
    * 
-   * @param value - DID to set or undefined to get current value
-   * @returns Current sender DID if getting, this if setting
+   * @param value - DID to set
+   * @returns This message for chaining
    */
-  from(value?: string | undefined): string | undefined | this {
-    if (value === undefined) {
-      return this.wasmMessage.from_did();
-    }
-    
-    this.wasmMessage.set_from_did(value);
+  fromSender(value: string): this {
+    this.from = value;
     return this;
   }
 
   /**
    * Sign the message using the agent's keys
+   * Directly relies on the WASM implementation for signing
    * 
    * @param agent - Agent to sign the message with
    * @returns This message for chaining
@@ -425,8 +563,15 @@ export class Message {
       this.securityMode = SecurityMode.SIGNED;
     }
     
-    if (agent.sign_message) {
-      agent.sign_message(this.wasmMessage);
+    try {
+      // Use the agent's sign_message method which calls the WASM implementation
+      agent.signMessage(this.wasmMessage);
+    } catch (error) {
+      throw new TapError({
+        type: ErrorType.MESSAGE_SIGNING_ERROR,
+        message: "Failed to sign message using agent",
+        cause: error
+      });
     }
     
     return this;
@@ -450,13 +595,22 @@ export class Message {
 
   /**
    * Verify the message signature
+   * Uses the WASM implementation for verification
    * 
-   * @returns True if the message signature is valid
+   * @returns True if the message signature is valid, false if verification fails or isn't available
    */
   verify(): boolean {
-    // In the future, implement actual verification here
-    // For now, just return true
-    return true;
+    try {
+      if (this.wasmMessage.verify_message) {
+        return this.wasmMessage.verify_message(true);
+      } else {
+        console.warn("verify_message not available on WASM message");
+        return false; // Security first: if we can't verify, assume it's not valid
+      }
+    } catch (error) {
+      console.error("Error verifying message:", error);
+      return false;
+    }
   }
 
   /**
@@ -494,7 +648,6 @@ export class Message {
     const message = new Message({
       id: wasmMessage.id(),
       type: wasmMessage.message_type() as MessageType,
-      ledgerId: wasmMessage.ledger_id(),
     });
     
     // Replace the WASM message with the one we got from bytes
@@ -524,7 +677,6 @@ export class Message {
     const message = new Message({
       id: wasmMessage.id(),
       type: wasmMessage.message_type() as MessageType,
-      ledgerId: wasmMessage.ledger_id(),
     });
     
     // Replace the WASM message with the one we got from JSON
@@ -562,7 +714,6 @@ export class Message {
       id: this.getId(),
       type: this.getType(),
       version: this.getVersion(),
-      ledgerId: this.getLedgerId(),
       created: this.created,
       expires: this.expires,
       threadId: this.threadId,
@@ -571,25 +722,17 @@ export class Message {
     };
     
     // Add from/to if present
-    const from = this.from();
-    if (from) {
-      Object.assign(base, { from });
+    if (this.from) {
+      Object.assign(base, { from: this.from });
     }
     
-    const to = this.to();
-    if (to) {
-      Object.assign(base, { to });
+    if (this.to) {
+      Object.assign(base, { to: this.to });
     }
     
-    // Add request/response data if present
-    if (this.type === MessageType.AUTHORIZATION_REQUEST) {
-      Object.assign(base, { 
-        authorizationRequest: this.getAuthorizationRequest() 
-      });
-    } else if (this.type === MessageType.AUTHORIZATION_RESPONSE) {
-      Object.assign(base, { 
-        authorizationResponse: this.getAuthorizationResponse() 
-      });
+    // Add message-specific data if present
+    if (this._data && Object.keys(this._data).length > 0) {
+      Object.assign(base, { data: this._data });
     }
     
     // Add custom data if present
@@ -630,10 +773,10 @@ export type MessageHandler = (message: Message, metadata?: MessageMetadata) => v
 export type MessageSubscriber = (message: Message, metadata?: MessageMetadata) => void | Promise<void>;
 
 /**
- * Generate a UUID
+ * Generate a random ID
  * 
- * @returns A UUID string
+ * @returns A random ID string
  */
 function generateUuid(): string {
-  return uuid.v4.toString().replace(/-/g, "");
+  return crypto.randomUUID().replace(/-/g, "");
 }

@@ -8,18 +8,16 @@ import { Message, MessageType } from "../src/message.ts";
 Deno.test("Message tests", async (t) => {
   await t.step("Create basic message", () => {
     const message = new Message({
-      type: MessageType.PING,
-      ledgerId: "test-ledger",
+      type: MessageType.TRANSFER,
     });
     
     assertExists(message);
-    assertEquals(message.type, MessageType.PING);
-    assertEquals(message.getLedgerId, "test-ledger");
+    assertEquals(message.type, MessageType.TRANSFER);
   });
 
   await t.step("Create message with all properties", () => {
     const message = new Message({
-      type: MessageType.PING,
+      type: MessageType.TRANSFER,
       id: "custom_id",
       from: "did:key:alice",
       to: ["did:key:bob"],
@@ -30,12 +28,11 @@ Deno.test("Message tests", async (t) => {
       customData: {
         test: "value",
       },
-      ledgerId: "test-ledger",
     });
     
     assertExists(message);
     assertEquals(message.id, "custom_id");
-    assertEquals(message.type, MessageType.PING);
+    assertEquals(message.type, MessageType.TRANSFER);
     assertEquals(message.from, "did:key:alice");
     assertEquals(message.to?.length, 1);
     assertEquals(message.to?.[0], "did:key:bob");
@@ -44,13 +41,11 @@ Deno.test("Message tests", async (t) => {
     assertEquals(message.threadId, "thread_123");
     assertEquals(message.correlation, "corr_123");
     assertEquals(message.customData?.test, "value");
-    assertEquals(message.getLedgerId, "test-ledger");
   });
 
   await t.step("Create message with from set after construction", () => {
     const message = new Message({
-      type: MessageType.PING,
-      ledgerId: "test-ledger",
+      type: MessageType.TRANSFER,
     });
     
     message.from = "did:key:alice";
@@ -58,126 +53,69 @@ Deno.test("Message tests", async (t) => {
     assertEquals(message.from, "did:key:alice");
   });
 
-  await t.step("Create and verify authorization request", () => {
+  await t.step("Create and verify transfer message", () => {
     const message = new Message({
-      type: MessageType.AUTHORIZATION_REQUEST,
-      ledgerId: "test-ledger",
+      type: MessageType.TRANSFER,
     });
     
-    // Set authorization request data - temporarily skip this test
-    console.log("Skipping authorization request test - mocked implementation");
-    // message.setAuthorizationRequestData({
-    //   transactionHash: "0x1234567890abcdef",
-    //   sender: "0xAliceSender",
-    //   receiver: "0xBobReceiver",
-    //   amount: "100.0",
-    //   asset: "BTC",
-    // });
-    
-    // // Verify data
-    // const requestData = message.getAuthorizationRequestData();
-    // assertExists(requestData);
-    // assertEquals(requestData.transactionHash, "0x1234567890abcdef");
-    // assertEquals(requestData.sender, "0xAliceSender");
-    // assertEquals(requestData.receiver, "0xBobReceiver");
-    // assertEquals(requestData.amount, "100.0");
-    // assertEquals(requestData.asset, "BTC");
-  });
-
-  await t.step("Create and verify authorization response", () => {
-    const message = new Message({
-      type: MessageType.AUTHORIZATION_RESPONSE,
-      ledgerId: "test-ledger",
-    });
-    
-    // Set authorization response data
-    message.setAuthorizationResponseData({
-      transactionHash: "0x1234567890abcdef",
-      authorizationResult: "true",
-      approved: true,
-      reason: "Test approval",
+    // Set transfer data
+    message.setTransferData({
+      asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      originator: {
+        "@id": "did:key:alice",
+        role: "originator"
+      },
+      amount: "100.00",
+      agents: [
+        {
+          "@id": "did:key:alice",
+          role: "originator"
+        }
+      ]
     });
     
     // Verify data
-    const responseData = message.getAuthorizationResponseData();
-    assertExists(responseData);
-    assertEquals(responseData.transactionHash, "0x1234567890abcdef");
-    assertEquals(responseData.authorizationResult, "true");
-    assertEquals(responseData.approved, true);
-    assertEquals(responseData.reason, "Test approval");
+    const transferData = message.getTransferData();
+    assertExists(transferData);
+    assertEquals(transferData.asset, "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48");
+    assertEquals(transferData.originator["@id"], "did:key:alice");
+    assertEquals(transferData.amount, "100.00");
+    assertEquals(transferData.agents.length, 1);
+  });
+
+  await t.step("Create and verify authorize message", () => {
+    const message = new Message({
+      type: MessageType.AUTHORIZE,
+    });
+    
+    message.setAuthorizeData({
+      transfer_id: "test-transfer-id",
+      note: "Test authorization"
+    });
+    
+    // Verify data
+    const authorizeData = message.getAuthorizeData();
+    assertExists(authorizeData);
+    assertEquals(authorizeData.transfer_id, "test-transfer-id");
+    assertEquals(authorizeData.note, "Test authorization");
   });
 
   await t.step("Message serialization and deserialization", () => {
-    // Skip serialization test for now
-    console.log("Skipping serialization test - mocked implementation");
-    // const originalMessage = new Message({
-    //   type: MessageType.AUTHORIZATION_REQUEST,
-    //   from: "did:key:alice",
-    //   to: ["did:key:bob"],
-    //   ledgerId: "test-ledger",
-    // });
-    
-    // // Set authorization request data
-    // originalMessage.setAuthorizationRequestData({
-    //   transactionHash: "0x1234567890abcdef",
-    //   sender: "0xAliceSender",
-    //   receiver: "0xBobReceiver",
-    //   amount: "100.0",
-    //   asset: "BTC",
-    // });
-    
-    // // Serialize to JSON
-    // const json = originalMessage.toJSON();
-    
-    // // Deserialize from JSON
-    // const deserializedMessage = Message.fromJSON(json);
-    
-    // // Verify deserialized message
-    // assertEquals(deserializedMessage.type, originalMessage.type);
-    // assertEquals(deserializedMessage.id, originalMessage.id);
-    // assertEquals(deserializedMessage.from, originalMessage.from);
-    // assertEquals(deserializedMessage.to, originalMessage.to);
-    // assertEquals(deserializedMessage.getLedgerId, originalMessage.getLedgerId);
-    
-    // // Verify request data
-    // const requestData = deserializedMessage.getAuthorizationRequestData();
-    // assertExists(requestData);
-    // assertEquals(requestData.transactionHash, "0x1234567890abcdef");
-    // assertEquals(requestData.sender, "0xAliceSender");
-    // assertEquals(requestData.receiver, "0xBobReceiver");
-    // assertEquals(requestData.amount, "100.0");
-    // assertEquals(requestData.asset, "BTC");
+    // This test needs to be implemented with standard TAP message types
+    console.log("Serialization test not yet implemented with standard TAP message types");
   });
 
   await t.step("Reject setting wrong data type on message", () => {
-    // Skip type checking test for now
-    console.log("Skipping type check test - mocked implementation");
-    // // Create an authorization request message
-    // const requestMessage = new Message({
-    //   type: MessageType.AUTHORIZATION_REQUEST,
-    //   ledgerId: "test-ledger",
-    // });
+    // This test should verify that using wrong data types on messages is properly rejected
+    console.log("Type check test not yet implemented with standard TAP message types");
     
-    // // Test intentionally wrong method call
+    // Example implementation:
+    // const transferMessage = new Message({ type: MessageType.TRANSFER });
     // assertThrows(() => {
-    //   requestMessage.setAuthorizationResponseData({
-    //     transactionHash: "0x1234567890abcdef",
-    //     approved: true,
-    //   } as any);
-    // });
-    
-    // // Create an authorization response message
-    // const responseMessage = new Message({
-    //   type: MessageType.AUTHORIZATION_RESPONSE,
-    //   ledgerId: "test-ledger",
-    // });
-    
-    // // Test intentionally wrong method call
-    // assertThrows(() => {
-    //   responseMessage.setAuthorizationRequestData({
-    //     transactionHash: "0x1234567890abcdef",
-    //     sourceAddress: "0xSender",
-    //   } as any);
+    //   transferMessage.setAuthorizeData({
+    //     transfer_id: "test-id",
+    //     note: "This should fail"
+    //   });
     // });
   });
 });

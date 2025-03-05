@@ -22,7 +22,7 @@ tap-agent = { path = "../../../tap-agent", default-features = false, features = 
 # Exclude tap-node and tap-caip as they pull in dependencies that don't work in WASM
 # tap-node = { path = "../../../tap-node" }
 didcomm = { workspace = true, default-features = false }
-uuid = { workspace = true }
+uuid = { version = "1.5", features = ["v4", "js"] }
 wee_alloc = { version = "0.4.5", optional = true }
 getrandom = { workspace = true, features = ["js"] }
 

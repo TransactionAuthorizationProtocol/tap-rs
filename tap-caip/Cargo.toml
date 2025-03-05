@@ -40,8 +40,10 @@ criterion = "0.5"
 name = "caip_benchmark"
 harness = false
 
-# Fuzzing
-arbitrary = { version = "1.3", features = ["derive"] }
+# Fuzzing dependencies
+[dev-dependencies.arbitrary]
+version = "1.3"
+features = ["derive"]
 
 [features]
 default = []

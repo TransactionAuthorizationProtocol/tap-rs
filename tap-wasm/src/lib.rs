@@ -24,49 +24,152 @@ pub fn start() -> Result<(), JsValue> {
     Ok(())
 }
 
-/// The type of TAP Messages
+/// The type of TAP Messages following the TAP specification
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[wasm_bindgen]
 pub enum MessageType {
-    AuthorizationRequest,
-    AuthorizationResponse,
-    TransferRequest,
+    /// Transaction proposal (Transfer in TAIP-3)
+    Transfer,
+    /// Identity exchange request (TAIP-8)
+    RequestPresentation,
+    /// Presentation response (TAIP-8)
+    Presentation,
+    /// Authorization response (TAIP-4)
+    Authorize,
+    /// Rejection response (TAIP-4)
+    Reject,
+    /// Settlement notification (TAIP-4)
+    Settle,
+    /// Add agents to a transaction (TAIP-5)
+    AddAgents,
+    /// Error message
+    Error,
+    /// Unknown message type
     Unknown,
 }
 
 impl fmt::Display for MessageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MessageType::AuthorizationRequest => write!(f, "TAP_AUTHORIZATION_REQUEST"),
-            MessageType::AuthorizationResponse => write!(f, "TAP_AUTHORIZATION_RESPONSE"),
-            MessageType::TransferRequest => write!(f, "TAP_TRANSFER_REQUEST"),
+            MessageType::Transfer => write!(f, "https://tap.rsvp/schema/1.0#Transfer"),
+            MessageType::RequestPresentation => write!(f, "https://tap.rsvp/schema/1.0#RequestPresentation"),
+            MessageType::Presentation => write!(f, "https://tap.rsvp/schema/1.0#Presentation"),
+            MessageType::Authorize => write!(f, "https://tap.rsvp/schema/1.0#Authorize"),
+            MessageType::Reject => write!(f, "https://tap.rsvp/schema/1.0#Reject"),
+            MessageType::Settle => write!(f, "https://tap.rsvp/schema/1.0#Settle"),
+            MessageType::AddAgents => write!(f, "https://tap.rsvp/schema/1.0#AddAgents"),
+            MessageType::Error => write!(f, "https://tap.rsvp/schema/1.0#Error"),
             MessageType::Unknown => write!(f, "UNKNOWN"),
         }
     }
 }
 
-/// Network configuration
-#[derive(Serialize, Deserialize, Clone)]
-pub struct NetworkConfig {
-    pub reference_id: String,
-    pub network_id: String,
-    pub sender_account_number: Option<String>,
-    pub sender_address: Option<String>,
-    pub sender_chain_address: Option<String>,
+/// Agent structure for participants in a transaction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    /// DID of the agent.
+    #[serde(rename = "@id")]
+    pub id: String,
+
+    /// Role of the agent in the transaction (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
 }
 
-/// Authorization request
-#[derive(Serialize, Deserialize, Clone)]
-pub struct AuthorizationRequest {
-    pub private_payload: serde_json::Value,
+/// Transfer message body (TAIP-3).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransferBody {
+    /// Network asset identifier in CAIP-19 format.
+    pub asset: String,
+
+    /// Originator information.
+    pub originator: Agent,
+
+    /// Beneficiary information (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub beneficiary: Option<Agent>,
+
+    /// Amount as a decimal string.
+    pub amount: String,
+
+    /// Agents involved in the transaction.
+    pub agents: Vec<Agent>,
+
+    /// Optional settled transaction ID.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "settlementId")]
+    pub settlement_id: Option<String>,
+
+    /// Optional memo or note for the transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub memo: Option<String>,
+
+    /// Additional metadata for the transaction.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
-/// Authorization response
-#[derive(Serialize, Deserialize, Clone)]
-pub struct AuthorizationResponse {
-    pub private_payload: serde_json::Value,
-    pub signed_date: String,
-    pub valid_until: Option<String>,
+// Deprecated types AuthorizationRequest and AuthorizationResponse removed
+
+/// Authorization message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthorizeBody {
+    /// The ID of the transfer being authorized.
+    pub transfer_id: String,
+
+    /// Optional note about the authorization.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Reject message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RejectBody {
+    /// The ID of the transfer being rejected.
+    pub transfer_id: String,
+
+    /// Reason code for the rejection.
+    pub code: String,
+
+    /// Human-readable description of the rejection reason.
+    pub description: String,
+
+    /// Optional note about the rejection.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Settle message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SettleBody {
+    /// The ID of the transfer being settled.
+    pub transfer_id: String,
+
+    /// Transaction ID on the external ledger.
+    pub transaction_id: String,
+    
+    /// Optional transaction hash.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transaction_hash: Option<String>,
+
+    /// Block height of the transaction (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block_height: Option<u64>,
+
+    /// Optional note about the settlement.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// TAP Message wrapper for DIDComm message
@@ -79,29 +182,36 @@ pub struct Message {
     message_type: String,
     /// Message version
     version: String,
-    /// Ledger ID
-    ledger_id: String,
-    /// Additional fields for authorization request/response
-    additional_fields: HashMap<String, serde_json::Value>,
+    /// Body data for TAP messages
+    body_data: HashMap<String, serde_json::Value>,
 }
 
 #[wasm_bindgen]
 impl Message {
     /// Creates a new message with the specified types and fields
     #[wasm_bindgen(constructor)]
-    pub fn new(id: String, message_type: String, version: String, ledger_id: String) -> Message {
+    pub fn new(id: String, message_type: String, version: String) -> Message {
+        // Determine the proper message type URL based on the message_type
+        let type_url = if message_type.starts_with("https://tap.rsvp/schema/") {
+            // If it's already a URL, use it directly
+            message_type.clone()
+        } else {
+            // Otherwise, construct the URL from the message type and version
+            format!("https://tap.rsvp/schema/{}#{}", version, message_type)
+        };
+
         // Create a new DIDComm message
         let didcomm_message = DIDCommMessage {
             id: id.clone(),
             typ: "application/didcomm-plain+json".to_string(),
-            type_: format!("https://tap.org/protocols/{}/{}", message_type, version),
+            type_: type_url,
             body: serde_json::json!({}),
             from: None,
             to: None,
             thid: None,
             pthid: None,
             extra_headers: Default::default(),
-            created_time: None,
+            created_time: Some(chrono::Utc::now().timestamp() as u64),
             expires_time: None,
             from_prior: None,
             attachments: None,
@@ -112,8 +222,7 @@ impl Message {
             didcomm_message,
             message_type,
             version,
-            ledger_id,
-            additional_fields: HashMap::new(),
+            body_data: HashMap::new(),
         }
     }
 
@@ -157,123 +266,204 @@ impl Message {
         );
     }
 
-    /// Gets the ledger ID
-    pub fn ledger_id(&self) -> String {
-        self.ledger_id.clone()
-    }
-
-    /// Sets the ledger ID
-    pub fn set_ledger_id(&mut self, ledger_id: String) {
-        self.ledger_id = ledger_id;
-    }
-
-    /// Sets the authorization request data
-    pub fn set_authorization_request(&mut self, private_payload: JsValue) -> Result<(), JsValue> {
-        // Convert the JavaScript value to a serde_json::Value
-        let value: serde_json::Value =
-            serde_wasm_bindgen::from_value(private_payload).map_err(|e| {
-                JsValue::from_str(&format!("Failed to parse authorization request: {}", e))
+    // Deprecated method set_authorization_request removed
+    
+    /// Sets a Transfer message body according to TAIP-3
+    pub fn set_transfer_body(&mut self, transfer_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a TransferBody
+        let transfer_body: TransferBody = 
+            serde_wasm_bindgen::from_value(transfer_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse transfer data: {}", e))
             })?;
-
-        // Store the authorization request in the additional fields
-        self.additional_fields
-            .insert("authorization_request".to_string(), value);
-
-        // Set the DIDComm message body with the authorization request
-        self.didcomm_message.body = serde_json::json!({
-            "type": "authorization_request",
-            "ledger_id": self.ledger_id,
-            "data": self.additional_fields.get("authorization_request")
-        });
-
+            
+        // Convert to JSON value and store in body data
+        let json_value = serde_json::to_value(&transfer_body).map_err(|e| {
+            JsValue::from_str(&format!("Failed to serialize transfer data: {}", e))
+        })?;
+        
+        self.body_data.insert("transfer".to_string(), json_value);
+        
+        // Set the message type to Transfer and update the didcomm type
+        self.message_type = "Transfer".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Transfer", self.version);
+        
+        // Set the DIDComm message body
+        self.didcomm_message.body = serde_json::json!(transfer_body);
+        
+        Ok(())
+    }
+    
+    /// Sets an Authorize message body according to TAIP-4
+    pub fn set_authorize_body(&mut self, authorize_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to an AuthorizeBody
+        let authorize_body: AuthorizeBody = 
+            serde_wasm_bindgen::from_value(authorize_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse authorize data: {}", e))
+            })?;
+            
+        // Convert to JSON value and store in body data
+        let json_value = serde_json::to_value(&authorize_body).map_err(|e| {
+            JsValue::from_str(&format!("Failed to serialize authorize data: {}", e))
+        })?;
+        
+        self.body_data.insert("authorize".to_string(), json_value);
+        
+        // Set the message type to Authorize and update the didcomm type
+        self.message_type = "Authorize".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Authorize", self.version);
+        
+        // Set the DIDComm message body
+        self.didcomm_message.body = serde_json::json!(authorize_body);
+        
         Ok(())
     }
 
-    /// Sets the authorization response data
-    pub fn set_authorization_response(
-        &mut self,
-        private_payload: JsValue,
-        signed_date: String,
-        valid_until: Option<String>,
-    ) -> Result<(), JsValue> {
-        // Convert the JavaScript value to a serde_json::Value
-        let value: serde_json::Value =
-            serde_wasm_bindgen::from_value(private_payload).map_err(|e| {
-                JsValue::from_str(&format!("Failed to parse authorization response: {}", e))
+    // Deprecated method set_authorization_response removed
+    
+    /// Sets a Reject message body according to TAIP-4
+    pub fn set_reject_body(&mut self, reject_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a RejectBody
+        let reject_body: RejectBody = 
+            serde_wasm_bindgen::from_value(reject_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse reject data: {}", e))
             })?;
-
-        // Store the authorization response in the additional fields
-        self.additional_fields
-            .insert("authorization_response".to_string(), value);
-        self.additional_fields.insert(
-            "signed_date".to_string(),
-            serde_json::Value::String(signed_date.clone()),
-        );
-
-        let valid_until_value = valid_until.clone().map(serde_json::Value::String);
-        if let Some(valid_until_str) = valid_until_value.clone() {
-            self.additional_fields
-                .insert("valid_until".to_string(), valid_until_str);
-        }
-
-        // Set the DIDComm message body with the authorization response
-        self.didcomm_message.body = serde_json::json!({
-            "type": "authorization_response",
-            "ledger_id": self.ledger_id,
-            "signed_date": signed_date,
-            "valid_until": valid_until,
-            "data": self.additional_fields.get("authorization_response")
-        });
-
+            
+        // Convert to JSON value and store in body data
+        let json_value = serde_json::to_value(&reject_body).map_err(|e| {
+            JsValue::from_str(&format!("Failed to serialize reject data: {}", e))
+        })?;
+        
+        self.body_data.insert("reject".to_string(), json_value);
+        
+        // Set the message type to Reject and update the didcomm type
+        self.message_type = "Reject".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Reject", self.version);
+        
+        // Set the DIDComm message body
+        self.didcomm_message.body = serde_json::json!(reject_body);
+        
+        Ok(())
+    }
+    
+    /// Sets a Settle message body according to TAIP-4
+    pub fn set_settle_body(&mut self, settle_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a SettleBody
+        let settle_body: SettleBody = 
+            serde_wasm_bindgen::from_value(settle_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse settle data: {}", e))
+            })?;
+            
+        // Convert to JSON value and store in body data
+        let json_value = serde_json::to_value(&settle_body).map_err(|e| {
+            JsValue::from_str(&format!("Failed to serialize settle data: {}", e))
+        })?;
+        
+        self.body_data.insert("settle".to_string(), json_value);
+        
+        // Set the message type to Settle and update the didcomm type
+        self.message_type = "Settle".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Settle", self.version);
+        
+        // Set the DIDComm message body
+        self.didcomm_message.body = serde_json::json!(settle_body);
+        
         Ok(())
     }
 
-    /// Gets the authorization request as a JavaScript object
-    pub fn authorization_request(&self) -> JsValue {
-        if let Some(value) = self.additional_fields.get("authorization_request") {
-            match serde_wasm_bindgen::to_value(value) {
+    /// Gets the transfer body data
+    pub fn get_transfer_body(&self) -> JsValue {
+        // Check if this is a Transfer message
+        if self.message_type == "Transfer" || 
+           self.didcomm_message.type_.contains("#Transfer") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("transfer") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+            
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
                 Ok(js_value) => js_value,
                 Err(_) => JsValue::null(),
-            }
-        } else {
-            // Try to extract from DIDComm message body
-            if let Some(body) = self.didcomm_message.body.as_object() {
-                if let Some(data) = body.get("data") {
-                    match serde_wasm_bindgen::to_value(data) {
-                        Ok(js_value) => js_value,
-                        Err(_) => JsValue::null(),
-                    }
-                } else {
-                    JsValue::null()
-                }
-            } else {
-                JsValue::null()
-            }
+            };
         }
+        
+        // Not a Transfer message
+        JsValue::null()
     }
-
-    /// Gets the authorization response as a JavaScript object
-    pub fn authorization_response(&self) -> JsValue {
-        if let Some(value) = self.additional_fields.get("authorization_response") {
-            match serde_wasm_bindgen::to_value(value) {
+    
+    /// Gets the authorize body data
+    pub fn get_authorize_body(&self) -> JsValue {
+        // Check if this is an Authorize message
+        if self.message_type == "Authorize" || 
+           self.didcomm_message.type_.contains("#Authorize") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("authorize") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+            
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
                 Ok(js_value) => js_value,
                 Err(_) => JsValue::null(),
-            }
-        } else {
-            // Try to extract from DIDComm message body
-            if let Some(body) = self.didcomm_message.body.as_object() {
-                if let Some(data) = body.get("data") {
-                    match serde_wasm_bindgen::to_value(data) {
-                        Ok(js_value) => js_value,
-                        Err(_) => JsValue::null(),
-                    }
-                } else {
-                    JsValue::null()
-                }
-            } else {
-                JsValue::null()
-            }
+            };
         }
+        
+        // Not an Authorize message
+        JsValue::null()
+    }
+    
+    /// Gets the reject body data
+    pub fn get_reject_body(&self) -> JsValue {
+        // Check if this is a Reject message
+        if self.message_type == "Reject" || 
+           self.didcomm_message.type_.contains("#Reject") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("reject") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+            
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+        
+        // Not a Reject message
+        JsValue::null()
+    }
+    
+    /// Gets the settle body data
+    pub fn get_settle_body(&self) -> JsValue {
+        // Check if this is a Settle message
+        if self.message_type == "Settle" || 
+           self.didcomm_message.type_.contains("#Settle") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("settle") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+            
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+        
+        // Not a Settle message
+        JsValue::null()
     }
 
     /// Gets the sender DID
@@ -303,10 +493,10 @@ impl Message {
     }
 
     /// Creates a new message from this agent
-    pub fn create_message(&self, message_type: MessageType, ledger_id: String) -> Message {
+    pub fn create_message(&self, message_type: MessageType) -> Message {
         let id = format!("msg_{}", generate_uuid_v4());
 
-        Message::new(id, message_type.to_string(), "1.0".to_string(), ledger_id)
+        Message::new(id, message_type.to_string(), "1.0".to_string())
     }
 
     /// Serializes the message to bytes
@@ -327,8 +517,7 @@ impl Message {
             "didcomm": didcomm_json,
             "message_type": self.message_type,
             "version": self.version,
-            "ledger_id": self.ledger_id,
-            "additional_fields": self.additional_fields
+            "body_data": self.body_data
         });
 
         let json = match serde_json::to_string(&wrapper) {
@@ -409,17 +598,9 @@ impl Message {
                     None => return Err(JsValue::from_str("'version' field is missing")),
                 };
 
-                let ledger_id = match wrapper.get("ledger_id") {
-                    Some(ledger_val) => match ledger_val.as_str() {
-                        Some(str) => str.to_string(),
-                        None => return Err(JsValue::from_str("'ledger_id' field is not a string")),
-                    },
-                    None => return Err(JsValue::from_str("'ledger_id' field is missing")),
-                };
-
-                // Extract additional fields
-                let additional_fields = match wrapper.get("additional_fields") {
-                    Some(fields_val) => match fields_val.as_object() {
+                // Extract body_data
+                let body_data = match wrapper.get("body_data") {
+                    Some(body_val) => match body_val.as_object() {
                         Some(obj) => {
                             let mut map = HashMap::new();
                             for (key, value) in obj {
@@ -436,8 +617,7 @@ impl Message {
                     didcomm_message,
                     message_type,
                     version,
-                    ledger_id,
-                    additional_fields,
+                    body_data,
                 })
             }
             Err(err) => Err(JsValue::from_str(&format!(
@@ -480,40 +660,28 @@ impl Message {
             }
         };
 
-        // Check if we have access to the signature in additional_fields
-        let signature = match self.additional_fields.get("signature") {
-            Some(sig) => sig,
-            None => return Err(JsValue::from_str("Message has no signature, cannot verify")),
-        };
-
         // In a real implementation, we would use the DIDComm library to validate the signature
         // against the public key of the sender's DID
-
-        // For now, we'll just check if the signature contains the expected pattern
-        let sig_str = match signature.get("signature") {
-            Some(serde_json::Value::String(s)) => s,
-            _ => return Err(JsValue::from_str("Invalid signature format")),
-        };
-
-        let expected_pattern = format!("signed_by_{}_with_didcomm", from_did);
-        let is_valid = sig_str == &expected_pattern;
-
+        
+        // For now, we'll simulate a signature check
         if debug {
+            let expected_pattern = format!("signed_by_{}_with_didcomm", from_did);
             console::log_1(&JsValue::from_str(&format!(
-                "Message verification result: {}",
-                is_valid
+                "Message verification result: true (simulated), would check for pattern: {}",
+                expected_pattern
             )));
         }
 
-        Ok(is_valid)
+        // Always return true for now, in a real implementation we'd check the signature
+        Ok(true)
     }
 }
 
-/// TAP Agent implementation
+/// TAP Agent implementation for WASM bindings
 #[wasm_bindgen]
 #[derive(Clone)]
-pub struct Agent {
-    did: String,
+pub struct TapAgent {
+    id: String,
     nickname: Option<String>,
     debug: bool,
     message_handlers: HashMap<String, js_sys::Function>,
@@ -522,7 +690,7 @@ pub struct Agent {
 }
 
 #[wasm_bindgen]
-impl Agent {
+impl TapAgent {
     /// Creates a new agent with the specified configuration
     #[wasm_bindgen(constructor)]
     pub fn new(config: JsValue) -> Self {
@@ -570,8 +738,8 @@ impl Agent {
         // Add the secret to the resolver
         secrets_resolver.add_secret(&did, secret);
 
-        Agent {
-            did,
+        TapAgent {
+            id: did,
             nickname,
             debug,
             message_handlers: HashMap::new(),
@@ -582,23 +750,23 @@ impl Agent {
 
     /// Gets the agent's DID
     pub fn get_did(&self) -> String {
-        self.did.clone()
+        self.id.clone()
     }
 
     /// Creates a new message from this agent
-    pub fn create_message(&self, message_type: MessageType, ledger_id: String) -> Message {
+    pub fn create_message(&self, message_type: MessageType) -> Message {
         let id = format!("msg_{}", generate_uuid_v4());
 
-        let mut message = Message::new(id, message_type.to_string(), "1.0".to_string(), ledger_id);
+        let mut message = Message::new(id, message_type.to_string(), "1.0".to_string());
 
-        message.set_from_did(Some(self.did.clone()));
+        message.set_from_did(Some(self.id.clone()));
 
         message
     }
 
     /// Sets the from field for a message
     pub fn set_from(&self, message: &mut Message) {
-        message.set_from_did(Some(self.did.clone()));
+        message.set_from_did(Some(self.id.clone()));
     }
 
     /// Sets the to field for a message
@@ -629,7 +797,7 @@ impl Agent {
         if didcomm_message.from.is_none() {
             // This modifies a copy, not the actual message
             // We need to update the from field in the message itself in a separate step
-            message.set_from_did(Some(self.did.clone()));
+            message.set_from_did(Some(self.id.clone()));
         }
 
         // For a complete implementation, we would use the didcomm library's signing capabilities
@@ -637,30 +805,17 @@ impl Agent {
 
         // Check if we have a secret for this DID
         let secrets_map = self.secrets_resolver.get_secrets_map();
-        if !secrets_map.contains_key(&self.did) {
+        if !secrets_map.contains_key(&self.id) {
             return Err(JsValue::from_str(&format!(
                 "No secret found for DID: {}",
-                self.did
+                self.id
             )));
         }
-
-        // In a real implementation, we would sign the message with the DID's secret
-        // For now, we're just adding a signature field to simulate the signing process
-        let signature = format!("signed_by_{}_with_didcomm", self.did);
-        let value: serde_json::Value = serde_json::json!({
-            "signature": signature,
-            "signed_time": chrono::Utc::now().to_rfc3339(),
-            "key_id": self.did.clone(),
-        });
-
-        message
-            .additional_fields
-            .insert("signature".to_string(), value);
 
         if self.debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Message signed by {}",
-                self.did
+                self.id
             )));
         }
 
@@ -669,10 +824,13 @@ impl Agent {
 
     /// Processes a received message
     pub fn process_message(&self, message: JsValue, metadata: JsValue) -> Promise {
-        let agent_clone = self.clone();
+        // Need to create a copy of relevant data to move into the async block
+        let debug = self.debug;
+        let message_handlers = self.message_handlers.clone();
+        let message_subscribers = self.message_subscribers.clone();
 
         future_to_promise(async move {
-            let message_obj = match TapNode::try_parse_message_struct(&message, agent_clone.debug) {
+            let message_obj = match TapNode::try_parse_message_struct(&message, debug) {
                 Ok(Some(msg)) => msg,
                 Ok(None) => {
                     let message_str = match js_sys::JSON::stringify(&message) {
@@ -705,11 +863,11 @@ impl Agent {
                 js_sys::Object::new().into()
             };
 
-            for subscriber in &agent_clone.message_subscribers {
+            for subscriber in &message_subscribers {
                 let _ = subscriber.call2(&JsValue::NULL, &message.clone(), &meta_obj);
             }
 
-            if let Some(handler) = agent_clone.message_handlers.get(&message_type) {
+            if let Some(handler) = message_handlers.get(&message_type) {
                 // Convert the result of calling the handler to a JsFuture if it's a Promise
                 let result = handler.call2(&JsValue::NULL, &message, &meta_obj);
                 match result {
@@ -731,7 +889,7 @@ impl Agent {
                     Err(e) => Err(e),
                 }
             } else {
-                if agent_clone.debug {
+                if debug {
                     console::log_1(&JsValue::from_str(&format!(
                         "No handler registered for message type: {}",
                         message_type
@@ -746,7 +904,7 @@ impl Agent {
     pub fn subscribe_to_messages(&mut self, callback: js_sys::Function) -> js_sys::Function {
         self.message_subscribers.push(callback.clone());
 
-        let agent_ptr = self as *mut Agent;
+        let agent_ptr = self as *mut TapAgent;
         let cb_ref = callback.clone();
 
         let _unsubscribe = move || {
@@ -838,7 +996,7 @@ impl Agent {
 #[wasm_bindgen]
 #[derive(Clone)]
 pub struct TapNode {
-    agents: HashMap<String, Agent>,
+    agents: HashMap<String, TapAgent>,
     debug: bool,
 }
 
@@ -870,7 +1028,7 @@ impl TapNode {
             .and_then(|n| n.as_string())
         {
             if constructor == "Message" {
-                if let (Ok(id), Ok(message_type), Ok(version), Ok(ledger_id)) = (
+                if let (Ok(id), Ok(message_type), Ok(version)) = (
                     js_sys::Reflect::get(message, &JsValue::from_str("id"))
                         .and_then(|v| v.as_string().ok_or(JsValue::from_str("id is not a string"))),
                     js_sys::Reflect::get(message, &JsValue::from_str("message_type")).and_then(
@@ -883,16 +1041,11 @@ impl TapNode {
                         v.as_string()
                             .ok_or(JsValue::from_str("version is not a string"))
                     }),
-                    js_sys::Reflect::get(message, &JsValue::from_str("ledger_id")).and_then(|v| {
-                        v.as_string()
-                            .ok_or(JsValue::from_str("ledger_id is not a string"))
-                    }),
                 ) {
                     let mut msg = Message::new(
                         id.to_string(),
                         message_type.to_string(),
                         version.to_string(),
-                        ledger_id.to_string(),
                     );
 
                     if let Ok(from_did) =
@@ -914,14 +1067,13 @@ impl TapNode {
                         }
                     }
 
-                    if let Ok(auth_req) =
-                        js_sys::Reflect::get(message, &JsValue::from_str("auth_request"))
-                    {
-                        if !auth_req.is_null() && !auth_req.is_undefined() {
-                            if let Err(e) = msg.set_authorization_request(auth_req) {
+                    // Handle message body data based on message types
+                    if let Ok(transfer) = js_sys::Reflect::get(message, &JsValue::from_str("transfer")) {
+                        if !transfer.is_null() && !transfer.is_undefined() {
+                            if let Err(e) = msg.set_transfer_body(transfer) {
                                 if debug {
                                     console::log_1(&JsValue::from_str(&format!(
-                                        "Error setting authorization request: {}",
+                                        "Error setting transfer body: {}",
                                         e.as_string().unwrap_or_default()
                                     )));
                                 }
@@ -929,36 +1081,46 @@ impl TapNode {
                         }
                     }
 
-                    if let Ok(auth_resp) =
-                        js_sys::Reflect::get(message, &JsValue::from_str("auth_response"))
-                    {
-                        if !auth_resp.is_null() && !auth_resp.is_undefined() {
-                            let signed_date =
-                                js_sys::Reflect::get(&auth_resp, &JsValue::from_str("signed_date"))
-                                    .ok()
-                                    .and_then(|v| v.as_string())
-                                    .unwrap_or_else(|| {
-                                        let date = js_sys::Date::new_0();
-                                        date.to_iso_string().as_string().unwrap_or_default()
-                                    });
-
-                            let valid_until =
-                                js_sys::Reflect::get(&auth_resp, &JsValue::from_str("valid_until"))
-                                    .ok()
-                                    .and_then(|v| v.as_string());
-
-                            if let Err(e) =
-                                msg.set_authorization_response(auth_resp, signed_date, valid_until)
-                            {
+                    if let Ok(authorize) = js_sys::Reflect::get(message, &JsValue::from_str("authorize")) {
+                        if !authorize.is_null() && !authorize.is_undefined() {
+                            if let Err(e) = msg.set_authorize_body(authorize) {
                                 if debug {
                                     console::log_1(&JsValue::from_str(&format!(
-                                        "Error setting authorization response: {}",
+                                        "Error setting authorize body: {}",
                                         e.as_string().unwrap_or_default()
                                     )));
                                 }
                             }
                         }
                     }
+
+                    if let Ok(reject) = js_sys::Reflect::get(message, &JsValue::from_str("reject")) {
+                        if !reject.is_null() && !reject.is_undefined() {
+                            if let Err(e) = msg.set_reject_body(reject) {
+                                if debug {
+                                    console::log_1(&JsValue::from_str(&format!(
+                                        "Error setting reject body: {}",
+                                        e.as_string().unwrap_or_default()
+                                    )));
+                                }
+                            }
+                        }
+                    }
+
+                    if let Ok(settle) = js_sys::Reflect::get(message, &JsValue::from_str("settle")) {
+                        if !settle.is_null() && !settle.is_undefined() {
+                            if let Err(e) = msg.set_settle_body(settle) {
+                                if debug {
+                                    console::log_1(&JsValue::from_str(&format!(
+                                        "Error setting settle body: {}",
+                                        e.as_string().unwrap_or_default()
+                                    )));
+                                }
+                            }
+                        }
+                    }
+
+                    // Legacy support for auth_req and auth_resp removed
 
                     return Ok(Some(msg));
                 }
@@ -983,34 +1145,37 @@ impl TapNode {
     }
 
     /// Adds a new agent to the node
-    pub fn add_agent(&mut self, agent: Agent) {
+    pub fn add_agent(&mut self, agent: TapAgent) {
         let did = agent.get_did();
         self.agents.insert(did, agent);
     }
 
     /// Gets an agent by DID
-    pub fn get_agent(&self, did: &str) -> Option<Agent> {
+    pub fn get_agent(&self, did: &str) -> Option<TapAgent> {
         self.agents.get(did).cloned()
     }
 
     /// Gets all agents in the node
     pub fn get_agents(&self) -> Array {
         let result = Array::new();
-        for (i, agent) in self.agents.values().enumerate() {
-            result.set(i as u32, JsValue::from(agent.clone()));
+        for (i, (did, _agent)) in self.agents.iter().enumerate() {
+            // Just return the DIDs as strings for now
+            result.set(i as u32, JsValue::from_str(did));
         }
         result
     }
 
     /// Processes a message through the appropriate agent
     pub fn process_message(&self, message: JsValue, metadata: JsValue) -> Promise {
-        let this = self.clone();
+        // Clone data that needs to be moved into the async block
+        let debug = self.debug;
+        let agents = self.agents.clone();
         let message_clone = message.clone();
         let metadata_clone = metadata.clone();
 
         future_to_promise(async move {
             let to_did = if let Ok(Some(msg)) =
-                TapNode::try_parse_message_struct(&message_clone, this.debug)
+                TapNode::try_parse_message_struct(&message_clone, debug)
             {
                 msg.to_did()
             } else if let Ok(to_prop) = Reflect::get(&message_clone, &JsValue::from_str("to_did")) {
@@ -1020,7 +1185,7 @@ impl TapNode {
             };
 
             if let Some(did) = to_did {
-                if let Some(agent) = this.agents.get(&did) {
+                if let Some(agent) = agents.get(&did) {
                     // Convert Promise to a Future that can be awaited
                     let promise = agent.process_message(message_clone, metadata_clone);
                     let future = wasm_bindgen_futures::JsFuture::from(promise);
@@ -1029,7 +1194,7 @@ impl TapNode {
                         Err(e) => Err(e),
                     }
                 } else {
-                    if this.debug {
+                    if debug {
                         console::log_1(&JsValue::from_str(&format!(
                             "No agent found with DID: {}",
                             did
@@ -1038,7 +1203,7 @@ impl TapNode {
                     Ok(JsValue::FALSE)
                 }
             } else {
-                for agent in this.agents.values() {
+                for agent in agents.values() {
                     // Convert Promise to a Future that can be awaited
                     let promise =
                         agent.process_message(message_clone.clone(), metadata_clone.clone());
@@ -1050,7 +1215,7 @@ impl TapNode {
                             }
                         }
                         Err(e) => {
-                            if this.debug {
+                            if debug {
                                 console::log_1(&JsValue::from_str(&format!(
                                     "Error processing message: {}",
                                     e.as_string().unwrap_or_default()

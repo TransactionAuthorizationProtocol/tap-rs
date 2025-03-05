@@ -129,7 +129,7 @@ Deno.test("TapNode - Send message between agents", async () => {
   
   // Register a message handler for Bob
   let messageReceived = false;
-  bobAgent.registerHandler(MessageType.PING, async () => {
+  bobAgent.registerHandler(MessageType.TRANSFER, async () => {
     messageReceived = true;
   });
   
@@ -139,8 +139,7 @@ Deno.test("TapNode - Send message between agents", async () => {
   
   // Create a message
   const message = new Message({
-    type: MessageType.PING,
-    ledgerId: "test-ledger",
+    type: MessageType.TRANSFER,
   });
   
   // Send message from Alice to Bob
@@ -178,13 +177,11 @@ Deno.test("TapNode - Subscribe to node messages", async () => {
   
   // Create and send two messages
   const message1 = new Message({
-    type: MessageType.PING,
-    ledgerId: "test-ledger",
+    type: MessageType.TRANSFER,
   });
   
   const message2 = new Message({
-    type: MessageType.PING,
-    ledgerId: "test-ledger",
+    type: MessageType.TRANSFER,
   });
   
   await node.sendMessage(aliceDID, bobDID, message1);
@@ -197,8 +194,7 @@ Deno.test("TapNode - Subscribe to node messages", async () => {
   unsubscribe();
   
   const message3 = new Message({
-    type: MessageType.PING,
-    ledgerId: "test-ledger",
+    type: MessageType.TRANSFER,
   });
   
   await node.sendMessage(aliceDID, bobDID, message3);

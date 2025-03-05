@@ -55,16 +55,13 @@ async function runMessageSuite() {
   const bobDID = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
   
   // Create message instances for benchmarking
-  const authRequest = new Message({
-    type: MessageType.AUTHORIZATION_REQUEST,
+  const authMessage = new Message({
+    type: MessageType.AUTHORIZE,
   });
   
-  authRequest.setAuthorizationRequestData({
-    transactionHash: "0x1234567890abcdef",
-    sender: "0xAliceSender",
-    receiver: "0xBobReceiver",
-    amount: "100.0",
-    asset: "BTC",
+  authMessage.setAuthorizeData({
+    transfer_id: "msg_1234567890abcdef",
+    note: "Benchmark authorization"
   });
   
   const transfer = new Message({
@@ -74,30 +71,43 @@ async function runMessageSuite() {
   transfer.setTransferData({
     asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F",
     amount: "100.0",
-    originatorDid: aliceDID,
-    beneficiaryDid: bobDID,
+    originator: {
+      "@id": aliceDID,
+      role: "originator"
+    },
+    beneficiary: {
+      "@id": bobDID,
+      role: "beneficiary"
+    },
+    agents: [
+      {
+        "@id": aliceDID,
+        role: "originator"
+      },
+      {
+        "@id": bobDID,
+        role: "beneficiary"
+      }
+    ],
     memo: "Payment for services"
   });
   
   // Benchmarks
   await benchmark('Create message', () => {
     const msg = new Message({
-      type: MessageType.AUTHORIZATION_REQUEST,
+      type: MessageType.AUTHORIZE,
     });
-    msg.setAuthorizationRequestData({
-      transactionHash: "0x1234567890abcdef",
-      sender: "0xSender",
-      receiver: "0xReceiver",
-      amount: "100.0",
-      asset: "BTC",
+    msg.setAuthorizeData({
+      transfer_id: "msg_1234567890abcdef",
+      note: "Benchmark test"
     });
   });
   
   await benchmark('Serialize message to JSON', () => {
-    const json = authRequest.toJSON();
+    const json = authMessage.toJSON();
   });
   
-  const jsonStr = authRequest.toJSON();
+  const jsonStr = authMessage.toJSON();
   await benchmark('Deserialize message from JSON', () => {
     const msg = Message.fromJSON(jsonStr);
   });
@@ -109,8 +119,24 @@ async function runMessageSuite() {
     msg.setTransferData({
       asset: "eip155:1/erc20:0xToken",
       amount: "10.0",
-      originatorDid: aliceDID,
-      beneficiaryDid: bobDID,
+      originator: {
+        "@id": aliceDID,
+        role: "originator"
+      },
+      beneficiary: {
+        "@id": bobDID,
+        role: "beneficiary"
+      },
+      agents: [
+        {
+          "@id": aliceDID,
+          role: "originator" 
+        },
+        {
+          "@id": bobDID,
+          role: "beneficiary"
+        }
+      ]
     });
   });
 }
@@ -129,16 +155,13 @@ async function runAgentSuite() {
     nickname: "Bob"
   });
   
-  const authRequest = new Message({
-    type: MessageType.AUTHORIZATION_REQUEST,
+  const authMessage = new Message({
+    type: MessageType.AUTHORIZE,
   });
   
-  authRequest.setAuthorizationRequestData({
-    transactionHash: "0x1234567890abcdef",
-    sender: "0xAliceSender",
-    receiver: "0xBobReceiver",
-    amount: "100.0",
-    asset: "BTC",
+  authMessage.setAuthorizeData({
+    transfer_id: "msg_1234567890abcdef",
+    note: "Agent benchmark authorization"
   });
   
   // Benchmarks
@@ -155,7 +178,7 @@ async function runAgentSuite() {
   // Mock send message (don't actually send)
   await benchmark('Prepare message', () => {
     // We can't directly call private method, so simulate it
-    const msg = authRequest.toJSON();
+    const msg = authMessage.toJSON();
     const parsed = JSON.parse(msg);
   });
 }

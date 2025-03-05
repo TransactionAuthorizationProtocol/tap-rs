@@ -44,7 +44,8 @@ tap-core = { path = "../../tap-core" }
 tap-agent = { path = "../../tap-agent" }
 tap-node = { path = "../../tap-node" }
 didcomm = "0.3"
-uuid = { version = "1.3", features = ["v4", "js"] }
+uuid = { version = "1.5", features = ["v4", "js"] }
+getrandom = { version = "0.2", features = ["js"] }
 
 [dependencies.web-sys]
 version = "0.3"
@@ -104,9 +105,14 @@ pub fn start() -> Result<(), JsValue> {
 /// Message type enum in JavaScript
 #[wasm_bindgen]
 pub enum MessageType {
-    AuthorizationRequest = 0,
-    AuthorizationResponse = 1,
-    Ping = 2,
+    Transfer = 0,
+    RequestPresentation = 1,
+    Presentation = 2,
+    Authorize = 3,
+    Reject = 4,
+    Settle = 5,
+    AddAgents = 6,
+    Error = 7,
 }
 
 /// Configuration for a TAP Node
@@ -184,77 +190,33 @@ pub struct Message {
     pub id: String,
     pub message_type: String,
     pub version: String,
-    pub ledger_id: String,
-    pub authorization_request: Option<AuthorizationRequest>,
-    pub authorization_response: Option<AuthorizationResponse>,
 }
 
-/// Authorization Request structure
-#[derive(Serialize, Deserialize)]
-pub struct AuthorizationRequest {
-    pub transaction_hash: String,
-    pub sender: String,
-    pub receiver: String,
-    pub amount: String,
-}
-
-/// Authorization Response structure
-#[derive(Serialize, Deserialize)]
-pub struct AuthorizationResponse {
-    pub transaction_hash: String,
-    pub authorization_result: bool,
-    pub reason: Option<String>,
-}
 
 #[wasm_bindgen]
 impl Message {
     /// Creates a new message
     #[wasm_bindgen(constructor)]
-    pub fn new(message_type: MessageType, ledger_id: String) -> Self {
+    pub fn new(message_type: MessageType) -> Self {
         let id = "msg_".to_string() + &uuid::Uuid::new_v4().to_string();
         let message_type_str = match message_type {
-            MessageType::AuthorizationRequest => "TAP_AUTHORIZATION_REQUEST".to_string(),
-            MessageType::AuthorizationResponse => "TAP_AUTHORIZATION_RESPONSE".to_string(),
-            MessageType::Ping => "TAP_PING".to_string(),
+            MessageType::Transfer => "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+            MessageType::RequestPresentation => "https://tap.rsvp/schema/1.0#RequestPresentation".to_string(),
+            MessageType::Presentation => "https://tap.rsvp/schema/1.0#Presentation".to_string(),
+            MessageType::Authorize => "https://tap.rsvp/schema/1.0#Authorize".to_string(),
+            MessageType::Reject => "https://tap.rsvp/schema/1.0#Reject".to_string(),
+            MessageType::Settle => "https://tap.rsvp/schema/1.0#Settle".to_string(),
+            MessageType::AddAgents => "https://tap.rsvp/schema/1.0#AddAgents".to_string(),
+            MessageType::Error => "https://tap.rsvp/schema/1.0#Error".to_string(),
         };
 
         Self {
             id,
             message_type: message_type_str,
             version: "1.0".to_string(),
-            ledger_id,
-            authorization_request: None,
-            authorization_response: None,
         }
     }
 
-    /// Sets the authorization request data
-    pub fn set_authorization_request(&mut self, 
-        transaction_hash: String, 
-        sender: String, 
-        receiver: String, 
-        amount: String
-    ) {
-        self.authorization_request = Some(AuthorizationRequest {
-            transaction_hash,
-            sender,
-            receiver,
-            amount,
-        });
-    }
-
-    /// Sets the authorization response data
-    pub fn set_authorization_response(&mut self, 
-        transaction_hash: String, 
-        authorization_result: bool, 
-        reason: Option<String>
-    ) {
-        self.authorization_response = Some(AuthorizationResponse {
-            transaction_hash,
-            authorization_result,
-            reason,
-        });
-    }
 }
 
 /// TAP Agent implementation
@@ -296,9 +258,14 @@ impl Agent {
     /// Registers a message handler function
     pub fn register_message_handler(&mut self, message_type: MessageType, handler: js_sys::Function) {
         let message_type_str = match message_type {
-            MessageType::AuthorizationRequest => "TAP_AUTHORIZATION_REQUEST".to_string(),
-            MessageType::AuthorizationResponse => "TAP_AUTHORIZATION_RESPONSE".to_string(),
-            MessageType::Ping => "TAP_PING".to_string(),
+            MessageType::Transfer => "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+            MessageType::RequestPresentation => "https://tap.rsvp/schema/1.0#RequestPresentation".to_string(),
+            MessageType::Presentation => "https://tap.rsvp/schema/1.0#Presentation".to_string(),
+            MessageType::Authorize => "https://tap.rsvp/schema/1.0#Authorize".to_string(),
+            MessageType::Reject => "https://tap.rsvp/schema/1.0#Reject".to_string(),
+            MessageType::Settle => "https://tap.rsvp/schema/1.0#Settle".to_string(),
+            MessageType::AddAgents => "https://tap.rsvp/schema/1.0#AddAgents".to_string(),
+            MessageType::Error => "https://tap.rsvp/schema/1.0#Error".to_string(),
         };
 
         self.message_handlers.insert(message_type_str, handler);

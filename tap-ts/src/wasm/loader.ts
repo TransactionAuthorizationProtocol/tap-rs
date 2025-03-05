@@ -44,44 +44,94 @@ type WasmEventListener = (event: WasmEvent, data?: any) => void;
 function createMockModule(): WasmModule {
   const mockModule: WasmModule = {
     MessageType: {
-      Ping: 1,
-      Pong: 2,
-      AuthorizationRequest: 3,
-      AuthorizationResponse: 4,
+      Transfer: 1,
+      RequestPresentation: 2,
+      Presentation: 3,
+      Authorize: 4,
+      Reject: 5,
+      Settle: 6,
+      AddAgents: 7,
+      Error: 8,
       Unknown: 0,
     },
     Message: class MockMessage {
-      constructor(public type: number, public ledgerId?: string) {}
-      set_from(did: string) {}
-      set_to(did: string) {}
-      get_from() { return "did:example:sender"; }
-      get_to() { return "did:example:recipient"; }
-      set_authorization_request() {}
-      get_authorization_request() { 
+      private _id: string;
+      private _message_type: string;
+      private _version: string;
+      
+      constructor(id: string, message_type: string, version: string) {
+        this._id = id;
+        this._message_type = message_type;
+        this._version = version;
+      }
+      
+      set_from_did(did: string) {}
+      set_to_did(did: string) {}
+      from_did() { return "did:key:alice"; }
+      to_did() { return "did:key:bob"; }
+      id() { return this._id; }
+      message_type() { return this._message_type; }
+      version() { return this._version; }
+      // Standard TAP message methods 
+      set_transfer_body() {}
+      get_transfer_body() {
         return {
-          transaction_hash: "mocked-hash",
-          source_address: "mocked-source",
-          destination_address: "mocked-destination",
-          amount: "100",
+          asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          originator: {
+            "@id": "did:key:alice",
+            "role": "originator"
+          },
+          amount: "100.00",
+          agents: [
+            {
+              "@id": "did:key:alice",
+              "role": "originator"
+            }
+          ]
         };
       }
-      set_authorization_response() {}
-      get_authorization_response() {
+      
+      set_authorize_body() {}
+      get_authorize_body() {
         return {
-          transaction_hash: "mocked-hash",
-          authorization_result: "true",
-          reason: "mocked-reason",
+          transfer_id: "test-transfer-id",
+          note: "Test authorization"
         };
       }
+      
+      set_reject_body() {}
+      get_reject_body() {
+        return {
+          transfer_id: "mocked-transfer-id",
+          code: "user-rejected",
+          description: "User rejected the transaction"
+        };
+      }
+      
+      set_settle_body() {}
+      get_settle_body() {
+        return {
+          transfer_id: "mocked-transfer-id",
+          transaction_id: "mocked-transaction-id",
+          transaction_hash: "mocked-transaction-hash"
+        };
+      }
+      
+      verify_message() { return true; }
       to_bytes() { return new Uint8Array([1, 2, 3, 4]); }
-      static from_bytes() { return new this(1); }
+      static fromBytes() { return new this("msg_id", "https://tap.rsvp/schema/1.0#Transfer", "1.0"); }
+      static fromJson() { return new this("msg_id", "https://tap.rsvp/schema/1.0#Transfer", "1.0"); }
     },
     Agent: class MockAgent {
       callbacks: Array<(message: any) => void> = [];
       constructor(public config: any) {}
       get_did() { return this.config.did || "did:example:mock"; }
-      create_message() { 
-        return new mockModule.Message(1);
+      create_message(type: string) { 
+        return new mockModule.Message(
+          `msg_${crypto.randomUUID()}`,
+          type,
+          "1.0"
+        );
       }
       subscribe_to_messages(callback: (message: any) => void) {
         this.callbacks.push(callback);

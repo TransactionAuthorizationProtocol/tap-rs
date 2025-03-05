@@ -70,49 +70,67 @@ const bobUnsubscribe = bobAgent.subscribeToMessages((message, metadata) => {
   console.log("Bob received message:", message.id);
   console.log("From:", metadata.fromDid);
   
-  // If it's an authorization request, automatically respond
-  if (message.type === MessageType.AUTHORIZATION_REQUEST) {
-    console.log("Authorization request received, sending response...");
+  // If it's a transfer message, automatically authorize it
+  if (message.type === MessageType.TRANSFER) {
+    console.log("Transfer message received, sending authorize response...");
     
-    // Create a response message
-    const response = new Message({
-      type: MessageType.AUTHORIZATION_RESPONSE,
-      correlation: message.id,
-    });
-    
-    // Set authorization response data
-    response.setAuthorizationResponseData({
-      transactionHash: message.getAuthorizationRequestData()?.transactionHash || "",
-      approved: true,
-      reason: "Automatic approval",
-    });
-    
-    // Send the response
-    bobAgent.sendMessage(metadata.fromDid || "", response)
-      .then(() => console.log("Response sent"))
-      .catch((error) => console.error("Error sending response:", error));
+    const transferData = message.getTransferData();
+    if (transferData) {
+      // Create an authorize response message
+      const response = new Message({
+        type: MessageType.AUTHORIZE,
+        correlation: message.id,
+      });
+      
+      // Set authorize data
+      response.setAuthorizeData({
+        transfer_id: message.id,
+        note: "Automatic authorization",
+      });
+      
+      // Send the response
+      bobAgent.sendMessage(metadata.fromDid || "", response)
+        .then(() => console.log("Authorization sent"))
+        .catch((error) => console.error("Error sending authorization:", error));
+    }
   }
 });
 
-// Create a TAP authorization request message
-console.log("Creating authorization request message...");
-const authRequest = new Message({
-  type: MessageType.AUTHORIZATION_REQUEST,
+// Create a TAP transfer message
+console.log("Creating transfer message...");
+const transferMessage = new Message({
+  type: MessageType.TRANSFER,
 });
 
-// Set the authorization request data
-authRequest.setAuthorizationRequestData({
-  transactionHash: "0x1234567890abcdef",
-  sender: "0xAliceSender",
-  receiver: "0xBobReceiver",
-  amount: "100.0",
-  asset: "BTC",
+// Set the transfer data following TAIP-3
+transferMessage.setTransferData({
+  asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  originator: {
+    "@id": aliceDID,
+    role: "originator"
+  },
+  amount: "100.00",
+  beneficiary: {
+    "@id": bobDID,
+    role: "beneficiary"
+  },
+  agents: [
+    {
+      "@id": aliceDID,
+      role: "originator"
+    },
+    {
+      "@id": bobDID,
+      role: "beneficiary"
+    }
+  ],
+  memo: "Example transfer"
 });
 
 // Send the message from Alice to Bob
 console.log("Sending message from Alice to Bob...");
 try {
-  await aliceAgent.sendMessage(bobDID, authRequest);
+  await aliceAgent.sendMessage(bobDID, transferMessage);
   console.log("Message sent");
 } catch (error) {
   console.error("Error sending message:", error);

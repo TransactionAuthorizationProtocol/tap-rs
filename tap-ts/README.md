@@ -98,22 +98,64 @@ const bobAgent = new Agent({
 node.registerAgent(aliceAgent);
 node.registerAgent(bobAgent);
 
-// Create a TAP authorization request message
-const authRequest = new Message({
-  type: MessageType.AUTHORIZATION_REQUEST,
+// Create a TAP transfer message
+const transferMessage = new Message({
+  type: MessageType.TRANSFER,
 });
 
-// Set the authorization request data
-authRequest.setAuthorizationRequestData({
-  transactionHash: "0x1234567890abcdef",
-  sender: "0xAliceSender",
-  receiver: "0xBobReceiver",
-  amount: "100.0",
-  asset: "BTC",
+// Set the transfer data following TAIP-3
+transferMessage.setTransferData({
+  asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  originator: {
+    "@id": aliceAgent.getDid(),
+    role: "originator"
+  },
+  amount: "100.00",
+  beneficiary: {
+    "@id": bobAgent.getDid(),
+    role: "beneficiary"
+  },
+  agents: [
+    {
+      "@id": aliceAgent.getDid(),
+      role: "originator"
+    },
+    {
+      "@id": bobAgent.getDid(),
+      role: "beneficiary"
+    }
+  ],
+  memo: "Example transfer"
 });
 
 // Send the message
-await aliceAgent.sendMessage(bobAgent.did, authRequest);
+await aliceAgent.sendMessage(bobAgent.getDid(), transferMessage);
+
+// On Bob's side, set up a handler for transfer messages
+bobAgent.registerHandler(MessageType.TRANSFER, async (message, metadata) => {
+  console.log("Received transfer message:", message.getId());
+  
+  const transferData = message.getTransferData();
+  if (transferData) {
+    console.log("Transfer details:", transferData);
+    
+    // Create an authorize response
+    const authorizeMessage = new Message({
+      type: MessageType.AUTHORIZE,
+      correlation: message.getId(),
+    });
+    
+    // Set authorize data
+    authorizeMessage.setAuthorizeData({
+      transfer_id: message.getId(),
+      note: "Transfer authorized"
+    });
+    
+    // Send the authorization response
+    await bobAgent.sendMessage(metadata?.senderDid || "", authorizeMessage);
+    console.log("Authorization sent");
+  }
+});
 ```
 
 ### DID Resolution
@@ -161,16 +203,23 @@ console.log("Available keys:", keysInfo);
 
 // Create and sign a message
 const message = new Message({
-  type: MessageType.AUTHORIZATION_REQUEST,
+  type: MessageType.TRANSFER,
 });
 
-// Set message data
-message.setAuthorizationRequestData({
-  transactionHash: "0x1234567890abcdef",
-  sender: "0xAliceSender",
-  receiver: "0xBobReceiver",
-  amount: "100.0",
-  asset: "BTC",
+// Set transfer data
+message.setTransferData({
+  asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+  originator: {
+    "@id": agent.getDid(),
+    role: "originator"
+  },
+  amount: "100.00",
+  agents: [
+    {
+      "@id": agent.getDid(),
+      role: "originator"
+    }
+  ]
 });
 
 // Sign the message
