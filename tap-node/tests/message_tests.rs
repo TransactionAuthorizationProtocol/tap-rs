@@ -89,8 +89,8 @@ fn create_test_agent(did: &str) -> Arc<DefaultAgent> {
 fn create_test_error_body(_from_did: &str, _to_did: &str) -> ErrorBody {
     ErrorBody {
         code: "TEST_ERROR".to_string(),
-        description: "This is a test error message".to_string(),
-        related_message_id: None,
+        message: "This is a test error message".to_string(),
+        caused_by: None,
         metadata: HashMap::new(),
     }
 }
@@ -272,8 +272,8 @@ async fn test_error_message() {
     // Create an error message
     let error_body = ErrorBody {
         code: "TEST001".to_string(),
-        description: "Test error message".to_string(),
-        related_message_id: None,
+        message: "Test error message".to_string(),
+        caused_by: None,
         metadata: HashMap::new(),
     };
 
@@ -292,9 +292,9 @@ async fn test_error_message() {
         error_json.get("code").unwrap().as_str().unwrap(),
         "TEST001"
     );
-    assert!(error_json.get("description").is_some());
+    assert!(error_json.get("message").is_some());
     assert_eq!(
-        error_json.get("description").unwrap().as_str().unwrap(),
+        error_json.get("message").unwrap().as_str().unwrap(),
         "Test error message"
     );
 }

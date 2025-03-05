@@ -97,7 +97,7 @@ fn test_full_flow() {
     let auth_message = auth
         .to_didcomm()
         .expect("Failed to convert authorize to DIDComm message");
-    assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#Authorize");
+    assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
     // Generate settle response
     let settle = original_message.settle(
@@ -112,7 +112,7 @@ fn test_full_flow() {
     let settle_message = settle
         .to_didcomm()
         .expect("Failed to convert settle to DIDComm message");
-    assert_eq!(settle_message.type_, "https://tap.rsvp/schema/1.0#Settle");
+    assert_eq!(settle_message.type_, "https://tap.rsvp/schema/1.0#settle");
 }
 
 // Helper function to create a test Transfer message

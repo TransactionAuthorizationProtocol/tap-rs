@@ -23,55 +23,77 @@ tap-msg = "0.1.0"
 ### Creating a TAP Message
 
 ```rust
-use tap_msg::message::{TapMessageEnvelope, TapMessageType};
-use serde_json::json;
+use tap_msg::didcomm::Message;
+use tap_msg::message::types::{Transfer, Participant};
+use tap_msg::message::tap_message_trait::{TapMessageBody, TapMessage};
+use tap_caip::AssetId;
+use std::collections::HashMap;
 
-async fn create_message_example() {
-    // Create a new message with the builder pattern
-    let message = TapMessageEnvelope::new()
-        .with_message_type(TapMessageType::TransactionProposal)
-        .with_body(json!({
-            "transaction": {
-                "amount": "100.00",
-                "currency": "USD",
-                "sender": "did:example:sender",
-                "receiver": "did:example:receiver"
-            }
-        }))
-        .with_from("did:example:sender")
-        .with_to("did:example:receiver")
-        .build();
+fn create_message_example() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a Transfer message body
+    let asset = "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7"
+        .parse::<AssetId>()?;
+    
+    let originator = Participant {
+        id: "did:example:sender".to_string(),
+        role: Some("originator".to_string()),
+    };
+    
+    let beneficiary = Participant {
+        id: "did:example:receiver".to_string(),
+        role: Some("beneficiary".to_string()),
+    };
+    
+    let transfer = Transfer {
+        asset,
+        originator,
+        beneficiary: Some(beneficiary),
+        amount: "100.0".to_string(),
+        agents: vec![],
+        settlement_id: None,
+        memo: Some("Test transfer".to_string()),
+        metadata: HashMap::new(),
+    };
+    
+    // Create a DIDComm message from the transfer
+    let message = transfer.to_didcomm_with_route(
+        Some("did:example:sender"), 
+        ["did:example:receiver"].iter().copied()
+    )?;
     
     // Validate the message
-    message.validate().expect("Message is valid");
+    message.validate()?;
     
     // Convert to JSON
-    let json_message = serde_json::to_string(&message).expect("Serialization succeeds");
+    let json_message = serde_json::to_string(&message)?;
     println!("Message: {}", json_message);
+    
+    Ok(())
 }
 ```
 
 ### Parsing and Validating a TAP Message
 
 ```rust
-use tap_msg::message::{TapMessageEnvelope, Validate};
-use serde_json::Value;
+use tap_msg::didcomm::Message;
+use tap_msg::message::tap_message_trait::TapMessage;
+use tap_msg::message::types::Transfer;
 
 fn parse_message_example(json_string: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Parse JSON string into a TapMessageEnvelope
-    let message: TapMessageEnvelope = serde_json::from_str(json_string)?;
+    // Parse JSON string into a DIDComm Message
+    let message: Message = serde_json::from_str(json_string)?;
     
-    // Validate the message
+    // Validate the message is a valid TAP message
     message.validate()?;
     
     // Access message fields
     println!("Message ID: {}", message.id);
-    println!("Message Type: {:?}", message.message_type);
+    println!("Message Type: {}", message.type_);
     
-    // Parse the body into a specific type
-    if let Some(body) = &message.body {
-        let transaction: Value = serde_json::from_value(body.clone())?;
-        println!("Transaction details: {:#?}", transaction);
+    // Extract the message body as a specific TAP type
+    if message.is_tap_message() {
+        let transfer: Transfer = message.body_as()?;
+        println!("Transfer details: {:#?}", transfer);
     }
     
     Ok(())
@@ -227,14 +249,22 @@ TAP supports various message types, including:
 The library uses a custom error type for consistent error handling:
 
 ```rust
-fn handle_message(message: &TapMessageEnvelope) {
-    match message.message_type {
-        TapMessageType::TransactionProposal => {
-            // Handle transaction proposal
-            println!("Received transaction proposal with ID: {}", message.id);
+use tap_msg::didcomm::Message;
+use tap_msg::message::tap_message_trait::TapMessage;
+
+fn handle_message(message: &Message) {
+    if !message.is_tap_message() {
+        println!("Not a TAP message");
+        return;
+    }
+    
+    match message.type_.as_str() {
+        "https://tap.rsvp/schema/1.0#transfer" => {
+            // Handle transfer message
+            println!("Received transfer with ID: {}", message.id);
         }
         // Handle other message types
-        _ => println!("Received message with type: {:?}", message.message_type),
+        _ => println!("Received message with type: {}", message.type_),
     }
 }
 ```

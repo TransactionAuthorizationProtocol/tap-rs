@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::types::{Participant, Transfer};
-use tap_msg::message::validation::validate_transfer_body;
 
 #[test]
 fn test_valid_transfer_body() {
@@ -32,7 +32,7 @@ fn test_valid_transfer_body() {
     };
 
     // Validate the transfer body - no error should be returned
-    assert!(validate_transfer_body(&body).is_ok());
+    assert!(body.validate().is_ok());
 }
 
 #[test]
@@ -67,7 +67,7 @@ fn test_transfer_with_empty_asset() {
     };
 
     // Validation should pass
-    assert!(validate_transfer_body(&body).is_ok());
+    assert!(body.validate().is_ok());
 }
 
 #[test]
@@ -97,5 +97,5 @@ fn test_transfer_with_empty_amount() {
     };
 
     // Validation should fail for empty amount
-    assert!(validate_transfer_body(&body).is_err());
+    assert!(body.validate().is_err());
 }

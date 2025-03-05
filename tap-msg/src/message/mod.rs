@@ -10,7 +10,7 @@ pub mod validation;
 // Re-export specific types to avoid ambiguity
 pub use types::{
     AddAgents, Attachment, AttachmentData, Authorize, ErrorBody, Participant, Presentation, Reject,
-    RequestPresentation, Settle, TapMessageType, Transfer, Validate,
+    RequestPresentation, Settle, Transfer, Validate,
 };
 
 // Re-export the TapMessage trait and related functionality

@@ -18,26 +18,24 @@ pub mod utils;
 
 // Re-export public types for easier access
 pub use error::{Error, Result};
-pub use message::types::TapMessageEnvelope;
 pub use message::{
     create_tap_message, AddAgents, Attachment, AttachmentData, Authorize, ErrorBody, Participant,
-    Presentation, Reject, RequestPresentation, Settle, TapMessageBody, TapMessageType, Transfer,
-    Validate,
+    Presentation, Reject, RequestPresentation, Settle, TapMessageBody, Transfer, Validate,
 };
 
 // Conditional compilation for WASM targets
 #[cfg(target_arch = "wasm32")]
 pub mod wasm {
     //! WASM-specific functionality
-    //!
-    //! This module provides functionality for using TAP Core in WebAssembly environments.
 
     use wasm_bindgen::prelude::*;
 
-    /// Initialize the WASM module
+    use super::*;
+
+    /// Initialize the WASM module.
     #[wasm_bindgen(start)]
     pub fn init() {
-        // Set up panic hook for better debugging
+        #[cfg(feature = "console_error_panic_hook")]
         console_error_panic_hook::set_once();
     }
 }
