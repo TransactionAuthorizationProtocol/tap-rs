@@ -42,3 +42,4 @@ Cargo.lock
 Thumbs.db
 .windsurfrules
 CLAUDE.md
+tap-ts/package.json
