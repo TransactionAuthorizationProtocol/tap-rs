@@ -1,95 +1,134 @@
-# tap-http
+# TAP HTTP
 
-A HTTP server implementation for the Transaction Authorization Protocol (TAP) that uses the DIDComm v2 protocol for message exchange.
+HTTP DIDComm server implementation for the Transaction Authorization Protocol (TAP).
 
 ## Features
 
-- Exposes a HTTP endpoint to receive DIDComm messages (`/didcomm`)
-- Forwards received messages to a TAP Node for processing
-- Outbound message delivery to external endpoints
-- Implements response handling according to DIDComm conventions
-- Provides health checking endpoint (`/health`)
-- Configurable for TLS and rate limiting
+- **DIDComm HTTP Endpoint**: Exposes a secure HTTP endpoint for DIDComm messaging
+- **Integration with tap-node**: Seamlessly forwards messages to a tap-node instance
+- **Message Validation**: Validates incoming DIDComm messages
+- **Response Handling**: Proper handling of responses and acknowledgments
+- **Outgoing Message Delivery**: HTTP client for sending outgoing DIDComm messages
+- **Security**: Support for HTTPS/TLS and basic rate limiting
 
 ## Usage
 
-### Server Setup
-
 ```rust
-use tap_http::{TapHttpConfig, TapHttpServer};
-use tap_node::{TapNode, NodeConfig};
+use tap_http::server::TapHttpServer;
+use tap_node::node::{TapNode, DefaultTapNode};
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
+use tap_agent::did::DefaultDIDResolver;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize logging
-    env_logger::init();
+    // Set up DID and secret resolvers
+    let did_resolver = Arc::new(DefaultDIDResolver::new());
+    let secret_resolver = Arc::new(BasicSecretResolver::new());
 
-    // Configure the HTTP server
-    let config = TapHttpConfig {
-        host: "127.0.0.1".to_string(),
-        port: 8000,
-        didcomm_endpoint: "/didcomm".to_string(),
-        ..TapHttpConfig::default()
-    };
+    // Create a TAP node
+    let mut node = DefaultTapNode::new(did_resolver.clone(), secret_resolver.clone());
 
-    // Create a TAP Node to handle message processing
-    let node = TapNode::new(NodeConfig::default());
-    
-    // Create and start the HTTP server
-    let mut server = TapHttpServer::new(config, node);
-    server.start().await?;
-    
-    // Wait for shutdown signal
-    tokio::signal::ctrl_c().await?;
-    println!("Shutting down server...");
-    
-    // Stop the server
-    server.stop().await?;
-    
+    // Create and register an agent
+    let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+    let agent = Arc::new(DefaultAgent::new(config, message_packer));
+    node.register_agent(agent).await?;
+
+    // Create the HTTP server
+    let server = TapHttpServer::new(node);
+
+    // Start the server
+    let addr = ([127, 0, 0, 1], 3000).into();
+    println!("Starting TAP HTTP server on {}", addr);
+    server.start(addr).await?;
+
     Ok(())
 }
 ```
 
-### Outbound Message Delivery
+## HTTP Endpoints
 
-You can also use the included `DIDCommClient` to deliver DIDComm messages to external endpoints:
+### POST /didcomm
 
-```rust
-use tap_http::DIDCommClient;
+The main endpoint for receiving DIDComm messages:
 
-async fn send_message(endpoint: &str, message: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Create a client with a custom timeout (in seconds)
-    let client = DIDCommClient::new(Some(30));
-    
-    // Deliver the DIDComm message
-    client.deliver_message(endpoint, message).await?;
-    
-    Ok(())
+```http
+POST /didcomm HTTP/1.1
+Host: example.com
+Content-Type: application/json
+
+{
+  "protected": "eyJhbGciOiJFZERTQSIsImt...",
+  "payload": "eyJ0eXBlIjoiaHR0cHM6Ly90...",
+  "signature": "FW33NnvOHV0Ted9-F_...",
 }
 ```
 
-## API Endpoints
+### Response
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/health` | GET | Health check endpoint that returns status and version information |
-| `/didcomm` | POST | Receives DIDComm messages for processing by the TAP Node |
+For successfully processed messages, the server returns:
+
+```http
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{
+  "status": "accepted",
+  "message_id": "1234-5678-90ab-cdef"
+}
+```
+
+For errors:
+
+```http
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{
+  "error": "invalid_message",
+  "message": "Invalid message format: missing signature"
+}
+```
+
+## Message Flow
+
+1. Client sends a DIDComm message to the `/didcomm` endpoint
+2. Server validates the message format
+3. The message is forwarded to the TAP node
+4. The node routes the message to the appropriate agent
+5. Agent processes the message
+6. Server returns an acknowledgment response
 
 ## Security Considerations
 
-- TLS encryption should be configured in production environments
-- Authentication can be enabled for secure environments
-- Rate limiting is available to prevent abuse
-- Set appropriate timeouts for outbound message delivery
+- The server supports HTTPS for secure communication
+- Incoming messages should be authenticated via DIDComm signatures
+- Configure proper rate limiting to prevent abuse
+- Consider running behind a reverse proxy for additional security
 
-## Testing
+## Configuration
 
-Run the tests with:
+The server can be configured with the following options:
 
-```bash
-cargo test --package tap-http
+```rust
+let server_config = ServerConfig {
+    cors_origins: vec!["https://example.com".to_string()],
+    rate_limit: Some(RateLimit {
+        requests_per_minute: 100,
+        burst_size: 20,
+    }),
+    tls_config: Some(TlsConfig {
+        cert_path: "/path/to/cert.pem".to_string(),
+        key_path: "/path/to/key.pem".to_string(),
+    }),
+};
+
+let server = TapHttpServer::with_config(node, server_config);
 ```
 
-## License
+## Examples
 
-MIT
+See the [examples directory](./examples) for more detailed usage examples.

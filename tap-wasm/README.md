@@ -1,114 +1,197 @@
-# tap-wasm: WebAssembly Bindings for the TAP Protocol
+# TAP WASM
 
-The `tap-wasm` crate provides WebAssembly bindings for the Transaction Authorization Protocol (TAP), enabling TAP functionality in browser and JavaScript/TypeScript environments.
+WebAssembly bindings for the Transaction Authorization Protocol (TAP) with DIDComm integration.
 
 ## Features
 
-- Complete WebAssembly bindings for TAP functionality
-- Support for all TAP message types and operations
-- Integration with the DIDComm v2 library for secure messaging
-- Key management through the SecretsResolver implementation
-- JavaScript-friendly API with Promise support for asynchronous operations
-- Lightweight and efficient implementation for browser environments
+- **WebAssembly Support**: Run TAP in browser and Node.js environments
+- **DIDComm Integration**: Full support for DIDComm v2 messaging
+- **TAP Message Types**: Support for all TAP message types
+- **Secure Key Management**: Integration with DIDComm SecretsResolver for key management
+- **Serialization**: Efficient serialization between Rust and JavaScript
+- **Performance**: Optimized for browser performance
 
 ## Usage
 
-This crate is primarily used as a dependency by the `tap-ts` TypeScript package, which provides a more ergonomic API for JavaScript and TypeScript developers. However, you can also use it directly in your JavaScript/TypeScript projects.
+### In a Web Application
 
-### Building from Source
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>TAP WASM Example</title>
+</head>
+<body>
+  <script type="module">
+    import init, { 
+      create_transfer_message, 
+      parse_didcomm_message,
+      sign_message 
+    } from './pkg/tap_wasm.js';
 
-To build the WebAssembly module from source:
+    async function run() {
+      // Initialize the WASM module
+      await init();
+
+      // Create a transfer message
+      const transferMessage = create_transfer_message({
+        asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+        originator: {
+          id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+          role: "originator"
+        },
+        beneficiary: {
+          id: "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+          role: "beneficiary"
+        },
+        amount: "100.0",
+        memo: "Test transfer"
+      });
+
+      console.log("Transfer Message:", transferMessage);
+
+      // Sign the message
+      const signedMessage = sign_message(
+        transferMessage,
+        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+        "z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+        "5HAPpXmY2FHkHsNitVh9Uy5wKCXZ2DJgNCKyiuPqYgQwKcXfiRtS5Y7D9kSuTwLfgJQDZ52VhVrcNtrHy9TLSN6J"
+      );
+
+      console.log("Signed Message:", signedMessage);
+
+      // Parse a received DIDComm message
+      const parsedMessage = parse_didcomm_message(signedMessage);
+      console.log("Parsed Message:", parsedMessage);
+    }
+
+    run();
+  </script>
+</body>
+</html>
+```
+
+### With TypeScript
+
+```typescript
+import init, { 
+  create_transfer_message, 
+  parse_didcomm_message, 
+  sign_message 
+} from 'tap-wasm';
+
+async function run() {
+  // Initialize the WASM module
+  await init();
+
+  // Create a transfer message
+  const transferMessage = create_transfer_message({
+    asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+    originator: {
+      id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      role: "originator"
+    },
+    beneficiary: {
+      id: "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+      role: "beneficiary"
+    },
+    amount: "100.0",
+    memo: "Test transfer"
+  });
+
+  console.log("Transfer Message:", transferMessage);
+}
+
+run();
+```
+
+## Exported Functions
+
+### Message Creation
+
+```typescript
+// Create a transfer message
+function create_transfer_message(transferData: TransferData): string;
+
+// Create other message types
+function create_authorization_message(authData: AuthorizationData): string;
+function create_rejection_message(rejectionData: RejectionData): string;
+function create_settlement_message(settlementData: SettlementData): string;
+```
+
+### Message Processing
+
+```typescript
+// Parse a DIDComm message to extract its content
+function parse_didcomm_message(message: string): any;
+
+// Sign a message
+function sign_message(message: string, senderDid: string, recipientDid: string, privateKey: string): string;
+
+// Encrypt a message
+function encrypt_message(message: string, senderDid: string, recipientDid: string, privateKey: string): string;
+```
+
+### Key Management
+
+```typescript
+// Generate a new key pair
+function generate_keypair(): KeyPair;
+
+// Convert between key formats
+function ed25519_to_x25519(ed25519Key: string): string;
+```
+
+## Data Types
+
+```typescript
+// Transfer message data
+interface TransferData {
+  asset: string;
+  originator: Participant;
+  beneficiary?: Participant;
+  amount: string;
+  agents?: Participant[];
+  settlement_id?: string;
+  memo?: string;
+  metadata?: Record<string, string>;
+}
+
+// Participant information
+interface Participant {
+  id: string;
+  role?: string;
+}
+
+// Key pair result
+interface KeyPair {
+  publicKey: string;
+  privateKey: string;
+  did: string;
+}
+```
+
+## Building from Source
 
 ```bash
-# Navigate to the tap-wasm directory
-cd tap-rs/tap-wasm
+# Install wasm-pack if not already installed
+cargo install wasm-pack
 
-# Build the WebAssembly module using wasm-pack
+# Build the package
 wasm-pack build --target web
 
-# Or for Node.js environments
+# For bundlers (webpack, rollup, etc)
+wasm-pack build --target bundler
+
+# For Node.js
 wasm-pack build --target nodejs
 ```
 
-### Importing in JavaScript/TypeScript
+## Examples
 
-```javascript
-// Using ES modules (browser)
-import * as tapWasm from './pkg/tap_wasm.js';
+See the [examples directory](./examples) for more detailed usage examples.
 
-// Initialize the module
-async function init() {
-  await tapWasm.default();
-  
-  // Create a new participant
-  const participant = new tapWasm.Participant("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-  
-  // Create a new message
-  const message = new tapWasm.Message();
-  message.setMessageType(tapWasm.MessageType.AuthorizationRequest);
-  
-  // Work with the message
-  message.setFromDid("did:example:sender");
-  message.setToDid("did:example:receiver");
-  
-  // Sign the message
-  participant.signMessage(message);
-  
-  console.log("Created signed message:", message.serialize());
-}
+## Integration with tap-ts
 
-init().catch(console.error);
-```
-
-## Key Management with SecretsResolver
-
-The `tap-wasm` crate implements the DIDComm SecretsResolver trait to manage cryptographic keys securely:
-
-```javascript
-// Create a participant with a specific DID
-const participant = new tapWasm.Participant("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-
-// Add a new key to the participant
-const privateKey = new Uint8Array([/* your private key bytes */]);
-const publicKey = new Uint8Array([/* your public key bytes */]);
-participant.addKey("did:key:z6MkNewKey", "Ed25519", privateKey, publicKey);
-
-// Get information about the participant's keys
-const keysInfo = participant.getKeysInfo();
-console.log("Available keys:", keysInfo);
-
-// Verify a message signature
-const isValid = participant.verifyMessage(signedMessage);
-console.log("Signature valid:", isValid);
-```
-
-## Message Processing
-
-```javascript
-// Create a new participant
-const participant = new tapWasm.Participant("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-
-// Create a TAP node with the participant
-const node = new tapWasm.TapNode("my-node");
-node.addParticipant(participant);
-
-// Process an incoming message
-const incomingMessage = "..."; // Serialized message JSON
-node.processMessage(incomingMessage)
-  .then(response => {
-    console.log("Processed message, response:", response);
-  })
-  .catch(error => {
-    console.error("Error processing message:", error);
-  });
-```
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Related Projects
-
-- [tap-msg](../tap-msg/README.md): Core message processing for TAP
-- [tap-agent](../tap-agent/README.md): TAP agent functionality and identity management
-- [tap-ts](../tap-ts/README.md): TypeScript wrapper for browser and Node.js environments
+For a higher-level TypeScript wrapper, see the [tap-ts](../tap-ts) package, which provides a more idiomatic TypeScript API on top of these WASM bindings.

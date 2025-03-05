@@ -1,250 +1,264 @@
-# TAP-TS: TypeScript WASM Wrapper for the Transaction Authorization Protocol
+# TAP-TS
 
-A Deno-based TypeScript wrapper for the Transaction Authorization Protocol (TAP) Rust implementation.
+A TypeScript wrapper for the Transaction Authorization Protocol (TAP) with full DIDComm messaging support.
 
 ## Features
 
-- **WASM Integration:** Provides a bridge to the Rust implementation using WebAssembly.
-- **DID Resolution:** Supports multiple DID methods (did:key, did:web, did:pkh) using standard libraries.
-- **Message Handling:** Create, process, and manage TAP messages.
-- **Agent Implementation:** Create and manage TAP agents that can send and receive messages.
-- **Node Implementation:** Create TAP nodes that can host multiple agents and route messages.
-- **Cryptographic Operations:** Secure key management with DIDComm SecretsResolver integration.
-- **Message Signing and Verification:** Support for Ed25519 and other key types.
-- **Minimal Dependencies:** Built with minimal external dependencies.
-- **Browser Compatibility:** Works in both Deno and browser environments.
-
-## Development Notes
-
-### Dependency Requirements
-
-The TAP-TS module has specific dependency requirements that must be followed:
-
-- **UUID Version**: The underlying Rust code requires UUID v0.8.2 due to compatibility with the didcomm crate.
-- **WASM Dependencies**: The build process requires specific feature flags for WASM compatibility.
-
-When building or modifying the WASM module, please consult the project's [DEPENDENCIES.md](../DEPENDENCIES.md) for important version constraints.
-
-## Prerequisites
-
-- [Deno](https://deno.land/) 2.2 or higher
-- [Rust](https://www.rust-lang.org/) 1.70 or higher
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/) for building WASM modules
+- **TypeScript API**: Idiomatic TypeScript wrapper for TAP functionality
+- **DIDComm Integration**: Complete DIDComm v2 integration
+- **Message Types**: Full support for all TAP message types (Transfer, Authorization, Rejection, Settlement)
+- **Agent Management**: Agent creation, configuration, and messaging
+- **Key Management**: Secure management of cryptographic keys
+- **Browser & Node.js Support**: Runs in both browser and Node.js environments
+- **Async API**: Promise-based API for all asynchronous operations
+- **Type Safety**: Full TypeScript definitions for all TAP structures
 
 ## Installation
 
-Clone the repository and build the project:
-
 ```bash
-# Clone the repository
-git clone https://github.com/notabene/tap-rs.git
-cd tap-rs/tap-ts
-
-# Build the project
-deno task build
-```
-
-## Development
-
-### Building the WASM module
-
-To build the WASM module from the Rust implementation:
-
-```bash
-deno task build:wasm
-```
-
-### Running tests
-
-```bash
-# Run all tests
-deno task test
-
-# Run tests in a browser environment (requires Playwright)
-deno task test:browser
-```
-
-### Cleaning build artifacts
-
-```bash
-deno task clean
+npm install @notabene/tap-ts
+# or
+yarn add @notabene/tap-ts
 ```
 
 ## Usage
 
-### Basic Example
+### Creating an Agent
 
 ```typescript
-import {
-  Participant,
-  TapNode,
-  Message,
-  MessageType,
-  wasmLoader,
-} from "https://deno.land/x/tap_ts/mod.ts";
+import { Agent, AgentConfig } from '@notabene/tap-ts';
 
-// Load the WASM module
-await wasmLoader.load();
-
-// Create a TAP node
-const node = new TapNode({
-  debug: true,
-  network: {
-    peers: ["https://example.com/tap"],
-  },
-});
-
-// Create and register agents
-const aliceAgent = new Agent({
-  did: "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
-  nickname: "Alice",
-});
-
-const bobAgent = new Agent({
-  did: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-  nickname: "Bob",
-});
-
-// Register the agents with the node
-node.registerAgent(aliceAgent);
-node.registerAgent(bobAgent);
-
-// Create a TAP transfer message
-const transferMessage = new Message({
-  type: MessageType.TRANSFER,
-});
-
-// Set the transfer data following TAIP-3
-transferMessage.setTransferData({
-  asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  originator: {
-    "@id": aliceParticipant.getDid(),
-    role: "originator"
-  },
-  amount: "100.00",
-  beneficiary: {
-    "@id": bobParticipant.getDid(),
-    role: "beneficiary"
-  },
-  participants: [
-    {
-      "@id": aliceParticipant.getDid(),
-      role: "originator"
-    },
-    {
-      "@id": bobParticipant.getDid(),
-      role: "beneficiary"
-    }
-  ],
-  memo: "Example transfer"
-});
-
-// Send the message
-await aliceParticipant.sendMessage(bobParticipant.getDid(), transferMessage);
-
-// On Bob's side, set up a handler for transfer messages
-bobParticipant.registerHandler(MessageType.TRANSFER, async (message, metadata) => {
-  console.log("Received transfer message:", message.getId());
+async function init() {
+  // Create an agent with a DID
+  const config = new AgentConfig({
+    did: 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK',
+    label: 'My TAP Agent'
+  });
   
-  const transferData = message.getTransferData();
-  if (transferData) {
-    console.log("Transfer details:", transferData);
-    
-    // Create an authorize response
-    const authorizeMessage = new Message({
-      type: MessageType.AUTHORIZE,
-      correlation: message.getId(),
-    });
-    
-    // Set authorize data
-    authorizeMessage.setAuthorizeData({
-      transfer_id: message.getId(),
-      note: "Transfer authorized"
-    });
-    
-    // Send the authorization response
-    await bobParticipant.sendMessage(metadata?.senderDid || "", authorizeMessage);
-    console.log("Authorization sent");
-  }
-});
-```
-
-### DID Resolution
-
-```typescript
-import { resolveDID, canResolveDID } from "https://deno.land/x/tap_ts/mod.ts";
-
-// Check if a DID is resolvable
-if (canResolveDID("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH")) {
-  // Resolve the DID
-  const resolution = await resolveDID("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
-  console.log(resolution.didDocument);
+  const agent = await Agent.create(config);
+  console.log(`Agent created with DID: ${agent.did}`);
+  
+  return agent;
 }
 ```
 
-### Key Management and Message Signing
-
-The TAP-TS library includes built-in support for cryptographic key management and message signing through the DIDComm SecretsResolver integration:
+### Creating and Sending a Transfer Message
 
 ```typescript
-import {
-  Participant,
-  Message,
-  MessageType,
-  wasmLoader,
-} from "https://deno.land/x/tap_ts/mod.ts";
+import { Agent, AgentConfig, CaipAssetId, TapTransfer, Participant } from '@notabene/tap-ts';
 
-// Load the WASM module
-await wasmLoader.load();
-
-// Create a participant with a DID
-const participant = new Participant({
-  did: "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
-  nickname: "Alice",
-});
-
-// Add a custom key to the participant
-const privateKeyBytes = new Uint8Array([/* private key bytes */]);
-const publicKeyBytes = new Uint8Array([/* public key bytes */]);
-participant.addKey("did:key:z6MkCustomKey", "Ed25519", privateKeyBytes, publicKeyBytes);
-
-// Get information about available keys
-const keysInfo = participant.getKeysInfo();
-console.log("Available keys:", keysInfo);
-
-// Create and sign a message
-const message = new Message({
-  type: MessageType.TRANSFER,
-});
-
-// Set transfer data
-message.setTransferData({
-  asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-  originator: {
-    "@id": participant.getDid(),
-    role: "originator"
-  },
-  amount: "100.00",
-  participants: [
-    {
-      "@id": participant.getDid(),
-      role: "originator"
-    }
-  ]
-});
-
-// Sign the message
-participant.signMessage(message);
-
-// Verify a message signature
-const isValid = participant.verifyMessage(message);
-console.log("Signature is valid:", isValid);
+async function sendTransfer(agent: Agent) {
+  // Create originator participant
+  const originator = new Participant({
+    id: agent.did,
+    role: 'originator'
+  });
+  
+  // Create beneficiary participant
+  const beneficiary = new Participant({
+    id: 'did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL',
+    role: 'beneficiary'
+  });
+  
+  // Create asset ID
+  const asset = CaipAssetId.parse('eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7');
+  
+  // Create a transfer message
+  const transfer = new TapTransfer({
+    asset: asset.toString(),
+    originator,
+    beneficiary,
+    amount: '100.0',
+    memo: 'Test transfer'
+  });
+  
+  // Pack and send the message
+  const message = await agent.packMessage(transfer, beneficiary.id);
+  console.log('Message created:', message);
+  
+  // Send the message (example implementation)
+  const response = await fetch('https://example.com/didcomm', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(message)
+  });
+  
+  return response.json();
+}
 ```
 
-## License
+### Processing Incoming Messages
 
-MIT
+```typescript
+import { Agent, AgentConfig } from '@notabene/tap-ts';
 
-## Contributing
+async function processMessage(agent: Agent, rawMessage: string) {
+  // Unpack and process the message
+  const result = await agent.unpackMessage(rawMessage);
+  
+  if (result.isTransfer()) {
+    console.log('Received transfer message:', result.asTransfer());
+    
+    // Send authorization response
+    const authResponse = result.asTransfer().authorize({
+      note: 'Transfer approved',
+      metadata: { 'approval_time': new Date().toISOString() }
+    });
+    
+    // Pack the authorization response
+    const packedResponse = await agent.packMessage(
+      authResponse,
+      result.message.from
+    );
+    
+    // Send the response (implementation depends on your transport)
+    return packedResponse;
+  }
+  
+  console.log('Received message of type:', result.type());
+  return null;
+}
+```
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Key Management
+
+```typescript
+import { KeyPair, Agent } from '@notabene/tap-ts';
+
+async function manageKeys() {
+  // Generate a new key pair
+  const keyPair = await KeyPair.generate();
+  console.log('Generated DID:', keyPair.did);
+  console.log('Public Key:', keyPair.publicKey);
+  
+  // Create agent with the generated key pair
+  const agent = await Agent.createWithKeys({
+    did: keyPair.did,
+    label: 'New Agent'
+  }, keyPair);
+  
+  // Import an existing key
+  const importedKeyPair = await KeyPair.fromSeed('your-seed-phrase');
+  console.log('Imported DID:', importedKeyPair.did);
+  
+  return { agent, keyPair };
+}
+```
+
+### Using with TAP Node
+
+```typescript
+import { Agent, TapNode } from '@notabene/tap-ts';
+
+async function setupNode(agents: Agent[]) {
+  // Create a TAP node
+  const node = new TapNode();
+  
+  // Register multiple agents with the node
+  for (const agent of agents) {
+    await node.registerAgent(agent);
+  }
+  
+  // Process an incoming message
+  async function handleIncomingMessage(rawMessage: string) {
+    const result = await node.processMessage(rawMessage);
+    return result;
+  }
+  
+  return node;
+}
+```
+
+## API Reference
+
+### Agent
+
+```typescript
+class Agent {
+  static create(config: AgentConfig): Promise<Agent>;
+  static createWithKeys(config: AgentConfig, keyPair: KeyPair): Promise<Agent>;
+  
+  get did(): string;
+  get config(): AgentConfig;
+  
+  packMessage(message: TapMessage, to: string): Promise<Record<string, any>>;
+  unpackMessage(message: string): Promise<MessageUnpackResult>;
+  
+  createTransfer(options: TransferOptions): TapTransfer;
+  createAuthorization(options: AuthorizationOptions): TapAuthorization;
+  createRejection(options: RejectionOptions): TapRejection;
+  createSettlement(options: SettlementOptions): TapSettlement;
+}
+```
+
+### Message Types
+
+```typescript
+class TapTransfer {
+  constructor(options: TransferOptions);
+  
+  authorize(options?: AuthorizeOptions): TapAuthorization;
+  reject(options?: RejectOptions): TapRejection;
+  
+  get asset(): string;
+  get originator(): Participant;
+  get beneficiary(): Participant | undefined;
+  get amount(): string;
+  get memo(): string | undefined;
+}
+
+class TapAuthorization {
+  constructor(options: AuthorizationOptions);
+  
+  settle(options?: SettleOptions): TapSettlement;
+  
+  get transfer(): TapTransfer;
+  get note(): string | undefined;
+}
+
+class TapRejection {
+  constructor(options: RejectionOptions);
+  
+  get transfer(): TapTransfer;
+  get reason(): string;
+}
+
+class TapSettlement {
+  constructor(options: SettlementOptions);
+  
+  get authorization(): TapAuthorization;
+  get txid(): string;
+}
+```
+
+## Examples
+
+See the [examples directory](./examples) for more detailed usage examples.
+
+## Integration with TAP-WASM
+
+This package is built on top of the `tap-wasm` WebAssembly module, which provides the core functionality from the Rust implementation. The TypeScript wrapper provides a more idiomatic API for JavaScript and TypeScript developers.
+
+## Building from Source
+
+```bash
+# Clone the repository
+git clone https://github.com/notabene/tap-rs.git
+cd tap-rs
+
+# Build the WASM bindings
+cd tap-wasm
+wasm-pack build --target bundler
+
+# Build the TypeScript wrapper
+cd ../tap-ts
+npm install
+npm run build
+```
+
+## Testing
+
+```bash
+npm test

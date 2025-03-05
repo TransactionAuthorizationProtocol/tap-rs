@@ -1,75 +1,105 @@
-# TAP-Node
+# TAP Node
 
-TAP-Node is a Rust implementation of a Transaction Authorization Protocol (TAP) node, responsible for managing multiple agents, handling message routing, and coordinating between different TAP agents.
+TAP node orchestration and message routing for the Transaction Authorization Protocol (TAP).
 
 ## Features
 
-- **Agent Management**: Register and manage multiple TAP agents
-- **Message Routing**: Forward messages to appropriate agents based on DID
-- **Message Processing**: Validate, log, and process messages 
-- **Event Handling**: Publish and subscribe to TAP events
-- **DID Resolution**: Resolve DIDs using multiple resolver methods
-- **Concurrency**: Efficient asynchronous message processing
+- **Multi-Agent Coordination**: Manage multiple TAP agents within a single node
+- **Message Routing**: Route incoming messages to the appropriate agent
+- **DID Resolution**: Resolve DIDs for message routing and key discovery
+- **Asynchronous Processing**: Process messages concurrently using Tokio
+- **Event System**: Publish/subscribe system for TAP events
+- **Message Queueing**: Queue management for pending messages
 
 ## Usage
 
 ```rust
+use tap_node::node::{TapNode, DefaultTapNode};
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
+use tap_agent::did::DefaultDIDResolver;
 use std::sync::Arc;
-use tap_agent::{Agent, AgentConfig, TapAgent};
-use tap_node::{NodeConfig, TapNode};
 
-// Create a TAP Node with default configuration
-let node_config = NodeConfig::default();
-let node = TapNode::new(node_config);
+// Create resolvers
+let did_resolver = Arc::new(DefaultDIDResolver::new());
+let secret_resolver = Arc::new(BasicSecretResolver::new());
+
+// Create the TAP node
+let mut node = DefaultTapNode::new(did_resolver.clone(), secret_resolver.clone());
 
 // Create and register an agent
-let agent_config = AgentConfig::new()
-    .with_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-let agent = Arc::new(TapAgent::with_config(agent_config).unwrap());
+let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
+let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+let agent = Arc::new(DefaultAgent::new(config, message_packer));
+node.register_agent(agent).await?;
 
-// Register the agent with the node
-node.register_agent(agent.clone()).await.unwrap();
-
-// Process a message
-let message = tap_msg::message::TapMessageBuilder::new()
-    .id("test-message-id")
-    .message_type(tap_msg::message::TapMessageType::TransactionProposal)
-    .from_did(Some("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH".to_string()))
-    .to_did(Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()))
-    .build()
-    .unwrap();
-
-// Message will be routed to the appropriate agent
-let result = node.process_message(message).await;
+// Process an incoming message
+let result = node.process_message("incoming_message").await;
 ```
 
-## Architecture
+## Components
 
-TAP-Node implements a modular, extensible architecture:
+### TapNode
 
-- **Message Router**: Determines which agent should receive a message
-- **Message Processor**: Pre-processes messages before routing 
-- **Processor Pool**: Concurrently processes messages using a worker pool
-- **Event Bus**: Provides publish-subscribe mechanism for TAP events
-- **Agent Registry**: Manages registered agents and their capabilities
-- **Node Resolver**: Resolves DIDs using various resolver methods
+The core node interface that manages agents and routes messages:
 
-## Performance
-
-The node is designed for high throughput, with benchmarks showing processing capabilities of:
-- 166,000+ messages per second for small batches (10 messages)
-- 400,000+ messages per second for larger batches (1000 messages)
-
-## Testing
-
-Run tests using:
-
-```bash
-cargo test -p tap-node
+```rust
+pub trait TapNode: Send + Sync {
+    /// Register a new agent with the node
+    async fn register_agent(&mut self, agent: Arc<dyn Agent>) -> Result<(), Error>;
+    
+    /// Process an incoming message
+    async fn process_message(&self, message: &str) -> Result<(), Error>;
+    
+    /// Route a message to the appropriate agent
+    async fn route_message(&self, message: &didcomm::Message) -> Result<(), Error>;
+    
+    /// Get an agent by DID
+    fn get_agent(&self, did: &str) -> Option<Arc<dyn Agent>>;
+}
 ```
 
-Run benchmarks using:
+### Message Processing Flow
 
-```bash
-cargo bench --bench stress_test -p tap-node
+1. An incoming message is received as a serialized string
+2. The node deserializes and unpacks the message
+3. The message is validated as a valid TAP message
+4. The node determines the target agent based on the recipient DID
+5. The message is routed to the appropriate agent for processing
+6. The agent processes the message and returns a response if needed
+
+### Event System
+
+The node includes a pub/sub event system for TAP events:
+
+```rust
+// Subscribe to all transfer events
+let mut subscription = node.subscribe_to_events("transfer").await?;
+
+// Handle events asynchronously
+tokio::spawn(async move {
+    while let Some(event) = subscription.recv().await {
+        println!("Received event: {:?}", event);
+    }
+});
 ```
+
+### DID Resolution
+
+The node handles DID resolution for message routing and agent discovery:
+
+```rust
+// Resolve a DID to find the recipient agent
+let did_doc = node.resolve_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK").await?;
+```
+
+## Integration with Other Crates
+
+- **tap-agent**: Uses agents for message processing
+- **tap-msg**: Uses TAP message types for protocol handling
+- **tap-http**: Can be used with tap-http for HTTP-based DIDComm messaging
+
+## Examples
+
+See the [examples directory](./examples) for more detailed usage examples.
