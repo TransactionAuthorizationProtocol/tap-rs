@@ -26,7 +26,7 @@ chrono = { workspace = true }
 thiserror = { workspace = true }
 
 # UUID generation
-uuid = { workspace = true }
+uuid = { version = "1.3", features = ["v4"] }
 
 # Tracing
 tracing = { workspace = true }

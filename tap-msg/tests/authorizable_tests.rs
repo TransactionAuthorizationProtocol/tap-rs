@@ -11,37 +11,28 @@ fn test_transfer_authorizable() {
     let transfer = create_test_transfer();
 
     // Test authorize method
-    let auth = transfer.authorize(
-        "transfer-123".to_string(),
-        Some("Authorization approved".to_string()),
-        HashMap::new(),
-    );
-    assert_eq!(auth.transfer_id, "transfer-123");
+    let auth = transfer.authorize(Some("Authorization approved".to_string()), HashMap::new());
     assert_eq!(auth.note, Some("Authorization approved".to_string()));
 
     // Test reject method
     let reject = transfer.reject(
-        "transfer-123".to_string(),
         "REJECT-001".to_string(),
         "Rejected due to compliance issues".to_string(),
         Some("Additional rejection note".to_string()),
         HashMap::new(),
     );
-    assert_eq!(reject.transfer_id, "transfer-123");
     assert_eq!(reject.code, "REJECT-001");
     assert_eq!(reject.description, "Rejected due to compliance issues");
     assert_eq!(reject.note, Some("Additional rejection note".to_string()));
 
     // Test settle method
     let settle = transfer.settle(
-        "transfer-123".to_string(),
         "tx-12345".to_string(),
         Some("0x1234567890abcdef".to_string()),
         Some(1234567),
         Some("Settlement note".to_string()),
         HashMap::new(),
     );
-    assert_eq!(settle.transfer_id, "transfer-123");
     assert_eq!(settle.transaction_id, "tx-12345");
     assert_eq!(
         settle.transaction_hash,
@@ -60,37 +51,28 @@ fn test_didcomm_message_authorizable() {
         .expect("Failed to convert to DIDComm message");
 
     // Test authorize method
-    let auth = message.authorize(
-        "transfer-123".to_string(),
-        Some("Authorization approved".to_string()),
-        HashMap::new(),
-    );
-    assert_eq!(auth.transfer_id, "transfer-123");
+    let auth = message.authorize(Some("Authorization approved".to_string()), HashMap::new());
     assert_eq!(auth.note, Some("Authorization approved".to_string()));
 
     // Test reject method
     let reject = message.reject(
-        "transfer-123".to_string(),
         "REJECT-001".to_string(),
         "Rejected due to compliance issues".to_string(),
         Some("Additional rejection note".to_string()),
         HashMap::new(),
     );
-    assert_eq!(reject.transfer_id, "transfer-123");
     assert_eq!(reject.code, "REJECT-001");
     assert_eq!(reject.description, "Rejected due to compliance issues");
     assert_eq!(reject.note, Some("Additional rejection note".to_string()));
 
     // Test settle method
     let settle = message.settle(
-        "transfer-123".to_string(),
         "tx-12345".to_string(),
         Some("0x1234567890abcdef".to_string()),
         Some(1234567),
         Some("Settlement note".to_string()),
         HashMap::new(),
     );
-    assert_eq!(settle.transfer_id, "transfer-123");
     assert_eq!(settle.transaction_id, "tx-12345");
     assert_eq!(
         settle.transaction_hash,
@@ -107,14 +89,9 @@ fn test_full_flow() {
     let original_message = transfer
         .to_didcomm()
         .expect("Failed to convert to DIDComm message");
-    let message_id = original_message.id.clone();
 
     // Generate authorize response
-    let auth = original_message.authorize(
-        message_id.clone(),
-        Some("Transfer approved".to_string()),
-        HashMap::new(),
-    );
+    let auth = original_message.authorize(Some("Transfer approved".to_string()), HashMap::new());
 
     // Convert authorize to DIDComm message
     let auth_message = auth
@@ -124,7 +101,6 @@ fn test_full_flow() {
 
     // Generate settle response
     let settle = original_message.settle(
-        message_id,
         "txid-12345".to_string(),
         Some("0xabcdef1234567890".to_string()),
         Some(9876543),

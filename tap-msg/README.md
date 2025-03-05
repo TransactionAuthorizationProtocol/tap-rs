@@ -9,6 +9,7 @@ The `tap-msg` crate provides core message processing functionality for the Trans
 - Serialization and deserialization of TAP messages
 - DIDComm v2 integration directly built into TAP message types
 - WASM compatibility for browser environments
+- Authorization flow support for Transfer messages
 
 ## Usage
 
@@ -22,12 +23,12 @@ tap-msg = "0.1.0"
 ### Creating a TAP Message
 
 ```rust
-use tap_msg::message::{TapMessage, TapMessageType};
+use tap_msg::message::{TapMessageEnvelope, TapMessageType};
 use serde_json::json;
 
 async fn create_message_example() {
     // Create a new message with the builder pattern
-    let message = TapMessage::new()
+    let message = TapMessageEnvelope::new()
         .with_message_type(TapMessageType::TransactionProposal)
         .with_body(json!({
             "transaction": {
@@ -53,12 +54,12 @@ async fn create_message_example() {
 ### Parsing and Validating a TAP Message
 
 ```rust
-use tap_msg::message::{TapMessage, Validate};
+use tap_msg::message::{TapMessageEnvelope, Validate};
 use serde_json::Value;
 
 fn parse_message_example(json_string: &str) -> Result<(), Box<dyn std::error::Error>> {
-    // Parse JSON string into a TapMessage
-    let message: TapMessage = serde_json::from_str(json_string)?;
+    // Parse JSON string into a TapMessageEnvelope
+    let message: TapMessageEnvelope = serde_json::from_str(json_string)?;
     
     // Validate the message
     message.validate()?;
@@ -101,133 +102,143 @@ fn didcomm_conversion_example() -> Result<(), Box<dyn std::error::Error>> {
         role: Some("beneficiary".to_string()),
     };
     
-    let transfer_body = Transfer {
+    let agents = vec![
+        Participant {
+            id: "did:key:z6MkhaXgCDEv1tDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+            role: Some("agent".to_string()),
+        }
+    ];
+    
+    let transfer = Transfer {
         asset,
-        originator: originator.clone(),
-        beneficiary: Some(beneficiary.clone()),
-        amount_subunits: "100000000".to_string(),
-        agents: vec![originator, beneficiary],
+        originator,
+        beneficiary: Some(beneficiary),
+        amount: "100.0".to_string(),
+        agents,
         settlement_id: None,
-        memo: Some("Test transaction".to_string()),
+        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
     
-    // Convert to DIDComm message for a specific recipient
-    let from_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
-    let to_did = "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6";
+    // Convert to DIDComm message
+    let didcomm_message = transfer.to_didcomm()?;
     
-    // Convert TAP message to DIDComm
-    let didcomm_message = transfer_body.to_didcomm()?;
+    // Now you can send this DIDComm message
+    println!("DIDComm message ID: {}", didcomm_message.id);
     
-    // Or send to multiple recipients
-    let to_dids = ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6", 
-                  "did:key:z6MkwYyuTCaaDKnMGHpMkteuFpj1KrsFgGXwW3nXdT7k3RQP"];
-    let multi_recipient_message = transfer_body.to_didcomm_with_route(
-        Some(from_did), 
-        to_dids.iter().copied()
-    )?;
-    
-    // Convert DIDComm message back to TAP message
-    let extracted_body = Transfer::from_didcomm(&didcomm_message)?;
-    
-    println!("Successfully converted TAP message to and from DIDComm!");
     Ok(())
 }
 ```
 
-### Working with Different Message Types
+### Using the Authorizable Trait for Transfer Authorization Flow
+
+The `Authorizable` trait provides a streamlined way to handle the authorization, rejection, and settlement flows for Transfer messages:
 
 ```rust
-use tap_msg::message::{TapMessage, TapMessageType};
+use tap_msg::message::types::Authorizable;
+use tap_msg::{Transfer, Participant};
+use tap_caip::AssetId;
+use std::str::FromStr;
+use std::collections::HashMap;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 
-fn handle_message(message: &TapMessage) {
+fn authorization_flow_example() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a Transfer message
+    let asset = AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48")?;
+    
+    let originator = Participant {
+        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+        role: Some("originator".to_string()),
+    };
+    
+    let beneficiary = Participant {
+        id: "did:key:z6MkhaDgCZDv1tDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+        role: Some("beneficiary".to_string()),
+    };
+
+    let agents = vec![
+        Participant {
+            id: "did:key:z6MkhaXgCDEv1tDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+            role: Some("agent".to_string()),
+        }
+    ];
+    
+    let transfer = Transfer {
+        asset,
+        originator,
+        beneficiary: Some(beneficiary),
+        amount: "100.0".to_string(),
+        agents,
+        settlement_id: None,
+        memo: Some("Test transfer".to_string()),
+        metadata: HashMap::new(),
+    };
+    
+    // Convert to DIDComm message for transmission
+    let didcomm_message = transfer.to_didcomm()?;
+    
+    // Recipient receives the message and can now authorize, reject, or settle it
+    
+    // To authorize the transfer:
+    let auth = didcomm_message.authorize(
+        Some("Authorization approved".to_string()),
+        HashMap::new(),
+    );
+    
+    // To reject the transfer:
+    let reject = didcomm_message.reject(
+        "REJECT-001".to_string(),
+        "Rejected due to compliance issues".to_string(),
+        Some("Additional rejection note".to_string()),
+        HashMap::new(),
+    );
+    
+    // To settle the transfer:
+    let settle = didcomm_message.settle(
+        "tx-12345".to_string(),
+        Some("0x1234567890abcdef".to_string()),
+        Some(1234567),
+        Some("Settlement note".to_string()),
+        HashMap::new(),
+    );
+    
+    // Convert the response messages to DIDComm format for transmission
+    let auth_message = auth.to_didcomm()?;
+    let reject_message = reject.to_didcomm()?;
+    let settle_message = settle.to_didcomm()?;
+    
+    Ok(())
+}
+```
+
+## Message Types
+
+TAP supports various message types, including:
+
+- Transfer: Initiates a transfer proposal
+- Authorize: Approves a transfer
+- Reject: Rejects a transfer with reason
+- Settle: Confirms settlement of a transfer
+- RequestPresentation: Requests identity or credential verification
+- Presentation: Provides requested identity or credential information
+
+## Error Handling
+
+The library uses a custom error type for consistent error handling:
+
+```rust
+fn handle_message(message: &TapMessageEnvelope) {
     match message.message_type {
         TapMessageType::TransactionProposal => {
             // Handle transaction proposal
             println!("Received transaction proposal with ID: {}", message.id);
-        },
-        TapMessageType::TransactionAuthorization => {
-            // Handle transaction authorization
-            println!("Received transaction authorization with ID: {}", message.id);
-        },
-        TapMessageType::IdentityExchange => {
-            // Handle identity exchange
-            println!("Received identity exchange with ID: {}", message.id);
-        },
-        TapMessageType::Error => {
-            // Handle error message
-            println!("Received error message with ID: {}", message.id);
-        },
-        TapMessageType::Custom(ref custom_type) => {
-            // Handle custom message type
-            println!("Received custom message type {} with ID: {}", custom_type, message.id);
-        },
-    }
-}
-```
-
-## Advanced Usage
-
-### Deserializing Typed Message Bodies
-
-```rust
-use tap_msg::message::TapMessage;
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Transaction {
-    amount: String,
-    currency: String,
-    sender: String,
-    receiver: String,
-}
-
-fn process_transaction_proposal(message: &TapMessage) -> Result<(), Box<dyn std::error::Error>> {
-    // Deserialize the body to a specific struct
-    let transaction: Transaction = message.body_as()?;
-    
-    println!("Processing transaction: {} {}", transaction.amount, transaction.currency);
-    println!("From: {} To: {}", transaction.sender, transaction.receiver);
-    
-    Ok(())
-}
-```
-
-### Handling Message Attachments
-
-```rust
-use tap_msg::message::{TapMessage, Attachment};
-use base64::{Engine as _, engine::general_purpose::STANDARD as Base64};
-
-fn process_attachments(message: &TapMessage) {
-    if let Some(attachments) = &message.attachments {
-        for (i, attachment) in attachments.iter().enumerate() {
-            match &attachment.data {
-                Some(data) => {
-                    if let Some(base64) = &data.base64 {
-                        // Decode base64 attachment
-                        match Base64.decode(base64) {
-                            Ok(bytes) => {
-                                println!("Attachment {}: {} bytes", i, bytes.len());
-                                // Process the bytes as needed
-                            },
-                            Err(e) => {
-                                println!("Error decoding attachment {}: {}", i, e);
-                            }
-                        }
-                    } else if let Some(json) = &data.json {
-                        println!("JSON attachment {}: {}", i, json);
-                    }
-                },
-                None => {
-                    println!("Attachment {} has no data", i);
-                }
-            }
         }
+        // Handle other message types
+        _ => println!("Received message with type: {:?}", message.message_type),
     }
 }
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the [Apache License 2.0](LICENSE).

@@ -171,6 +171,12 @@ pub struct Transfer {
 }
 
 impl Transfer {
+    /// Get the message ID to use for authorization, rejection, or settlement
+    /// For now, we'll use a placeholder ID, but in a real implementation this should be a unique identifier
+    fn message_id(&self) -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+
     /// Validates that the transfer proposal contains consistent CAIP identifiers
     ///
     /// # Returns
@@ -495,7 +501,6 @@ pub trait Authorizable {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - The ID of the transfer being authorized
     /// * `note` - Optional note about the authorization
     /// * `metadata` - Additional metadata for the authorization
     ///
@@ -504,7 +509,6 @@ pub trait Authorizable {
     /// A new Authorize message body
     fn authorize(
         &self,
-        transfer_id: String,
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Authorize;
@@ -513,7 +517,6 @@ pub trait Authorizable {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - The ID of the transfer being rejected
     /// * `code` - Rejection code
     /// * `description` - Description of the rejection reason
     /// * `note` - Optional note about the rejection
@@ -524,7 +527,6 @@ pub trait Authorizable {
     /// A new Reject message body
     fn reject(
         &self,
-        transfer_id: String,
         code: String,
         description: String,
         note: Option<String>,
@@ -535,7 +537,6 @@ pub trait Authorizable {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - The ID of the transfer being settled
     /// * `transaction_id` - Transaction ID on the external ledger
     /// * `transaction_hash` - Optional transaction hash
     /// * `block_height` - Optional block height
@@ -547,7 +548,6 @@ pub trait Authorizable {
     /// A new Settle message body
     fn settle(
         &self,
-        transfer_id: String,
         transaction_id: String,
         transaction_hash: Option<String>,
         block_height: Option<u64>,
@@ -560,12 +560,11 @@ pub trait Authorizable {
 impl Authorizable for Transfer {
     fn authorize(
         &self,
-        transfer_id: String,
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Authorize {
         Authorize {
-            transfer_id,
+            transfer_id: self.message_id(),
             note,
             metadata,
         }
@@ -573,14 +572,13 @@ impl Authorizable for Transfer {
 
     fn reject(
         &self,
-        transfer_id: String,
         code: String,
         description: String,
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Reject {
         Reject {
-            transfer_id,
+            transfer_id: self.message_id(),
             code,
             description,
             note,
@@ -590,7 +588,6 @@ impl Authorizable for Transfer {
 
     fn settle(
         &self,
-        transfer_id: String,
         transaction_id: String,
         transaction_hash: Option<String>,
         block_height: Option<u64>,
@@ -598,7 +595,7 @@ impl Authorizable for Transfer {
         metadata: HashMap<String, serde_json::Value>,
     ) -> Settle {
         Settle {
-            transfer_id,
+            transfer_id: self.message_id(),
             transaction_id,
             transaction_hash,
             block_height,
@@ -612,13 +609,12 @@ impl Authorizable for Transfer {
 impl Authorizable for Message {
     fn authorize(
         &self,
-        transfer_id: String,
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Authorize {
         // Create an Authorize message as a response
         Authorize {
-            transfer_id,
+            transfer_id: self.id.clone(),
             note,
             metadata,
         }
@@ -626,7 +622,6 @@ impl Authorizable for Message {
 
     fn reject(
         &self,
-        transfer_id: String,
         code: String,
         description: String,
         note: Option<String>,
@@ -634,7 +629,7 @@ impl Authorizable for Message {
     ) -> Reject {
         // Create a Reject message as a response
         Reject {
-            transfer_id,
+            transfer_id: self.id.clone(),
             code,
             description,
             note,
@@ -644,7 +639,6 @@ impl Authorizable for Message {
 
     fn settle(
         &self,
-        transfer_id: String,
         transaction_id: String,
         transaction_hash: Option<String>,
         block_height: Option<u64>,
@@ -653,7 +647,7 @@ impl Authorizable for Message {
     ) -> Settle {
         // Create a Settle message as a response
         Settle {
-            transfer_id,
+            transfer_id: self.id.clone(),
             transaction_id,
             transaction_hash,
             block_height,
