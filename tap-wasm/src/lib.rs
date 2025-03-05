@@ -698,10 +698,10 @@ impl TapAgent {
             if let Some(did_str) = did_prop.as_string() {
                 did_str
             } else {
-                format!("did:key:z6Mk{}", uuid::Uuid::new_v4().as_simple())
+                format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple().to_string())
             }
         } else {
-            format!("did:key:z6Mk{}", uuid::Uuid::new_v4().as_simple())
+            format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple().to_string())
         };
 
         let nickname =
@@ -1234,7 +1234,7 @@ impl TapNode {
 /// Creates a new DID key pair
 #[wasm_bindgen]
 pub fn create_did_key() -> Result<JsValue, JsValue> {
-    let uuid_str = uuid::Uuid::new_v4().as_simple().to_string();
+    let uuid_str = uuid::Uuid::new_v4().to_simple().to_string();
 
     let mock_did = format!("did:key:z6Mk{}", uuid_str);
 
