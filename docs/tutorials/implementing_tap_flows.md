@@ -33,7 +33,7 @@ The basic transfer flow involves:
 use tap_agent::{Participant, ParticipantConfig};
 use tap_msg::{
     did::KeyPair,
-    message::{TransferBody, AuthorizeBody, ReceiptBody, TapMessageBody, Participant as MessageParticipant},
+    message::{Transfer, Authorize, ReceiptBody, TapMessageBody, Participant as MessageParticipant},
 };
 use tap_caip::AssetId;
 use didcomm::Message;
@@ -68,7 +68,7 @@ async fn implement_basic_flow() -> Result<(), Box<dyn std::error::Error>> {
         role: Some("beneficiary".to_string()),
     };
     
-    let transfer_body = TransferBody {
+    let transfer_body = Transfer {
         asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
         originator: originator_msg_participant,
         beneficiary: Some(beneficiary_msg_participant),
@@ -90,9 +90,9 @@ async fn implement_basic_flow() -> Result<(), Box<dyn std::error::Error>> {
     let transfer_id = transfer_message.id.clone();
     
     // Step 2: Beneficiary processes the Transfer and responds with Authorize
-    let received_transfer_body = TransferBody::from_didcomm(&transfer_message)?;
+    let received_transfer_body = Transfer::from_didcomm(&transfer_message)?;
     
-    let authorize_body = AuthorizeBody {
+    let authorize_body = Authorize {
         transfer_id: transfer_id.clone(),
         note: Some("Transfer authorized, please proceed with on-chain settlement".to_string()),
         metadata: HashMap::new(),
@@ -106,7 +106,7 @@ async fn implement_basic_flow() -> Result<(), Box<dyn std::error::Error>> {
     println!("2. Beneficiary sends Authorize message");
     
     // Step 3: Originator processes the Authorize message
-    let received_authorize_body = AuthorizeBody::from_didcomm(&authorize_message)?;
+    let received_authorize_body = Authorize::from_didcomm(&authorize_message)?;
     println!("3. Originator receives authorization: {}", 
              received_authorize_body.note.unwrap_or_default());
     
@@ -226,7 +226,7 @@ async fn implement_rejection_flow() -> Result<(), Box<dyn std::error::Error>> {
     // Step:1-2 Same as basic flow, originator sends Transfer
     
     // Step 3: Beneficiary decides to reject the transfer
-    let reject_body = RejectBody {
+    let reject_body = Reject {
         transfer_id: transfer_id.clone(),
         code: "policy_violation".to_string(),
         description: Some("Amount exceeds daily transfer limit".to_string()),
@@ -242,7 +242,7 @@ async fn implement_rejection_flow() -> Result<(), Box<dyn std::error::Error>> {
              reject_body.description.unwrap_or_default());
     
     // Step 4: Originator processes the rejection
-    let received_reject_body = RejectBody::from_didcomm(&reject_message)?;
+    let received_reject_body = Reject::from_didcomm(&reject_message)?;
     println!("4. Originator receives rejection: {} - {}", 
              received_reject_body.code,
              received_reject_body.description.unwrap_or_default());
@@ -333,7 +333,7 @@ async fn implement_multi_agent_flow() -> Result<(), Box<dyn std::error::Error>> 
         }
     ];
     
-    let transfer_body = TransferBody {
+    let transfer_body = Transfer {
         asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
         originator: originator_msg_participant,
         beneficiary: Some(beneficiary_msg_participant),
@@ -352,10 +352,10 @@ async fn implement_multi_agent_flow() -> Result<(), Box<dyn std::error::Error>> 
     println!("1. Originator sends Transfer message to intermediary");
     
     // Step 2: Intermediary forwards to beneficiary (potentially adding compliance data)
-    let received_transfer_body = TransferBody::from_didcomm(&transfer_message)?;
+    let received_transfer_body = Transfer::from_didcomm(&transfer_message)?;
     
     // Intermediary can add metadata or modify the message if needed
-    let forwarded_transfer_body = TransferBody {
+    let forwarded_transfer_body = Transfer {
         metadata: {
             let mut metadata = received_transfer_body.metadata.clone();
             metadata.insert("compliance_checked".to_string(), "true".to_string());

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::result::Result;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::{Participant, TransferBody, TapMessageBody};
+use tap_msg::message::{Participant, Transfer, TapMessageBody};
 use tap_msg::didcomm::Message;
 
 /// Test the round-trip conversion between TAP messages and DIDComm messages.
@@ -29,7 +29,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         role: Some("beneficiary".to_string()),
     };
 
-    let body = TransferBody {
+    let body = Transfer {
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -53,10 +53,10 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     // Extract the message metadata
     assert_eq!(unpacked_message.from, Some(from_did.to_string()));
     assert_eq!(unpacked_message.to, Some(vec![to_did.to_string()]));
-    assert_eq!(unpacked_message.type_, TransferBody::message_type());
+    assert_eq!(unpacked_message.type_, Transfer::message_type());
 
     // Extract the message body
-    let unpacked_body = TransferBody::from_didcomm(&unpacked_message)?;
+    let unpacked_body = Transfer::from_didcomm(&unpacked_message)?;
 
     // Verify the body matches the original
     assert_eq!(unpacked_body.asset.to_string(), asset.to_string());

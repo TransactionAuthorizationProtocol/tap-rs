@@ -135,7 +135,7 @@ pub struct TapMessage {
 
 /// Transfer message body (TAIP-3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransferBody {
+pub struct Transfer {
     /// Network asset identifier (CAIP-19 format).
     pub asset: AssetId,
 
@@ -167,7 +167,7 @@ pub struct TransferBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TransferBody {
+impl Transfer {
     /// Validates that the transfer proposal contains consistent CAIP identifiers
     ///
     /// # Returns
@@ -179,7 +179,7 @@ impl TransferBody {
     }
 }
 
-impl TapMessageBody for TransferBody {
+impl TapMessageBody for Transfer {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Transfer"
     }
@@ -204,7 +204,7 @@ pub struct Participant {
 
 /// Request presentation message body (TAIP-8).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestPresentationBody {
+pub struct RequestPresentation {
     /// Unique identifier for the presentation request.
     pub presentation_id: String,
 
@@ -224,7 +224,7 @@ pub struct RequestPresentationBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TapMessageBody for RequestPresentationBody {
+impl TapMessageBody for RequestPresentation {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#RequestPresentation"
     }
@@ -245,7 +245,7 @@ impl TapMessageBody for RequestPresentationBody {
 
 /// Presentation message body (TAIP-8).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct PresentationBody {
+pub struct Presentation {
     /// Presentation ID that relates to a RequestPresentation.
     pub presentation_id: String,
 
@@ -261,7 +261,7 @@ pub struct PresentationBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TapMessageBody for PresentationBody {
+impl TapMessageBody for Presentation {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Presentation"
     }
@@ -280,26 +280,10 @@ impl TapMessageBody for PresentationBody {
     }
 }
 
-/// Travel rule information message body.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TravelRuleInfoBody {
-    /// Transaction ID this information is related to.
-    pub transaction_id: String,
-
-    /// Type of travel rule information.
-    pub information_type: String,
-
-    /// The travel rule information content.
-    pub content: serde_json::Value,
-
-    /// Additional metadata for the travel rule information.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
-}
 
 /// Authorize message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthorizeBody {
+pub struct Authorize {
     /// The ID of the transfer being authorized.
     pub transfer_id: String,
 
@@ -312,7 +296,7 @@ pub struct AuthorizeBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TapMessageBody for AuthorizeBody {
+impl TapMessageBody for Authorize {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Authorize"
     }
@@ -329,7 +313,7 @@ impl TapMessageBody for AuthorizeBody {
 
 /// Reject message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RejectBody {
+pub struct Reject {
     /// The ID of the transfer being rejected.
     pub transfer_id: String,
 
@@ -348,7 +332,7 @@ pub struct RejectBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TapMessageBody for RejectBody {
+impl TapMessageBody for Reject {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Reject"
     }
@@ -369,7 +353,7 @@ impl TapMessageBody for RejectBody {
 
 /// Settle message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SettleBody {
+pub struct Settle {
     /// The ID of the transfer being settled.
     pub transfer_id: String,
 
@@ -393,7 +377,7 @@ pub struct SettleBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TapMessageBody for SettleBody {
+impl TapMessageBody for Settle {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Settle"
     }
@@ -414,7 +398,7 @@ impl TapMessageBody for SettleBody {
 
 /// AddAgents message body (TAIP-5).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AddAgentsBody {
+pub struct AddAgents {
     /// The ID of the transfer to add agents to.
     pub transfer_id: String,
 
@@ -426,7 +410,7 @@ pub struct AddAgentsBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TapMessageBody for AddAgentsBody {
+impl TapMessageBody for AddAgents {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#AddAgents"
     }

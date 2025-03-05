@@ -10,7 +10,7 @@ use didcomm::Message;
 use std::collections::HashMap;
 use tap_caip::AssetId;
 use tap_msg::message::{
-    TransferBody, AuthorizeBody, RejectBody, SettleBody,
+    Transfer, Authorize, Reject, Settle,
     Participant, TapMessageBody,
 };
 
@@ -24,7 +24,7 @@ criterion_group!(
 criterion_main!(benches);
 
 /// Create a test Transfer message body
-fn create_transfer_body() -> TransferBody {
+fn create_transfer_body() -> Transfer {
     // Create participant information
     let originator = Participant {
         id: "did:example:alice".to_string(),
@@ -44,7 +44,7 @@ fn create_transfer_body() -> TransferBody {
     ).unwrap();
     
     // Return the transfer body
-    TransferBody {
+    Transfer {
         asset,
         originator,
         beneficiary: Some(beneficiary),
@@ -57,8 +57,8 @@ fn create_transfer_body() -> TransferBody {
 }
 
 /// Create a test Authorize message body
-fn create_authorize_body() -> AuthorizeBody {
-    AuthorizeBody {
+fn create_authorize_body() -> Authorize {
+    Authorize {
         transfer_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
         metadata: HashMap::new(),
@@ -66,8 +66,8 @@ fn create_authorize_body() -> AuthorizeBody {
 }
 
 /// Create a test Reject message body
-fn create_reject_body() -> RejectBody {
-    RejectBody {
+fn create_reject_body() -> Reject {
+    Reject {
         transfer_id: "test-transfer-id".to_string(),
         code: "COMPLIANCE_FAILURE".to_string(),
         description: "Unable to comply with transfer requirements".to_string(),
@@ -77,8 +77,8 @@ fn create_reject_body() -> RejectBody {
 }
 
 /// Create a test Settle message body
-fn create_settle_body() -> SettleBody {
-    SettleBody {
+fn create_settle_body() -> Settle {
+    Settle {
         transfer_id: "test-transfer-id".to_string(),
         transaction_id: "0xabcdef1234567890".to_string(),
         transaction_hash: Some("0xabcdef1234567890".to_string()),
@@ -149,28 +149,28 @@ fn bench_from_didcomm(c: &mut Criterion) {
     // Benchmark Transfer messages
     group.bench_function("transfer", |b| {
         b.iter(|| {
-            let _: TransferBody = TransferBody::from_didcomm(&transfer_message).unwrap();
+            let _: Transfer = Transfer::from_didcomm(&transfer_message).unwrap();
         })
     });
     
     // Benchmark Authorize messages
     group.bench_function("authorize", |b| {
         b.iter(|| {
-            let _: AuthorizeBody = AuthorizeBody::from_didcomm(&authorize_message).unwrap();
+            let _: Authorize = Authorize::from_didcomm(&authorize_message).unwrap();
         })
     });
     
     // Benchmark Reject messages
     group.bench_function("reject", |b| {
         b.iter(|| {
-            let _: RejectBody = RejectBody::from_didcomm(&reject_message).unwrap();
+            let _: Reject = Reject::from_didcomm(&reject_message).unwrap();
         })
     });
     
     // Benchmark Settle messages
     group.bench_function("settle", |b| {
         b.iter(|| {
-            let _: SettleBody = SettleBody::from_didcomm(&settle_message).unwrap();
+            let _: Settle = Settle::from_didcomm(&settle_message).unwrap();
         })
     });
     
@@ -203,7 +203,7 @@ fn bench_serialize_deserialize(c: &mut Criterion) {
     // Benchmark Transfer deserialization
     group.bench_function("transfer_deserialize", |b| {
         b.iter(|| {
-            let _: TransferBody = serde_json::from_str(&transfer_json).unwrap();
+            let _: Transfer = serde_json::from_str(&transfer_json).unwrap();
         })
     });
     
@@ -217,7 +217,7 @@ fn bench_serialize_deserialize(c: &mut Criterion) {
     // Benchmark Authorize deserialization
     group.bench_function("authorize_deserialize", |b| {
         b.iter(|| {
-            let _: AuthorizeBody = serde_json::from_str(&authorize_json).unwrap();
+            let _: Authorize = serde_json::from_str(&authorize_json).unwrap();
         })
     });
     
@@ -231,7 +231,7 @@ fn bench_serialize_deserialize(c: &mut Criterion) {
     // Benchmark Reject deserialization
     group.bench_function("reject_deserialize", |b| {
         b.iter(|| {
-            let _: RejectBody = serde_json::from_str(&reject_json).unwrap();
+            let _: Reject = serde_json::from_str(&reject_json).unwrap();
         })
     });
     
@@ -245,7 +245,7 @@ fn bench_serialize_deserialize(c: &mut Criterion) {
     // Benchmark Settle deserialization
     group.bench_function("settle_deserialize", |b| {
         b.iter(|| {
-            let _: SettleBody = serde_json::from_str(&settle_json).unwrap();
+            let _: Settle = serde_json::from_str(&settle_json).unwrap();
         })
     });
     

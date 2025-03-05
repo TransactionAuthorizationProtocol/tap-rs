@@ -3,7 +3,7 @@
 use crate::didcomm::pack_tap_body;
 use crate::error::Result;
 use crate::message::{
-    TransferBody, TapMessageBody, AuthorizeBody, RejectBody, SettleBody, Participant,
+    Transfer, TapMessageBody, Authorize, Reject, Settle, Participant,
 };
 use didcomm::Message;
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ pub async fn create_transfer_message_example() -> Result<Message> {
     };
     
     // Create a transfer body
-    let transfer_body = TransferBody {
+    let transfer_body = Transfer {
         asset: AssetId::parse("eip155:1/erc20:0x123456789abcdef").unwrap(),
         originator,
         beneficiary: Some(beneficiary),
@@ -58,7 +58,7 @@ pub fn process_transfer_message_example(message: &Message) -> Result<()> {
     
     // For a Transfer message, extract the transfer body
     if message.type_.as_ref().map_or(false, |t| t == "TAP_TRANSFER") {
-        let transfer_body = TransferBody::from_didcomm(message)?;
+        let transfer_body = Transfer::from_didcomm(message)?;
         
         // Now we can work with the transfer body
         println!("Received transfer from originator: {:?}", transfer_body.originator);
@@ -68,7 +68,7 @@ pub fn process_transfer_message_example(message: &Message) -> Result<()> {
         println!("Amount: {}", transfer_body.amount);
         
         // Create a response message (either Authorize or Reject)
-        let authorize_body = AuthorizeBody {
+        let authorize_body = Authorize {
             transfer_id: message.id.clone(), // Reference the original transfer ID
             note: Some("Transfer authorized".to_string()),
             metadata: HashMap::new(),
@@ -83,7 +83,7 @@ pub fn process_transfer_message_example(message: &Message) -> Result<()> {
 
 /// Example function to create a Reject message.
 pub async fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
-    let reject_body = RejectBody {
+    let reject_body = Reject {
         transfer_id: transfer_id.to_string(),
         code: "COMPLIANCE_FAILURE".to_string(),
         description: "Unable to comply with transfer requirements".to_string(),
@@ -105,7 +105,7 @@ pub async fn create_reject_message_example(transfer_id: &str) -> Result<Message>
 
 /// Example function to create a Settle message.
 pub async fn create_settle_message_example(transfer_id: &str) -> Result<Message> {
-    let settle_body = SettleBody {
+    let settle_body = Settle {
         transfer_id: transfer_id.to_string(),
         transaction_id: "0x123456789abcdef".to_string(),
         transaction_hash: Some("0xabcdef123456789".to_string()),
@@ -134,20 +134,20 @@ pub async fn process_any_tap_message_example(message: &Message) -> Result<()> {
     // Check the message type and process accordingly
     match message_type {
         Some("TAP_TRANSFER") => {
-            let body = TransferBody::from_didcomm(message)?;
+            let body = Transfer::from_didcomm(message)?;
             println!("Processing transfer: {:?} -> {:?}", body.originator, body.beneficiary);
         }
         Some("TAP_AUTHORIZE") => {
-            let body = AuthorizeBody::from_didcomm(message)?;
+            let body = Authorize::from_didcomm(message)?;
             println!("Authorization received for transfer: {}", body.transfer_id);
         }
         Some("TAP_REJECT") => {
-            let body = RejectBody::from_didcomm(message)?;
+            let body = Reject::from_didcomm(message)?;
             println!("Rejection received for transfer: {}", body.transfer_id);
             println!("Reason: {} - {}", body.code, body.description);
         }
         Some("TAP_SETTLE") => {
-            let body = SettleBody::from_didcomm(message)?;
+            let body = Settle::from_didcomm(message)?;
             println!("Settlement received for transfer: {}", body.transfer_id);
             println!("Transaction ID: {}", body.transaction_id);
         }

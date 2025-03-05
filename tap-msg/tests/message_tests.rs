@@ -3,7 +3,7 @@ extern crate tap_msg;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::types::{Participant, TapMessage, TapMessageType, TransferBody};
+use tap_msg::message::types::{Participant, TapMessage, TapMessageType, Transfer};
 
 #[test]
 fn test_create_message() {
@@ -21,7 +21,7 @@ fn test_create_message() {
         role: Some("beneficiary".to_string()),
     };
 
-    let body = TransferBody {
+    let body = Transfer {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),

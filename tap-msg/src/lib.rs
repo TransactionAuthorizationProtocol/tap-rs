@@ -19,9 +19,9 @@ pub mod utils;
 // Re-export public types for easier access
 pub use error::{Error, Result};
 pub use message::{
-    AddAgentsBody, Participant, Attachment, AttachmentData, AuthorizeBody, ErrorBody,
-    PresentationBody, RejectBody, RequestPresentationBody, SettleBody, 
-    TapMessageType, TransferBody, Validate, TapMessage, TapMessageBody, create_tap_message
+    AddAgents, Participant, Attachment, AttachmentData, Authorize, ErrorBody,
+    Presentation, Reject, RequestPresentation, Settle, 
+    TapMessageType, Transfer, Validate, TapMessage, TapMessageBody, create_tap_message
 };
 
 // Conditional compilation for WASM targets

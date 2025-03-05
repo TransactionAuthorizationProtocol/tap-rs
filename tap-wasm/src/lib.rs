@@ -78,7 +78,7 @@ pub struct Participant {
 
 /// Transfer message body (TAIP-3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TransferBody {
+pub struct Transfer {
     /// Network asset identifier in CAIP-19 format.
     pub asset: String,
 
@@ -112,7 +112,7 @@ pub struct TransferBody {
 
 /// Authorization message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AuthorizeBody {
+pub struct Authorize {
     /// The ID of the transfer being authorized.
     pub transfer_id: String,
 
@@ -127,7 +127,7 @@ pub struct AuthorizeBody {
 
 /// Reject message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RejectBody {
+pub struct Reject {
     /// The ID of the transfer being rejected.
     pub transfer_id: String,
 
@@ -148,7 +148,7 @@ pub struct RejectBody {
 
 /// Settle message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SettleBody {
+pub struct Settle {
     /// The ID of the transfer being settled.
     pub transfer_id: String,
 
@@ -270,8 +270,8 @@ impl Message {
     
     /// Sets a Transfer message body according to TAIP-3
     pub fn set_transfer_body(&mut self, transfer_data: JsValue) -> Result<(), JsValue> {
-        // Convert the JavaScript value to a TransferBody
-        let transfer_body: TransferBody = 
+        // Convert the JavaScript value to a Transfer
+        let transfer_body: Transfer = 
             serde_wasm_bindgen::from_value(transfer_data).map_err(|e| {
                 JsValue::from_str(&format!("Failed to parse transfer data: {}", e))
             })?;
@@ -295,8 +295,8 @@ impl Message {
     
     /// Sets an Authorize message body according to TAIP-4
     pub fn set_authorize_body(&mut self, authorize_data: JsValue) -> Result<(), JsValue> {
-        // Convert the JavaScript value to an AuthorizeBody
-        let authorize_body: AuthorizeBody = 
+        // Convert the JavaScript value to an Authorize
+        let authorize_body: Authorize = 
             serde_wasm_bindgen::from_value(authorize_data).map_err(|e| {
                 JsValue::from_str(&format!("Failed to parse authorize data: {}", e))
             })?;
@@ -322,8 +322,8 @@ impl Message {
     
     /// Sets a Reject message body according to TAIP-4
     pub fn set_reject_body(&mut self, reject_data: JsValue) -> Result<(), JsValue> {
-        // Convert the JavaScript value to a RejectBody
-        let reject_body: RejectBody = 
+        // Convert the JavaScript value to a Reject
+        let reject_body: Reject = 
             serde_wasm_bindgen::from_value(reject_data).map_err(|e| {
                 JsValue::from_str(&format!("Failed to parse reject data: {}", e))
             })?;
@@ -347,8 +347,8 @@ impl Message {
     
     /// Sets a Settle message body according to TAIP-4
     pub fn set_settle_body(&mut self, settle_data: JsValue) -> Result<(), JsValue> {
-        // Convert the JavaScript value to a SettleBody
-        let settle_body: SettleBody = 
+        // Convert the JavaScript value to a Settle
+        let settle_body: Settle = 
             serde_wasm_bindgen::from_value(settle_data).map_err(|e| {
                 JsValue::from_str(&format!("Failed to parse settle data: {}", e))
             })?;

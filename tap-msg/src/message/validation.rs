@@ -4,8 +4,8 @@
 
 use crate::error::{Error, Result};
 use crate::message::types::{
-    AddAgentsBody, AuthorizeBody, ErrorBody, PresentationBody, RejectBody, RequestPresentationBody,
-    SettleBody, TapMessage, TapMessageType, TransferBody, Validate,
+    AddAgents, Authorize, ErrorBody, Presentation, Reject, RequestPresentation,
+    Settle, TapMessage, TapMessageType, Transfer, Validate,
 };
 use serde_json::Value;
 
@@ -31,7 +31,7 @@ impl Validate for TapMessage {
                 // For tests, we can allow empty body
                 if self.body.is_some() {
                     // Only validate if a body is present
-                    let body: TransferBody = self.body_as()?;
+                    let body: Transfer = self.body_as()?;
                     validate_transfer_body(&body)?;
                 }
             }
@@ -39,7 +39,7 @@ impl Validate for TapMessage {
                 // For tests, we can allow empty body
                 if self.body.is_some() {
                     // Only validate if a body is present
-                    let body: RequestPresentationBody = self.body_as()?;
+                    let body: RequestPresentation = self.body_as()?;
                     validate_request_presentation_body(&body)?;
                 }
             }
@@ -47,7 +47,7 @@ impl Validate for TapMessage {
                 // For tests, we can allow empty body
                 if self.body.is_some() {
                     // Only validate if a body is present
-                    let body: PresentationBody = self.body_as()?;
+                    let body: Presentation = self.body_as()?;
                     validate_presentation_body(&body)?;
                 }
             }
@@ -55,7 +55,7 @@ impl Validate for TapMessage {
                 // For tests, we can allow empty body
                 if self.body.is_some() {
                     // Only validate if a body is present
-                    let body: AuthorizeBody = self.body_as()?;
+                    let body: Authorize = self.body_as()?;
                     validate_authorize_body(&body)?;
                 }
             }
@@ -63,7 +63,7 @@ impl Validate for TapMessage {
                 // For tests, we can allow empty body
                 if self.body.is_some() {
                     // Only validate if a body is present
-                    let body: RejectBody = self.body_as()?;
+                    let body: Reject = self.body_as()?;
                     validate_reject_body(&body)?;
                 }
             }
@@ -71,7 +71,7 @@ impl Validate for TapMessage {
                 // For tests, we can allow empty body
                 if self.body.is_some() {
                     // Only validate if a body is present
-                    let body: SettleBody = self.body_as()?;
+                    let body: Settle = self.body_as()?;
                     validate_settle_body(&body)?;
                 }
             }
@@ -79,7 +79,7 @@ impl Validate for TapMessage {
                 // For tests, we can allow empty body
                 if self.body.is_some() {
                     // Only validate if a body is present
-                    let body: AddAgentsBody = self.body_as()?;
+                    let body: AddAgents = self.body_as()?;
                     validate_add_agents_body(&body)?;
                 }
             }
@@ -108,39 +108,39 @@ impl Validate for TapMessage {
 pub fn validate_message_body(message_type: &TapMessageType, body: &Value) -> Result<()> {
     match message_type {
         TapMessageType::Transfer => {
-            let body: TransferBody = serde_json::from_value(body.clone())
+            let body: Transfer = serde_json::from_value(body.clone())
                 .map_err(|e| Error::Validation(format!("Invalid Transfer body: {}", e)))?;
             validate_transfer_body(&body)
         }
         TapMessageType::RequestPresentation => {
-            let body: RequestPresentationBody =
+            let body: RequestPresentation =
                 serde_json::from_value(body.clone()).map_err(|e| {
                     Error::Validation(format!("Invalid RequestPresentation body: {}", e))
                 })?;
             validate_request_presentation_body(&body)
         }
         TapMessageType::Presentation => {
-            let body: PresentationBody = serde_json::from_value(body.clone())
+            let body: Presentation = serde_json::from_value(body.clone())
                 .map_err(|e| Error::Validation(format!("Invalid Presentation body: {}", e)))?;
             validate_presentation_body(&body)
         }
         TapMessageType::Authorize => {
-            let body: AuthorizeBody = serde_json::from_value(body.clone())
+            let body: Authorize = serde_json::from_value(body.clone())
                 .map_err(|e| Error::Validation(format!("Invalid Authorize body: {}", e)))?;
             validate_authorize_body(&body)
         }
         TapMessageType::Reject => {
-            let body: RejectBody = serde_json::from_value(body.clone())
+            let body: Reject = serde_json::from_value(body.clone())
                 .map_err(|e| Error::Validation(format!("Invalid Reject body: {}", e)))?;
             validate_reject_body(&body)
         }
         TapMessageType::Settle => {
-            let body: SettleBody = serde_json::from_value(body.clone())
+            let body: Settle = serde_json::from_value(body.clone())
                 .map_err(|e| Error::Validation(format!("Invalid Settle body: {}", e)))?;
             validate_settle_body(&body)
         }
         TapMessageType::AddAgents => {
-            let body: AddAgentsBody = serde_json::from_value(body.clone())
+            let body: AddAgents = serde_json::from_value(body.clone())
                 .map_err(|e| Error::Validation(format!("Invalid AddAgents body: {}", e)))?;
             validate_add_agents_body(&body)
         }
@@ -157,7 +157,7 @@ pub fn validate_message_body(message_type: &TapMessageType, body: &Value) -> Res
 }
 
 /// Validates a transfer body.
-pub fn validate_transfer_body(body: &TransferBody) -> Result<()> {
+pub fn validate_transfer_body(body: &Transfer) -> Result<()> {
     // Validate required fields
     if body.asset.to_string().is_empty() {
         return Err(Error::Validation("Asset is required".to_string()));
@@ -171,7 +171,7 @@ pub fn validate_transfer_body(body: &TransferBody) -> Result<()> {
 }
 
 /// Validates a request presentation body.
-fn validate_request_presentation_body(body: &RequestPresentationBody) -> Result<()> {
+fn validate_request_presentation_body(body: &RequestPresentation) -> Result<()> {
     // Validate required fields
     if body.presentation_id.is_empty() {
         return Err(Error::Validation(
@@ -189,7 +189,7 @@ fn validate_request_presentation_body(body: &RequestPresentationBody) -> Result<
 }
 
 /// Validates a presentation body.
-fn validate_presentation_body(body: &PresentationBody) -> Result<()> {
+fn validate_presentation_body(body: &Presentation) -> Result<()> {
     // Validate required fields
     if body.presentation_id.is_empty() {
         return Err(Error::Validation(
@@ -207,7 +207,7 @@ fn validate_presentation_body(body: &PresentationBody) -> Result<()> {
 }
 
 /// Validates an authorize body.
-fn validate_authorize_body(body: &AuthorizeBody) -> Result<()> {
+fn validate_authorize_body(body: &Authorize) -> Result<()> {
     // Validate required fields
     if body.transfer_id.is_empty() {
         return Err(Error::Validation("Transfer ID is required".to_string()));
@@ -217,7 +217,7 @@ fn validate_authorize_body(body: &AuthorizeBody) -> Result<()> {
 }
 
 /// Validates a reject body.
-fn validate_reject_body(body: &RejectBody) -> Result<()> {
+fn validate_reject_body(body: &Reject) -> Result<()> {
     // Validate required fields
     if body.transfer_id.is_empty() {
         return Err(Error::Validation("Transfer ID is required".to_string()));
@@ -235,7 +235,7 @@ fn validate_reject_body(body: &RejectBody) -> Result<()> {
 }
 
 /// Validates a settle body.
-fn validate_settle_body(body: &SettleBody) -> Result<()> {
+fn validate_settle_body(body: &Settle) -> Result<()> {
     // Validate required fields
     if body.transfer_id.is_empty() {
         return Err(Error::Validation("Transfer ID is required".to_string()));
@@ -249,7 +249,7 @@ fn validate_settle_body(body: &SettleBody) -> Result<()> {
 }
 
 /// Validates an add agents body.
-fn validate_add_agents_body(body: &AddAgentsBody) -> Result<()> {
+fn validate_add_agents_body(body: &AddAgents) -> Result<()> {
     // Validate required fields
     if body.transfer_id.is_empty() {
         return Err(Error::Validation("Transfer ID is required".to_string()));

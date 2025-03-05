@@ -11,7 +11,7 @@ use didcomm::secrets::{Secret, SecretType, SecretMaterial};
 use tap_agent::did::MultiResolver;
 use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
-use tap_msg::message::TransferBody;
+use tap_msg::message::Transfer;
 use tap_msg::message::TapMessageBody;
 
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -23,9 +23,9 @@ async fn create_test_message(
     from_did: &str,
     to_did: &str,
     index: usize,
-) -> (DIDCommMessage, TransferBody) {
+) -> (DIDCommMessage, Transfer) {
     // Create a simple transfer message
-    let body = TransferBody {
+    let body = Transfer {
         asset: tap_caip::AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
         originator: tap_msg::message::Agent {
             id: from_did.to_string(),

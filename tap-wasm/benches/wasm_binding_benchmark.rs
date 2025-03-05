@@ -11,12 +11,12 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::{
-    TapMessageBody, TransferBody, AuthorizeBody, RejectBody,
+    TapMessageBody, Transfer, Authorize, Reject,
     Agent as MessageAgent, 
 };
 
 /// Create a test transfer message body
-fn create_transfer_body() -> TransferBody {
+fn create_transfer_body() -> Transfer {
     // Create originator and beneficiary agents
     let originator = MessageAgent {
         id: "did:example:alice".to_string(),
@@ -29,7 +29,7 @@ fn create_transfer_body() -> TransferBody {
     };
     
     // Create a transfer body
-    TransferBody {
+    Transfer {
         asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
         originator,
         beneficiary: Some(beneficiary),
@@ -84,14 +84,14 @@ fn bench_message_conversion(c: &mut Criterion) {
     let transfer_body = create_transfer_body();
     let transfer_message = transfer_body.to_didcomm().unwrap();
     
-    let authorize_body = AuthorizeBody {
+    let authorize_body = Authorize {
         transfer_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
         metadata: HashMap::new(),
     };
     let authorize_message = authorize_body.to_didcomm().unwrap();
     
-    let reject_body = RejectBody {
+    let reject_body = Reject {
         transfer_id: "test-transfer-id".to_string(),
         code: "COMPLIANCE_FAILURE".to_string(),
         description: "Unable to comply with transfer requirements".to_string(),
@@ -109,21 +109,21 @@ fn bench_message_conversion(c: &mut Criterion) {
     group.bench_function("detect_transfer", |b| {
         b.iter(|| {
             let parsed: DIDCommMessage = serde_json::from_str(&transfer_json).unwrap();
-            let _: TransferBody = TransferBody::from_didcomm(&parsed).unwrap();
+            let _: Transfer = Transfer::from_didcomm(&parsed).unwrap();
         })
     });
     
     group.bench_function("detect_authorize", |b| {
         b.iter(|| {
             let parsed: DIDCommMessage = serde_json::from_str(&authorize_json).unwrap();
-            let _: AuthorizeBody = AuthorizeBody::from_didcomm(&parsed).unwrap();
+            let _: Authorize = Authorize::from_didcomm(&parsed).unwrap();
         })
     });
     
     group.bench_function("detect_reject", |b| {
         b.iter(|| {
             let parsed: DIDCommMessage = serde_json::from_str(&reject_json).unwrap();
-            let _: RejectBody = RejectBody::from_didcomm(&parsed).unwrap();
+            let _: Reject = Reject::from_didcomm(&parsed).unwrap();
         })
     });
     

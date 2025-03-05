@@ -47,7 +47,7 @@ use std::time::Duration;
 
 use tap_agent::{Participant, ParticipantConfig};
 use tap_msg::message::{
-    TransferBody, AuthorizeBody, ReceiptBody, SettlementBody, RejectBody,
+    Transfer, Authorize, ReceiptBody, SettlementBody, Reject,
     TapMessageBody, Participant as TapParticipant
 };
 use tap_msg::did::KeyPair;
@@ -133,7 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Beneficiary received transfer request: {}", msg_clone.id);
                     
                     // Create an authorize response
-                    let authorize = AuthorizeBody {
+                    let authorize = Authorize {
                         transfer_id: msg_clone.id.clone(),
                         note: Some("Transfer authorized by beneficiary".to_string()),
                         metadata: HashMap::new(),
@@ -174,7 +174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Originator received authorization: {}", msg_clone.id);
                     
                     // Extract the transfer ID from the authorization
-                    let auth_body = AuthorizeBody::from_didcomm(&msg_clone)?;
+                    let auth_body = Authorize::from_didcomm(&msg_clone)?;
                     
                     // Create a receipt
                     let receipt = ReceiptBody {
@@ -260,7 +260,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let asset = AssetId::from_str("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F")?;
     
     // Create the transfer body
-    let transfer_body = TransferBody {
+    let transfer_body = Transfer {
         asset,
         originator,
         beneficiary: Some(beneficiary),

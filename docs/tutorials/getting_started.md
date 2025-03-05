@@ -91,7 +91,7 @@ main().catch(console.error);
 ### In Rust
 
 ```rust
-use tap_msg::message::{TransferBody, TapMessageBody, Participant as MessageParticipant};
+use tap_msg::message::{Transfer, TapMessageBody, Participant as MessageParticipant};
 use didcomm::Message;
 use tap_caip::AssetId;
 use std::collections::HashMap;
@@ -112,7 +112,7 @@ async fn create_transfer_message(
     };
     
     // Create a transfer body
-    let transfer_body = TransferBody {
+    let transfer_body = Transfer {
         asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(), // DAI token
         originator,
         beneficiary: Some(beneficiary),
@@ -214,7 +214,7 @@ const unsubscribe = node.subscribeToMessages((message, metadata) => {
 ### In Rust
 
 ```rust
-use tap_msg::message::{TransferBody, AuthorizeBody};
+use tap_msg::message::{Transfer, Authorize};
 use didcomm::Message;
 use std::collections::HashMap;
 
@@ -222,7 +222,7 @@ async fn process_transfer_message(
     message: &Message
 ) -> Result<Message, tap_msg::error::Error> {
     // Extract the transfer body
-    let transfer_body = TransferBody::from_didcomm(message)?;
+    let transfer_body = Transfer::from_didcomm(message)?;
     
     println!("Received transfer:");
     println!("  From: {}", transfer_body.originator.id);
@@ -230,7 +230,7 @@ async fn process_transfer_message(
     println!("  Asset: {}", transfer_body.asset);
     
     // Create an authorize response
-    let authorize_body = AuthorizeBody {
+    let authorize_body = Authorize {
         transfer_id: message.id.clone(),
         note: Some("Transfer authorized".to_string()),
         metadata: HashMap::new(),
@@ -287,7 +287,7 @@ participant.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => 
 use tap_agent::{Agent, AgentConfig};
 use tap_msg::{
     did::KeyPair,
-    message::{TransferBody, AuthorizeBody, TapMessageBody, Participant as MessageParticipant},
+    message::{Transfer, Authorize, TapMessageBody, Participant as MessageParticipant},
 };
 use tap_node::{Node, NodeConfig};
 use didcomm::Message;
@@ -335,7 +335,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Process based on message type
         if message.type_.as_ref().map_or(false, |t| t == "TAP_TRANSFER") {
             // Create an authorize response (in a real scenario, would verify first)
-            let authorize_body = AuthorizeBody {
+            let authorize_body = Authorize {
                 transfer_id: message.id.clone(),
                 note: Some("Transfer authorized".to_string()),
                 metadata: HashMap::new(),
@@ -369,7 +369,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         role: Some("beneficiary".to_string()),
     };
     
-    let transfer_body = TransferBody {
+    let transfer_body = Transfer {
         asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
         originator,
         beneficiary: Some(beneficiary),
@@ -394,7 +394,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     // Alice processes Bob's response
     println!("Alice received Bob's response");
-    let authorize_body = AuthorizeBody::from_didcomm(&bob_response)?;
+    let authorize_body = Authorize::from_didcomm(&bob_response)?;
     println!("Authorization note: {}", authorize_body.note.unwrap_or_default());
     
     // In a real scenario, Alice would now proceed with the on-chain transaction

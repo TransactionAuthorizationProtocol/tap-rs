@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::types::{Participant, TransferBody};
+use tap_msg::message::types::{Participant, Transfer};
 use tap_msg::message::validation::validate_transfer_body;
 
 #[test]
@@ -20,7 +20,7 @@ fn test_valid_transfer_body() {
         role: Some("beneficiary".to_string()),
     };
 
-    let body = TransferBody {
+    let body = Transfer {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -55,7 +55,7 @@ fn test_transfer_with_empty_asset() {
     };
 
     // Creating a body with valid values
-    let body = TransferBody {
+    let body = Transfer {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -85,7 +85,7 @@ fn test_transfer_with_empty_amount() {
         role: Some("beneficiary".to_string()),
     };
 
-    let body = TransferBody {
+    let body = Transfer {
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),

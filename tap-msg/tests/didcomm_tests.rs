@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::error::Result;
-use tap_msg::message::{Participant, TransferBody, TapMessageBody};
+use tap_msg::message::{Participant, Transfer, TapMessageBody};
 
 #[tokio::test]
 async fn test_pack_tap_body() -> Result<()> {
@@ -20,7 +20,7 @@ async fn test_pack_tap_body() -> Result<()> {
         role: Some("beneficiary".to_string()),
     };
 
-    let body = TransferBody {
+    let body = Transfer {
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -44,7 +44,7 @@ async fn test_pack_tap_body() -> Result<()> {
         packed_msg.to,
         Some(vec![to_did.to_string()])
     );
-    assert_eq!(packed_msg.type_, TransferBody::message_type());
+    assert_eq!(packed_msg.type_, Transfer::message_type());
     
     // Verify the body contains our data
     let body_value = packed_msg.body.as_object().unwrap();
@@ -53,7 +53,7 @@ async fn test_pack_tap_body() -> Result<()> {
     assert!(body_value.contains_key("originator"));
 
     // Now test extracting the body back using from_didcomm
-    let extracted_body = TransferBody::from_didcomm(&packed_msg)?;
+    let extracted_body = Transfer::from_didcomm(&packed_msg)?;
     
     // Verify the extracted body matches the original
     assert_eq!(extracted_body.asset, asset);
@@ -79,7 +79,7 @@ async fn test_extract_tap_body() -> Result<()> {
         role: Some("beneficiary".to_string()),
     };
     
-    let body = TransferBody {
+    let body = Transfer {
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -98,7 +98,7 @@ async fn test_extract_tap_body() -> Result<()> {
     let message = body.to_didcomm_with_route(Some(from_did), to_dids.iter().copied())?;
     
     // Extract the body using from_didcomm
-    let extracted: TransferBody = TransferBody::from_didcomm(&message)?;
+    let extracted: Transfer = Transfer::from_didcomm(&message)?;
     
     // Verify extraction was successful
     assert_eq!(extracted.asset, asset);

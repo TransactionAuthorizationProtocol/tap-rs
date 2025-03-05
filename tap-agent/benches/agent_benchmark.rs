@@ -13,7 +13,7 @@ use tap_agent::{
 };
 use tap_agent::did::MultiResolver;
 use tap_msg::message::{
-    TransferBody, 
+    Transfer, 
     Agent as MessageAgent
 };
 use tap_caip::AssetId;
@@ -62,7 +62,7 @@ async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
 }
 
 /// Create a test transfer message
-async fn create_transfer_message(from_did: &str, to_did: &str) -> TransferBody {
+async fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
     // Create originator and beneficiary agents
     let originator = MessageAgent {
         id: from_did.to_string(),
@@ -75,7 +75,7 @@ async fn create_transfer_message(from_did: &str, to_did: &str) -> TransferBody {
     };
     
     // Create a transfer body
-    TransferBody {
+    Transfer {
         asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
         originator,
         beneficiary: Some(beneficiary),
@@ -130,7 +130,7 @@ fn bench_message_packing(c: &mut Criterion) {
                 
                 // Send and receive message
                 let packed = agent1.send_message(&transfer, &did2).await.unwrap();
-                let _: TransferBody = agent2.receive_message(&packed).await.unwrap();
+                let _: Transfer = agent2.receive_message(&packed).await.unwrap();
             });
         });
     });
