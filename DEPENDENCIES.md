@@ -17,6 +17,7 @@ The TAP-rs project requires UUID version 0.8.2 specifically because:
 #### Usage Guidelines:
 
 - Always use `uuid::Uuid::new_v4()` for generating UUIDs (not `v4()`)
+- Use `uuid::Uuid::new_v4().to_simple().to_string()` instead of `as_simple()` (which is only available in newer versions)
 - All crates in the workspace should reference the UUID dependency via:
   ```toml
   uuid = { workspace = true }
