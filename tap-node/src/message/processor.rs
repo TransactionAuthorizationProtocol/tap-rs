@@ -89,8 +89,10 @@ impl Default for DefaultMessageProcessorImpl {
 impl DefaultMessageProcessorImpl {
     /// Create a new default message processor
     pub fn new() -> Self {
-        let logging_processor = crate::message::MessageProcessorType::Logging(LoggingMessageProcessor);
-        let validation_processor = crate::message::MessageProcessorType::Validation(ValidationMessageProcessor);
+        let logging_processor =
+            crate::message::MessageProcessorType::Logging(LoggingMessageProcessor);
+        let validation_processor =
+            crate::message::MessageProcessorType::Validation(ValidationMessageProcessor);
 
         let mut processor = crate::message::CompositeMessageProcessor::new(Vec::new());
         processor.add_processor(validation_processor);
@@ -108,7 +110,9 @@ impl MessageProcessor for DefaultMessageProcessorImpl {
         match &self.processor {
             crate::message::MessageProcessorType::Default(p) => p.process_incoming(message).await,
             crate::message::MessageProcessorType::Logging(p) => p.process_incoming(message).await,
-            crate::message::MessageProcessorType::Validation(p) => p.process_incoming(message).await,
+            crate::message::MessageProcessorType::Validation(p) => {
+                p.process_incoming(message).await
+            }
             crate::message::MessageProcessorType::Composite(p) => p.process_incoming(message).await,
         }
     }
@@ -117,7 +121,9 @@ impl MessageProcessor for DefaultMessageProcessorImpl {
         match &self.processor {
             crate::message::MessageProcessorType::Default(p) => p.process_outgoing(message).await,
             crate::message::MessageProcessorType::Logging(p) => p.process_outgoing(message).await,
-            crate::message::MessageProcessorType::Validation(p) => p.process_outgoing(message).await,
+            crate::message::MessageProcessorType::Validation(p) => {
+                p.process_outgoing(message).await
+            }
             crate::message::MessageProcessorType::Composite(p) => p.process_outgoing(message).await,
         }
     }

@@ -1,5 +1,5 @@
 //! Message types and utilities for the TAP Agent.
-//! 
+//!
 //! This module provides constants and types for working with TAP messages,
 //! including security modes and message type identifiers.
 

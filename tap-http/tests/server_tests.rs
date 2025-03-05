@@ -25,21 +25,21 @@ async fn test_server_startup() {
     // Create a mock TapNode and find an available port
     let node = create_mock_node();
     let port = find_unused_port().expect("Unable to find unused port");
-    
+
     // Configure server with the available port
     let config = TapHttpConfig {
         host: "127.0.0.1".to_string(),
         port,
         ..TapHttpConfig::default()
     };
-    
+
     // Create and start HTTP server
     let mut server = TapHttpServer::new(config, node);
     server.start().await.expect("Server should start");
-    
+
     // Wait a moment for server to fully start
     sleep(Duration::from_millis(100)).await;
-    
+
     // Stop the server
     server.stop().await.expect("Server should stop");
 }
@@ -49,23 +49,23 @@ async fn test_health_endpoint() {
     // Create a mock TapNode and find an available port
     let node = create_mock_node();
     let port = find_unused_port().expect("Unable to find unused port");
-    
+
     // Configure server with the available port
     let config = TapHttpConfig {
         host: "127.0.0.1".to_string(),
         port,
         ..TapHttpConfig::default()
     };
-    
+
     // Create HTTP server
     let mut server = TapHttpServer::new(config, node);
-    
+
     // Start the server
     server.start().await.expect("Server should start");
-    
+
     // Wait for server to fully start
     sleep(Duration::from_millis(500)).await;
-    
+
     // Make request to health endpoint
     let client = reqwest::Client::new();
     let response = client
@@ -73,21 +73,25 @@ async fn test_health_endpoint() {
         .timeout(Duration::from_secs(5))
         .send()
         .await;
-        
+
     // Ensure we got a response
-    assert!(response.is_ok(), "Failed to connect to health endpoint: {:?}", response.err());
-    
+    assert!(
+        response.is_ok(),
+        "Failed to connect to health endpoint: {:?}",
+        response.err()
+    );
+
     let response = response.unwrap();
     assert_eq!(response.status(), 200);
-    
+
     // Parse response body
     let body = response.text().await.unwrap();
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    
+
     // Verify response contents
     assert_eq!(json["status"], "ok");
     assert!(json["version"].is_string());
-    
+
     // Stop the server
     server.stop().await.expect("Server should stop");
 }
@@ -97,23 +101,23 @@ async fn test_didcomm_endpoint() {
     // Create a mock TapNode and find an available port
     let node = create_mock_node();
     let port = find_unused_port().expect("Unable to find unused port");
-    
+
     // Configure server with the available port
     let config = TapHttpConfig {
         host: "127.0.0.1".to_string(),
         port,
         ..TapHttpConfig::default()
     };
-    
+
     // Create HTTP server
     let mut server = TapHttpServer::new(config, node);
-    
+
     // Start the server
     server.start().await.expect("Server should start");
-    
+
     // Wait for server to fully start
     sleep(Duration::from_millis(500)).await;
-    
+
     // Create a DIDComm test message (intentionally invalid to test error handling)
     let didcomm_msg = json!({
         "id": "1234567890",
@@ -132,7 +136,7 @@ async fn test_didcomm_endpoint() {
         "from": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
         "to": ["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp"]
     });
-    
+
     // Make request to DIDComm endpoint
     let client = reqwest::Client::new();
     let response = client
@@ -142,13 +146,17 @@ async fn test_didcomm_endpoint() {
         .timeout(Duration::from_secs(5))
         .send()
         .await;
-        
+
     // Ensure we got a response
-    assert!(response.is_ok(), "Failed to connect to didcomm endpoint: {:?}", response.err());
-    
+    assert!(
+        response.is_ok(),
+        "Failed to connect to didcomm endpoint: {:?}",
+        response.err()
+    );
+
     let status = response.unwrap().status();
     assert_eq!(status, 500);
-    
+
     // Stop the server
     server.stop().await.expect("Server should stop");
 }

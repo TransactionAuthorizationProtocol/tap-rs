@@ -8,15 +8,17 @@ pub mod router;
 pub mod sender;
 
 // Re-export processors, routers, and senders
-pub use processor::{DefaultMessageProcessor, LoggingMessageProcessor, ValidationMessageProcessor, MessageProcessor};
+pub use processor::{
+    DefaultMessageProcessor, LoggingMessageProcessor, MessageProcessor, ValidationMessageProcessor,
+};
 pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
-pub use router::{DefaultMessageRouter};
+pub use router::DefaultMessageRouter;
 pub use sender::{HttpMessageSender, NodeMessageSender};
 
 // Import the Message type from tap-msg
-use tap_msg::didcomm::Message;
-use crate::error::{Result};
+use crate::error::Result;
 use async_trait::async_trait;
+use tap_msg::didcomm::Message;
 
 /// Router to determine the destination agent for a message
 pub trait MessageRouter: Send + Sync {
@@ -151,6 +153,8 @@ impl MessageRouter for CompositeMessageRouter {
         }
 
         // If we get here, all routers failed
-        Err(crate::error::Error::Routing("No router could handle the message".to_string()))
+        Err(crate::error::Error::Routing(
+            "No router could handle the message".to_string(),
+        ))
     }
 }

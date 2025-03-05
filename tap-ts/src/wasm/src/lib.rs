@@ -556,7 +556,10 @@ impl TapNode {
 pub fn create_did_key() -> Result<JsValue, JsValue> {
     // In a real implementation, this would generate a key pair and return a DID
     // For now, just return a mock DID
-    let mock_did = format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_string().replace("-", ""));
+    let mock_did = format!(
+        "did:key:z6Mk{}",
+        uuid::Uuid::new_v4().to_string().replace("-", "")
+    );
 
     let result = Object::new();
     Reflect::set(

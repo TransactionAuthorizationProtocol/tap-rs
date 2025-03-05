@@ -28,7 +28,7 @@ impl DefaultMessageRouter {
     pub fn new() -> Self {
         Self { agents: None }
     }
-    
+
     /// Set the agent registry
     pub fn with_agents(mut self, agents: Arc<AgentRegistry>) -> Self {
         self.agents = Some(agents);
@@ -43,7 +43,7 @@ impl MessageRouter for DefaultMessageRouter {
             if !to.is_empty() {
                 // Check if the first to DID exists in our registry
                 let to_did = to[0].clone();
-                
+
                 // If we have an agent registry, check if the agent exists
                 if let Some(agents) = &self.agents {
                     if agents.has_agent(&to_did) {
@@ -95,8 +95,7 @@ impl MessageRouter for CompositeMessageRouter {
                         Ok(target) => return Ok(target),
                         Err(_) => continue, // Try the next router
                     }
-                }
-                // Add other router types here if needed
+                } // Add other router types here if needed
             }
         }
 

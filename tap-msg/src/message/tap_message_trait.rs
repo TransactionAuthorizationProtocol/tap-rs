@@ -46,6 +46,10 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
     }
 
     /// Convert this body to a DIDComm message with a sender and multiple recipients.
+    ///
+    /// According to TAP requirements:
+    /// - The `from` field should always be the creator's DID
+    /// - The `to` field should include DIDs of all agents involved except the creator
     fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
     where
         I: IntoIterator<Item = &'a str>,
@@ -61,6 +65,61 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
         let to_vec: Vec<String> = to.into_iter().map(String::from).collect();
         if !to_vec.is_empty() {
             message.to = Some(to_vec);
+        }
+
+        Ok(message)
+    }
+
+    /// Create a reply message to an existing message.
+    ///
+    /// This method helps create a response that maintains thread correlation with the original message.
+    /// According to TAP requirements:
+    /// - Responses should include DIDs of all agents involved except for the creator of the response
+    /// - The thread ID should be preserved to maintain message correlation
+    ///
+    /// # Arguments
+    ///
+    /// * `original` - The original message to reply to
+    /// * `creator_did` - DID of the creator of this reply (will be set as the `from` value)
+    /// * `participant_dids` - DIDs of all participants in the thread
+    ///                       (creator_did will be filtered out automatically for the `to` field)
+    ///
+    /// # Returns
+    ///
+    /// A new DIDComm message that is properly linked to the original message
+    fn create_reply(
+        &self,
+        original: &Message,
+        creator_did: &str,
+        participant_dids: &[&str],
+    ) -> Result<Message> {
+        let mut message = self.to_didcomm()?;
+
+        // Set the thread ID to maintain the conversation thread
+        if let Some(thread_id) = original.thid.as_ref() {
+            message.thid = Some(thread_id.clone());
+        } else {
+            // If no thread ID exists, use the original message ID as the thread ID
+            message.thid = Some(original.id.clone());
+        }
+
+        // Set the parent thread ID if this thread is part of a larger transaction
+        if let Some(parent_thread_id) = original.pthid.as_ref() {
+            message.pthid = Some(parent_thread_id.clone());
+        }
+
+        // Set the creator as the sender
+        message.from = Some(creator_did.to_string());
+
+        // Set recipients to all participants except the creator
+        let recipients: Vec<String> = participant_dids
+            .iter()
+            .filter(|&&did| did != creator_did)
+            .map(|&did| did.to_string())
+            .collect();
+
+        if !recipients.is_empty() {
+            message.to = Some(recipients);
         }
 
         Ok(message)
@@ -128,6 +187,32 @@ pub trait TapMessage {
     ///
     /// The message body if the type matches T, otherwise an error
     fn body_as<T: TapMessageBody>(&self) -> Result<T>;
+
+    /// Get all participant DIDs from this message.
+    ///
+    /// This method collects all DIDs involved in the message thread,
+    /// including both the sender (from) and all recipients (to).
+    ///
+    /// # Returns
+    ///
+    /// A vector containing all DIDs involved in the message.
+    fn get_all_participants(&self) -> Vec<String>;
+
+    /// Create a reply to this message.
+    ///
+    /// # Type Parameters
+    ///
+    /// * `T` - The TAP message body type to create
+    ///
+    /// # Arguments
+    ///
+    /// * `body` - The reply message body
+    /// * `creator_did` - DID of the creator of this reply
+    ///
+    /// # Returns
+    ///
+    /// A new DIDComm message that is properly linked to this message as a reply
+    fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<Message>;
 }
 
 // Implement TapMessage trait for didcomm::Message
@@ -185,6 +270,33 @@ impl TapMessage for Message {
 
         Ok(body)
     }
+
+    fn get_all_participants(&self) -> Vec<String> {
+        let mut participants = Vec::new();
+
+        // Add the sender if present
+        if let Some(from) = &self.from {
+            participants.push(from.clone());
+        }
+
+        // Add all recipients if present
+        if let Some(to) = &self.to {
+            participants.extend(to.clone());
+        }
+
+        participants
+    }
+
+    fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<Message> {
+        // Get all participants from this message
+        let all_participants = self.get_all_participants();
+
+        // Convert to &str for the body.create_reply call
+        let participant_refs: Vec<&str> = all_participants.iter().map(AsRef::as_ref).collect();
+
+        // Create the reply using the body's method
+        body.create_reply(self, creator_did, &participant_refs)
+    }
 }
 
 /// Creates a new TAP message from a message body.
@@ -202,13 +314,13 @@ impl TapMessage for Message {
 /// # Returns
 ///
 /// A DIDComm message object ready for further processing
-pub async fn create_tap_message<T: TapMessageBody>(
+pub fn create_tap_message<T: TapMessageBody>(
     body: &T,
     id: Option<String>,
     from_did: Option<&str>,
     to_dids: &[&str],
 ) -> Result<Message> {
-    // Convert the message body to a DIDComm message
+    // Create the base message from the body
     let mut message = body.to_didcomm()?;
 
     // Set custom ID if provided
@@ -216,12 +328,11 @@ pub async fn create_tap_message<T: TapMessageBody>(
         message.id = custom_id;
     }
 
-    // Set the sender if provided
-    if let Some(from) = from_did {
-        message.from = Some(from.to_string());
+    // Set sender and recipients
+    if let Some(sender) = from_did {
+        message.from = Some(sender.to_string());
     }
 
-    // Set the recipients if provided
     if !to_dids.is_empty() {
         message.to = Some(to_dids.iter().map(|&s| s.to_string()).collect());
     }

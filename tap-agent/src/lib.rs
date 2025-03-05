@@ -38,7 +38,7 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 pub use agent::{Agent, DefaultAgent};
 pub use config::AgentConfig;
 pub use crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
-pub use did::{DIDMethodResolver, MultiResolver, KeyResolver, SyncDIDResolver};
+pub use did::{DIDMethodResolver, KeyResolver, MultiResolver, SyncDIDResolver};
 pub use didcomm::did::{DIDDoc, DIDResolver};
 pub use error::{Error, Result};
 pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};

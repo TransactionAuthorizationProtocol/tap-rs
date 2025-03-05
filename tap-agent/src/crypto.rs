@@ -5,9 +5,9 @@
 //! - Secret resolution for cryptographic operations
 //! - Security mode handling for different message types
 
+use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
 use crate::message::SecurityMode;
-use crate::did::SyncDIDResolver;
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -149,8 +149,9 @@ impl DefaultMessagePacker {
     async fn resolve_did(&self, did: &str) -> Result<String> {
         // Our SyncDIDResolver returns our own error type, so we don't need to convert it
         let doc_option = self.did_resolver.resolve(did).await?;
-        let doc = doc_option.ok_or_else(|| Error::DidResolution(format!("Could not resolve DID: {}", did)))?;
-            
+        let doc = doc_option
+            .ok_or_else(|| Error::DidResolution(format!("Could not resolve DID: {}", did)))?;
+
         // Convert the DID doc to a JSON string
         serde_json::to_string(&doc).map_err(|e| Error::Serialization(e.to_string()))
     }
@@ -198,7 +199,7 @@ impl DefaultMessagePacker {
     /// Unpack a message and parse it to the requested type
     pub async fn unpack_message<T: DeserializeOwned + Send>(&self, packed: &str) -> Result<T> {
         let value = self.unpack_message_value(packed).await?;
-        
+
         // Parse the unpacked message to the requested type
         serde_json::from_value::<T>(value).map_err(|e| Error::Serialization(e.to_string()))
     }
@@ -229,26 +230,30 @@ impl MessagePacker for DefaultMessagePacker {
         // For proper implementations, we would use the did_resolver to resolve DIDs
         // and the secrets_resolver for cryptographic operations
         let _to_doc = self.resolve_did(to).await?;
-        
+
         // If from is provided, resolve it too
         if let Some(from_did) = from {
             let _from_doc = self.resolve_did(from_did).await?;
         }
-        
+
         // Serialize the message to a JSON string
-        let mut value = serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
-        
+        let mut value =
+            serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
+
         // Ensure value is an object
-        let obj = value.as_object_mut().ok_or_else(|| Error::Serialization("Message is not a JSON object".to_string()))?;
-        
+        let obj = value
+            .as_object_mut()
+            .ok_or_else(|| Error::Serialization("Message is not a JSON object".to_string()))?;
+
         // Add id if not present
         if !obj.contains_key("id") {
             obj.insert("id".to_string(), Value::String(Uuid::new_v4().to_string()));
         }
-        
+
         // Convert back to string
-        let message_str = serde_json::to_string(&value).map_err(|e| Error::Serialization(e.to_string()))?;
-        
+        let message_str =
+            serde_json::to_string(&value).map_err(|e| Error::Serialization(e.to_string()))?;
+
         // Build DIDComm message
         // Note: In a real implementation, we would use the didcomm crate's Message type
         // Here we'll create a simplified message structure
@@ -258,15 +263,15 @@ impl MessagePacker for DefaultMessagePacker {
             "body": value,
             "to": to
         });
-        
+
         // Add "from" if provided
         if let Some(from_did) = from {
             msg["from"] = Value::String(from_did.to_string());
         }
-        
+
         // Select the security mode
         let actual_mode = self.select_security_mode(mode, from.is_some())?;
-        
+
         // Pack the message according to the selected mode
         let packed = match actual_mode {
             SecurityMode::Plain => {
@@ -280,11 +285,13 @@ impl MessagePacker for DefaultMessagePacker {
                     // to sign the message with the sender's key
                     // Accessing the secrets_resolver (now just using it to prevent dead code warning)
                     let _sr = &self.secrets_resolver;
-                    
+
                     // For now, just serialize the message with an id field
                     message_str
                 } else {
-                    return Err(Error::Validation("Signed mode requires a from field".to_string()));
+                    return Err(Error::Validation(
+                        "Signed mode requires a from field".to_string(),
+                    ));
                 }
             }
             SecurityMode::AuthCrypt => {
@@ -294,18 +301,22 @@ impl MessagePacker for DefaultMessagePacker {
                     // to encrypt and sign the message
                     // Accessing the secrets_resolver (now just using it to prevent dead code warning)
                     let _sr = &self.secrets_resolver;
-                    
+
                     // For now, just serialize the message with an id field
                     message_str
                 } else {
-                    return Err(Error::Validation("AuthCrypt mode requires a from field".to_string()));
+                    return Err(Error::Validation(
+                        "AuthCrypt mode requires a from field".to_string(),
+                    ));
                 }
             }
             SecurityMode::Any => {
-                return Err(Error::Validation("Cannot use Any mode for packing".to_string()));
+                return Err(Error::Validation(
+                    "Cannot use Any mode for packing".to_string(),
+                ));
             }
         };
-        
+
         Ok(packed)
     }
 
@@ -324,16 +335,16 @@ impl MessagePacker for DefaultMessagePacker {
         // to decrypt and verify the message
         // Accessing the secrets_resolver (now just using it to prevent dead code warning)
         let _sr = &self.secrets_resolver;
-    
+
         // Try to parse as JSON first (for Plain mode)
         if let Ok(value) = serde_json::from_str::<Value>(packed) {
             return Ok(value);
         }
-        
+
         // If that fails, attempt to unpack as a DIDComm message
         // (for Signed and AuthCrypt modes)
         // This would involve using the secrets_resolver and did_resolver
-        
+
         // For now, just return an error
         Err(Error::Serialization("Failed to unpack message".to_string()))
     }

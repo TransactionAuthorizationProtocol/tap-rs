@@ -278,6 +278,41 @@ pub struct AddAgents {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
+/// Replace agent message body (TAIP-5).
+///
+/// This message type allows replacing an agent with another agent in a transaction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReplaceAgent {
+    /// ID of the transfer to replace an agent in.
+    pub transfer_id: String,
+
+    /// DID of the agent to be replaced.
+    pub original: String,
+
+    /// Replacement agent.
+    pub replacement: Participant,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Remove agent message body (TAIP-5).
+///
+/// This message type allows removing an agent from a transaction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RemoveAgent {
+    /// ID of the transfer to remove an agent from.
+    pub transfer_id: String,
+
+    /// DID of the agent to be removed.
+    pub agent: String,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
 /// Error message body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorBody {
@@ -516,6 +551,56 @@ impl TapMessageBody for AddAgents {
                     "Agent ID is required in AddAgents".to_string(),
                 ));
             }
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for ReplaceAgent {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#replaceagent"
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.transfer_id.is_empty() {
+            return Err(Error::Validation(
+                "Transfer ID is required in ReplaceAgent".to_string(),
+            ));
+        }
+
+        if self.original.is_empty() {
+            return Err(Error::Validation(
+                "Original agent ID is required in ReplaceAgent".to_string(),
+            ));
+        }
+
+        if self.replacement.id.is_empty() {
+            return Err(Error::Validation(
+                "Replacement agent ID is required in ReplaceAgent".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for RemoveAgent {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#removeagent"
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.transfer_id.is_empty() {
+            return Err(Error::Validation(
+                "Transfer ID is required in RemoveAgent".to_string(),
+            ));
+        }
+
+        if self.agent.is_empty() {
+            return Err(Error::Validation(
+                "Agent ID is required in RemoveAgent".to_string(),
+            ));
         }
 
         Ok(())

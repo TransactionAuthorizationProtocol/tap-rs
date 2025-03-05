@@ -2,13 +2,13 @@
 //!
 //! This module provides a processor pool for handling concurrent message processing.
 
-use tokio::sync::mpsc::{channel, Sender};
 use tap_msg::didcomm::Message;
+use tokio::sync::mpsc::{channel, Sender};
 use tokio::time::Duration;
 
 use crate::error::{Error, Result};
-use crate::message::{MessageProcessorType, CompositeMessageProcessor};
 use crate::message::processor::MessageProcessor;
+use crate::message::{CompositeMessageProcessor, MessageProcessorType};
 
 /// Configuration for the processor pool
 #[derive(Debug, Clone)]
@@ -47,7 +47,7 @@ impl ProcessorPool {
         let processors: Vec<MessageProcessorType> = Vec::new();
         let processor = CompositeMessageProcessor::new(processors);
         let processor_for_workers = processor.clone();
-        
+
         // Spawn a single task to distribute messages to workers
         tokio::spawn(async move {
             // Create worker channels
@@ -55,34 +55,42 @@ impl ProcessorPool {
             for _ in 0..config.workers {
                 let (worker_tx, mut worker_rx) = channel::<Message>(config.channel_capacity);
                 worker_channels.push(worker_tx);
-                
+
                 let worker_processor = processor_for_workers.clone();
                 let worker_timeout = config.worker_timeout;
-                
+
                 // Spawn a worker to process messages from its channel
                 tokio::spawn(async move {
                     while let Some(message) = worker_rx.recv().await {
-                        match tokio::time::timeout(worker_timeout, worker_processor.process_incoming(message)).await {
+                        match tokio::time::timeout(
+                            worker_timeout,
+                            worker_processor.process_incoming(message),
+                        )
+                        .await
+                        {
                             Ok(result) => {
                                 if let Err(e) = result {
                                     eprintln!("Error processing message: {}", e);
                                 }
                             }
                             Err(_) => {
-                                eprintln!("Message processing timed out after {:?}", worker_timeout);
+                                eprintln!(
+                                    "Message processing timed out after {:?}",
+                                    worker_timeout
+                                );
                             }
                         }
                     }
                 });
             }
-            
+
             // Round-robin distribute messages to workers
             let mut current_worker = 0;
             while let Some(message) = rx.recv().await {
                 if worker_channels.is_empty() {
                     break;
                 }
-                
+
                 // Try to send to the current worker, or move to the next one if fails
                 let mut attempts = 0;
                 while attempts < worker_channels.len() {
@@ -94,20 +102,22 @@ impl ProcessorPool {
                         }
                     }
                 }
-                
+
                 // Advance to next worker
                 current_worker = (current_worker + 1) % worker_channels.len();
             }
         });
-        
+
         Self { processor, tx }
     }
-    
+
     /// Submit a message for processing
     pub async fn submit(&self, message: Message) -> Result<()> {
-        self.tx.send(message).await.map_err(|e| Error::Processing(format!("Failed to submit message to processor pool: {}", e)))
+        self.tx.send(message).await.map_err(|e| {
+            Error::Processing(format!("Failed to submit message to processor pool: {}", e))
+        })
     }
-    
+
     /// Add a processor to the pool
     pub fn add_processor(&mut self, processor: MessageProcessorType) {
         self.processor.add_processor(processor);

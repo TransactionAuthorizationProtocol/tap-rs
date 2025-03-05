@@ -3,9 +3,9 @@
 //! This module provides event handling and subscription functionality for TAP Node events.
 
 use async_trait::async_trait;
-use tap_msg::didcomm::Message;
 use serde_json::Value;
 use std::sync::Arc;
+use tap_msg::didcomm::Message;
 use tokio::sync::{broadcast, RwLock};
 
 /// Event types that can be emitted by the TAP Node
@@ -112,13 +112,19 @@ impl EventBus {
 
     /// Publish a message received event
     pub async fn publish_message_received(&self, message: Message) {
-        let event = NodeEvent::MessageReceived { message: serde_json::to_value(message).unwrap() };
+        let event = NodeEvent::MessageReceived {
+            message: serde_json::to_value(message).unwrap(),
+        };
         self.publish_event(event).await;
     }
 
     /// Publish a message sent event
     pub async fn publish_message_sent(&self, message: Message, from: String, to: String) {
-        let event = NodeEvent::MessageSent { message: serde_json::to_value(message).unwrap(), from, to };
+        let event = NodeEvent::MessageSent {
+            message: serde_json::to_value(message).unwrap(),
+            from,
+            to,
+        };
         self.publish_event(event).await;
     }
 

@@ -2,7 +2,7 @@
 //!
 //! This module provides a complete HTTP server implementation for the Transaction Authorization
 //! Protocol (TAP). The server exposes endpoints for:
-//! 
+//!
 //! - Processing DIDComm messages for TAP operations
 //! - Health checks for monitoring system availability
 //!

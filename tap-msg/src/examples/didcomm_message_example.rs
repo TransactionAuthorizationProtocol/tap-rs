@@ -28,7 +28,7 @@ pub async fn create_transfer_message_example() -> Result<Message> {
         originator,
         beneficiary: Some(beneficiary),
         amount: "10.00".to_string(),
-        participants: vec![],
+        agents: vec![],
         settlement_id: None,
         memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),

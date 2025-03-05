@@ -132,7 +132,10 @@ impl Agent for DefaultAgent {
         // Ensure message has a type field
         if message_obj.get("type").is_none() {
             if let serde_json::Value::Object(ref mut obj) = message_obj {
-                obj.insert("type".to_string(), serde_json::Value::String(T::message_type().to_string()));
+                obj.insert(
+                    "type".to_string(),
+                    serde_json::Value::String(T::message_type().to_string()),
+                );
             }
         }
 
@@ -162,7 +165,10 @@ impl Agent for DefaultAgent {
         packed_message: &str,
     ) -> Result<T> {
         // Unpack the message
-        let message_value: Value = self.message_packer.unpack_message_value(packed_message).await?;
+        let message_value: Value = self
+            .message_packer
+            .unpack_message_value(packed_message)
+            .await?;
 
         // Get the message type from the unpacked message
         let message_type = message_value
@@ -189,12 +195,18 @@ impl Agent for DefaultAgent {
                 type_: message_type.to_string(),
                 // Use the entire message as the body, not just the "body" field
                 body: message_value.clone(),
-                from: message_value.get("from").and_then(|v| v.as_str()).map(|s| s.to_string()),
-                to: message_value.get("to").and_then(|v| v.as_array()).map(|arr| {
-                    arr.iter()
-                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                        .collect()
-                }),
+                from: message_value
+                    .get("from")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string()),
+                to: message_value
+                    .get("to")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
                 thid: None,
                 pthid: None,
                 extra_headers: Default::default(),
@@ -220,8 +232,9 @@ impl Agent for DefaultAgent {
             Ok(message)
         } else {
             // This might be just the message body directly, try to deserialize
-            let message = serde_json::from_value::<T>(message_value)
-                .map_err(|e| Error::Serialization(format!("Failed to deserialize message: {}", e)))?;
+            let message = serde_json::from_value::<T>(message_value).map_err(|e| {
+                Error::Serialization(format!("Failed to deserialize message: {}", e))
+            })?;
 
             // Validate the message
             message.validate().map_err(|e| {

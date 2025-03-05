@@ -1,19 +1,19 @@
 //! Tests for message handling in TAP Node
 
+use async_trait::async_trait;
+use didcomm::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
 use std::collections::HashMap;
+use std::fmt::Debug;
 use std::sync::Arc;
-use tap_agent::{AgentConfig, DefaultAgent};
-use tap_agent::did::SyncDIDResolver;
 use tap_agent::crypto::DebugSecretsResolver;
+use tap_agent::did::SyncDIDResolver;
+use tap_agent::error::Result as AgentResult;
+use tap_agent::{AgentConfig, DefaultAgent};
 use tap_msg::didcomm::Message;
-use tap_msg::message::ErrorBody;
 use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::ErrorBody;
 use tap_node::{NodeConfig, TapNode};
 use uuid;
-use async_trait::async_trait;
-use tap_agent::error::Result as AgentResult;
-use std::fmt::Debug;
-use didcomm::did::{DIDDoc, VerificationMethod, VerificationMethodType, VerificationMaterial};
 
 /// Test DID Resolver for testing
 #[derive(Debug)]
@@ -70,11 +70,11 @@ impl DebugSecretsResolver for TestSecretsResolver {
 /// Create a test agent with the given DID
 fn create_test_agent(did: &str) -> Arc<DefaultAgent> {
     let agent_config = AgentConfig::new(did.to_string());
-    
+
     // Create resolvers for the DefaultMessagePacker
     let did_resolver = Arc::new(TestDIDResolver::new());
     let secrets_resolver = Arc::new(TestSecretsResolver::new());
-    
+
     // Create a new DefaultAgent with message packer
     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
         did_resolver,
@@ -102,7 +102,7 @@ fn create_didcomm_message<T: TapMessageBody>(
     to_did: Option<&str>,
 ) -> Message {
     let body_json = serde_json::to_value(body).unwrap();
-    
+
     // Create basic DIDComm message with all required fields
     Message {
         id: uuid::Uuid::new_v4().to_string(),
@@ -125,7 +125,7 @@ fn create_didcomm_message<T: TapMessageBody>(
 fn create_test_message(from_did: &str, to_did: &str) -> Message {
     // Create an error body
     let error_body = create_test_error_body(from_did, to_did);
-    
+
     // Convert to DIDComm message
     create_didcomm_message(&error_body, Some(from_did), Some(to_did))
 }
@@ -190,12 +190,13 @@ async fn test_invalid_message() {
 
     // Register the agent with the node
     _node.register_agent(agent.clone()).await.unwrap();
-    
+
     // Create invalid message with missing to field
     let message = Message {
         id: uuid::Uuid::new_v4().to_string(),
         typ: "application/didcomm-plain+json".to_string(),
-        body: serde_json::to_value(&create_test_error_body(agent_did, "did:example:invalid")).unwrap(),
+        body: serde_json::to_value(&create_test_error_body(agent_did, "did:example:invalid"))
+            .unwrap(),
         from: Some(agent_did.to_string()),
         to: None, // Missing to field
         thid: None,
@@ -279,19 +280,16 @@ async fn test_error_message() {
 
     // Convert the error_body to a message
     let message = error_body.to_didcomm().unwrap();
-    
+
     // Validate message has required fields
     assert!(!message.id.is_empty());
     assert!(!message.typ.is_empty());
     assert!(!message.body.is_null());
-    
+
     // Check specific error properties
     let error_json = &message.body;
     assert!(error_json.get("code").is_some());
-    assert_eq!(
-        error_json.get("code").unwrap().as_str().unwrap(),
-        "TEST001"
-    );
+    assert_eq!(error_json.get("code").unwrap().as_str().unwrap(), "TEST001");
     assert!(error_json.get("message").is_some());
     assert_eq!(
         error_json.get("message").unwrap().as_str().unwrap(),
@@ -327,7 +325,7 @@ async fn test_message_creation() {
     assert!(!message.body.is_null());
     assert!(message.from.is_some());
     assert!(message.to.is_some());
-    
+
     // Check specific properties
     assert_eq!(message.type_, "https://example.com/protocol/1.0/test");
     let body = &message.body;

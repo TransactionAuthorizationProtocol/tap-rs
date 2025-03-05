@@ -2,13 +2,13 @@
 
 use async_trait::async_trait;
 use didcomm::did::DIDDoc;
-use didcomm::secrets::{Secret, SecretType, SecretMaterial};
+use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
-use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker, DebugSecretsResolver};
-use tap_agent::did::{MultiResolver, SyncDIDResolver, DIDMethodResolver};
+use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver, DefaultMessagePacker};
+use tap_agent::did::{DIDMethodResolver, MultiResolver, SyncDIDResolver};
 use tap_agent::error::{Error, Result};
 use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
 use tap_msg::message::tap_message_trait::TapMessageBody;
@@ -34,7 +34,7 @@ impl TapMessageBody for TestMessage {
                 });
             }
         }
-        
+
         // If we get here, we couldn't find a content field that's a string
         // Try to extract as a serde_json value
         Ok(Self {
@@ -52,7 +52,8 @@ impl TapMessageBody for TestMessage {
             id: Uuid::new_v4().to_string(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            body: serde_json::to_value(self).map_err(|e| TapCoreError::SerializationError(e.to_string()))?,
+            body: serde_json::to_value(self)
+                .map_err(|e| TapCoreError::SerializationError(e.to_string()))?,
             from: None,
             to: None,
             thid: None,
@@ -63,7 +64,7 @@ impl TapMessageBody for TestMessage {
             from_prior: None,
             attachments: None,
         };
-        
+
         Ok(msg)
     }
 }
@@ -82,16 +83,20 @@ impl TapMessageBody for PresentationMessage {
 
     fn from_didcomm(msg: &didcomm::Message) -> TapCoreResult<Self> {
         // First try to get fields directly from message body
-        let presentation_id = msg.body.get("presentation_id")
+        let presentation_id = msg
+            .body
+            .get("presentation_id")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-            
-        let data = msg.body.get("data")
+
+        let data = msg
+            .body
+            .get("data")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        
+
         Ok(Self {
             presentation_id,
             data,
@@ -108,7 +113,8 @@ impl TapMessageBody for PresentationMessage {
             id: Uuid::new_v4().to_string(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            body: serde_json::to_value(self).map_err(|e| TapCoreError::SerializationError(e.to_string()))?,
+            body: serde_json::to_value(self)
+                .map_err(|e| TapCoreError::SerializationError(e.to_string()))?,
             from: None,
             to: None,
             thid: None,
@@ -119,7 +125,7 @@ impl TapMessageBody for PresentationMessage {
             from_prior: None,
             attachments: None,
         };
-        
+
         Ok(msg)
     }
 }
@@ -139,15 +145,18 @@ impl DIDMethodResolver for TestDIDResolver {
     fn method(&self) -> &str {
         "example"
     }
-    
+
     async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
         if !did.starts_with("did:example:") {
-            return Err(Error::UnsupportedDIDMethod(format!("Unsupported DID method for test resolver: {}", did)));
+            return Err(Error::UnsupportedDIDMethod(format!(
+                "Unsupported DID method for test resolver: {}",
+                did
+            )));
         }
-        
+
         // Create a test DID document
         let id = format!("{}#keys-1", did);
-        
+
         let auth_method = didcomm::did::VerificationMethod {
             id: id.clone(),
             type_: didcomm::did::VerificationMethodType::Ed25519VerificationKey2018,
@@ -156,7 +165,7 @@ impl DIDMethodResolver for TestDIDResolver {
                 public_key_base58: "H3C2AVvLMv6gmMNam3uVAjZpfkcJCwDwnZn6z3wXmqPV".to_string(),
             },
         };
-        
+
         let doc = DIDDoc {
             id: did.to_string(),
             verification_method: vec![auth_method.clone()],
@@ -164,7 +173,7 @@ impl DIDMethodResolver for TestDIDResolver {
             key_agreement: vec![id],
             service: vec![],
         };
-        
+
         Ok(Some(doc))
     }
 }
@@ -179,7 +188,7 @@ impl SyncDIDResolver for TestDIDResolver {
 // Create a test secret resolver with a test key
 fn create_test_secret_resolver() -> Arc<dyn DebugSecretsResolver> {
     let mut resolver = BasicSecretResolver::new();
-    
+
     // Create a test key for the sender
     let test_key = Secret {
         id: "did:example:123#keys-1".to_string(),
@@ -191,12 +200,12 @@ fn create_test_secret_resolver() -> Arc<dyn DebugSecretsResolver> {
                 "crv": "Ed25519",
                 "x": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
                 "d": "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh"
-            })
+            }),
         },
     };
-    
+
     resolver.add_secret("did:example:123", test_key);
-    
+
     // Add a test key for the recipient as well
     let recipient_key = Secret {
         id: "did:example:456#keys-1".to_string(),
@@ -208,12 +217,12 @@ fn create_test_secret_resolver() -> Arc<dyn DebugSecretsResolver> {
                 "crv": "Ed25519",
                 "x": "12qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
                 "d": "oWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh"
-            })
+            }),
         },
     };
-    
+
     resolver.add_secret("did:example:456", recipient_key);
-    
+
     // Return the resolver directly as it implements DebugSecretsResolver
     Arc::new(resolver)
 }
@@ -224,8 +233,10 @@ async fn test_agent_creation() {
     let config = AgentConfig::new("did:example:123".to_string());
 
     // Create the DID resolver
-    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(TestDIDResolver::new())]));
-    
+    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(
+        TestDIDResolver::new(),
+    )]));
+
     // Create the secret resolver
     let secret_resolver = create_test_secret_resolver();
 
@@ -245,8 +256,10 @@ async fn test_send_receive_message() {
     let config = AgentConfig::new("did:example:123".to_string());
 
     // Create the DID resolver
-    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(TestDIDResolver::new())]));
-    
+    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(
+        TestDIDResolver::new(),
+    )]));
+
     // Create the secret resolver
     let secret_resolver = create_test_secret_resolver();
 
@@ -269,7 +282,7 @@ async fn test_send_receive_message() {
 
     // The agent should be able to decode its own messages
     let received: TestMessage = agent.receive_message(&packed).await.unwrap();
-    
+
     // Check that the message was received correctly
     assert_eq!(received.content, "value");
 }
@@ -280,8 +293,10 @@ async fn test_presentation_message() {
     let config = AgentConfig::new("did:example:123".to_string());
 
     // Create the DID resolver
-    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(TestDIDResolver::new())]));
-    
+    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(
+        TestDIDResolver::new(),
+    )]));
+
     // Create the secret resolver
     let secret_resolver = create_test_secret_resolver();
 

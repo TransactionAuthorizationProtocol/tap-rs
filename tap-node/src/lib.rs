@@ -19,15 +19,15 @@ use tap_msg::didcomm::Message;
 
 use agent::AgentRegistry;
 use event::EventBus;
-use message::{
-    CompositeMessageProcessor, CompositeMessageRouter, MessageProcessorType, MessageRouterType,
-};
 use message::processor::{
-    DefaultMessageProcessor, LoggingMessageProcessor, MessageProcessor, ValidationMessageProcessor
+    DefaultMessageProcessor, LoggingMessageProcessor, MessageProcessor, ValidationMessageProcessor,
 };
 use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
 use message::router::DefaultMessageRouter;
 use message::RouterAsyncExt;
+use message::{
+    CompositeMessageProcessor, CompositeMessageRouter, MessageProcessorType, MessageRouterType,
+};
 use resolver::NodeResolver;
 
 use async_trait::async_trait;
@@ -43,17 +43,17 @@ impl DefaultAgentExt for DefaultAgent {
     async fn send_serialized_message(&self, message: &Message, _to_did: &str) -> Result<String> {
         // Convert DIDComm Message to a packed DIDComm Message string
         // We use the raw didcomm_message methods of DefaultAgent
-        
+
         // First, serialize the message to JSON
         let json_value = serde_json::to_value(message).map_err(Error::Serialization);
-        
+
         // Use the message packer directly with security mode Signed
         let _security_mode = tap_agent::message::SecurityMode::Signed;
-        
+
         // Since we can't directly use the agent's message packer or send_message_raw method,
         // we'll just return the serialized message for now
         let packed = serde_json::to_string(&json_value?).map_err(Error::Serialization);
-            
+
         Ok(packed?)
     }
 }
@@ -200,7 +200,9 @@ impl TapNode {
         let agent = self.agents.get_agent(from_did).await?;
 
         // Pack the message
-        let packed = agent.send_serialized_message(&processed_message, to_did).await?;
+        let packed = agent
+            .send_serialized_message(&processed_message, to_did)
+            .await?;
 
         // Publish an event for the sent message
         self.event_bus
@@ -227,7 +229,9 @@ impl TapNode {
         self.agents.unregister_agent(did).await?;
 
         // Publish event about agent unregistration
-        self.event_bus.publish_agent_unregistered(did.to_string()).await;
+        self.event_bus
+            .publish_agent_unregistered(did.to_string())
+            .await;
 
         Ok(())
     }
@@ -246,12 +250,12 @@ impl TapNode {
     pub fn get_resolver(&self) -> Arc<NodeResolver> {
         self.resolver.clone()
     }
-    
+
     /// Get the node config
     pub fn config(&self) -> &NodeConfig {
         &self.config
     }
-    
+
     /// Get the agent registry
     pub fn agents(&self) -> &AgentRegistry {
         &self.agents

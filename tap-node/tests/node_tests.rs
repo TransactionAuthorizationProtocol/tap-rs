@@ -1,15 +1,15 @@
 //! Tests for TAP Node
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use tap_agent::{AgentConfig, DefaultAgent};
-use tap_agent::did::SyncDIDResolver;
-use tap_agent::crypto::DebugSecretsResolver;
-use tap_node::{NodeConfig, TapNode};
 use async_trait::async_trait;
-use tap_agent::error::Result as AgentResult;
+use didcomm::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
+use std::collections::HashMap;
 use std::fmt::Debug;
-use didcomm::did::{DIDDoc, VerificationMethod, VerificationMethodType, VerificationMaterial};
+use std::sync::Arc;
+use tap_agent::crypto::DebugSecretsResolver;
+use tap_agent::did::SyncDIDResolver;
+use tap_agent::error::Result as AgentResult;
+use tap_agent::{AgentConfig, DefaultAgent};
+use tap_node::{NodeConfig, TapNode};
 
 /// Test DID Resolver for testing
 #[derive(Debug)]
@@ -87,7 +87,7 @@ async fn test_agent_registration() {
     // Create resolvers for the DefaultMessagePacker
     let did_resolver = Arc::new(TestDIDResolver::new());
     let secrets_resolver = Arc::new(TestSecretsResolver::new());
-    
+
     // Create a new DefaultAgent with message packer
     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
         did_resolver,
@@ -128,7 +128,7 @@ async fn test_agent_unregistration() {
     // Create resolvers for the DefaultMessagePacker
     let did_resolver = Arc::new(TestDIDResolver::new());
     let secrets_resolver = Arc::new(TestSecretsResolver::new());
-    
+
     // Create a new DefaultAgent with message packer
     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
         did_resolver,
@@ -170,7 +170,7 @@ async fn test_node_configuration() {
     // Create resolvers for the DefaultMessagePacker
     let did_resolver = Arc::new(TestDIDResolver::new());
     let secrets_resolver = Arc::new(TestSecretsResolver::new());
-    
+
     // Create a new DefaultAgent with message packer
     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
         did_resolver,

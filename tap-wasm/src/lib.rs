@@ -52,7 +52,9 @@ impl fmt::Display for MessageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MessageType::Transfer => write!(f, "https://tap.rsvp/schema/1.0#Transfer"),
-            MessageType::RequestPresentation => write!(f, "https://tap.rsvp/schema/1.0#RequestPresentation"),
+            MessageType::RequestPresentation => {
+                write!(f, "https://tap.rsvp/schema/1.0#RequestPresentation")
+            }
             MessageType::Presentation => write!(f, "https://tap.rsvp/schema/1.0#Presentation"),
             MessageType::Authorize => write!(f, "https://tap.rsvp/schema/1.0#Authorize"),
             MessageType::Reject => write!(f, "https://tap.rsvp/schema/1.0#Reject"),
@@ -154,7 +156,7 @@ pub struct Settle {
 
     /// Transaction ID on the external ledger.
     pub transaction_id: String,
-    
+
     /// Optional transaction hash.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction_hash: Option<String>,
@@ -267,114 +269,102 @@ impl Message {
     }
 
     // Deprecated method set_authorization_request removed
-    
+
     /// Sets a Transfer message body according to TAIP-3
     pub fn set_transfer_body(&mut self, transfer_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to a Transfer
-        let transfer_body: Transfer = 
-            serde_wasm_bindgen::from_value(transfer_data).map_err(|e| {
-                JsValue::from_str(&format!("Failed to parse transfer data: {}", e))
-            })?;
-            
+        let transfer_body: Transfer = serde_wasm_bindgen::from_value(transfer_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse transfer data: {}", e)))?;
+
         // Convert to JSON value and store in body data
-        let json_value = serde_json::to_value(&transfer_body).map_err(|e| {
-            JsValue::from_str(&format!("Failed to serialize transfer data: {}", e))
-        })?;
-        
+        let json_value = serde_json::to_value(&transfer_body)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize transfer data: {}", e)))?;
+
         self.body_data.insert("transfer".to_string(), json_value);
-        
+
         // Set the message type to Transfer and update the didcomm type
         self.message_type = "Transfer".to_string();
         self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Transfer", self.version);
-        
+
         // Set the DIDComm message body
         self.didcomm_message.body = serde_json::json!(transfer_body);
-        
+
         Ok(())
     }
-    
+
     /// Sets an Authorize message body according to TAIP-4
     pub fn set_authorize_body(&mut self, authorize_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to an Authorize
-        let authorize_body: Authorize = 
-            serde_wasm_bindgen::from_value(authorize_data).map_err(|e| {
-                JsValue::from_str(&format!("Failed to parse authorize data: {}", e))
-            })?;
-            
+        let authorize_body: Authorize = serde_wasm_bindgen::from_value(authorize_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse authorize data: {}", e)))?;
+
         // Convert to JSON value and store in body data
         let json_value = serde_json::to_value(&authorize_body).map_err(|e| {
             JsValue::from_str(&format!("Failed to serialize authorize data: {}", e))
         })?;
-        
+
         self.body_data.insert("authorize".to_string(), json_value);
-        
+
         // Set the message type to Authorize and update the didcomm type
         self.message_type = "Authorize".to_string();
         self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Authorize", self.version);
-        
+
         // Set the DIDComm message body
         self.didcomm_message.body = serde_json::json!(authorize_body);
-        
+
         Ok(())
     }
 
     // Deprecated method set_authorization_response removed
-    
+
     /// Sets a Reject message body according to TAIP-4
     pub fn set_reject_body(&mut self, reject_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to a Reject
-        let reject_body: Reject = 
-            serde_wasm_bindgen::from_value(reject_data).map_err(|e| {
-                JsValue::from_str(&format!("Failed to parse reject data: {}", e))
-            })?;
-            
+        let reject_body: Reject = serde_wasm_bindgen::from_value(reject_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse reject data: {}", e)))?;
+
         // Convert to JSON value and store in body data
-        let json_value = serde_json::to_value(&reject_body).map_err(|e| {
-            JsValue::from_str(&format!("Failed to serialize reject data: {}", e))
-        })?;
-        
+        let json_value = serde_json::to_value(&reject_body)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize reject data: {}", e)))?;
+
         self.body_data.insert("reject".to_string(), json_value);
-        
+
         // Set the message type to Reject and update the didcomm type
         self.message_type = "Reject".to_string();
         self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Reject", self.version);
-        
+
         // Set the DIDComm message body
         self.didcomm_message.body = serde_json::json!(reject_body);
-        
+
         Ok(())
     }
-    
+
     /// Sets a Settle message body according to TAIP-4
     pub fn set_settle_body(&mut self, settle_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to a Settle
-        let settle_body: Settle = 
-            serde_wasm_bindgen::from_value(settle_data).map_err(|e| {
-                JsValue::from_str(&format!("Failed to parse settle data: {}", e))
-            })?;
-            
+        let settle_body: Settle = serde_wasm_bindgen::from_value(settle_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse settle data: {}", e)))?;
+
         // Convert to JSON value and store in body data
-        let json_value = serde_json::to_value(&settle_body).map_err(|e| {
-            JsValue::from_str(&format!("Failed to serialize settle data: {}", e))
-        })?;
-        
+        let json_value = serde_json::to_value(&settle_body)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize settle data: {}", e)))?;
+
         self.body_data.insert("settle".to_string(), json_value);
-        
+
         // Set the message type to Settle and update the didcomm type
         self.message_type = "Settle".to_string();
         self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Settle", self.version);
-        
+
         // Set the DIDComm message body
         self.didcomm_message.body = serde_json::json!(settle_body);
-        
+
         Ok(())
     }
 
     /// Gets the transfer body data
     pub fn get_transfer_body(&self) -> JsValue {
         // Check if this is a Transfer message
-        if self.message_type == "Transfer" || 
-           self.didcomm_message.type_.contains("#Transfer") {
+        if self.message_type == "Transfer" || self.didcomm_message.type_.contains("#Transfer") {
             // Try to get from body_data first
             if let Some(value) = self.body_data.get("transfer") {
                 return match serde_wasm_bindgen::to_value(value) {
@@ -382,23 +372,22 @@ impl Message {
                     Err(_) => JsValue::null(),
                 };
             }
-            
+
             // If not in body_data, try to get from didcomm message body
             return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
                 Ok(js_value) => js_value,
                 Err(_) => JsValue::null(),
             };
         }
-        
+
         // Not a Transfer message
         JsValue::null()
     }
-    
+
     /// Gets the authorize body data
     pub fn get_authorize_body(&self) -> JsValue {
         // Check if this is an Authorize message
-        if self.message_type == "Authorize" || 
-           self.didcomm_message.type_.contains("#Authorize") {
+        if self.message_type == "Authorize" || self.didcomm_message.type_.contains("#Authorize") {
             // Try to get from body_data first
             if let Some(value) = self.body_data.get("authorize") {
                 return match serde_wasm_bindgen::to_value(value) {
@@ -406,23 +395,22 @@ impl Message {
                     Err(_) => JsValue::null(),
                 };
             }
-            
+
             // If not in body_data, try to get from didcomm message body
             return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
                 Ok(js_value) => js_value,
                 Err(_) => JsValue::null(),
             };
         }
-        
+
         // Not an Authorize message
         JsValue::null()
     }
-    
+
     /// Gets the reject body data
     pub fn get_reject_body(&self) -> JsValue {
         // Check if this is a Reject message
-        if self.message_type == "Reject" || 
-           self.didcomm_message.type_.contains("#Reject") {
+        if self.message_type == "Reject" || self.didcomm_message.type_.contains("#Reject") {
             // Try to get from body_data first
             if let Some(value) = self.body_data.get("reject") {
                 return match serde_wasm_bindgen::to_value(value) {
@@ -430,23 +418,22 @@ impl Message {
                     Err(_) => JsValue::null(),
                 };
             }
-            
+
             // If not in body_data, try to get from didcomm message body
             return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
                 Ok(js_value) => js_value,
                 Err(_) => JsValue::null(),
             };
         }
-        
+
         // Not a Reject message
         JsValue::null()
     }
-    
+
     /// Gets the settle body data
     pub fn get_settle_body(&self) -> JsValue {
         // Check if this is a Settle message
-        if self.message_type == "Settle" || 
-           self.didcomm_message.type_.contains("#Settle") {
+        if self.message_type == "Settle" || self.didcomm_message.type_.contains("#Settle") {
             // Try to get from body_data first
             if let Some(value) = self.body_data.get("settle") {
                 return match serde_wasm_bindgen::to_value(value) {
@@ -454,14 +441,14 @@ impl Message {
                     Err(_) => JsValue::null(),
                 };
             }
-            
+
             // If not in body_data, try to get from didcomm message body
             return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
                 Ok(js_value) => js_value,
                 Err(_) => JsValue::null(),
             };
         }
-        
+
         // Not a Settle message
         JsValue::null()
     }
@@ -662,7 +649,7 @@ impl Message {
 
         // In a real implementation, we would use the DIDComm library to validate the signature
         // against the public key of the sender's DID
-        
+
         // For now, we'll simulate a signature check
         if debug {
             let expected_pattern = format!("signed_by_{}_with_didcomm", from_did);
@@ -698,10 +685,16 @@ impl TapAgent {
             if let Some(did_str) = did_prop.as_string() {
                 did_str
             } else {
-                format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple().to_string())
+                format!(
+                    "did:key:z6Mk{}",
+                    uuid::Uuid::new_v4().to_simple().to_string()
+                )
             }
         } else {
-            format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple().to_string())
+            format!(
+                "did:key:z6Mk{}",
+                uuid::Uuid::new_v4().to_simple().to_string()
+            )
         };
 
         let nickname =
@@ -1068,7 +1061,9 @@ impl TapNode {
                     }
 
                     // Handle message body data based on message types
-                    if let Ok(transfer) = js_sys::Reflect::get(message, &JsValue::from_str("transfer")) {
+                    if let Ok(transfer) =
+                        js_sys::Reflect::get(message, &JsValue::from_str("transfer"))
+                    {
                         if !transfer.is_null() && !transfer.is_undefined() {
                             if let Err(e) = msg.set_transfer_body(transfer) {
                                 if debug {
@@ -1081,7 +1076,9 @@ impl TapNode {
                         }
                     }
 
-                    if let Ok(authorize) = js_sys::Reflect::get(message, &JsValue::from_str("authorize")) {
+                    if let Ok(authorize) =
+                        js_sys::Reflect::get(message, &JsValue::from_str("authorize"))
+                    {
                         if !authorize.is_null() && !authorize.is_undefined() {
                             if let Err(e) = msg.set_authorize_body(authorize) {
                                 if debug {
@@ -1094,7 +1091,8 @@ impl TapNode {
                         }
                     }
 
-                    if let Ok(reject) = js_sys::Reflect::get(message, &JsValue::from_str("reject")) {
+                    if let Ok(reject) = js_sys::Reflect::get(message, &JsValue::from_str("reject"))
+                    {
                         if !reject.is_null() && !reject.is_undefined() {
                             if let Err(e) = msg.set_reject_body(reject) {
                                 if debug {
@@ -1107,7 +1105,8 @@ impl TapNode {
                         }
                     }
 
-                    if let Ok(settle) = js_sys::Reflect::get(message, &JsValue::from_str("settle")) {
+                    if let Ok(settle) = js_sys::Reflect::get(message, &JsValue::from_str("settle"))
+                    {
                         if !settle.is_null() && !settle.is_undefined() {
                             if let Err(e) = msg.set_settle_body(settle) {
                                 if debug {

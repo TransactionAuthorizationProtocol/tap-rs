@@ -61,7 +61,9 @@ pub struct HttpMessageSender {
 impl HttpMessageSender {
     /// Create a new HttpMessageSender with the given base URL
     pub fn new(base_url: String) -> Self {
-        Self { _base_url: base_url }
+        Self {
+            _base_url: base_url,
+        }
     }
 }
 
@@ -73,10 +75,10 @@ impl MessageSender for HttpMessageSender {
         for recipient in &recipient_dids {
             log::info!("Sending message to {} via HTTP", recipient);
             log::debug!("Message content: {}", packed_message);
-            
+
             // TODO: Implement actual HTTP request using reqwest or similar
         }
-        
+
         // For now, just pretend it worked
         Ok(())
     }
@@ -89,12 +91,15 @@ impl MessageSender for HttpMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         // In a WASM environment, we'd use web-sys or similar to make HTTP requests
         for recipient in &recipient_dids {
-            log::info!("Sending message to {} via HTTP (WASM environment)", recipient);
+            log::info!(
+                "Sending message to {} via HTTP (WASM environment)",
+                recipient
+            );
             log::debug!("Message content: {}", packed_message);
-            
+
             // TODO: Implement actual HTTP request using web-sys or similar
         }
-        
+
         // For now, just pretend it worked
         Ok(())
     }
