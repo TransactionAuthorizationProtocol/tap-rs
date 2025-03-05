@@ -19,8 +19,11 @@ tap-caip = { path = "../tap-caip" }
 # DIDComm
 didcomm = { workspace = true }
 
-# Time handling
+# Date and time
 chrono = { workspace = true }
+
+# Random numbers for nonces
+rand = "0.8.5"
 
 # Error handling
 thiserror = { workspace = true }

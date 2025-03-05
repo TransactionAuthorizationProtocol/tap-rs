@@ -76,6 +76,7 @@ pub fn add_participant_to_thread_example(
     let new_participant = Participant {
         id: new_participant.to_string(),
         role: Some("observer".to_string()),
+        policies: None, // No policies for this participant
     };
     
     // Create an AddAgents message according to TAIP-5

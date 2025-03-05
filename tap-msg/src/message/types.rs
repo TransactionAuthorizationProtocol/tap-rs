@@ -3,6 +3,7 @@
 //! This module defines the structure of all TAP message types according to the specification.
 
 use crate::error::{Error, Result};
+use crate::message::policy::Policy;
 use crate::message::tap_message_trait::TapMessageBody;
 use chrono;
 use didcomm::Message;
@@ -11,14 +12,41 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 /// Participant in a transfer (TAIP-3).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Participant {
     /// DID of the participant.
+    #[serde(default)]
     pub id: String,
 
     /// Role of the participant (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
     pub role: Option<String>,
+
+    /// Policies of the participant according to TAIP-7 (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub policies: Option<Vec<Policy>>,
+}
+
+impl Participant {
+    /// Create a new participant with the given DID.
+    pub fn new(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            role: None,
+            policies: None,
+        }
+    }
+
+    /// Create a new participant with the given DID and role.
+    pub fn with_role(id: &str, role: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            role: Some(role.to_string()),
+            policies: None,
+        }
+    }
 }
 
 /// Attachment data for a TAP message.
@@ -283,10 +311,10 @@ pub struct AddAgents {
 /// This message type allows replacing an agent with another agent in a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplaceAgent {
-    /// ID of the transfer to replace an agent in.
+    /// ID of the transfer to replace agent in.
     pub transfer_id: String,
 
-    /// DID of the agent to be replaced.
+    /// DID of the original agent to replace.
     pub original: String,
 
     /// Replacement agent.
@@ -302,11 +330,31 @@ pub struct ReplaceAgent {
 /// This message type allows removing an agent from a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoveAgent {
-    /// ID of the transfer to remove an agent from.
+    /// ID of the transfer to remove agent from.
     pub transfer_id: String,
 
-    /// DID of the agent to be removed.
+    /// DID of the agent to remove.
     pub agent: String,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// UpdatePolicies message body (TAIP-7).
+///
+/// This message type allows agents to update their policies for a transaction.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdatePolicies {
+    /// ID of the transfer to update policies for.
+    pub transfer_id: String,
+
+    /// JSON-LD context.
+    #[serde(rename = "@context")]
+    pub context: String,
+
+    /// List of policies that replace the current set of policies.
+    pub policies: Vec<Policy>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -319,12 +367,12 @@ pub struct ErrorBody {
     /// Error code.
     pub code: String,
 
-    /// Error message.
-    pub message: String,
+    /// Error description.
+    pub description: String,
 
-    /// ID of the message that caused the error.
+    /// Original message ID (if applicable).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub caused_by: Option<String>,
+    pub original_message_id: Option<String>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -598,9 +646,29 @@ impl TapMessageBody for RemoveAgent {
         }
 
         if self.agent.is_empty() {
-            return Err(Error::Validation(
-                "Agent ID is required in RemoveAgent".to_string(),
-            ));
+            return Err(Error::Validation("Agent DID cannot be empty".to_string()));
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for UpdatePolicies {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#updatepolicies"
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.transfer_id.is_empty() {
+            return Err(Error::Validation("Transfer ID is required".to_string()));
+        }
+
+        if self.context.is_empty() {
+            return Err(Error::Validation("Context is required".to_string()));
+        }
+
+        if self.policies.is_empty() {
+            return Err(Error::Validation("Policies are required".to_string()));
         }
 
         Ok(())
@@ -619,9 +687,9 @@ impl TapMessageBody for ErrorBody {
             ));
         }
 
-        if self.message.is_empty() {
+        if self.description.is_empty() {
             return Err(Error::Validation(
-                "Error message is required in Error message".to_string(),
+                "Error description is required in Error message".to_string(),
             ));
         }
 

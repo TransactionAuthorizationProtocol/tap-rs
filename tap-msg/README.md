@@ -9,6 +9,7 @@ Core message processing for the Transaction Authorization Protocol (TAP) with in
 - **Validation**: Proper validation of all message fields and formats
 - **CAIP Support**: Validation for chain-agnostic identifiers (CAIP-2, CAIP-10, CAIP-19)
 - **Authorization Flows**: Support for authorization, rejection, and settlement flows
+- **Agent Policies**: TAIP-7 compliant policy implementation for defining agent requirements
 - **Extensibility**: Easy addition of new message types
 
 ## Usage
@@ -74,6 +75,51 @@ pub struct Transfer {
     pub memo: Option<String>,
     pub metadata: HashMap<String, String>,
 }
+```
+
+### Agent Policies (TAIP-7)
+
+The TAP protocol supports defining agent policies according to TAIP-7, which allows agents to specify requirements for authorizing transactions:
+
+```rust
+use tap_msg::message::{
+    Participant, Policy, RequireAuthorization, RequirePresentation, 
+    RequireProofOfControl, UpdatePolicies
+};
+use std::collections::HashMap;
+
+// Create a participant with a policy
+let auth_policy = RequireAuthorization {
+    type_: "RequireAuthorization".to_string(),
+    from: Some(vec!["did:example:alice".to_string()]),
+    from_role: None,
+    from_agent: None,
+    purpose: Some("Authorization required from Alice".to_string()),
+};
+
+let participant = Participant {
+    id: "did:example:bob".to_string(),
+    role: Some("beneficiary".to_string()),
+    policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
+};
+
+// Create an UpdatePolicies message to dynamically update policies
+let proof_policy = RequireProofOfControl::default(); // Uses random nonce
+let update_policies = UpdatePolicies {
+    transfer_id: "transfer_12345".to_string(),
+    context: "https://tap.rsvp/schemas/1.0".to_string(),
+    policies: vec![Policy::RequireProofOfControl(proof_policy)],
+    metadata: HashMap::new(),
+};
+
+// Validate the message
+update_policies.validate().unwrap();
+
+// Convert to DIDComm message and send to all participants
+let didcomm_msg = update_policies.to_didcomm_with_route(
+    Some("did:example:originator_vasp"),
+    ["did:example:beneficiary", "did:example:beneficiary_vasp"].iter().copied()
+).unwrap();
 ```
 
 ### Authorization Messages

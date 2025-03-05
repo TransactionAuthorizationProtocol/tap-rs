@@ -22,11 +22,13 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     let originator = Participant {
         id: from_did.to_string(),
         role: Some("originator".to_string()),
+        policies: None,
     };
 
     let beneficiary = Participant {
         id: to_did.to_string(),
         role: Some("beneficiary".to_string()),
+        policies: None,
     };
 
     let body = Transfer {

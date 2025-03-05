@@ -23,10 +23,12 @@ fn test_create_reply() -> Result<()> {
         originator: Participant {
             id: alice_did.to_string(),
             role: Some("originator".to_string()),
+            policies: None,
         },
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
+            policies: None,
         }),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -98,6 +100,7 @@ fn test_add_agents() -> Result<()> {
         agents: vec![Participant {
             id: charlie_did.to_string(),
             role: Some("observer".to_string()),
+            policies: None,
         }],
         metadata: HashMap::new(),
     };
@@ -152,6 +155,7 @@ fn test_replace_agent() -> Result<()> {
         replacement: Participant {
             id: charlie_did.to_string(),
             role: Some("beneficiary".to_string()),
+            policies: None,
         },
         metadata: HashMap::new(),
     };
