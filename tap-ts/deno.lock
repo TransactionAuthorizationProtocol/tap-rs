@@ -208,7 +208,12 @@
   },
   "workspace": {
     "dependencies": [
-      "npm:@playwright/test@1.41.2"
+      "npm:did-resolver@4.1.0",
+      "npm:ethr-did-resolver@8.0.0",
+      "npm:key-did-resolver@3.0.0",
+      "npm:pkh-did-resolver@1.0.2",
+      "npm:uint8arrays@4.0.10",
+      "npm:web-did-resolver@2.0.0"
     ]
   }
 }

@@ -1,9 +1,9 @@
-extern crate tap_core;
+extern crate tap_msg;
 
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_core::message::types::{Participant, TapMessage, TapMessageType, TransferBody};
+use tap_msg::message::types::{Participant, TapMessage, TapMessageType, TransferBody};
 
 #[test]
 fn test_create_message() {

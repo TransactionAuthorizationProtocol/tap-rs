@@ -3,7 +3,7 @@
 //! This module provides event handling and subscription functionality for TAP Node events.
 
 use async_trait::async_trait;
-use tap_core::didcomm::Message;
+use tap_msg::didcomm::Message;
 use serde_json::Value;
 use std::sync::Arc;
 use tokio::sync::{broadcast, RwLock};

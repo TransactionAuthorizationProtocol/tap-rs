@@ -18,7 +18,7 @@ Step-by-step guides to get you started with TAP-RS:
 Detailed technical documentation for each of the TAP-RS crates:
 
 - [API Reference Index](./api/index.md) - Overview of all API documentation
-- [tap-core](./api/tap-core.md) - Core TAP message types and utilities
+- [tap-msg](./api/tap-msg.md) - Core TAP message types and utilities
 - [tap-agent](./api/tap-agent.md) - Participant implementation for TAP
 - [tap-node](./api/tap-node.md) - Node implementation for routing TAP messages
 - [tap-caip](./api/tap-caip.md) - CAIP (Chain Agnostic Improvement Proposals) implementation

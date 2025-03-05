@@ -1,6 +1,6 @@
-# tap-core: TAP Core Message Processing
+# tap-msg: TAP Core Message Processing
 
-The `tap-core` crate provides core message processing functionality for the Transaction Authorization Protocol (TAP). This library handles message types, validation, and serialization according to the TAP specification.
+The `tap-msg` crate provides core message processing functionality for the Transaction Authorization Protocol (TAP). This library handles message types, validation, and serialization according to the TAP specification.
 
 ## Features
 
@@ -12,17 +12,17 @@ The `tap-core` crate provides core message processing functionality for the Tran
 
 ## Usage
 
-Add `tap-core` to your `Cargo.toml`:
+Add `tap-msg` to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tap-core = "0.1.0"
+tap-msg = "0.1.0"
 ```
 
 ### Creating a TAP Message
 
 ```rust
-use tap_core::message::{TapMessage, TapMessageType};
+use tap_msg::message::{TapMessage, TapMessageType};
 use serde_json::json;
 
 async fn create_message_example() {
@@ -53,7 +53,7 @@ async fn create_message_example() {
 ### Parsing and Validating a TAP Message
 
 ```rust
-use tap_core::message::{TapMessage, Validate};
+use tap_msg::message::{TapMessage, Validate};
 use serde_json::Value;
 
 fn parse_message_example(json_string: &str) -> Result<(), Box<dyn std::error::Error>> {
@@ -82,7 +82,7 @@ fn parse_message_example(json_string: &str) -> Result<(), Box<dyn std::error::Er
 The TAP message types implement `TapMessageBody` trait which provides methods to convert to and from DIDComm messages:
 
 ```rust
-use tap_core::message::{Participant, TransferBody, TapMessageBody};
+use tap_msg::message::{Participant, TransferBody, TapMessageBody};
 use tap_caip::AssetId;
 use std::str::FromStr;
 use std::collections::HashMap;
@@ -138,7 +138,7 @@ fn didcomm_conversion_example() -> Result<(), Box<dyn std::error::Error>> {
 ### Working with Different Message Types
 
 ```rust
-use tap_core::message::{TapMessage, TapMessageType};
+use tap_msg::message::{TapMessage, TapMessageType};
 
 fn handle_message(message: &TapMessage) {
     match message.message_type {
@@ -171,7 +171,7 @@ fn handle_message(message: &TapMessage) {
 ### Deserializing Typed Message Bodies
 
 ```rust
-use tap_core::message::TapMessage;
+use tap_msg::message::TapMessage;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -196,7 +196,7 @@ fn process_transaction_proposal(message: &TapMessage) -> Result<(), Box<dyn std:
 ### Handling Message Attachments
 
 ```rust
-use tap_core::message::{TapMessage, Attachment};
+use tap_msg::message::{TapMessage, Attachment};
 use base64::{Engine as _, engine::general_purpose::STANDARD as Base64};
 
 fn process_attachments(message: &TapMessage) {

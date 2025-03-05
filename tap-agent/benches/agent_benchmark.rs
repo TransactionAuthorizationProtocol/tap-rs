@@ -12,7 +12,7 @@ use tap_agent::{
     DefaultMessagePacker, BasicSecretResolver
 };
 use tap_agent::did::MultiResolver;
-use tap_core::message::{
+use tap_msg::message::{
     TransferBody, 
     Agent as MessageAgent
 };

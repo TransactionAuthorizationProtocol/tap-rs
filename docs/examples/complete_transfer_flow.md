@@ -10,7 +10,7 @@ This example demonstrates a complete TAP transfer flow involving multiple compon
 ## Prerequisites
 
 This example uses the following TAP-RS crates:
-- `tap-core`
+- `tap-msg`
 - `tap-agent`
 - `tap-caip`
 - `tap-node`
@@ -22,7 +22,7 @@ First, let's add the necessary dependencies to your Cargo.toml:
 
 ```toml
 [dependencies]
-tap-core = { path = "../tap-core" }
+tap-msg = { path = "../tap-msg" }
 tap-agent = { path = "../tap-agent" }
 tap-caip = { path = "../tap-caip" }
 tap-node = { path = "../tap-node" }
@@ -46,11 +46,11 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use tap_agent::{Participant, ParticipantConfig};
-use tap_core::message::{
+use tap_msg::message::{
     TransferBody, AuthorizeBody, ReceiptBody, SettlementBody, RejectBody,
     TapMessageBody, Participant as TapParticipant
 };
-use tap_core::did::KeyPair;
+use tap_msg::did::KeyPair;
 use tap_caip::AssetId;
 use tap_node::{Node, NodeConfig};
 use tap_node::message::{

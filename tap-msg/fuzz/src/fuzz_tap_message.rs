@@ -2,7 +2,7 @@
 
 use arbitrary::Arbitrary;
 use libfuzzer_sys::fuzz_target;
-use tap_core::message::{TapMessage, TapMessageType, Validate};
+use tap_msg::message::{TapMessage, TapMessageType, Validate};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::{ChainId, AccountId, AssetId};

@@ -14,7 +14,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fmt::Debug;
 use std::sync::Arc;
-use tap_core::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 
 /// A trait for agents that can send and receive TAP messages
 ///

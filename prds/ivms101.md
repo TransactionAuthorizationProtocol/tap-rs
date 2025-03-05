@@ -8,13 +8,13 @@ This document outlines the product requirements for a Rust implementation of the
 
 ---
 
-*(Previous sections covering tap-core, tap-agent, caip, tap-node, tap-http, tap-ts, tap-cli, and overall testing & validation remain unchanged.)*
+*(Previous sections covering tap-msg, tap-agent, caip, tap-node, tap-http, tap-ts, tap-cli, and overall testing & validation remain unchanged.)*
 
 ---
 
 ## tap-ivms101 Module
 
-The `tap-ivms101` module integrates IVMS101 data handling directly into `tap-core`. This module enables the secure and compliant exchange of identity information between TAP agents by combining IVMS101 data with TAP’s PresentationRequest and Presentation messages (as described in TAIP-8). The module will:
+The `tap-ivms101` module integrates IVMS101 data handling directly into `tap-msg`. This module enables the secure and compliant exchange of identity information between TAP agents by combining IVMS101 data with TAP’s PresentationRequest and Presentation messages (as described in TAIP-8). The module will:
 
 - **PresentationRequest Message:**  
   - Require specific IVMS101 person information (e.g. full name, address, national ID) about either the originator or beneficiary.
@@ -25,7 +25,7 @@ The `tap-ivms101` module integrates IVMS101 data handling directly into `tap-cor
   - Support full serialization and deserialization of IVMS101 data into the standard JSON format.
 
 - **Integration:**  
-  - Integrate directly into `tap-core` so that TAP messages can include IVMS101 data seamlessly.
+  - Integrate directly into `tap-msg` so that TAP messages can include IVMS101 data seamlessly.
   - Ensure that the PresentationRequest/Presentation messages are packed/unpacked via DIDComm v2 like all other TAP messages.
 
 - **Verifiable Credential and Presentation:**  
@@ -56,8 +56,8 @@ The `tap-ivms101` module integrates IVMS101 data handling directly into `tap-cor
   - Design and implement an API function (e.g., `create_presentation()`) that builds a Presentation message.
   - Ensure this function accepts IVMS101 data and produces a message that includes the data as a Verifiable Presentation.
 
-- [ ] **Integrate with tap-core Message Handling:**  
-  - Extend tap-core’s packing/unpacking logic to recognize and process PresentationRequest and Presentation messages that contain IVMS101 data.
+- [ ] **Integrate with tap-msg Message Handling:**  
+  - Extend tap-msg’s packing/unpacking logic to recognize and process PresentationRequest and Presentation messages that contain IVMS101 data.
   - Ensure that these messages are handled dynamically as part of the TAP flow.
 
 - [ ] **Verifiable Credential Generation:**  

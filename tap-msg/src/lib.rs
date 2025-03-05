@@ -8,7 +8,7 @@
 //! authorizing, documenting, and recording financial transactions for
 //! cryptocurrency asset transfers.
 
-// Re-export the didcomm crate for convenience to users of tap-core
+// Re-export the didcomm crate for convenience to users of tap-msg
 pub use didcomm;
 
 // Internal modules

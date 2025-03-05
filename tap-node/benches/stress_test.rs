@@ -11,8 +11,8 @@ use didcomm::secrets::{Secret, SecretType, SecretMaterial};
 use tap_agent::did::MultiResolver;
 use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
-use tap_core::message::TransferBody;
-use tap_core::message::TapMessageBody;
+use tap_msg::message::TransferBody;
+use tap_msg::message::TapMessageBody;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use tokio::time::Duration;
@@ -27,11 +27,11 @@ async fn create_test_message(
     // Create a simple transfer message
     let body = TransferBody {
         asset: tap_caip::AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
-        originator: tap_core::message::Agent {
+        originator: tap_msg::message::Agent {
             id: from_did.to_string(),
             role: Some("originator".to_string()),
         },
-        beneficiary: Some(tap_core::message::Agent {
+        beneficiary: Some(tap_msg::message::Agent {
             id: to_did.to_string(),
             role: Some("beneficiary".to_string()),
         }),

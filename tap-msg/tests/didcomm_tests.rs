@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_core::error::Result;
-use tap_core::message::{Participant, TransferBody, TapMessageBody};
+use tap_msg::error::Result;
+use tap_msg::message::{Participant, TransferBody, TapMessageBody};
 
 #[tokio::test]
 async fn test_pack_tap_body() -> Result<()> {

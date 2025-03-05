@@ -6,7 +6,7 @@ This repository contains a Rust implementation of the Transaction Authorization 
 
 TAP-RS is organized as a Rust workspace with multiple crates:
 
-- **[tap-core](./tap-core/README.md)**: Core message processing for TAP with integrated DIDComm support
+- **[tap-msg](./tap-msg/README.md)**: Core message processing for TAP with integrated DIDComm support
 - **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **caip**: Implementation of Chain Agnostic Identifier Standards
 - **tap-node**: TAP node orchestration and message routing
@@ -49,10 +49,10 @@ cargo test
 - Secure key management with DIDComm SecretsResolver implementation
 - Message signing and verification with Ed25519 and other key types
 
-## Getting Started with tap-core
+## Getting Started with tap-msg
 
 ```rust
-use tap_core::message::{TapMessage, TapMessageType};
+use tap_msg::message::{TapMessage, TapMessageType};
 use serde_json::json;
 
 // Create a message using builder pattern
@@ -67,7 +67,7 @@ let message = TapMessage::new()
     .build();
 ```
 
-See the [tap-core README](./tap-core/README.md) for more detailed examples.
+See the [tap-msg README](./tap-msg/README.md) for more detailed examples.
 
 ## Getting Started with tap-agent
 

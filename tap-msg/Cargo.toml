@@ -1,5 +1,5 @@
 [package]
-name = "tap-core"
+name = "tap-msg"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

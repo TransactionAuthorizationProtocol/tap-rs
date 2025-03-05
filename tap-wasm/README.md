@@ -109,6 +109,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Related Projects
 
-- [tap-core](../tap-core/README.md): Core message processing for TAP
+- [tap-msg](../tap-msg/README.md): Core message processing for TAP
 - [tap-agent](../tap-agent/README.md): TAP agent functionality and identity management
 - [tap-ts](../tap-ts/README.md): TypeScript wrapper for browser and Node.js environments

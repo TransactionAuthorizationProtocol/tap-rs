@@ -43,8 +43,8 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<tap_core::error::Error> for Error {
-    fn from(err: tap_core::error::Error) -> Self {
+impl From<tap_msg::error::Error> for Error {
+    fn from(err: tap_msg::error::Error) -> Self {
         Error::DIDComm(err.to_string())
     }
 }

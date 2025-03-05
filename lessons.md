@@ -3,7 +3,7 @@
 This document tracks key learnings, decisions, and insights discovered during the development of the TAP-RS implementation.
 
 ## Project Setup
-- Following implementation order: tap-core, tap-agent, caip, tap-node, tap-server, tap-ts
+- Following implementation order: tap-msg, tap-agent, caip, tap-node, tap-server, tap-ts
 - Using test-driven development approach
 - Using didcomm v2 library from crates.io
 - Supporting did:key and did:pkh methods by default with did:web only available in non-WASM environments

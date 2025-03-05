@@ -12,7 +12,7 @@ use serde::Serialize;
 use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
-use tap_core::didcomm;
+use tap_msg::didcomm;
 use didcomm::Message;
 use tap_node::TapNode;
 use tracing::{debug, error, info};

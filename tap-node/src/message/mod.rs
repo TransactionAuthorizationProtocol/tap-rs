@@ -13,8 +13,8 @@ pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
 pub use router::{DefaultMessageRouter};
 pub use sender::{HttpMessageSender, NodeMessageSender};
 
-// Import the Message type from tap-core
-use tap_core::didcomm::Message;
+// Import the Message type from tap-msg
+use tap_msg::didcomm::Message;
 use crate::error::{Result};
 use async_trait::async_trait;
 

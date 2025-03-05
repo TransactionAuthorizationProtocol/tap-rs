@@ -3,7 +3,7 @@
 //! This module provides a processor pool for handling concurrent message processing.
 
 use tokio::sync::mpsc::{channel, Sender};
-use tap_core::didcomm::Message;
+use tap_msg::didcomm::Message;
 use tokio::time::Duration;
 
 use crate::error::{Error, Result};

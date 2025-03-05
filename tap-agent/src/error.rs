@@ -12,7 +12,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub enum Error {
     /// Core TAP errors
     #[error("Core error: {0}")]
-    Core(#[from] tap_core::error::Error),
+    Core(#[from] tap_msg::error::Error),
 
     /// Validation errors
     #[error("Validation error: {0}")]

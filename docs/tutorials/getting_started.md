@@ -19,7 +19,7 @@ Add TAP-RS dependencies to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tap-core = "0.1.0"
+tap-msg = "0.1.0"
 tap-agent = "0.1.0"
 tap-node = "0.1.0"
 tokio = { version = "1", features = ["full"] }
@@ -43,7 +43,7 @@ yarn add @tap-rs/tap-ts
 
 ```rust
 use tap_agent::{Agent, AgentConfig};
-use tap_core::did::KeyPair;
+use tap_msg::did::KeyPair;
 use std::sync::Arc;
 
 #[tokio::main]
@@ -91,7 +91,7 @@ main().catch(console.error);
 ### In Rust
 
 ```rust
-use tap_core::message::{TransferBody, TapMessageBody, Participant as MessageParticipant};
+use tap_msg::message::{TransferBody, TapMessageBody, Participant as MessageParticipant};
 use didcomm::Message;
 use tap_caip::AssetId;
 use std::collections::HashMap;
@@ -99,7 +99,7 @@ use std::collections::HashMap;
 async fn create_transfer_message(
     from_did: &str, 
     to_did: &str
-) -> Result<Message, tap_core::error::Error> {
+) -> Result<Message, tap_msg::error::Error> {
     // Create originator and beneficiary participants
     let originator = MessageParticipant {
         id: from_did.to_string(),
@@ -214,13 +214,13 @@ const unsubscribe = node.subscribeToMessages((message, metadata) => {
 ### In Rust
 
 ```rust
-use tap_core::message::{TransferBody, AuthorizeBody};
+use tap_msg::message::{TransferBody, AuthorizeBody};
 use didcomm::Message;
 use std::collections::HashMap;
 
 async fn process_transfer_message(
     message: &Message
-) -> Result<Message, tap_core::error::Error> {
+) -> Result<Message, tap_msg::error::Error> {
     // Extract the transfer body
     let transfer_body = TransferBody::from_didcomm(message)?;
     
@@ -285,7 +285,7 @@ participant.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => 
 
 ```rust
 use tap_agent::{Agent, AgentConfig};
-use tap_core::{
+use tap_msg::{
     did::KeyPair,
     message::{TransferBody, AuthorizeBody, TapMessageBody, Participant as MessageParticipant},
 };

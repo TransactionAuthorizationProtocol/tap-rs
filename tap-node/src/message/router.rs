@@ -4,7 +4,7 @@
 
 use log::debug;
 use std::sync::Arc;
-use tap_core::didcomm::Message;
+use tap_msg::didcomm::Message;
 
 use crate::agent::AgentRegistry;
 use crate::error::{Error, Result};

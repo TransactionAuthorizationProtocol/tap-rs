@@ -59,7 +59,7 @@ use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
 use tap_agent::did::DefaultDIDResolver;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
-use tap_core::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 
 // Define a custom message type
 #[derive(Debug, Serialize, Deserialize)]
@@ -73,12 +73,12 @@ impl TapMessageBody for TransactionProposal {
         "https://tap.rsvp/schema/1.0#TransactionProposal"
     }
 
-    fn from_didcomm(msg: &didcomm::Message) -> tap_core::error::Result<Self> {
+    fn from_didcomm(msg: &didcomm::Message) -> tap_msg::error::Result<Self> {
         serde_json::from_value(msg.body.clone())
-            .map_err(|e| tap_core::error::Error::Validation(e.to_string()))
+            .map_err(|e| tap_msg::error::Error::Validation(e.to_string()))
     }
 
-    fn validate(&self) -> tap_core::error::Result<()> {
+    fn validate(&self) -> tap_msg::error::Result<()> {
         Ok(())
     }
 }
@@ -122,7 +122,7 @@ use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
 use tap_agent::did::DefaultDIDResolver;
 use std::sync::Arc;
 use serde::{Serialize, Deserialize};
-use tap_core::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 
 // Define the same message type for receiving
 #[derive(Debug, Serialize, Deserialize)]
@@ -136,12 +136,12 @@ impl TapMessageBody for TransactionProposal {
         "https://tap.rsvp/schema/1.0#TransactionProposal"
     }
 
-    fn from_didcomm(msg: &didcomm::Message) -> tap_core::error::Result<Self> {
+    fn from_didcomm(msg: &didcomm::Message) -> tap_msg::error::Result<Self> {
         serde_json::from_value(msg.body.clone())
-            .map_err(|e| tap_core::error::Error::Validation(e.to_string()))
+            .map_err(|e| tap_msg::error::Error::Validation(e.to_string()))
     }
 
-    fn validate(&self) -> tap_core::error::Result<()> {
+    fn validate(&self) -> tap_msg::error::Result<()> {
         Ok(())
     }
 }

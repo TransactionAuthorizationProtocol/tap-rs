@@ -8,7 +8,7 @@ license.workspace = true
 description = "HTTP server for the Transaction Authorization Protocol (TAP)"
 
 [dependencies]
-tap-core = { path = "../tap-core" }
+tap-msg = { path = "../tap-msg" }
 tap-node = { path = "../tap-node" }
 warp = "0.3"
 tokio = { workspace = true, features = ["full"] }

@@ -31,7 +31,7 @@ The basic transfer flow involves:
 
 ```rust
 use tap_agent::{Participant, ParticipantConfig};
-use tap_core::{
+use tap_msg::{
     did::KeyPair,
     message::{TransferBody, AuthorizeBody, ReceiptBody, TapMessageBody, Participant as MessageParticipant},
 };

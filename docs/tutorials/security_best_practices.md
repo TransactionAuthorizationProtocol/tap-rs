@@ -13,7 +13,7 @@ The security of your TAP implementation fundamentally depends on how private key
 let hardcoded_key = "abcdef1234567890..."; // SECURITY RISK
 
 // DO THIS INSTEAD - use a secure key management approach
-use tap_core::did::KeyPair;
+use tap_msg::did::KeyPair;
 
 async fn secure_key_management() -> Result<KeyPair, Box<dyn std::error::Error>> {
     // Option 1: Generate a new key pair securely
@@ -303,7 +303,7 @@ fn create_production_node() -> Node {
 Implement comprehensive audit logging:
 
 ```rust
-use tap_core::logging::{AuditLogger, LogLevel, LogEvent};
+use tap_msg::logging::{AuditLogger, LogLevel, LogEvent};
 
 fn setup_audit_logging() -> AuditLogger {
     let logger = AuditLogger::new()

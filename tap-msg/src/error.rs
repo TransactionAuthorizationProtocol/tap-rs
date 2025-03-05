@@ -1,4 +1,4 @@
-//! Error types for the tap-core crate.
+//! Error types for the tap-msg crate.
 
 use std::result;
 use thiserror::Error;

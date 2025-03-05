@@ -31,9 +31,9 @@ let agent = Arc::new(TapAgent::with_config(agent_config).unwrap());
 node.register_agent(agent.clone()).await.unwrap();
 
 // Process a message
-let message = tap_core::message::TapMessageBuilder::new()
+let message = tap_msg::message::TapMessageBuilder::new()
     .id("test-message-id")
-    .message_type(tap_core::message::TapMessageType::TransactionProposal)
+    .message_type(tap_msg::message::TapMessageType::TransactionProposal)
     .from_did(Some("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH".to_string()))
     .to_did(Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()))
     .build()

@@ -17,7 +17,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 wasm-bindgen-futures = { workspace = true }
 serde-wasm-bindgen = { workspace = true }
-tap-core = { path = "../../../tap-core", default-features = false, features = ["wasm"] }
+tap-msg = { path = "../../../tap-msg", default-features = false, features = ["wasm"] }
 tap-agent = { path = "../../../tap-agent", default-features = false, features = ["wasm"] }
 # Exclude tap-node and tap-caip as they pull in dependencies that don't work in WASM
 # tap-node = { path = "../../../tap-node" }

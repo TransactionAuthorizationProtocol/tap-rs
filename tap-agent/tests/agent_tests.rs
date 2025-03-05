@@ -10,8 +10,8 @@ use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker, DebugSecretsResolver};
 use tap_agent::did::{MultiResolver, SyncDIDResolver, DIDMethodResolver};
 use tap_agent::error::{Error, Result};
-use tap_core::error::{Error as TapCoreError, Result as TapCoreResult};
-use tap_core::message::tap_message_trait::TapMessageBody;
+use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
+use tap_msg::message::tap_message_trait::TapMessageBody;
 use uuid::Uuid;
 
 // Test message for agent tests

@@ -15,7 +15,7 @@ pub use error::{Error, Result};
 use std::sync::Arc;
 
 use tap_agent::{Agent, DefaultAgent};
-use tap_core::didcomm::Message;
+use tap_msg::didcomm::Message;
 
 use agent::AgentRegistry;
 use event::EventBus;

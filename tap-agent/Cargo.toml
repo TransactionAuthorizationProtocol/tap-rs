@@ -9,7 +9,7 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-tap-core = { path = "../tap-core" }
+tap-msg = { path = "../tap-msg" }
 tap-caip = { path = "../tap-caip" }
 async-trait = { workspace = true }
 thiserror = "1.0"
@@ -49,7 +49,7 @@ harness = false
 default = ["native"]
 native = ["tokio", "url"]
 wasm = [
-  "tap-core/wasm",
+  "tap-msg/wasm",
   "wasm-bindgen",
   "js-sys",
   "web-sys",

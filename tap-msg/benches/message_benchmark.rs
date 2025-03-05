@@ -9,7 +9,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use didcomm::Message;
 use std::collections::HashMap;
 use tap_caip::AssetId;
-use tap_core::message::{
+use tap_msg::message::{
     TransferBody, AuthorizeBody, RejectBody, SettleBody,
     Participant, TapMessageBody,
 };

@@ -10,7 +10,7 @@ use didcomm::{Message as DIDCommMessage};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_core::message::{
+use tap_msg::message::{
     TapMessageBody, TransferBody, AuthorizeBody, RejectBody,
     Agent as MessageAgent, 
 };

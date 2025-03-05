@@ -40,7 +40,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 wasm-bindgen-futures = "0.4"
 console_error_panic_hook = "0.1"
-tap-core = { path = "../../tap-core" }
+tap-msg = { path = "../../tap-msg" }
 tap-agent = { path = "../../tap-agent" }
 tap-node = { path = "../../tap-node" }
 didcomm = "0.3"
