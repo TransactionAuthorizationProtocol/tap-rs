@@ -46,14 +46,14 @@ pub enum TapMessageType {
 impl fmt::Display for TapMessageType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            TapMessageType::Transfer => write!(f, "transfer"),
-            TapMessageType::RequestPresentation => write!(f, "request-presentation"),
-            TapMessageType::Presentation => write!(f, "presentation"),
-            TapMessageType::Authorize => write!(f, "authorize"),
-            TapMessageType::Reject => write!(f, "reject"),
-            TapMessageType::Settle => write!(f, "settle"),
-            TapMessageType::AddAgents => write!(f, "add-agents"),
-            TapMessageType::Error => write!(f, "error"),
+            TapMessageType::Transfer => write!(f, "https://tap.rsvp/schema/1.0#Transfer"),
+            TapMessageType::RequestPresentation => write!(f, "https://tap.rsvp/schema/1.0#RequestPresentation"),
+            TapMessageType::Presentation => write!(f, "https://tap.rsvp/schema/1.0#Presentation"),
+            TapMessageType::Authorize => write!(f, "https://tap.rsvp/schema/1.0#Authorize"),
+            TapMessageType::Reject => write!(f, "https://tap.rsvp/schema/1.0#Reject"),
+            TapMessageType::Settle => write!(f, "https://tap.rsvp/schema/1.0#Settle"),
+            TapMessageType::AddAgents => write!(f, "https://tap.rsvp/schema/1.0#AddAgents"),
+            TapMessageType::Error => write!(f, "https://tap.rsvp/schema/1.0#Error"),
             TapMessageType::Custom(s) => write!(f, "{}", s),
         }
     }
