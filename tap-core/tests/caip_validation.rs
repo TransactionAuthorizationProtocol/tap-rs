@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_core::message::types::{Agent, TransferBody};
+use tap_core::message::types::{Participant, TransferBody};
 use tap_core::message::validation::validate_transfer_body;
 
 #[test]
@@ -10,12 +10,12 @@ fn test_valid_transfer_body() {
     let asset =
         AssetId::from_str("ethereum:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Agent {
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
     };
 
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
     };
@@ -44,12 +44,12 @@ fn test_transfer_with_empty_asset() {
     let asset =
         AssetId::from_str("ethereum:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Agent {
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
     };
 
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
     };
@@ -75,12 +75,12 @@ fn test_transfer_with_empty_amount() {
     let asset =
         AssetId::from_str("ethereum:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Agent {
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
     };
 
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
     };

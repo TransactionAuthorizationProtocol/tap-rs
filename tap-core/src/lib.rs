@@ -19,7 +19,7 @@ pub mod utils;
 // Re-export public types for easier access
 pub use error::{Error, Result};
 pub use message::{
-    AddAgentsBody, Agent, Attachment, AttachmentData, AuthorizeBody, ErrorBody,
+    AddAgentsBody, Participant, Attachment, AttachmentData, AuthorizeBody, ErrorBody,
     PresentationBody, RejectBody, RequestPresentationBody, SettleBody, 
     TapMessageType, TransferBody, Validate, TapMessage, TapMessageBody, create_tap_message
 };

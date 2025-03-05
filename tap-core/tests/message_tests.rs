@@ -3,7 +3,7 @@ extern crate tap_core;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_core::message::types::{Agent, TapMessage, TapMessageType, TransferBody};
+use tap_core::message::types::{Participant, TapMessage, TapMessageType, TransferBody};
 
 #[test]
 fn test_create_message() {
@@ -11,12 +11,12 @@ fn test_create_message() {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap();
 
-    let originator = Agent {
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
     };
 
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
     };

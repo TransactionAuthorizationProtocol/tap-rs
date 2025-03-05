@@ -2,7 +2,7 @@
 
 This example demonstrates a complete TAP transfer flow involving multiple components:
 
-1. Creating TAP agents for the originator and beneficiary
+1. Creating TAP participants for the originator and beneficiary
 2. Implementing a TAP node for message routing  
 3. Setting up a simple HTTP server for communication
 4. Processing a complete transfer flow (Transfer → Authorize → Receipt → Settlement)
@@ -45,10 +45,10 @@ use std::str::FromStr;
 use std::collections::HashMap;
 use std::time::Duration;
 
-use tap_agent::{Agent, AgentConfig};
+use tap_agent::{Participant, ParticipantConfig};
 use tap_core::message::{
     TransferBody, AuthorizeBody, ReceiptBody, SettlementBody, RejectBody,
-    TapMessageBody, Agent as TapAgent
+    TapMessageBody, Participant as TapParticipant
 };
 use tap_core::did::KeyPair;
 use tap_caip::AssetId;
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     println!("Starting TAP transfer flow example...");
     
-    // 1. Create key pairs for the agents
+    // 1. Create key pairs for the participants
     let originator_key = KeyPair::generate_ed25519().await?;
     let beneficiary_key = KeyPair::generate_ed25519().await?;
     
@@ -77,24 +77,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("  Originator: {}", originator_key.get_did_key());
     println!("  Beneficiary: {}", beneficiary_key.get_did_key());
     
-    // 2. Create the TAP agents
-    let originator_agent = Agent::new(
-        AgentConfig::new().with_name("Originator".to_string()),
+    // 2. Create the TAP participants
+    let originator_participant = Participant::new(
+        ParticipantConfig::new().with_name("Originator".to_string()),
         Arc::new(originator_key),
     )?;
     
-    let beneficiary_agent = Agent::new(
-        AgentConfig::new().with_name("Beneficiary".to_string()),
+    let beneficiary_participant = Participant::new(
+        ParticipantConfig::new().with_name("Beneficiary".to_string()),
         Arc::new(beneficiary_key),
     )?;
     
-    println!("Created TAP agents:");
-    println!("  Originator: {} ({})", originator_agent.name(), originator_agent.did());
-    println!("  Beneficiary: {} ({})", beneficiary_agent.name(), beneficiary_agent.did());
+    println!("Created TAP participants:");
+    println!("  Originator: {} ({})", originator_participant.name(), originator_participant.did());
+    println!("  Beneficiary: {} ({})", beneficiary_participant.name(), beneficiary_participant.did());
     
     // 3. Set up the TAP node
     let node_config = NodeConfig::new()
-        .with_max_agents(10)
+        .with_max_participants(10)
         .with_logging(true);
         
     let node = Node::new(node_config);
@@ -110,17 +110,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     node.add_processor(MessageProcessorType::Composite(composite_processor))?;
     
-    // Register the agents with the node
-    node.register_agent(Arc::new(originator_agent.clone())).await?;
-    node.register_agent(Arc::new(beneficiary_agent.clone())).await?;
+    // Register the participants with the node
+    node.register_participant(Arc::new(originator_participant.clone())).await?;
+    node.register_participant(Arc::new(beneficiary_participant.clone())).await?;
     
-    println!("Set up TAP node and registered agents");
+    println!("Set up TAP node and registered participants");
     
     // 4. Set up message handlers
     
     // Set up a handler for the beneficiary to process transfer requests
-    let beneficiary_clone = beneficiary_agent.clone();
-    let beneficiary_did = beneficiary_agent.did().to_string();
+    let beneficiary_clone = beneficiary_participant.clone();
+    let beneficiary_did = beneficiary_participant.did().to_string();
     
     // Handler for processing transfers
     node.register_message_handler(beneficiary_did, move |message| {
@@ -160,8 +160,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }).await?;
     
     // Set up a handler for the originator to process authorizations
-    let originator_clone = originator_agent.clone();
-    let originator_did = originator_agent.did().to_string();
+    let originator_clone = originator_participant.clone();
+    let originator_did = originator_participant.did().to_string();
     
     // Handler for processing authorizations
     node.register_message_handler(originator_did, move |message| {
@@ -245,14 +245,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Prepare the transfer message
     println!("Initiating transfer from originator to beneficiary...");
     
-    // Create agent representations for the message
-    let originator = TapAgent {
-        id: originator_agent.did().to_string(),
+    // Create participant representations for the message
+    let originator = TapParticipant {
+        id: originator_participant.did().to_string(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary = TapAgent {
-        id: beneficiary_agent.did().to_string(),
+    let beneficiary = TapParticipant {
+        id: beneficiary_participant.did().to_string(),
         role: Some("beneficiary".to_string()),
     };
     
@@ -274,14 +274,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create and sign the message
     let transfer_msg = transfer_body.to_didcomm()?;
     let transfer_msg = transfer_msg
-        .set_from(Some(originator_agent.did().to_string()))
-        .set_to(Some(vec![beneficiary_agent.did().to_string()]))
+        .set_from(Some(originator_participant.did().to_string()))
+        .set_to(Some(vec![beneficiary_participant.did().to_string()]))
         .set_created_time(Some(chrono::Utc::now().to_rfc3339()));
     
     println!("Originator created transfer message: {}", transfer_msg.id);
     
     // Send the message
-    originator_agent.send_message(beneficiary_agent.did(), transfer_msg).await?;
+    originator_participant.send_message(beneficiary_participant.did(), transfer_msg).await?;
     
     // Wait to see the whole flow complete
     println!("Waiting for the transfer flow to complete...");
@@ -313,10 +313,10 @@ Starting TAP transfer flow example...
 Generated key pairs:
   Originator: did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
   Beneficiary: did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH
-Created TAP agents:
+Created TAP participants:
   Originator: Originator (did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK)
   Beneficiary: Beneficiary (did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH)
-Set up TAP node and registered agents
+Set up TAP node and registered participants
 Started TAP HTTP server on http://127.0.0.1:8080
 Initiating transfer from originator to beneficiary...
 Originator created transfer message: 1234-5678-9abc-def0
@@ -334,9 +334,9 @@ Transfer flow completed!
 
 This example demonstrates a complete TAP transfer flow:
 
-1. **Setup**: We create two TAP agents (originator and beneficiary) with their own key pairs, and a TAP node to route messages between them.
+1. **Setup**: We create two TAP participants (originator and beneficiary) with their own key pairs, and a TAP node to route messages between them.
 
-2. **Message Handlers**: We set up message handlers for both agents to process incoming messages:
+2. **Message Handlers**: We set up message handlers for both participants to process incoming messages:
    - The beneficiary processes transfer requests and responds with authorizations
    - The originator processes authorizations, sends receipts, and settlement messages
 
@@ -345,7 +345,7 @@ This example demonstrates a complete TAP transfer flow:
    - Beneficiary receives the transfer and sends an authorization
    - Originator receives the authorization, sends a receipt, and then a settlement message
 
-4. **HTTP Transport**: The example sets up an HTTP server to handle communication between the agents, which would be necessary in a real-world deployment.
+4. **HTTP Transport**: The example sets up an HTTP server to handle communication between the participants, which would be necessary in a real-world deployment.
 
 ## Next Steps
 
@@ -357,4 +357,4 @@ This example can be extended in various ways:
 4. **Implement Webhooks**: Notify external systems about TAP events
 5. **Add Authentication**: Implement proper authentication for the HTTP server
 
-For more details on TAP-RS, see the [API Reference](../api/index.md) and other [tutorials](../tutorials/getting_started.md).
+For more details on TAP-RS, see the API Reference documentation and other [tutorials](../tutorials/getting_started.md).

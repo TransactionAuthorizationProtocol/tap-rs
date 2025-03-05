@@ -10,13 +10,13 @@ import { wasmLoader } from "./wasm/loader.ts";
 
 
 /**
- * Agent involved in a transaction
+ * Participant involved in a transaction
  */
-interface Agent {
-  /** DID of the agent */
+interface Participant {
+  /** DID of the participant */
   "@id": string;
   
-  /** Optional role of the agent in the transaction */
+  /** Optional role of the participant in the transaction */
   role?: string;
 }
 
@@ -28,16 +28,16 @@ interface TransferData {
   asset: string;
   
   /** Originator information */
-  originator: Agent;
+  originator: Participant;
   
   /** Beneficiary information (optional) */
-  beneficiary?: Agent;
+  beneficiary?: Participant;
   
   /** Amount as a decimal string */
   amount: string;
   
   /** Agents involved in the transaction */
-  agents: Agent[];
+  agents: Participant[];
   
   /** Optional settled transaction ID */
   settlementId?: string;

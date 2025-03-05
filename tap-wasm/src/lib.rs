@@ -64,14 +64,14 @@ impl fmt::Display for MessageType {
     }
 }
 
-/// Agent structure for participants in a transaction.
+/// Participant structure for participants in a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Agent {
-    /// DID of the agent.
+pub struct Participant {
+    /// DID of the participant.
     #[serde(rename = "@id")]
     pub id: String,
 
-    /// Role of the agent in the transaction (optional).
+    /// Role of the participant in the transaction (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
 }
@@ -83,17 +83,17 @@ pub struct TransferBody {
     pub asset: String,
 
     /// Originator information.
-    pub originator: Agent,
+    pub originator: Participant,
 
     /// Beneficiary information (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub beneficiary: Option<Agent>,
+    pub beneficiary: Option<Participant>,
 
     /// Amount as a decimal string.
     pub amount: String,
 
     /// Agents involved in the transaction.
-    pub agents: Vec<Agent>,
+    pub agents: Vec<Participant>,
 
     /// Optional settled transaction ID.
     #[serde(skip_serializing_if = "Option::is_none", rename = "settlementId")]

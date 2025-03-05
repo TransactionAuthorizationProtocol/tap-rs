@@ -30,10 +30,10 @@ The basic transfer flow involves:
 ### Rust Implementation
 
 ```rust
-use tap_agent::{Agent, AgentConfig};
+use tap_agent::{Participant, ParticipantConfig};
 use tap_core::{
     did::KeyPair,
-    message::{TransferBody, AuthorizeBody, ReceiptBody, TapMessageBody, Agent as MessageAgent},
+    message::{TransferBody, AuthorizeBody, ReceiptBody, TapMessageBody, Participant as MessageParticipant},
 };
 use tap_caip::AssetId;
 use didcomm::Message;
@@ -47,31 +47,31 @@ async fn implement_basic_flow() -> Result<(), Box<dyn std::error::Error>> {
     let originator_did = originator_key.get_did_key();
     let beneficiary_did = beneficiary_key.get_did_key();
     
-    let originator_agent = Agent::new(
-        AgentConfig::new().with_did(originator_did.clone()).with_name("Originator"),
+    let originator_agent = Participant::new(
+        ParticipantConfig::new().with_did(originator_did.clone()).with_name("Originator"),
         Arc::new(originator_key),
     )?;
     
-    let beneficiary_agent = Agent::new(
-        AgentConfig::new().with_did(beneficiary_did.clone()).with_name("Beneficiary"),
+    let beneficiary_agent = Participant::new(
+        ParticipantConfig::new().with_did(beneficiary_did.clone()).with_name("Beneficiary"),
         Arc::new(beneficiary_key),
     )?;
     
     // Step 1: Originator creates and sends a Transfer message
-    let originator_msg_agent = MessageAgent {
+    let originator_msg_participant = MessageParticipant {
         id: originator_did.clone(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary_msg_agent = MessageAgent {
+    let beneficiary_msg_participant = MessageParticipant {
         id: beneficiary_did.clone(),
         role: Some("beneficiary".to_string()),
     };
     
     let transfer_body = TransferBody {
         asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-        originator: originator_msg_agent,
-        beneficiary: Some(beneficiary_msg_agent),
+        originator: originator_msg_participant,
+        beneficiary: Some(beneficiary_msg_participant),
         amount: "100.0".to_string(),
         agents: vec![],
         settlement_id: None,
@@ -141,16 +141,16 @@ async fn implement_basic_flow() -> Result<(), Box<dyn std::error::Error>> {
 ### TypeScript Implementation
 
 ```typescript
-import { Agent, Message, MessageType } from "@tap-rs/tap-ts";
+import { Participant, Message, MessageType } from "@tap-rs/tap-ts";
 
 async function implementBasicFlow() {
     // Create agents
-    const originatorAgent = new Agent({
+    const originatorAgent = new Participant({
         nickname: "Originator",
         // In a real implementation, you would provide or generate keys
     });
     
-    const beneficiaryAgent = new Agent({
+    const beneficiaryAgent = new Participant({
         nickname: "Beneficiary",
     });
     
@@ -327,7 +327,7 @@ async fn implement_multi_agent_flow() -> Result<(), Box<dyn std::error::Error>> 
     
     // Step 1: Originator creates Transfer with multiple agents
     let agents = vec![
-        MessageAgent {
+        MessageParticipant {
             id: intermediary_did.clone(),
             role: Some("transmitter".to_string()),
         }
@@ -335,8 +335,8 @@ async fn implement_multi_agent_flow() -> Result<(), Box<dyn std::error::Error>> 
     
     let transfer_body = TransferBody {
         asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
-        originator: originator_msg_agent,
-        beneficiary: Some(beneficiary_msg_agent),
+        originator: originator_msg_participant,
+        beneficiary: Some(beneficiary_msg_participant),
         amount: "100.0".to_string(),
         agents: agents,  // Include additional agents
         settlement_id: None,

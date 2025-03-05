@@ -65,7 +65,7 @@ deno task clean
 
 ```typescript
 import {
-  Agent,
+  Participant,
   TapNode,
   Message,
   MessageType,
@@ -107,21 +107,21 @@ const transferMessage = new Message({
 transferMessage.setTransferData({
   asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   originator: {
-    "@id": aliceAgent.getDid(),
+    "@id": aliceParticipant.getDid(),
     role: "originator"
   },
   amount: "100.00",
   beneficiary: {
-    "@id": bobAgent.getDid(),
+    "@id": bobParticipant.getDid(),
     role: "beneficiary"
   },
-  agents: [
+  participants: [
     {
-      "@id": aliceAgent.getDid(),
+      "@id": aliceParticipant.getDid(),
       role: "originator"
     },
     {
-      "@id": bobAgent.getDid(),
+      "@id": bobParticipant.getDid(),
       role: "beneficiary"
     }
   ],
@@ -129,10 +129,10 @@ transferMessage.setTransferData({
 });
 
 // Send the message
-await aliceAgent.sendMessage(bobAgent.getDid(), transferMessage);
+await aliceParticipant.sendMessage(bobParticipant.getDid(), transferMessage);
 
 // On Bob's side, set up a handler for transfer messages
-bobAgent.registerHandler(MessageType.TRANSFER, async (message, metadata) => {
+bobParticipant.registerHandler(MessageType.TRANSFER, async (message, metadata) => {
   console.log("Received transfer message:", message.getId());
   
   const transferData = message.getTransferData();
@@ -152,7 +152,7 @@ bobAgent.registerHandler(MessageType.TRANSFER, async (message, metadata) => {
     });
     
     // Send the authorization response
-    await bobAgent.sendMessage(metadata?.senderDid || "", authorizeMessage);
+    await bobParticipant.sendMessage(metadata?.senderDid || "", authorizeMessage);
     console.log("Authorization sent");
   }
 });
@@ -177,7 +177,7 @@ The TAP-TS library includes built-in support for cryptographic key management an
 
 ```typescript
 import {
-  Agent,
+  Participant,
   Message,
   MessageType,
   wasmLoader,
@@ -186,19 +186,19 @@ import {
 // Load the WASM module
 await wasmLoader.load();
 
-// Create an agent with a DID
-const agent = new Agent({
+// Create a participant with a DID
+const participant = new Participant({
   did: "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
   nickname: "Alice",
 });
 
-// Add a custom key to the agent
+// Add a custom key to the participant
 const privateKeyBytes = new Uint8Array([/* private key bytes */]);
 const publicKeyBytes = new Uint8Array([/* public key bytes */]);
-agent.addKey("did:key:z6MkCustomKey", "Ed25519", privateKeyBytes, publicKeyBytes);
+participant.addKey("did:key:z6MkCustomKey", "Ed25519", privateKeyBytes, publicKeyBytes);
 
 // Get information about available keys
-const keysInfo = agent.getKeysInfo();
+const keysInfo = participant.getKeysInfo();
 console.log("Available keys:", keysInfo);
 
 // Create and sign a message
@@ -210,23 +210,23 @@ const message = new Message({
 message.setTransferData({
   asset: "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   originator: {
-    "@id": agent.getDid(),
+    "@id": participant.getDid(),
     role: "originator"
   },
   amount: "100.00",
-  agents: [
+  participants: [
     {
-      "@id": agent.getDid(),
+      "@id": participant.getDid(),
       role: "originator"
     }
   ]
 });
 
 // Sign the message
-agent.signMessage(message);
+participant.signMessage(message);
 
 // Verify a message signature
-const isValid = agent.verifyMessage(message);
+const isValid = participant.verifyMessage(message);
 console.log("Signature is valid:", isValid);
 ```
 

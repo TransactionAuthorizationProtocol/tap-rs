@@ -82,7 +82,7 @@ fn parse_message_example(json_string: &str) -> Result<(), Box<dyn std::error::Er
 The TAP message types implement `TapMessageBody` trait which provides methods to convert to and from DIDComm messages:
 
 ```rust
-use tap_core::message::{Agent, TransferBody, TapMessageBody};
+use tap_core::message::{Participant, TransferBody, TapMessageBody};
 use tap_caip::AssetId;
 use std::str::FromStr;
 use std::collections::HashMap;
@@ -91,12 +91,12 @@ fn didcomm_conversion_example() -> Result<(), Box<dyn std::error::Error>> {
     // Create a TAP transfer message
     let asset = AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7")?;
     
-    let originator = Agent {
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
     };

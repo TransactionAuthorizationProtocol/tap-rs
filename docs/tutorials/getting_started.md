@@ -69,18 +69,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### In TypeScript
 
 ```typescript
-import { Agent, wasmLoader } from "@tap-rs/tap-ts";
+import { Participant, wasmLoader } from "@tap-rs/tap-ts";
 
 async function main() {
     // Load the WASM module
     await wasmLoader.load();
 
-    // Create an agent (this will generate a DID key by default)
-    const agent = new Agent({
-        nickname: "My TypeScript Agent"
+    // Create a participant (this will generate a DID key by default)
+    const participant = new Participant({
+        nickname: "My TypeScript Participant"
     });
 
-    console.log(`Created agent with DID: ${agent.did}`);
+    console.log(`Created participant with DID: ${participant.did}`);
 }
 
 main().catch(console.error);
@@ -91,7 +91,7 @@ main().catch(console.error);
 ### In Rust
 
 ```rust
-use tap_core::message::{TransferBody, TapMessageBody, Agent as MessageAgent};
+use tap_core::message::{TransferBody, TapMessageBody, Participant as MessageParticipant};
 use didcomm::Message;
 use tap_caip::AssetId;
 use std::collections::HashMap;
@@ -100,13 +100,13 @@ async fn create_transfer_message(
     from_did: &str, 
     to_did: &str
 ) -> Result<Message, tap_core::error::Error> {
-    // Create originator and beneficiary agents
-    let originator = MessageAgent {
+    // Create originator and beneficiary participants
+    let originator = MessageParticipant {
         id: from_did.to_string(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary = MessageAgent {
+    let beneficiary = MessageParticipant {
         id: to_did.to_string(),
         role: Some("beneficiary".to_string()),
     };
@@ -185,7 +185,7 @@ async fn create_node() -> Result<Arc<Node>, Box<dyn std::error::Error>> {
 ### In TypeScript
 
 ```typescript
-import { TapNode, Agent } from "@tap-rs/tap-ts";
+import { TapNode, Participant } from "@tap-rs/tap-ts";
 
 // Create a TAP node
 const node = new TapNode({
@@ -195,13 +195,13 @@ const node = new TapNode({
     },
 });
 
-// Create an agent
-const agent = new Agent({
+// Create a participant
+const participant = new Participant({
     nickname: "Alice",
 });
 
-// Register the agent with the node
-node.registerAgent(agent);
+// Register the participant with the node
+node.registerParticipant(participant);
 
 // Subscribe to messages on the node
 const unsubscribe = node.subscribeToMessages((message, metadata) => {
@@ -252,10 +252,10 @@ async fn process_transfer_message(
 ### In TypeScript
 
 ```typescript
-import { Agent, Message, MessageType } from "@tap-rs/tap-ts";
+import { Participant, Message, MessageType } from "@tap-rs/tap-ts";
 
 // Register a message handler for a specific message type
-agent.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => {
+participant.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => {
     console.log("Received transfer message:");
     console.log("  From:", metadata.fromDid);
     
@@ -275,7 +275,7 @@ agent.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => {
     });
     
     // Send the response
-    return agent.sendMessage(metadata.fromDid, authorize);
+    return participant.sendMessage(metadata.fromDid, authorize);
 });
 ```
 
@@ -287,7 +287,7 @@ agent.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => {
 use tap_agent::{Agent, AgentConfig};
 use tap_core::{
     did::KeyPair,
-    message::{TransferBody, AuthorizeBody, TapMessageBody, Agent as MessageAgent},
+    message::{TransferBody, AuthorizeBody, TapMessageBody, Participant as MessageParticipant},
 };
 use tap_node::{Node, NodeConfig};
 use didcomm::Message;
@@ -359,12 +359,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }).await?;
     
     // Alice creates a transfer message for Bob
-    let originator = MessageAgent {
+    let originator = MessageParticipant {
         id: alice_did.clone(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary = MessageAgent {
+    let beneficiary = MessageParticipant {
         id: bob_did.clone(),
         role: Some("beneficiary".to_string()),
     };

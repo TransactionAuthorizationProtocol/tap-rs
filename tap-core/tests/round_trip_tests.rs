@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::result::Result;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_core::message::{Agent, TransferBody, TapMessageBody};
+use tap_core::message::{Participant, TransferBody, TapMessageBody};
 use tap_core::didcomm::Message;
 
 /// Test the round-trip conversion between TAP messages and DIDComm messages.
@@ -19,12 +19,12 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     let from_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
     let to_did = "did:key:z6MkwYyuTCaaDKnMGHpMkteuFpj1KrsFgGXwW3nXdT7k3RQP";
 
-    let originator = Agent {
+    let originator = Participant {
         id: from_did.to_string(),
         role: Some("originator".to_string()),
     };
 
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: to_did.to_string(),
         role: Some("beneficiary".to_string()),
     };

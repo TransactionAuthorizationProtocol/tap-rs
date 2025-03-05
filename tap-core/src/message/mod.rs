@@ -9,7 +9,7 @@ pub mod tap_message_trait;
 
 // Re-export specific types to avoid ambiguity
 pub use types::{
-    AddAgentsBody, Agent, Attachment, AttachmentData, AuthorizeBody, ErrorBody,
+    AddAgentsBody, Participant, Attachment, AttachmentData, AuthorizeBody, ErrorBody,
     PresentationBody, RejectBody, RequestPresentationBody, SettleBody, 
     TapMessageType, TransferBody, Validate
 };

@@ -40,8 +40,8 @@ import * as tapWasm from './pkg/tap_wasm.js';
 async function init() {
   await tapWasm.default();
   
-  // Create a new agent
-  const agent = new tapWasm.Agent("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
+  // Create a new participant
+  const participant = new tapWasm.Participant("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
   
   // Create a new message
   const message = new tapWasm.Message();
@@ -52,7 +52,7 @@ async function init() {
   message.setToDid("did:example:receiver");
   
   // Sign the message
-  agent.signMessage(message);
+  participant.signMessage(message);
   
   console.log("Created signed message:", message.serialize());
 }
@@ -65,32 +65,32 @@ init().catch(console.error);
 The `tap-wasm` crate implements the DIDComm SecretsResolver trait to manage cryptographic keys securely:
 
 ```javascript
-// Create an agent with a specific DID
-const agent = new tapWasm.Agent("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
+// Create a participant with a specific DID
+const participant = new tapWasm.Participant("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-// Add a new key to the agent
+// Add a new key to the participant
 const privateKey = new Uint8Array([/* your private key bytes */]);
 const publicKey = new Uint8Array([/* your public key bytes */]);
-agent.addKey("did:key:z6MkNewKey", "Ed25519", privateKey, publicKey);
+participant.addKey("did:key:z6MkNewKey", "Ed25519", privateKey, publicKey);
 
-// Get information about the agent's keys
-const keysInfo = agent.getKeysInfo();
+// Get information about the participant's keys
+const keysInfo = participant.getKeysInfo();
 console.log("Available keys:", keysInfo);
 
 // Verify a message signature
-const isValid = agent.verifyMessage(signedMessage);
+const isValid = participant.verifyMessage(signedMessage);
 console.log("Signature valid:", isValid);
 ```
 
 ## Message Processing
 
 ```javascript
-// Create a new agent
-const agent = new tapWasm.Agent("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
+// Create a new participant
+const participant = new tapWasm.Participant("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-// Create a TAP node with the agent
+// Create a TAP node with the participant
 const node = new tapWasm.TapNode("my-node");
-node.addAgent(agent);
+node.addParticipant(participant);
 
 // Process an incoming message
 const incomingMessage = "..."; // Serialized message JSON

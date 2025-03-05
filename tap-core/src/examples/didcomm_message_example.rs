@@ -3,7 +3,7 @@
 use crate::didcomm::pack_tap_body;
 use crate::error::Result;
 use crate::message::{
-    TransferBody, TapMessageBody, AuthorizeBody, RejectBody, SettleBody, Agent,
+    TransferBody, TapMessageBody, AuthorizeBody, RejectBody, SettleBody, Participant,
 };
 use didcomm::Message;
 use std::collections::HashMap;
@@ -11,13 +11,13 @@ use tap_caip::AssetId;
 
 /// Example function to create a Transfer message using the new approach.
 pub async fn create_transfer_message_example() -> Result<Message> {
-    // Create originator and beneficiary agents
-    let originator = Agent {
+    // Create originator and beneficiary participants
+    let originator = Participant {
         id: "did:example:alice".to_string(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
     };
@@ -28,7 +28,7 @@ pub async fn create_transfer_message_example() -> Result<Message> {
         originator,
         beneficiary: Some(beneficiary),
         amount: "10.00".to_string(),
-        agents: vec![],
+        participants: vec![],
         settlement_id: None,
         memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),

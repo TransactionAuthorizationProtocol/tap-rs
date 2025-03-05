@@ -76,13 +76,13 @@ npm run build
 // Import the TAP-TS library
 import { Agent, Message, MessageType } from '@tap-rs/tap-ts';
 
-// Create an agent
-const agent = new Agent({
-  nickname: 'Browser Wallet Agent',
+// Create a participant
+const participant = new Agent({
+  nickname: 'Browser Wallet Participant',
   // You can provide a custom key resolver or use the default
 });
 
-console.log('Agent DID:', agent.did);
+console.log('Participant DID:', participant.did);
 ```
 
 ### Creating and Processing TAP Messages
@@ -97,7 +97,7 @@ function createTransferMessage(beneficiaryDid: string, amount: string, asset: st
   transfer.setTransferData({
     asset: asset, // e.g., "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F"
     amount: amount, // e.g., "100.0"
-    originatorDid: agent.did,
+    originatorDid: participant.did,
     beneficiaryDid: beneficiaryDid,
     memo: "Payment from web application"
   });
@@ -157,7 +157,7 @@ import { Agent, Message, MessageType } from '@tap-rs/tap-ts';
 import Web3 from 'web3';
 
 class WalletTapIntegration {
-  private agent: Agent;
+  private participant: Agent;
   private web3: Web3;
   
   constructor() {
@@ -168,8 +168,8 @@ class WalletTapIntegration {
       throw new Error("No Ethereum provider found");
     }
     
-    // Create TAP agent
-    this.agent = new Agent({
+    // Create TAP participant
+    this.participant = new Agent({
       nickname: 'Web Wallet'
     });
   }
@@ -194,7 +194,7 @@ class WalletTapIntegration {
     transfer.setTransferData({
       asset: asset,
       amount: amount,
-      originatorDid: this.agent.did,
+      originatorDid: this.participant.did,
       beneficiaryDid: beneficiaryDid,
       memo: "Transfer initiated from web wallet"
     });
@@ -309,8 +309,8 @@ When using TAP-RS in a browser environment, you need to handle WASM loading corr
     // Initialize after the WASM is loaded
     async function initialize() {
       try {
-        const agent = new Agent({
-          nickname: 'Browser Demo Agent'
+        const participant = new Agent({
+          nickname: 'Browser Demo Participant'
         });
         
         document.getElementById('createMessage').addEventListener('click', () => {
@@ -321,7 +321,7 @@ When using TAP-RS in a browser environment, you need to handle WASM loading corr
           transfer.setTransferData({
             asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F",
             amount: "10.0",
-            originatorDid: agent.did,
+            originatorDid: participant.did,
             beneficiaryDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             memo: "Demo transfer"
           });
@@ -331,7 +331,7 @@ When using TAP-RS in a browser environment, you need to handle WASM loading corr
         });
         
         console.log('TAP-RS WASM loaded successfully');
-        console.log('Agent DID:', agent.did);
+        console.log('Participant DID:', participant.did);
       } catch (error) {
         console.error('Failed to initialize TAP-RS:', error);
       }
@@ -352,9 +352,9 @@ Using TAP-RS in Node.js is similar to browser usage:
 // JavaScript/Node.js example
 const tap = require('@tap-rs/tap-ts');
 
-// Create an agent
-const agent = new tap.Agent({
-  nickname: 'Node.js Agent'
+// Create a participant
+const participant = new tap.Agent({
+  nickname: 'Node.js Participant'
 });
 
 // Create a simple transfer message
@@ -365,7 +365,7 @@ const transfer = new tap.Message({
 transfer.setTransferData({
   asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F",
   amount: "100.0",
-  originatorDid: agent.did,
+  originatorDid: participant.did,
   beneficiaryDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
   memo: "Node.js test transfer"
 });
@@ -439,7 +439,7 @@ let pendingMessages = [];
 
 // Initialize TAP-RS
 import('@tap-rs/tap-ts').then(tap => {
-  const agent = new tap.Agent({
+  const participant = new tap.Agent({
     nickname: 'Async Loading Example'
   });
   
@@ -528,8 +528,8 @@ const wallet = getWalletInstance(); // Your wallet implementation
 const keyManager = new WalletKeyManager(wallet);
 const keyResolver = new CustomKeyResolver();
 
-const agent = new Agent({
-  nickname: 'Custom Key Agent',
+const participant = new Agent({
+  nickname: 'Custom Key Participant',
   keyManager,
   keyResolver,
 });

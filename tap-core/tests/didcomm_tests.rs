@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_core::error::Result;
-use tap_core::message::{Agent, TransferBody, TapMessageBody};
+use tap_core::message::{Participant, TransferBody, TapMessageBody};
 
 #[tokio::test]
 async fn test_pack_tap_body() -> Result<()> {
@@ -10,12 +10,12 @@ async fn test_pack_tap_body() -> Result<()> {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7").unwrap();
 
-    let originator = Agent {
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
     };
 
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
     };
@@ -69,12 +69,12 @@ async fn test_extract_tap_body() -> Result<()> {
     // Create a valid transfer message body
     let asset = AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap();
     
-    let originator = Agent {
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
     };

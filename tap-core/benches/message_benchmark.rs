@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 use tap_core::message::{
     TransferBody, AuthorizeBody, RejectBody, SettleBody,
-    Agent, TapMessageBody,
+    Participant, TapMessageBody,
 };
 
 // Configure bench
@@ -25,13 +25,13 @@ criterion_main!(benches);
 
 /// Create a test Transfer message body
 fn create_transfer_body() -> TransferBody {
-    // Create agent information
-    let originator = Agent {
+    // Create participant information
+    let originator = Participant {
         id: "did:example:alice".to_string(),
         role: Some("originator".to_string()),
     };
     
-    let beneficiary = Agent {
+    let beneficiary = Participant {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
     };
@@ -49,7 +49,7 @@ fn create_transfer_body() -> TransferBody {
         originator,
         beneficiary: Some(beneficiary),
         amount: "10.00".to_string(),
-        agents: vec![],
+        participants: vec![],
         settlement_id: None,
         memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
