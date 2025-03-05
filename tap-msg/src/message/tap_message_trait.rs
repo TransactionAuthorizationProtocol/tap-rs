@@ -19,12 +19,12 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
 
     /// Convert this body to a DIDComm message with no sender or recipients.
     fn to_didcomm(&self) -> Result<Message> {
-        let body = serde_json::to_value(self)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
-        
+        let body =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
         // Get current time as u64 seconds since Unix epoch
         let now = get_current_time()?;
-            
+
         // Create a new Message with required fields
         let message = Message {
             id: uuid::Uuid::new_v4().to_string(),
@@ -51,18 +51,18 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
         I: IntoIterator<Item = &'a str>,
     {
         let mut message = self.to_didcomm()?;
-        
+
         // Set the sender if provided
         if let Some(sender) = from {
             message.from = Some(sender.to_string());
         }
-        
+
         // Set the recipients
         let to_vec: Vec<String> = to.into_iter().map(String::from).collect();
         if !to_vec.is_empty() {
             message.to = Some(to_vec);
         }
-        
+
         Ok(message)
     }
 
@@ -83,11 +83,12 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
                 Self::message_type()
             )));
         }
-        
+
         // Extract and deserialize the body
-        let body = serde_json::from_value(message.body.clone())
-            .map_err(|e| Error::SerializationError(format!("Failed to deserialize message body: {}", e)))?;
-        
+        let body = serde_json::from_value(message.body.clone()).map_err(|e| {
+            Error::SerializationError(format!("Failed to deserialize message body: {}", e))
+        })?;
+
         Ok(body)
     }
 }
@@ -136,25 +137,29 @@ impl TapMessage for Message {
         if !self.is_tap_message() {
             return Err(Error::Validation("Not a TAP message".to_string()));
         }
-        
+
         // Check ID
         if self.id.is_empty() {
-            return Err(Error::Validation("Message must have a non-empty ID".to_string()));
+            return Err(Error::Validation(
+                "Message must have a non-empty ID".to_string(),
+            ));
         }
-        
+
         // Check created time
         if self.created_time.is_none() {
-            return Err(Error::Validation("Message must have a created timestamp".to_string()));
+            return Err(Error::Validation(
+                "Message must have a created timestamp".to_string(),
+            ));
         }
-        
+
         // Body validation is type-specific and handled during body extraction
         Ok(())
     }
-    
+
     fn is_tap_message(&self) -> bool {
         self.type_.starts_with("https://tap.rsvp/schema/1.0#")
     }
-    
+
     fn get_tap_type(&self) -> Option<String> {
         if self.is_tap_message() {
             Some(self.type_.clone())
@@ -162,7 +167,7 @@ impl TapMessage for Message {
             None
         }
     }
-    
+
     fn body_as<T: TapMessageBody>(&self) -> Result<T> {
         // Check if the message type matches the expected type
         if self.type_ != T::message_type() {
@@ -172,11 +177,12 @@ impl TapMessage for Message {
                 self.type_
             )));
         }
-        
+
         // Extract and deserialize the body
-        let body = serde_json::from_value(self.body.clone())
-            .map_err(|e| Error::SerializationError(format!("Failed to deserialize message body: {}", e)))?;
-        
+        let body = serde_json::from_value(self.body.clone()).map_err(|e| {
+            Error::SerializationError(format!("Failed to deserialize message body: {}", e))
+        })?;
+
         Ok(body)
     }
 }
@@ -204,21 +210,21 @@ pub async fn create_tap_message<T: TapMessageBody>(
 ) -> Result<Message> {
     // Convert the message body to a DIDComm message
     let mut message = body.to_didcomm()?;
-    
+
     // Set custom ID if provided
     if let Some(custom_id) = id {
         message.id = custom_id;
     }
-    
+
     // Set the sender if provided
     if let Some(from) = from_did {
         message.from = Some(from.to_string());
     }
-    
+
     // Set the recipients if provided
     if !to_dids.is_empty() {
         message.to = Some(to_dids.iter().map(|&s| s.to_string()).collect());
     }
-    
+
     Ok(message)
 }

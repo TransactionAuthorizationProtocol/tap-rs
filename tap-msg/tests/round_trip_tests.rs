@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::result::Result;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::{Participant, Transfer, TapMessageBody};
 use tap_msg::didcomm::Message;
+use tap_msg::message::{Participant, TapMessageBody, Transfer};
 
 /// Test the round-trip conversion between TAP messages and DIDComm messages.
 ///

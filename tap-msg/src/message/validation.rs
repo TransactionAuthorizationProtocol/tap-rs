@@ -4,13 +4,13 @@
 
 use crate::error::{Error, Result};
 use crate::message::types::{
-    AddAgents, Authorize, ErrorBody, Presentation, Reject, RequestPresentation,
-    Settle, TapMessage, TapMessageType, Transfer, Validate,
+    AddAgents, Authorize, ErrorBody, Presentation, Reject, RequestPresentation, Settle,
+    TapMessageEnvelope, TapMessageType, Transfer, Validate,
 };
 use serde_json::Value;
 
-/// Implementation of validation for the TapMessage struct.
-impl Validate for TapMessage {
+/// Implementation of validation for the TapMessageEnvelope struct.
+impl Validate for TapMessageEnvelope {
     fn validate(&self) -> Result<()> {
         // Validate common required fields for all message types
         if self.id.is_empty() {
@@ -104,7 +104,7 @@ impl Validate for TapMessage {
 /// Validates a message body based on the provided JSON value and expected type.
 ///
 /// This is a public function that can be used by external code to validate
-/// message bodies without instantiating a full TapMessage.
+/// message bodies without instantiating a full TapMessageEnvelope.
 pub fn validate_message_body(message_type: &TapMessageType, body: &Value) -> Result<()> {
     match message_type {
         TapMessageType::Transfer => {
@@ -113,10 +113,9 @@ pub fn validate_message_body(message_type: &TapMessageType, body: &Value) -> Res
             validate_transfer_body(&body)
         }
         TapMessageType::RequestPresentation => {
-            let body: RequestPresentation =
-                serde_json::from_value(body.clone()).map_err(|e| {
-                    Error::Validation(format!("Invalid RequestPresentation body: {}", e))
-                })?;
+            let body: RequestPresentation = serde_json::from_value(body.clone()).map_err(|e| {
+                Error::Validation(format!("Invalid RequestPresentation body: {}", e))
+            })?;
             validate_request_presentation_body(&body)
         }
         TapMessageType::Presentation => {
@@ -174,11 +173,9 @@ pub fn validate_transfer_body(body: &Transfer) -> Result<()> {
 fn validate_request_presentation_body(body: &RequestPresentation) -> Result<()> {
     // Validate required fields
     if body.presentation_id.is_empty() {
-        return Err(Error::Validation(
-            "Presentation ID is required".to_string(),
-        ));
+        return Err(Error::Validation("Presentation ID is required".to_string()));
     }
-    
+
     if body.credentials.is_empty() {
         return Err(Error::Validation(
             "At least one credential request is required".to_string(),
@@ -192,15 +189,11 @@ fn validate_request_presentation_body(body: &RequestPresentation) -> Result<()> 
 fn validate_presentation_body(body: &Presentation) -> Result<()> {
     // Validate required fields
     if body.presentation_id.is_empty() {
-        return Err(Error::Validation(
-            "Presentation ID is required".to_string(),
-        ));
+        return Err(Error::Validation("Presentation ID is required".to_string()));
     }
-    
+
     if body.credentials.is_empty() {
-        return Err(Error::Validation(
-            "Credentials are required".to_string(),
-        ));
+        return Err(Error::Validation("Credentials are required".to_string()));
     }
 
     Ok(())
@@ -226,7 +219,7 @@ fn validate_reject_body(body: &Reject) -> Result<()> {
     if body.code.is_empty() {
         return Err(Error::Validation("Rejection code is required".to_string()));
     }
-    
+
     if body.description.is_empty() {
         return Err(Error::Validation("Description is required".to_string()));
     }
@@ -272,7 +265,9 @@ fn validate_error_body(body: &ErrorBody) -> Result<()> {
     }
 
     if body.description.is_empty() {
-        return Err(Error::Validation("Error description is required".to_string()));
+        return Err(Error::Validation(
+            "Error description is required".to_string(),
+        ));
     }
 
     Ok(())

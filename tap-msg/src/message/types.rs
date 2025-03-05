@@ -2,13 +2,14 @@
 //!
 //! This module defines the structure of all TAP message types according to the specification.
 
+use crate::error::{Error, Result};
+use crate::message::tap_message_trait::TapMessageBody;
 use chrono;
+use didcomm::Message;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use tap_caip::AssetId;
-use crate::message::tap_message_trait::TapMessageBody;
-use crate::error::{Error, Result};
 
 /// Represents the type of TAP message.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -47,7 +48,9 @@ impl fmt::Display for TapMessageType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             TapMessageType::Transfer => write!(f, "https://tap.rsvp/schema/1.0#Transfer"),
-            TapMessageType::RequestPresentation => write!(f, "https://tap.rsvp/schema/1.0#RequestPresentation"),
+            TapMessageType::RequestPresentation => {
+                write!(f, "https://tap.rsvp/schema/1.0#RequestPresentation")
+            }
             TapMessageType::Presentation => write!(f, "https://tap.rsvp/schema/1.0#Presentation"),
             TapMessageType::Authorize => write!(f, "https://tap.rsvp/schema/1.0#Authorize"),
             TapMessageType::Reject => write!(f, "https://tap.rsvp/schema/1.0#Reject"),
@@ -92,9 +95,9 @@ pub enum AttachmentData {
     Links { links: Vec<String> },
 }
 
-/// Represents a TAP message.
+/// Represents a TAP message envelope.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TapMessage {
+pub struct TapMessageEnvelope {
     /// Type of the message.
     #[serde(rename = "type")]
     pub message_type: TapMessageType,
@@ -183,7 +186,7 @@ impl TapMessageBody for Transfer {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Transfer"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Delegate to the existing validate method
         self.validate()
@@ -228,17 +231,19 @@ impl TapMessageBody for RequestPresentation {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#RequestPresentation"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Basic validation logic
         if self.presentation_id.is_empty() {
             return Err(Error::Validation("Presentation ID is required".to_string()));
         }
-        
+
         if self.credentials.is_empty() {
-            return Err(Error::Validation("At least one credential request is required".to_string()));
+            return Err(Error::Validation(
+                "At least one credential request is required".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 }
@@ -265,21 +270,20 @@ impl TapMessageBody for Presentation {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Presentation"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Basic validation logic
         if self.presentation_id.is_empty() {
             return Err(Error::Validation("Presentation ID is required".to_string()));
         }
-        
+
         if self.credentials.is_empty() {
             return Err(Error::Validation("Credentials are required".to_string()));
         }
-        
+
         Ok(())
     }
 }
-
 
 /// Authorize message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -300,13 +304,13 @@ impl TapMessageBody for Authorize {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Authorize"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Basic validation logic
         if self.transfer_id.is_empty() {
             return Err(Error::Validation("Transfer ID is required".to_string()));
         }
-        
+
         Ok(())
     }
 }
@@ -336,17 +340,17 @@ impl TapMessageBody for Reject {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Reject"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Basic validation logic
         if self.transfer_id.is_empty() {
             return Err(Error::Validation("Transfer ID is required".to_string()));
         }
-        
+
         if self.code.is_empty() {
             return Err(Error::Validation("Rejection code is required".to_string()));
         }
-        
+
         Ok(())
     }
 }
@@ -359,7 +363,7 @@ pub struct Settle {
 
     /// Transaction ID on the external ledger.
     pub transaction_id: String,
-    
+
     /// Optional transaction hash.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction_hash: Option<String>,
@@ -381,17 +385,17 @@ impl TapMessageBody for Settle {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Settle"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Basic validation logic
         if self.transfer_id.is_empty() {
             return Err(Error::Validation("Transfer ID is required".to_string()));
         }
-        
+
         if self.transaction_id.is_empty() {
             return Err(Error::Validation("Transaction ID is required".to_string()));
         }
-        
+
         Ok(())
     }
 }
@@ -414,24 +418,28 @@ impl TapMessageBody for AddAgents {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#AddAgents"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Basic validation logic
         if self.transfer_id.is_empty() {
             return Err(Error::Validation("Transfer ID is required".to_string()));
         }
-        
+
         if self.agents.is_empty() {
-            return Err(Error::Validation("At least one agent must be specified".to_string()));
+            return Err(Error::Validation(
+                "At least one agent must be specified".to_string(),
+            ));
         }
-        
+
         // Validate that all agents have a valid ID
         for agent in &self.agents {
             if agent.id.is_empty() {
-                return Err(Error::Validation("Agent ID is required for all agents".to_string()));
+                return Err(Error::Validation(
+                    "Agent ID is required for all agents".to_string(),
+                ));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -444,7 +452,7 @@ pub struct ErrorBody {
 
     /// Human-readable description of the error.
     pub description: String,
-    
+
     /// The ID of the message that caused the error (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub related_message_id: Option<String>,
@@ -458,17 +466,19 @@ impl TapMessageBody for ErrorBody {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#Error"
     }
-    
+
     fn validate(&self) -> Result<()> {
         // Basic validation logic
         if self.code.is_empty() {
             return Err(Error::Validation("Error code is required".to_string()));
         }
-        
+
         if self.description.is_empty() {
-            return Err(Error::Validation("Error description is required".to_string()));
+            return Err(Error::Validation(
+                "Error description is required".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 }
@@ -479,8 +489,182 @@ pub trait Validate {
     fn validate(&self) -> crate::error::Result<()>;
 }
 
-impl TapMessage {
-    /// Create a new TAP message with default values.
+/// Trait for TAP messages that can be authorized, rejected, or settled
+pub trait Authorizable {
+    /// Authorizes this message, creating an Authorize message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - The ID of the transfer being authorized
+    /// * `note` - Optional note about the authorization
+    /// * `metadata` - Additional metadata for the authorization
+    ///
+    /// # Returns
+    ///
+    /// A new Authorize message body
+    fn authorize(
+        &self,
+        transfer_id: String,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Authorize;
+
+    /// Rejects this message, creating a Reject message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - The ID of the transfer being rejected
+    /// * `code` - Rejection code
+    /// * `description` - Description of the rejection reason
+    /// * `note` - Optional note about the rejection
+    /// * `metadata` - Additional metadata for the rejection
+    ///
+    /// # Returns
+    ///
+    /// A new Reject message body
+    fn reject(
+        &self,
+        transfer_id: String,
+        code: String,
+        description: String,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Reject;
+
+    /// Settles this message, creating a Settle message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - The ID of the transfer being settled
+    /// * `transaction_id` - Transaction ID on the external ledger
+    /// * `transaction_hash` - Optional transaction hash
+    /// * `block_height` - Optional block height
+    /// * `note` - Optional note about the settlement
+    /// * `metadata` - Additional metadata for the settlement
+    ///
+    /// # Returns
+    ///
+    /// A new Settle message body
+    fn settle(
+        &self,
+        transfer_id: String,
+        transaction_id: String,
+        transaction_hash: Option<String>,
+        block_height: Option<u64>,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Settle;
+}
+
+/// Implement Authorizable for Transfer message
+impl Authorizable for Transfer {
+    fn authorize(
+        &self,
+        transfer_id: String,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Authorize {
+        Authorize {
+            transfer_id,
+            note,
+            metadata,
+        }
+    }
+
+    fn reject(
+        &self,
+        transfer_id: String,
+        code: String,
+        description: String,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Reject {
+        Reject {
+            transfer_id,
+            code,
+            description,
+            note,
+            metadata,
+        }
+    }
+
+    fn settle(
+        &self,
+        transfer_id: String,
+        transaction_id: String,
+        transaction_hash: Option<String>,
+        block_height: Option<u64>,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Settle {
+        Settle {
+            transfer_id,
+            transaction_id,
+            transaction_hash,
+            block_height,
+            note,
+            metadata,
+        }
+    }
+}
+
+/// Implement Authorizable for Message when it contains a Transfer message body
+impl Authorizable for Message {
+    fn authorize(
+        &self,
+        transfer_id: String,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Authorize {
+        // Create an Authorize message as a response
+        Authorize {
+            transfer_id,
+            note,
+            metadata,
+        }
+    }
+
+    fn reject(
+        &self,
+        transfer_id: String,
+        code: String,
+        description: String,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Reject {
+        // Create a Reject message as a response
+        Reject {
+            transfer_id,
+            code,
+            description,
+            note,
+            metadata,
+        }
+    }
+
+    fn settle(
+        &self,
+        transfer_id: String,
+        transaction_id: String,
+        transaction_hash: Option<String>,
+        block_height: Option<u64>,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Settle {
+        // Create a Settle message as a response
+        Settle {
+            transfer_id,
+            transaction_id,
+            transaction_hash,
+            block_height,
+            note,
+            metadata,
+        }
+    }
+}
+
+impl TapMessageEnvelope {
+    /// Create a new TAP message envelope with default values.
     pub fn new(message_type: TapMessageType) -> Self {
         Self {
             message_type,
@@ -623,7 +807,7 @@ impl TapMessageBuilder {
     }
 
     /// Build the message.
-    pub fn build(self) -> crate::error::Result<TapMessage> {
+    pub fn build(self) -> crate::error::Result<TapMessageEnvelope> {
         if self.id.is_none() {
             return Err(crate::error::Error::Validation(
                 "Message ID is required".to_string(),
@@ -638,7 +822,7 @@ impl TapMessageBuilder {
 
         let now = chrono::Utc::now();
 
-        Ok(TapMessage {
+        Ok(TapMessageEnvelope {
             id: self.id.unwrap(),
             message_type: self.message_type.unwrap(),
             version: "1.0".to_string(),

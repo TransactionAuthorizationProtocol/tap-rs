@@ -3,7 +3,7 @@ extern crate tap_msg;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::types::{Participant, TapMessage, TapMessageType, Transfer};
+use tap_msg::message::types::{Participant, TapMessageEnvelope, TapMessageType, Transfer};
 
 #[test]
 fn test_create_message() {
@@ -34,7 +34,7 @@ fn test_create_message() {
 
     let json_body = serde_json::to_value(&body).unwrap();
 
-    let message = TapMessage {
+    let message = TapMessageEnvelope {
         message_type: TapMessageType::Transfer,
         id: "msg123".to_string(),
         version: "1.0".to_string(),

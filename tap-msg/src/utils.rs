@@ -2,9 +2,9 @@
 //!
 //! This module provides utility functions used throughout the TAP core library.
 
-use std::time::SystemTime;
 use crate::error::Error;
 use crate::Result;
+use std::time::SystemTime;
 
 /// Gets the current time as a unix timestamp (seconds since the epoch)
 ///
