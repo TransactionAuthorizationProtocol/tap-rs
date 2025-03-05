@@ -2,44 +2,59 @@
 
 use crate::error::Result;
 use crate::message::{
-    AddAgents, Authorize, Participant, Reject, ReplaceAgent, RemoveAgent, Settle, TapMessageBody, Transfer, 
-    TapMessage,
+    AddAgents, Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, RequireProofOfControl,
+    Settle, TapMessage, TapMessageBody, Transfer, types::Authorizable,
 };
+use crate::utils::get_current_time;
 use didcomm::Message;
 use std::collections::HashMap;
 use tap_caip::AssetId;
 use std::str::FromStr;
 
 /// This example demonstrates how to create a reply to a Transfer message
-pub fn create_reply_to_transfer_example(
-    original_transfer_message: &Message,
-    creator_did: &str,
-) -> Result<Message> {
-    // Extract the Transfer body from the original message
-    let transfer = Transfer::from_didcomm(original_transfer_message)?;
+pub fn create_reply_to_transfer_example() -> Result<Message> {
+    let alice_did = "did:example:alice";
+    let bob_did = "did:example:bob";
     
-    // Create an Authorize response
-    let authorize = Authorize {
-        transfer_id: original_transfer_message.id.clone(),
-        note: Some("Transfer authorized".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+    // Create a Transfer message
+    let transfer = Transfer {
+        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+        originator: Participant {
+            id: alice_did.to_string(),
+            role: Some("originator".to_string()),
+            policies: None,
+        },
+        beneficiary: Some(Participant {
+            id: bob_did.to_string(),
+            role: Some("beneficiary".to_string()),
+            policies: None,
+        }),
+        amount: "100.00".to_string(),
+        agents: vec![],
+        settlement_id: None,
+        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
     
-    // Create a reply using the new create_reply method
-    // This will automatically:
-    // 1. Set the thread ID (thid) to link to the original message
-    // 2. Set the 'from' field to the creator_did
-    // 3. Set the 'to' field to include all participants except the creator
+    // Create the initial transfer message
+    let transfer_message = transfer.to_didcomm_with_route(
+        Some(alice_did),
+        [bob_did].iter().copied(),
+    )?;
+    
+    // Create an Authorize message
+    let authorize = Authorize {
+        transfer_id: transfer_message.id.clone(),
+        note: Some("I authorize this transfer".to_string()),
+        timestamp: get_current_time()?.to_string(),
+        metadata: HashMap::new(),
+    };
+    
+    // Create a reply from Alice to Bob
     let response_message = authorize.create_reply(
-        original_transfer_message,
-        creator_did,
-        &[
-            "did:example:alice",
-            "did:example:bob",
-            creator_did,
-            "did:example:charlie",
-        ],
+        &transfer_message,
+        alice_did,
+        &[alice_did, bob_did],
     )?;
     
     Ok(response_message)
@@ -54,7 +69,7 @@ pub fn create_reply_using_message_trait_example(
     let authorize = Authorize {
         transfer_id: original_message.id.clone(),
         note: Some("Transfer authorized".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: get_current_time()?.to_string(),
         metadata: HashMap::new(),
     };
     
@@ -65,44 +80,155 @@ pub fn create_reply_using_message_trait_example(
     Ok(response_message)
 }
 
-/// This example demonstrates how to add a new participant to an existing thread
-pub fn add_participant_to_thread_example(
-    transfer_id: &str,
-    creator_did: &str,
-    existing_participants: &[&str],
-    new_participant: &str,
-) -> Result<Message> {
-    // Create a new participant with an optional role
-    let new_participant = Participant {
-        id: new_participant.to_string(),
-        role: Some("observer".to_string()),
-        policies: None, // No policies for this participant
-    };
-    
-    // Create an AddAgents message according to TAIP-5
-    let update = AddAgents {
-        transfer_id: transfer_id.to_string(),
-        agents: vec![new_participant.clone()],
+/// This example demonstrates adding agents using the Authorizable trait
+pub fn create_add_agents_example() -> Result<Message> {
+    let originator_did = "did:example:originator";
+    let beneficiary_did = "did:example:beneficiary";
+    let sender_vasp_did = "did:example:sender_vasp";
+    let receiver_vasp_did = "did:example:receiver_vasp";
+    let new_agent_did = "did:example:new_agent";
+
+    // Create a Transfer
+    let transfer = Transfer {
+        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+        originator: Participant {
+            id: originator_did.to_string(),
+            role: Some("originator".to_string()),
+            policies: None,
+        },
+        beneficiary: Some(Participant {
+            id: beneficiary_did.to_string(),
+            role: Some("beneficiary".to_string()),
+            policies: None,
+        }),
+        amount: "100.00".to_string(),
+        agents: vec![
+            Participant {
+                id: sender_vasp_did.to_string(),
+                role: Some("sender_vasp".to_string()),
+                policies: None,
+            },
+            Participant {
+                id: receiver_vasp_did.to_string(),
+                role: Some("receiver_vasp".to_string()),
+                policies: None,
+            },
+        ],
+        settlement_id: None,
+        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
     
-    // Create the message with proper routing information
-    let mut all_participants = existing_participants.to_vec();
-    all_participants.push(new_participant.id.as_str());
-    
-    // Convert the update to a DIDComm message
-    let message = update.to_didcomm_with_route(
-        Some(creator_did),
-        all_participants.iter().filter(|&&did| did != creator_did).map(|&did| did),
+    // Create the initial transfer message
+    let transfer_message = transfer.to_didcomm_with_route(
+        Some(originator_did),
+        [beneficiary_did].iter().copied(),
     )?;
     
-    // Set the thread ID to link this message to the existing thread
-    let message_with_thread = Message {
-        thid: Some(transfer_id.to_string()),
-        ..message
+    // Create an Authorize message first
+    let authorize = Authorize {
+        transfer_id: transfer_message.id.clone(),
+        note: Some("I authorize this transfer".to_string()),
+        timestamp: get_current_time()?.to_string(),
+        metadata: HashMap::new(),
     };
     
-    Ok(message_with_thread)
+    // Create a reply from the originator to the beneficiary
+    let authorize_message = authorize.create_reply(
+        &transfer_message,
+        originator_did,
+        &[originator_did, beneficiary_did],
+    )?;
+    
+    // Create an AddAgents message
+    let add_agents = authorize_message.add_agents(
+        vec![
+            Participant {
+                id: new_agent_did.to_string(),
+                role: Some("compliance".to_string()),
+                policies: None,
+            }
+        ],
+        HashMap::new(),
+    );
+    
+    // Create a reply using the TapMessage trait
+    let response = transfer_message.create_reply(&add_agents, originator_did)?;
+    
+    Ok(response)
+}
+
+/// This example demonstrates replacing an agent using the Authorizable trait
+pub fn create_replace_agent_example(
+    original_message: &Message,
+    creator_did: &str,
+    original_agent_id: &str,
+    replacement_agent_id: &str,
+    replacement_agent_role: Option<&str>,
+) -> Result<Message> {
+    // Create a replacement participant
+    let replacement = Participant {
+        id: replacement_agent_id.to_string(),
+        role: replacement_agent_role.map(ToString::to_string),
+        policies: None, // No policies for this participant
+    };
+    
+    // Create a ReplaceAgent message using the Authorizable trait
+    let replace_agent = original_message.replace_agent(
+        original_agent_id.to_string(),
+        replacement,
+        HashMap::new(),
+    );
+    
+    // Create a reply using the TapMessage trait
+    let response = original_message.create_reply(&replace_agent, creator_did)?;
+    
+    Ok(response)
+}
+
+/// This example demonstrates removing an agent using the Authorizable trait
+pub fn create_remove_agent_example(
+    original_message: &Message,
+    creator_did: &str,
+    agent_to_remove: &str,
+) -> Result<Message> {
+    // Create a RemoveAgent message using the Authorizable trait
+    let remove_agent = original_message.remove_agent(
+        agent_to_remove.to_string(),
+        HashMap::new(),
+    );
+    
+    // Create a reply using the TapMessage trait
+    let response = original_message.create_reply(&remove_agent, creator_did)?;
+    
+    Ok(response)
+}
+
+/// This example demonstrates creating an UpdatePolicies message using the Authorizable trait
+pub fn create_update_policies_example(
+    original_message: &Message,
+    creator_did: &str,
+    _recipients: &[&str],
+) -> Result<Message> {
+    // Create a proof of control policy
+    let proof_policy = RequireProofOfControl {
+        from: Some(vec!["did:example:dave".to_string()]),
+        from_role: None,
+        from_agent: None,
+        nonce: 12345678,
+        purpose: Some("Please prove control of your account".to_string()),
+    };
+
+    // Create an UpdatePolicies message using the Authorizable trait
+    let update_policies = original_message.update_policies(
+        vec![Policy::RequireProofOfControl(proof_policy)],
+        HashMap::new(),
+    );
+    
+    // Create a reply using the TapMessage trait, which maintains thread correlation
+    let response = original_message.create_reply(&update_policies, creator_did)?;
+    
+    Ok(response)
 }
 
 /// This example demonstrates a complete workflow for managing thread participants
@@ -119,10 +245,12 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         originator: Participant {
             id: alice_did.to_string(),
             role: Some("originator".to_string()),
+            policies: None,
         },
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
+            policies: None,
         }),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -146,7 +274,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     let authorize = Authorize {
         transfer_id: transfer_message.id.clone(),
         note: Some("Transfer approved".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: get_current_time()?.to_string(),
         metadata: HashMap::new(),
     };
     
@@ -166,6 +294,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         agents: vec![Participant {
             id: charlie_did.to_string(),
             role: Some("observer".to_string()),
+            policies: None,
         }],
         metadata: HashMap::new(),
     };
@@ -191,6 +320,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         replacement: Participant {
             id: dave_did.to_string(),
             role: Some("beneficiary".to_string()),
+            policies: None,
         },
         metadata: HashMap::new(),
     };
@@ -237,7 +367,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         transaction_hash: Some("0xabcdef1234567890".to_string()),
         block_height: Some(12345),
         note: Some("Transfer settled".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
+        timestamp: get_current_time()?.to_string(),
         metadata: HashMap::new(),
     };
     

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use tap_msg::message::{
     Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
-    TapMessageBody, UpdatePolicies,
+    UpdatePolicies,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -12,7 +12,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a RequireAuthorization policy
     let auth_policy = RequireAuthorization {
-        type_: "RequireAuthorization".to_string(),
         from: Some(vec!["did:example:alice".to_string()]),
         from_role: None,
         from_agent: None,
@@ -21,7 +20,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a RequirePresentation policy
     let presentation_policy = RequirePresentation {
-        type_: "RequirePresentation".to_string(),
         context: Some(vec![
             "https://www.w3.org/2018/credentials/v1".to_string(),
             "https://w3id.org/security/suites/ed25519-2020/v1".to_string(),
@@ -83,7 +81,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a proof of control policy
     let proof_policy = RequireProofOfControl {
-        type_: "RequireProofOfControl".to_string(),
         from: Some(vec!["did:example:dave".to_string()]),
         from_role: None,
         from_agent: None,
@@ -94,14 +91,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an UpdatePolicies message
     let update = UpdatePolicies {
         transfer_id: "transfer_abc123".to_string(),
-        context: "https://tap.rsvp/schemas/1.0".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
         metadata: HashMap::new(),
     };
 
     println!("UpdatePolicies message created:");
     println!("  Transfer ID: {}", update.transfer_id);
-    println!("  Context: {}", update.context);
     println!("  Number of policies: {}", update.policies.len());
 
     // Validate the message
@@ -116,7 +111,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test with empty transfer_id
     let invalid_update_1 = UpdatePolicies {
         transfer_id: "".to_string(),
-        context: "https://tap.rsvp/schemas/1.0".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
         metadata: HashMap::new(),
     };
@@ -129,7 +123,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test with empty context
     let invalid_update_2 = UpdatePolicies {
         transfer_id: "transfer_abc123".to_string(),
-        context: "".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
         metadata: HashMap::new(),
     };
@@ -142,7 +135,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test with empty policies
     let invalid_update_3 = UpdatePolicies {
         transfer_id: "transfer_abc123".to_string(),
-        context: "https://tap.rsvp/schemas/1.0".to_string(),
         policies: vec![],
         metadata: HashMap::new(),
     };
@@ -152,30 +144,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(e) => println!("  Empty policies validation: Failed as expected - {}", e),
     }
 
-    println!("\n4. Testing Default Policy Implementations:");
+    println!("\n4. Default Policies:");
 
-    // Create default policies
+    // Default RequireAuthorization
     let default_auth = RequireAuthorization::default();
+    println!("\n  Default RequireAuthorization:");
+    println!("    From: {:?}", default_auth.from);
+    println!("    Purpose: {:?}", default_auth.purpose);
+
+    // Default RequirePresentation
     let default_presentation = RequirePresentation::default();
+    println!("\n  Default RequirePresentation:");
+    println!("    Context: {:?}", default_presentation.context);
+    println!("    From: {:?}", default_presentation.from);
+    println!("    Purpose: {:?}", default_presentation.purpose);
+
+    // Default RequireProofOfControl
     let default_proof = RequireProofOfControl::default();
-
-    println!("  Default RequireAuthorization:");
-    println!("    Type: {}", default_auth.type_);
-    println!(
-        "    Has default purpose: {}",
-        default_auth.purpose.is_some()
-    );
-
-    println!("  Default RequirePresentation:");
-    println!("    Type: {}", default_presentation.type_);
-    println!(
-        "    Has default context: {}",
-        default_presentation.context.is_some()
-    );
-
-    println!("  Default RequireProofOfControl:");
-    println!("    Type: {}", default_proof.type_);
-    println!("    Nonce generated: {}", default_proof.nonce);
+    println!("\n  Default RequireProofOfControl:");
+    println!("    From: {:?}", default_proof.from);
+    println!("    Nonce: {}", default_proof.nonce);
+    println!("    Purpose: {:?}", default_proof.purpose);
 
     println!("\n=== Demo Completed Successfully ===");
     Ok(())

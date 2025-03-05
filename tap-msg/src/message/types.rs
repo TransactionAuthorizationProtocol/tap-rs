@@ -186,26 +186,58 @@ impl Authorizable for Transfer {
             metadata,
         }
     }
+
+    fn update_policies(
+        &self,
+        policies: Vec<Policy>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdatePolicies {
+        UpdatePolicies {
+            transfer_id: self.message_id(),
+            policies,
+            metadata,
+        }
+    }
+
+    fn add_agents(
+        &self,
+        agents: Vec<Participant>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> AddAgents {
+        AddAgents {
+            transfer_id: self.message_id(),
+            agents,
+            metadata,
+        }
+    }
+
+    fn replace_agent(
+        &self,
+        original: String,
+        replacement: Participant,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ReplaceAgent {
+        ReplaceAgent {
+            transfer_id: self.message_id(),
+            original,
+            replacement,
+            metadata,
+        }
+    }
+
+    fn remove_agent(
+        &self,
+        agent: String,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> RemoveAgent {
+        RemoveAgent {
+            transfer_id: self.message_id(),
+            agent,
+            metadata,
+        }
+    }
 }
 
-/// Request for presentation message body (TAIP-8).
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RequestPresentation {
-    /// Challenge to include in the presentation.
-    pub challenge: String,
-
-    /// Types of credentials to include.
-    #[serde(default)]
-    pub credential_types: Vec<String>,
-
-    /// Format requirements.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub format: Option<serde_json::Value>,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
-}
 
 /// Presentation message body (TAIP-8).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -346,19 +378,112 @@ pub struct RemoveAgent {
 /// This message type allows agents to update their policies for a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatePolicies {
-    /// ID of the transfer to update policies for.
+    #[serde(rename = "transferId")]
     pub transfer_id: String,
-
-    /// JSON-LD context.
-    #[serde(rename = "@context")]
-    pub context: String,
-
-    /// List of policies that replace the current set of policies.
     pub policies: Vec<Policy>,
-
-    /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl UpdatePolicies {
+    pub fn new(transfer_id: &str, policies: Vec<Policy>) -> Self {
+        Self {
+            transfer_id: transfer_id.to_string(),
+            policies,
+            metadata: HashMap::new(),
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        if self.transfer_id.is_empty() {
+            return Err(Error::Validation(
+                "UpdatePolicies must have a transfer_id".to_string(),
+            ));
+        }
+
+        if self.policies.is_empty() {
+            return Err(Error::Validation(
+                "UpdatePolicies must have at least one policy".to_string(),
+            ));
+        }
+
+        for policy in &self.policies {
+            policy.validate()?;
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for UpdatePolicies {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#updatepolicies"
+    }
+
+    fn validate(&self) -> Result<()> {
+        UpdatePolicies::validate(self)
+    }
+
+    fn to_didcomm(&self) -> Result<Message> {
+        // Serialize the UpdatePolicies to a JSON value
+        let mut body_json = serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+        
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert("@type".to_string(), serde_json::Value::String(Self::message_type().to_string()));
+        }
+
+        let now = crate::utils::get_current_time()?;
+
+        // Create a new Message with required fields
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: None,
+            to: None,
+            thid: None,
+            pthid: None,
+            extra_headers: std::collections::HashMap::new(),
+            created_time: Some(now),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
+
+    fn from_didcomm(message: &Message) -> Result<Self> {
+        // Verify this is the correct message type
+        if message.type_ != Self::message_type() {
+            return Err(Error::InvalidMessageType(format!(
+                "Expected message type {}, but found {}",
+                Self::message_type(),
+                message.type_
+            )));
+        }
+        
+        // Create a copy of the body that we can modify
+        let mut body_json = message.body.clone();
+        
+        // Remove the @type field if present as we no longer need it in our struct
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.remove("@type");
+            
+            // Convert "transferId" to "transfer_id" if needed
+            if let Some(transfer_id) = body_obj.remove("transferId") {
+                body_obj.insert("transfer_id".to_string(), transfer_id);
+            }
+        }
+        
+        // Deserialize the body
+        let update_policies = serde_json::from_value(body_json)
+            .map_err(|e| Error::SerializationError(format!("Failed to deserialize UpdatePolicies: {}", e)))?;
+            
+        Ok(update_policies)
+    }
 }
 
 /// Error message body.
@@ -444,6 +569,72 @@ pub trait Authorizable {
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Settle;
+
+    /// Updates policies for this message, creating an UpdatePolicies message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `policies` - Vector of policies to be applied
+    /// * `metadata` - Additional metadata for the update
+    ///
+    /// # Returns
+    ///
+    /// A new UpdatePolicies message body
+    fn update_policies(
+        &self,
+        policies: Vec<Policy>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdatePolicies;
+
+    /// Adds agents to this message, creating an AddAgents message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `agents` - Vector of participants to be added
+    /// * `metadata` - Additional metadata for the update
+    ///
+    /// # Returns
+    ///
+    /// A new AddAgents message body
+    fn add_agents(
+        &self,
+        agents: Vec<Participant>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> AddAgents;
+
+    /// Replaces an agent in this message, creating a ReplaceAgent message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `original` - DID of the original agent to be replaced
+    /// * `replacement` - New participant replacing the original agent
+    /// * `metadata` - Additional metadata for the update
+    ///
+    /// # Returns
+    ///
+    /// A new ReplaceAgent message body
+    fn replace_agent(
+        &self,
+        original: String,
+        replacement: Participant,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ReplaceAgent;
+
+    /// Removes an agent from this message, creating a RemoveAgent message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `agent` - DID of the agent to be removed
+    /// * `metadata` - Additional metadata for the update
+    ///
+    /// # Returns
+    ///
+    /// A new RemoveAgent message body
+    fn remove_agent(
+        &self,
+        agent: String,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> RemoveAgent;
 }
 
 // Implementation of message type conversion for message body types
@@ -537,21 +728,6 @@ impl TapMessageBody for Settle {
     }
 }
 
-impl TapMessageBody for RequestPresentation {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#requestpresentation"
-    }
-
-    fn validate(&self) -> Result<()> {
-        if self.challenge.is_empty() {
-            return Err(Error::Validation(
-                "Challenge is required in RequestPresentation".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
-}
 
 impl TapMessageBody for Presentation {
     fn message_type() -> &'static str {
@@ -653,28 +829,6 @@ impl TapMessageBody for RemoveAgent {
     }
 }
 
-impl TapMessageBody for UpdatePolicies {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#updatepolicies"
-    }
-
-    fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
-            return Err(Error::Validation("Transfer ID is required".to_string()));
-        }
-
-        if self.context.is_empty() {
-            return Err(Error::Validation("Context is required".to_string()));
-        }
-
-        if self.policies.is_empty() {
-            return Err(Error::Validation("Policies are required".to_string()));
-        }
-
-        Ok(())
-    }
-}
-
 impl TapMessageBody for ErrorBody {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#error"
@@ -750,6 +904,56 @@ impl Authorizable for Message {
             block_height,
             note,
             timestamp,
+            metadata,
+        }
+    }
+
+    fn update_policies(
+        &self,
+        policies: Vec<Policy>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdatePolicies {
+        UpdatePolicies {
+            transfer_id: self.id.clone(),
+            policies,
+            metadata,
+        }
+    }
+
+    fn add_agents(
+        &self,
+        agents: Vec<Participant>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> AddAgents {
+        AddAgents {
+            transfer_id: self.id.clone(),
+            agents,
+            metadata,
+        }
+    }
+
+    fn replace_agent(
+        &self,
+        original: String,
+        replacement: Participant,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ReplaceAgent {
+        ReplaceAgent {
+            transfer_id: self.id.clone(),
+            original,
+            replacement,
+            metadata,
+        }
+    }
+
+    fn remove_agent(
+        &self,
+        agent: String,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> RemoveAgent {
+        RemoveAgent {
+            transfer_id: self.id.clone(),
+            agent,
             metadata,
         }
     }

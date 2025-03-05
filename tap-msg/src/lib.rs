@@ -15,12 +15,13 @@ pub use didcomm;
 pub mod error;
 pub mod message;
 pub mod utils;
+pub mod examples;
 
 // Re-export public types for easier access
 pub use error::{Error, Result};
 pub use message::{
     create_tap_message, AddAgents, Attachment, AttachmentData, Authorize, ErrorBody, Participant,
-    Presentation, Reject, RequestPresentation, Settle, TapMessageBody, Transfer, Validate,
+    Presentation, Reject, Settle, TapMessageBody, Transfer, Validate,
 };
 
 // Conditional compilation for WASM targets

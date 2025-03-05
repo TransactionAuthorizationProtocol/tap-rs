@@ -24,10 +24,6 @@ pub enum FromType {
 /// RequireAuthorization policy requires authorization from specific parties
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequireAuthorization {
-    /// Type identifier for JSON-LD
-    #[serde(rename = "@type")]
-    pub type_: String,
-
     /// Optional list of DIDs this policy applies to
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<Vec<String>>,
@@ -48,10 +44,6 @@ pub struct RequireAuthorization {
 /// RequirePresentation policy requires verifiable credential presentation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequirePresentation {
-    /// Type identifier for JSON-LD
-    #[serde(rename = "@type")]
-    pub type_: String,
-
     /// JSON-LD context for additional schemas
     #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
     pub context: Option<Vec<String>>,
@@ -92,10 +84,6 @@ pub struct RequirePresentation {
 /// RequireProofOfControl policy requires proving control of an account or address
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequireProofOfControl {
-    /// Type identifier for JSON-LD
-    #[serde(rename = "@type")]
-    pub type_: String,
-
     /// Optional list of DIDs this policy applies to
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from: Option<Vec<String>>,
@@ -133,11 +121,21 @@ pub enum Policy {
     RequireProofOfControl(RequireProofOfControl),
 }
 
+impl Policy {
+    /// Validates the policy based on its specific type
+    pub fn validate(&self) -> crate::error::Result<()> {
+        match self {
+            Policy::RequireAuthorization(_) => Ok(()),
+            Policy::RequirePresentation(_) => Ok(()),
+            Policy::RequireProofOfControl(_) => Ok(()),
+        }
+    }
+}
+
 /// Create default implementations for the various policy types
 impl Default for RequireAuthorization {
     fn default() -> Self {
         RequireAuthorization {
-            type_: "RequireAuthorization".to_string(),
             from: None,
             from_role: None,
             from_agent: None,
@@ -149,7 +147,6 @@ impl Default for RequireAuthorization {
 impl Default for RequirePresentation {
     fn default() -> Self {
         RequirePresentation {
-            type_: "RequirePresentation".to_string(),
             context: None,
             from: None,
             from_role: None,
@@ -166,7 +163,6 @@ impl Default for RequirePresentation {
 impl Default for RequireProofOfControl {
     fn default() -> Self {
         RequireProofOfControl {
-            type_: "RequireProofOfControl".to_string(),
             from: None,
             from_role: None,
             from_agent: None,

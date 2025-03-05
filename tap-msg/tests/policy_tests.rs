@@ -11,7 +11,6 @@ use tap_msg::message::{
 fn test_participant_with_policies() {
     // Create a policy
     let auth_policy = RequireAuthorization {
-        type_: "RequireAuthorization".to_string(),
         from: Some(vec!["did:example:alice".to_string()]),
         from_role: None,
         from_agent: None,
@@ -32,7 +31,6 @@ fn test_participant_with_policies() {
     // Check that we can access the policy
     if let Some(ref policies) = participant.policies {
         if let Policy::RequireAuthorization(policy) = &policies[0] {
-            assert_eq!(policy.type_, "RequireAuthorization");
             assert_eq!(policy.from.as_ref().unwrap()[0], "did:example:alice");
             assert_eq!(
                 policy.purpose.as_ref().unwrap(),
@@ -49,7 +47,6 @@ fn test_participant_with_policies() {
 fn test_update_policies() {
     // Create a presentation policy
     let presentation_policy = RequirePresentation {
-        type_: "RequirePresentation".to_string(),
         context: Some(vec!["https://www.w3.org/2018/credentials/v1".to_string()]),
         from: Some(vec!["did:example:bob".to_string()]),
         from_role: None,
@@ -64,7 +61,6 @@ fn test_update_policies() {
     // Create the UpdatePolicies message
     let update = UpdatePolicies {
         transfer_id: "transfer_12345".to_string(),
-        context: "https://tap.rsvp/schemas/1.0".to_string(),
         policies: vec![Policy::RequirePresentation(presentation_policy)],
         metadata: HashMap::new(),
     };
@@ -84,7 +80,6 @@ fn test_update_policies() {
 fn test_update_policies_validation() {
     // Create a proof of control policy
     let proof_policy = RequireProofOfControl {
-        type_: "RequireProofOfControl".to_string(),
         from: Some(vec!["did:example:dave".to_string()]),
         from_role: None,
         from_agent: None,
@@ -95,16 +90,6 @@ fn test_update_policies_validation() {
     // Test with empty transfer_id
     let invalid_update = UpdatePolicies {
         transfer_id: "".to_string(),
-        context: "https://tap.rsvp/schemas/1.0".to_string(),
-        policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
-        metadata: HashMap::new(),
-    };
-    assert!(invalid_update.validate().is_err());
-
-    // Test with empty context
-    let invalid_update = UpdatePolicies {
-        transfer_id: "transfer_12345".to_string(),
-        context: "".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
         metadata: HashMap::new(),
     };
@@ -113,7 +98,6 @@ fn test_update_policies_validation() {
     // Test with empty policies
     let invalid_update = UpdatePolicies {
         transfer_id: "transfer_12345".to_string(),
-        context: "https://tap.rsvp/schemas/1.0".to_string(),
         policies: vec![],
         metadata: HashMap::new(),
     };
@@ -122,10 +106,13 @@ fn test_update_policies_validation() {
     // Valid message should pass validation
     let valid_update = UpdatePolicies {
         transfer_id: "transfer_12345".to_string(),
-        context: "https://tap.rsvp/schemas/1.0".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy)],
         metadata: HashMap::new(),
     };
+    
+    // No need for creator_did in this context
+    // let _creator_did = "did:example:sender_vasp";
+
     assert!(valid_update.validate().is_ok());
 }
 
@@ -134,16 +121,58 @@ fn test_update_policies_validation() {
 fn test_all_policy_types() {
     // Create authorization policy
     let auth_policy = RequireAuthorization::default();
-    assert_eq!(auth_policy.type_, "RequireAuthorization");
+    assert_eq!(auth_policy.from, None);
+    assert_eq!(auth_policy.from_role, None);
+    assert_eq!(auth_policy.from_agent, None);
+    assert_eq!(auth_policy.purpose, None);
 
     // Create presentation policy
     let presentation_policy = RequirePresentation::default();
-    assert_eq!(presentation_policy.type_, "RequirePresentation");
+    assert_eq!(presentation_policy.context, None);
+    assert_eq!(presentation_policy.from, None);
+    assert_eq!(presentation_policy.from_role, None);
+    assert_eq!(presentation_policy.from_agent, None);
+    assert_eq!(presentation_policy.about_party, None);
+    assert_eq!(presentation_policy.about_agent, None);
+    assert_eq!(presentation_policy.purpose, None);
+    assert_eq!(presentation_policy.presentation_definition, None);
+    assert_eq!(presentation_policy.credentials, None);
 
     // Create proof of control policy
     let proof_policy = RequireProofOfControl::default();
-    assert_eq!(proof_policy.type_, "RequireProofOfControl");
-
-    // Ensure nonce is generated
+    assert_eq!(proof_policy.from, None);
+    assert_eq!(proof_policy.from_role, None);
+    assert_eq!(proof_policy.from_agent, None);
     assert_ne!(proof_policy.nonce, 0);
+    assert_eq!(proof_policy.purpose, None);
+
+    // Create policies
+    let policies = vec![
+        Policy::RequireAuthorization(auth_policy),
+        Policy::RequirePresentation(presentation_policy),
+        Policy::RequireProofOfControl(proof_policy),
+    ];
+
+    // Check the content of each policy type
+    if let Policy::RequireAuthorization(policy) = &policies[0] {
+        assert_eq!(policy.from, None);
+        assert_eq!(policy.purpose, None);
+    } else {
+        panic!("Expected RequireAuthorization policy");
+    }
+
+    if let Policy::RequirePresentation(policy) = &policies[1] {
+        assert_eq!(policy.context, None);
+        assert_eq!(policy.from, None);
+        assert_eq!(policy.purpose, None);
+    } else {
+        panic!("Expected RequirePresentation policy");
+    }
+
+    if let Policy::RequireProofOfControl(policy) = &policies[2] {
+        assert_eq!(policy.from, None);
+        assert_ne!(policy.nonce, 0);
+    } else {
+        panic!("Expected RequireProofOfControl policy");
+    }
 }

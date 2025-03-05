@@ -17,12 +17,17 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
     /// Validate the message body.
     fn validate(&self) -> Result<()>;
 
-    /// Convert this body to a DIDComm message with no sender or recipients.
+    /// Convert this body to a DIDComm message.
     fn to_didcomm(&self) -> Result<Message> {
-        let body =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+        // Create a JSON representation of self with explicit type field
+        let mut body_json = serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+        
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert("@type".to_string(), serde_json::Value::String(Self::message_type().to_string()));
+        }
 
-        // Get current time as u64 seconds since Unix epoch
         let now = get_current_time()?;
 
         // Create a new Message with required fields
@@ -30,7 +35,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
             id: uuid::Uuid::new_v4().to_string(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            body,
+            body: body_json,
             from: None,
             to: None,
             thid: None,
@@ -143,8 +148,17 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
             )));
         }
 
+        // Create a copy of the message body that we can modify
+        let mut body_json = message.body.clone();
+        
+        // Ensure the @type field is present for deserialization
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field to ensure it's present
+            body_obj.insert("@type".to_string(), serde_json::Value::String(Self::message_type().to_string()));
+        }
+
         // Extract and deserialize the body
-        let body = serde_json::from_value(message.body.clone()).map_err(|e| {
+        let body = serde_json::from_value(body_json).map_err(|e| {
             Error::SerializationError(format!("Failed to deserialize message body: {}", e))
         })?;
 
@@ -152,7 +166,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
     }
 }
 
-/// A trait for working with TAP messages using the DIDComm Message struct directly.
+/// Trait for types that can be represented as TAP messages.
 ///
 /// This trait provides utility methods for working with DIDComm Messages in the context of the TAP protocol.
 pub trait TapMessage {
@@ -177,11 +191,11 @@ pub trait TapMessage {
     /// Gets the TAP message type from this message.
     fn get_tap_type(&self) -> Option<String>;
 
-    /// Extracts the message body as a specific TAP body type.
+    /// Extract a specific message body type from this message.
     ///
     /// # Type Parameters
     ///
-    /// * `T` - The TAP message body type to extract
+    /// * `T` - The type of the body to extract, must implement `TapMessageBody`
     ///
     /// # Returns
     ///
@@ -190,12 +204,12 @@ pub trait TapMessage {
 
     /// Get all participant DIDs from this message.
     ///
-    /// This method collects all DIDs involved in the message thread,
-    /// including both the sender (from) and all recipients (to).
+    /// This includes all DIDs that are involved in the message, such as sender, recipients, and
+    /// any other participants mentioned in the message body.
     ///
     /// # Returns
     ///
-    /// A vector containing all DIDs involved in the message.
+    /// List of participant DIDs
     fn get_all_participants(&self) -> Vec<String>;
 
     /// Create a reply to this message.
@@ -263,23 +277,61 @@ impl TapMessage for Message {
             )));
         }
 
-        // Extract and deserialize the body
-        let body = serde_json::from_value(self.body.clone()).map_err(|e| {
-            Error::SerializationError(format!("Failed to deserialize message body: {}", e))
-        })?;
+        // Create a copy of the body that we can modify
+        let mut body_json = self.body.clone();
+        
+        // Debug: Print the body JSON before modification
+        println!("DEBUG: Body JSON before: {}", serde_json::to_string_pretty(&body_json).unwrap());
+        
+        // Ensure the @type field is present for deserialization
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field to ensure it's present
+            body_obj.insert("@type".to_string(), serde_json::Value::String(T::message_type().to_string()));
+        }
+        
+        // Debug: Print the body JSON after modification
+        println!("DEBUG: Body JSON after: {}", serde_json::to_string_pretty(&body_json).unwrap());
+        
+        // Debug: Print the expected struct type
+        println!("DEBUG: Deserializing to type: {}", std::any::type_name::<T>());
 
-        Ok(body)
+        // Try direct string-based deserialization
+        let json_str = serde_json::to_string(&body_json).unwrap();
+        println!("DEBUG: JSON string for deserialization: {}", json_str);
+        
+        match serde_json::from_str::<T>(&json_str) {
+            Ok(body) => {
+                println!("DEBUG: String-based deserialization succeeded");
+                return Ok(body);
+            }
+            Err(e) => {
+                println!("DEBUG: String-based deserialization failed: {}", e);
+                // Fall through to try the value-based approach
+            }
+        }
+
+        // Extract and deserialize the body using value-based approach
+        match serde_json::from_value::<T>(body_json) {
+            Ok(body) => {
+                println!("DEBUG: Value-based deserialization succeeded");
+                Ok(body)
+            }
+            Err(e) => {
+                println!("DEBUG: Value-based deserialization failed: {}", e);
+                Err(Error::SerializationError(format!("Failed to deserialize message body: {}", e)))
+            }
+        }
     }
 
     fn get_all_participants(&self) -> Vec<String> {
         let mut participants = Vec::new();
 
-        // Add the sender if present
+        // Add sender if present
         if let Some(from) = &self.from {
             participants.push(from.clone());
         }
 
-        // Add all recipients if present
+        // Add recipients if present
         if let Some(to) = &self.to {
             participants.extend(to.clone());
         }

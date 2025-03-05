@@ -5,7 +5,7 @@
 use crate::error::{Error, Result};
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::types::{
-    AddAgents, Authorize, ErrorBody, Presentation, Reject, RequestPresentation, Settle, Transfer,
+    AddAgents, Authorize, ErrorBody, Presentation, Reject, Settle, Transfer,
 };
 use didcomm::Message;
 use serde_json::Value;
@@ -34,11 +34,6 @@ pub fn validate_message_body(message_type: &str, body: &Value) -> Result<()> {
             let transfer: Transfer = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             transfer.validate()
-        }
-        "https://tap.rsvp/schema/1.0#requestpresentation" => {
-            let request: RequestPresentation = serde_json::from_value(body.clone())
-                .map_err(|e| Error::SerializationError(e.to_string()))?;
-            request.validate()
         }
         "https://tap.rsvp/schema/1.0#presentation" => {
             let presentation: Presentation = serde_json::from_value(body.clone())
