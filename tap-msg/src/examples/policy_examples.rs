@@ -73,9 +73,14 @@ pub fn update_policies_example(
     };
 
     // Convert the update to a DIDComm message
+    let participants = recipients
+        .iter()
+        .filter(|&&did| did != creator_did)
+        .copied()
+        .collect::<Vec<_>>();
     let message = update.to_didcomm_with_route(
         Some(creator_did),
-        recipients.iter().filter(|&&did| did != creator_did).map(|&did| did),
+        participants,
     )?;
 
     // Set the thread ID to link this message to the existing thread
@@ -141,9 +146,14 @@ pub fn policy_workflow_example() -> Result<()> {
 
     // Convert to DIDComm message with proper routing
     let participants = [originator_did, beneficiary_did, sender_vaspd_did, receiver_vaspd_did];
+    let to = participants
+        .iter()
+        .filter(|&&did| did != sender_vaspd_did)
+        .copied()
+        .collect::<Vec<_>>();
     let message = update_message.to_didcomm_with_route(
         Some(sender_vaspd_did),
-        participants.iter().filter(|&&did| did != sender_vaspd_did).map(|&did| did),
+        to,
     )?;
 
     // Link to our transfer thread
@@ -202,10 +212,15 @@ pub fn create_update_policies_using_authorizable_example(
     );
 
     // Create a reply to maintain the thread correlation
+    let participants = participant_dids
+        .iter()
+        .filter(|&&did| did != creator_did)
+        .copied()
+        .collect::<Vec<_>>();
     let response = update_policies_message.create_reply(
         original_message, 
         creator_did, 
-        participant_dids
+        &participants
     )?;
 
     Ok(response)

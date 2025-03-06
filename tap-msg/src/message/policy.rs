@@ -42,7 +42,7 @@ pub struct RequireAuthorization {
 }
 
 /// RequirePresentation policy requires verifiable credential presentation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RequirePresentation {
     /// JSON-LD context for additional schemas
     #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
@@ -140,22 +140,6 @@ impl Default for RequireAuthorization {
             from_role: None,
             from_agent: None,
             purpose: None,
-        }
-    }
-}
-
-impl Default for RequirePresentation {
-    fn default() -> Self {
-        RequirePresentation {
-            context: None,
-            from: None,
-            from_role: None,
-            from_agent: None,
-            about_party: None,
-            about_agent: None,
-            purpose: None,
-            presentation_definition: None,
-            credentials: None,
         }
     }
 }

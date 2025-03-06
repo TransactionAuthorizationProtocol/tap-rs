@@ -66,7 +66,44 @@ export enum MessageType {
 }
 
 /**
- * Security mode for messages
+ * Structure for TAIP-4 Reject data
+ */
+export interface RejectData {
+  /** Transfer ID that is being rejected */
+  transfer_id: string;
+  
+  /** Rejection code */
+  code: string;
+  
+  /** Rejection description */
+  description: string;
+  
+  /** Optional note */
+  note?: string;
+  
+  /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for Error message body
+ */
+export interface ErrorBody {
+  /** Error code */
+  code: string;
+  
+  /** Error description */
+  description: string;
+  
+  /** Original message ID that caused this error, if applicable */
+  original_message_id?: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Security modes for TAP messages
  */
 export enum SecurityMode {
   PLAIN = 'plain',
@@ -364,7 +401,7 @@ export class Message {
    * @returns This message for chaining
    * @throws If the message type is not Reject
    */
-  setRejectData(data: { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> }): this {
+  setRejectData(data: RejectData): this {
     if (this.type !== MessageType.REJECT) {
       throw new TapError({
         type: ErrorType.INVALID_MESSAGE_TYPE,
@@ -392,7 +429,7 @@ export class Message {
    * 
    * @returns Reject data object or undefined if not set or not a Reject message
    */
-  getRejectData(): { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> } | undefined {
+  getRejectData(): RejectData | undefined {
     if (this.type !== MessageType.REJECT) {
       return undefined;
     }
@@ -402,19 +439,43 @@ export class Message {
       try {
         const wasmRejectData = this.wasmMessage.get_reject_body();
         if (wasmRejectData) {
-          return wasmRejectData as { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> };
+          return wasmRejectData as RejectData;
         }
       } catch (error) {
         console.warn("Error getting reject body from WASM", error);
       }
     }
     
-    // Check if we have the minimum required fields
-    if (!this._data.transfer_id || !this._data.code || !this._data.description) {
+    if (!this._data || Object.keys(this._data).length === 0) {
       return undefined;
     }
     
-    return this._data as { transfer_id: string; code: string; description: string; note?: string; metadata?: Record<string, unknown> };
+    // Construct a properly typed RejectData object from the raw data
+    const data = this._data as Record<string, unknown>;
+    if (
+      typeof data.transfer_id === 'string' &&
+      typeof data.code === 'string' &&
+      typeof data.description === 'string'
+    ) {
+      const rejectData: RejectData = {
+        transfer_id: data.transfer_id,
+        code: data.code,
+        description: data.description
+      };
+      
+      // Add optional fields if present
+      if (typeof data.note === 'string') {
+        rejectData.note = data.note;
+      }
+      
+      if (data.metadata && typeof data.metadata === 'object') {
+        rejectData.metadata = data.metadata as Record<string, unknown>;
+      }
+      
+      return rejectData;
+    }
+    
+    return undefined;
   }
   
   /**
@@ -476,10 +537,88 @@ export class Message {
     
     return this._data as { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> };
   }
-  
 
-  // Legacy authorization methods have been removed and replaced with standard TAP types
-  // If you need authorization functionality, use the AUTHORIZE and REJECT message types
+  /**
+   * Set Error data 
+   * 
+   * @param data - Error data object
+   * @returns This message for chaining
+   * @throws If the message type is not Error
+   */
+  setErrorData(data: ErrorBody): this {
+    if (this.type !== MessageType.ERROR) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set Error data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_error_body) {
+      try {
+        this.wasmMessage.set_error_body(data);
+      } catch (error) {
+        console.warn("Error setting error body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get Error data
+   * 
+   * @returns Error data object or undefined if not set or not an Error message
+   */
+  getErrorData(): ErrorBody | undefined {
+    if (this.type !== MessageType.ERROR) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_error_body) {
+      try {
+        const wasmErrorData = this.wasmMessage.get_error_body();
+        if (wasmErrorData) {
+          return wasmErrorData as ErrorBody;
+        }
+      } catch (error) {
+        console.warn("Error getting error body from WASM", error);
+      }
+    }
+    
+    if (!this._data || Object.keys(this._data).length === 0) {
+      return undefined;
+    }
+    
+    // Construct a properly typed ErrorBody object from the raw data
+    const data = this._data as Record<string, unknown>;
+    if (
+      typeof data.code === 'string' &&
+      typeof data.description === 'string'
+    ) {
+      const errorBody: ErrorBody = {
+        code: data.code,
+        description: data.description
+      };
+      
+      // Add optional fields if present
+      if (typeof data.original_message_id === 'string') {
+        errorBody.original_message_id = data.original_message_id;
+      }
+      
+      if (data.metadata && typeof data.metadata === 'object') {
+        errorBody.metadata = data.metadata as Record<string, unknown>;
+      }
+      
+      return errorBody;
+    }
+    
+    return undefined;
+  }
 
   /**
    * Get the underlying WASM message

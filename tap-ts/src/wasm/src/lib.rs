@@ -177,6 +177,8 @@ pub struct Message {
     ledger_id: String,
     authorization_request: Option<AuthorizationRequest>,
     authorization_response: Option<AuthorizationResponse>,
+    reject_data: Option<serde_json::Value>,
+    error_data: Option<serde_json::Value>,
 }
 
 /// Authorization Request structure
@@ -215,6 +217,8 @@ impl Message {
             ledger_id,
             authorization_request: None,
             authorization_response: None,
+            reject_data: None,
+            error_data: None,
         }
     }
 
@@ -286,6 +290,44 @@ impl Message {
     pub fn get_authorization_response(&self) -> JsValue {
         match &self.authorization_response {
             Some(resp) => serde_wasm_bindgen::to_value(resp).unwrap_or(JsValue::NULL),
+            None => JsValue::NULL,
+        }
+    }
+
+    /// Sets the reject body data
+    pub fn set_reject_body(&mut self, data: JsValue) -> Result<(), JsValue> {
+        match serde_wasm_bindgen::from_value(data) {
+            Ok(reject_data) => {
+                self.reject_data = Some(reject_data);
+                Ok(())
+            }
+            Err(e) => Err(JsValue::from_str(&format!("Failed to parse reject data: {}", e))),
+        }
+    }
+
+    /// Gets the reject body data
+    pub fn get_reject_body(&self) -> JsValue {
+        match &self.reject_data {
+            Some(data) => serde_wasm_bindgen::to_value(data).unwrap_or(JsValue::NULL),
+            None => JsValue::NULL,
+        }
+    }
+
+    /// Sets the error body data
+    pub fn set_error_body(&mut self, data: JsValue) -> Result<(), JsValue> {
+        match serde_wasm_bindgen::from_value(data) {
+            Ok(error_data) => {
+                self.error_data = Some(error_data);
+                Ok(())
+            }
+            Err(e) => Err(JsValue::from_str(&format!("Failed to parse error data: {}", e))),
+        }
+    }
+
+    /// Gets the error body data
+    pub fn get_error_body(&self) -> JsValue {
+        match &self.error_data {
+            Some(data) => serde_wasm_bindgen::to_value(data).unwrap_or(JsValue::NULL),
             None => JsValue::NULL,
         }
     }
