@@ -1,14 +1,12 @@
 //! Example usage of the new DIDComm Message approach for TAP messages.
 
 use crate::error::Result;
-use crate::message::{
-    Transfer, TapMessageBody, Authorize, Reject, Settle, Participant
-};
+use crate::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
 use crate::utils::get_current_time;
 use didcomm::Message;
 use std::collections::HashMap;
-use tap_caip::AssetId;
 use std::str::FromStr;
+use tap_caip::AssetId;
 
 /// Example function to create a Transfer message using the new approach.
 pub fn create_transfer_message_example() -> Result<Message> {
@@ -18,13 +16,13 @@ pub fn create_transfer_message_example() -> Result<Message> {
         role: Some("originator".to_string()),
         policies: None,
     };
-    
+
     let beneficiary = Participant {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
     };
-    
+
     // Create a transfer body
     let transfer_body = Transfer {
         asset: AssetId::from_str("eip155:1/erc20:0x123456789abcdef").unwrap(),
@@ -36,10 +34,10 @@ pub fn create_transfer_message_example() -> Result<Message> {
         memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),
     };
-    
+
     // Create a DIDComm message directly from the transfer body
     let message = transfer_body.to_didcomm()?;
-    
+
     // The message is ready to be encrypted and sent
     Ok(message)
 }
@@ -48,24 +46,27 @@ pub fn create_transfer_message_example() -> Result<Message> {
 pub fn process_transfer_message_example(message: &Message) -> Result<()> {
     // First, check if this is a TAP message
     if message.type_.contains("transfer") {
-        println!("Received message is a TAP message of type: {}", message.type_);
-        
+        println!(
+            "Received message is a TAP message of type: {}",
+            message.type_
+        );
+
         // Extract the transfer body
         let transfer = Transfer::from_didcomm(message)?;
-        
+
         // Now we can work with the transfer data
         println!("Transfer amount: {}", transfer.amount);
         println!("Asset: {:?}", transfer.asset);
-        
+
         if let Some(ref beneficiary) = transfer.beneficiary {
             println!("Beneficiary: {}", beneficiary.id);
         }
-        
+
         println!("Originator: {}", transfer.originator.id);
     } else {
         println!("Not a transfer message");
     }
-    
+
     Ok(())
 }
 
@@ -79,10 +80,10 @@ pub fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
         timestamp: get_current_time()?.to_string(),
         metadata: HashMap::new(),
     };
-    
+
     // Create a DIDComm message directly from the reject body
     let message = reject_body.to_didcomm()?;
-    
+
     // The message is ready to be encrypted and sent
     Ok(message)
 }
@@ -98,10 +99,10 @@ pub fn create_settle_message_example(transfer_id: &str) -> Result<Message> {
         timestamp: get_current_time()?.to_string(),
         metadata: HashMap::new(),
     };
-    
+
     // Create a DIDComm message directly from the settle body
     let message = settle_body.to_didcomm()?;
-    
+
     // The message is ready to be encrypted and sent
     Ok(message)
 }
@@ -110,7 +111,7 @@ pub fn create_settle_message_example(transfer_id: &str) -> Result<Message> {
 pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
     // Get the message type
     let type_str = &message.type_;
-    
+
     match () {
         _ if type_str.contains("transfer") => {
             // Handle Transfer message
@@ -120,7 +121,10 @@ pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
         _ if type_str.contains("authorize") => {
             // Handle Authorize message
             let authorize = Authorize::from_didcomm(message)?;
-            println!("Processing Authorization for transfer: {}", authorize.transfer_id);
+            println!(
+                "Processing Authorization for transfer: {}",
+                authorize.transfer_id
+            );
         }
         _ if type_str.contains("reject") => {
             // Handle Reject message
@@ -138,6 +142,6 @@ pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
             println!("Unknown message type");
         }
     }
-    
+
     Ok(())
 }

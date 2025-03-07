@@ -1,17 +1,17 @@
 //! Integration tests for internal policy functionality
 
+use didcomm::Message;
+use serde_json;
+use std::collections::HashMap;
+use std::str::FromStr;
+use tap_caip::AssetId;
 use tap_msg::error::Result;
 use tap_msg::message::{
-    AddAgents, Authorize, Participant, Policy, RemoveAgent, ReplaceAgent,
-    RequireAuthorization, RequireProofOfControl, TapMessage,
-    TapMessageBody, Transfer, UpdatePolicies, types::Authorizable,
+    types::Authorizable, AddAgents, Authorize, Participant, Policy, RemoveAgent, ReplaceAgent,
+    RequireAuthorization, RequireProofOfControl, TapMessage, TapMessageBody, Transfer,
+    UpdatePolicies,
 };
 use tap_msg::utils::get_current_time;
-use didcomm::Message;
-use std::collections::HashMap;
-use tap_caip::AssetId;
-use std::str::FromStr;
-use serde_json;
 
 // Helper function to create a test transfer message
 fn create_test_transfer() -> Result<Message> {
@@ -21,7 +21,8 @@ fn create_test_transfer() -> Result<Message> {
     let receiver_vasp_did = "did:example:receiver_vasp";
 
     let transfer = Transfer {
-        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+            .unwrap(),
         originator: Participant {
             id: originator_did.to_string(),
             role: Some("originator".to_string()),
@@ -52,9 +53,13 @@ fn create_test_transfer() -> Result<Message> {
 
     transfer.to_didcomm_with_route(
         Some(originator_did),
-        [beneficiary_did, "did:example:sender_vasp", receiver_vasp_did]
-            .iter()
-            .copied(),
+        [
+            beneficiary_did,
+            "did:example:sender_vasp",
+            receiver_vasp_did,
+        ]
+        .iter()
+        .copied(),
     )
 }
 
@@ -95,11 +100,17 @@ fn test_update_policies() -> Result<()> {
 
     // Convert to DIDComm message
     let didcomm_message = update_policies.to_didcomm()?;
-    
+
     // DEBUG: Print the JSON structure of the message body
-    println!("DEBUG: Message body JSON: {}", serde_json::to_string_pretty(&didcomm_message.body).unwrap());
-    
-    assert_eq!(didcomm_message.body_as::<UpdatePolicies>()?.policies.len(), 2);
+    println!(
+        "DEBUG: Message body JSON: {}",
+        serde_json::to_string_pretty(&didcomm_message.body).unwrap()
+    );
+
+    assert_eq!(
+        didcomm_message.body_as::<UpdatePolicies>()?.policies.len(),
+        2
+    );
 
     Ok(())
 }
@@ -119,10 +130,7 @@ fn test_add_agents() -> Result<()> {
     };
 
     // Use the Authorizable trait to create an AddAgents message
-    let add_agents = transfer_message.add_agents(
-        vec![new_agent.clone()],
-        HashMap::new(),
-    );
+    let add_agents = transfer_message.add_agents(vec![new_agent.clone()], HashMap::new());
 
     // Validate the created message
     assert_eq!(add_agents.transfer_id, transfer_message.id);
@@ -164,7 +172,10 @@ fn test_replace_agent() -> Result<()> {
     assert_eq!(replace_agent.transfer_id, transfer_message.id);
     assert_eq!(replace_agent.original, original_agent_did);
     assert_eq!(replace_agent.replacement.id, replacement_agent_did);
-    assert_eq!(replace_agent.replacement.role, Some("beneficiary".to_string()));
+    assert_eq!(
+        replace_agent.replacement.role,
+        Some("beneficiary".to_string())
+    );
 
     // Convert to DIDComm message and check that it can be properly deserialized
     let didcomm_message = replace_agent.to_didcomm()?;
@@ -182,10 +193,7 @@ fn test_remove_agent() -> Result<()> {
     let agent_to_remove = "did:example:receiver_vasp";
 
     // Use the Authorizable trait to create a RemoveAgent message
-    let remove_agent = transfer_message.remove_agent(
-        agent_to_remove.to_string(),
-        HashMap::new(),
-    );
+    let remove_agent = transfer_message.remove_agent(agent_to_remove.to_string(), HashMap::new());
 
     // Validate the created message
     assert_eq!(remove_agent.transfer_id, transfer_message.id);
@@ -227,16 +235,12 @@ fn test_create_reply_maintains_thread_correlation() -> Result<()> {
     };
 
     // Create a reply using the TapMessageBody trait
-    let reply = update_policies.create_reply(
-        &transfer_message,
-        creator_did,
-        participants,
-    )?;
+    let reply = update_policies.create_reply(&transfer_message, creator_did, participants)?;
 
     // Verify that thread correlation is maintained
     assert_eq!(reply.thid, Some(transfer_message.id.clone()));
     assert_eq!(reply.from, Some(creator_did.to_string()));
-    
+
     // Verify that the message body contains the right content
     let body = reply.body_as::<UpdatePolicies>()?;
     assert_eq!(body.transfer_id, transfer_message.id);
@@ -266,11 +270,8 @@ fn test_reply_chain() -> Result<()> {
         metadata: HashMap::new(),
     };
 
-    let policies_message = update_policies.create_reply(
-        &transfer_message,
-        sender_vasp_did,
-        participants,
-    )?;
+    let policies_message =
+        update_policies.create_reply(&transfer_message, sender_vasp_did, participants)?;
 
     // Step 2: Beneficiary authorizes in response
     let authorize = Authorize {
@@ -280,11 +281,8 @@ fn test_reply_chain() -> Result<()> {
         metadata: HashMap::new(),
     };
 
-    let authorize_message = authorize.create_reply(
-        &policies_message,
-        beneficiary_did,
-        participants,
-    )?;
+    let authorize_message =
+        authorize.create_reply(&policies_message, beneficiary_did, participants)?;
 
     // Step 3: VASP adds an agent
     let add_agents = AddAgents {
@@ -300,7 +298,12 @@ fn test_reply_chain() -> Result<()> {
     let add_agents_message = add_agents.create_reply(
         &authorize_message,
         sender_vasp_did,
-        &[originator_did, beneficiary_did, sender_vasp_did, "did:example:compliance"],
+        &[
+            originator_did,
+            beneficiary_did,
+            sender_vasp_did,
+            "did:example:compliance",
+        ],
     )?;
 
     // Verify thread correlation is maintained throughout the chain

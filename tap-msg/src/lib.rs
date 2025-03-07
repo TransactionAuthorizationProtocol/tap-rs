@@ -13,9 +13,9 @@ pub use didcomm;
 
 // Internal modules
 pub mod error;
+pub mod examples;
 pub mod message;
 pub mod utils;
-pub mod examples;
 
 // Re-export public types for easier access
 pub use error::{Error, Result};

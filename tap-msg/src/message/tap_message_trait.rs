@@ -20,12 +20,16 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
     /// Convert this body to a DIDComm message.
     fn to_didcomm(&self) -> Result<Message> {
         // Create a JSON representation of self with explicit type field
-        let mut body_json = serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-        
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
         // Ensure the @type field is correctly set in the body
         if let Some(body_obj) = body_json.as_object_mut() {
             // Add or update the @type field with the message type
-            body_obj.insert("@type".to_string(), serde_json::Value::String(Self::message_type().to_string()));
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
         }
 
         let now = get_current_time()?;
@@ -150,11 +154,14 @@ pub trait TapMessageBody: Serialize + DeserializeOwned {
 
         // Create a copy of the message body that we can modify
         let mut body_json = message.body.clone();
-        
+
         // Ensure the @type field is present for deserialization
         if let Some(body_obj) = body_json.as_object_mut() {
             // Add or update the @type field to ensure it's present
-            body_obj.insert("@type".to_string(), serde_json::Value::String(Self::message_type().to_string()));
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
         }
 
         // Extract and deserialize the body
@@ -279,26 +286,38 @@ impl TapMessage for Message {
 
         // Create a copy of the body that we can modify
         let mut body_json = self.body.clone();
-        
+
         // Debug: Print the body JSON before modification
-        println!("DEBUG: Body JSON before: {}", serde_json::to_string_pretty(&body_json).unwrap());
-        
+        println!(
+            "DEBUG: Body JSON before: {}",
+            serde_json::to_string_pretty(&body_json).unwrap()
+        );
+
         // Ensure the @type field is present for deserialization
         if let Some(body_obj) = body_json.as_object_mut() {
             // Add or update the @type field to ensure it's present
-            body_obj.insert("@type".to_string(), serde_json::Value::String(T::message_type().to_string()));
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(T::message_type().to_string()),
+            );
         }
-        
+
         // Debug: Print the body JSON after modification
-        println!("DEBUG: Body JSON after: {}", serde_json::to_string_pretty(&body_json).unwrap());
-        
+        println!(
+            "DEBUG: Body JSON after: {}",
+            serde_json::to_string_pretty(&body_json).unwrap()
+        );
+
         // Debug: Print the expected struct type
-        println!("DEBUG: Deserializing to type: {}", std::any::type_name::<T>());
+        println!(
+            "DEBUG: Deserializing to type: {}",
+            std::any::type_name::<T>()
+        );
 
         // Try direct string-based deserialization
         let json_str = serde_json::to_string(&body_json).unwrap();
         println!("DEBUG: JSON string for deserialization: {}", json_str);
-        
+
         match serde_json::from_str::<T>(&json_str) {
             Ok(body) => {
                 println!("DEBUG: String-based deserialization succeeded");
@@ -318,7 +337,10 @@ impl TapMessage for Message {
             }
             Err(e) => {
                 println!("DEBUG: Value-based deserialization failed: {}", e);
-                Err(Error::SerializationError(format!("Failed to deserialize message body: {}", e)))
+                Err(Error::SerializationError(format!(
+                    "Failed to deserialize message body: {}",
+                    e
+                )))
             }
         }
     }

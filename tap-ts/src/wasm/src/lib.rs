@@ -301,7 +301,10 @@ impl Message {
                 self.reject_data = Some(reject_data);
                 Ok(())
             }
-            Err(e) => Err(JsValue::from_str(&format!("Failed to parse reject data: {}", e))),
+            Err(e) => Err(JsValue::from_str(&format!(
+                "Failed to parse reject data: {}",
+                e
+            ))),
         }
     }
 
@@ -320,7 +323,10 @@ impl Message {
                 self.error_data = Some(error_data);
                 Ok(())
             }
-            Err(e) => Err(JsValue::from_str(&format!("Failed to parse error data: {}", e))),
+            Err(e) => Err(JsValue::from_str(&format!(
+                "Failed to parse error data: {}",
+                e
+            ))),
         }
     }
 

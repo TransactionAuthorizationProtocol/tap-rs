@@ -56,12 +56,19 @@ interface TransferData {
 export enum MessageType {
   // Core message types based on TAP standard
   TRANSFER = 'https://tap.rsvp/schema/1.0#Transfer',
-  REQUEST_PRESENTATION = 'https://tap.rsvp/schema/1.0#RequestPresentation',
+  // Identity verification message type (TAIP-8)
   PRESENTATION = 'https://tap.rsvp/schema/1.0#Presentation',
+  // Transaction response message types (TAIP-4)
   AUTHORIZE = 'https://tap.rsvp/schema/1.0#Authorize',
   REJECT = 'https://tap.rsvp/schema/1.0#Reject',
   SETTLE = 'https://tap.rsvp/schema/1.0#Settle',
+  // Agent management message types (TAIP-5)
   ADD_AGENTS = 'https://tap.rsvp/schema/1.0#AddAgents',
+  REPLACE_AGENT = 'https://tap.rsvp/schema/1.0#ReplaceAgent',
+  REMOVE_AGENT = 'https://tap.rsvp/schema/1.0#RemoveAgent',
+  // Policy management message type (TAIP-7)
+  UPDATE_POLICIES = 'https://tap.rsvp/schema/1.0#UpdatePolicies',
+  // Error message type
   ERROR = 'https://tap.rsvp/schema/1.0#Error',
 }
 
@@ -97,6 +104,88 @@ export interface ErrorBody {
   
   /** Original message ID that caused this error, if applicable */
   original_message_id?: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for Policy Types (TAIP-7)
+ */
+export interface Policy {
+  /** Policy type */
+  '@type': string;
+  
+  /** Optional list of DIDs this policy applies to */
+  from?: string[];
+  
+  /** Optional list of roles this policy applies to */
+  from_role?: string[];
+  
+  /** Optional list of agent types this policy applies to */
+  from_agent?: string[];
+  
+  /** Optional human-readable purpose for this requirement */
+  purpose?: string;
+
+  /** Additional fields may be present based on policy type */
+  [key: string]: any;
+}
+
+/**
+ * Structure for TAIP-5 AddAgents message data
+ */
+export interface AddAgentsData {
+  /** ID of the transfer to add agents to */
+  transfer_id: string;
+  
+  /** Agents to add */
+  agents: Participant[];
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-5 ReplaceAgent message data
+ */
+export interface ReplaceAgentData {
+  /** ID of the transfer to replace agent in */
+  transfer_id: string;
+  
+  /** DID of the original agent to replace */
+  original: string;
+  
+  /** Replacement agent */
+  replacement: Participant;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-5 RemoveAgent message data
+ */
+export interface RemoveAgentData {
+  /** ID of the transfer to remove agent from */
+  transfer_id: string;
+  
+  /** DID of the agent to remove */
+  agent: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-7 UpdatePolicies message data
+ */
+export interface UpdatePoliciesData {
+  /** ID of the transfer to update policies for */
+  transfer_id: string;
+  
+  /** Policies to apply */
+  policies: Policy[];
   
   /** Additional metadata */
   metadata?: Record<string, unknown>;
@@ -620,6 +709,246 @@ export class Message {
     return undefined;
   }
 
+  /**
+   * Set AddAgents data according to TAIP-5
+   * 
+   * @param data - AddAgents data object
+   * @returns This message for chaining
+   * @throws If the message type is not AddAgents
+   */
+  setAddAgentsData(data: AddAgentsData): this {
+    if (this.type !== MessageType.ADD_AGENTS) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set AddAgents data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_add_agents_body) {
+      try {
+        this.wasmMessage.set_add_agents_body(data);
+      } catch (error) {
+        console.warn("Error setting add_agents body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get AddAgents data for TAIP-5 AddAgents messages
+   * 
+   * @returns AddAgentsData object or undefined if not set or not an AddAgents message
+   */
+  getAddAgentsData(): AddAgentsData | undefined {
+    if (this.type !== MessageType.ADD_AGENTS) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_add_agents_body) {
+      try {
+        const wasmAddAgentsData = this.wasmMessage.get_add_agents_body();
+        if (wasmAddAgentsData) {
+          return wasmAddAgentsData as AddAgentsData;
+        }
+      } catch (error) {
+        console.warn("Error getting add_agents body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields for AddAgents
+    if (!this._data.transfer_id || !this._data.agents) {
+      return undefined;
+    }
+    
+    return this._data as unknown as AddAgentsData;
+  }
+
+  /**
+   * Set ReplaceAgent data according to TAIP-5
+   * 
+   * @param data - ReplaceAgent data object
+   * @returns This message for chaining
+   * @throws If the message type is not ReplaceAgent
+   */
+  setReplaceAgentData(data: ReplaceAgentData): this {
+    if (this.type !== MessageType.REPLACE_AGENT) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set ReplaceAgent data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_replace_agent_body) {
+      try {
+        this.wasmMessage.set_replace_agent_body(data);
+      } catch (error) {
+        console.warn("Error setting replace_agent body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get ReplaceAgent data for TAIP-5 ReplaceAgent messages
+   * 
+   * @returns ReplaceAgentData object or undefined if not set or not a ReplaceAgent message
+   */
+  getReplaceAgentData(): ReplaceAgentData | undefined {
+    if (this.type !== MessageType.REPLACE_AGENT) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_replace_agent_body) {
+      try {
+        const wasmReplaceAgentData = this.wasmMessage.get_replace_agent_body();
+        if (wasmReplaceAgentData) {
+          return wasmReplaceAgentData as ReplaceAgentData;
+        }
+      } catch (error) {
+        console.warn("Error getting replace_agent body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields for ReplaceAgent
+    if (!this._data.transfer_id || !this._data.original || !this._data.replacement) {
+      return undefined;
+    }
+    
+    return this._data as unknown as ReplaceAgentData;
+  }
+
+  /**
+   * Set RemoveAgent data according to TAIP-5
+   * 
+   * @param data - RemoveAgent data object
+   * @returns This message for chaining
+   * @throws If the message type is not RemoveAgent
+   */
+  setRemoveAgentData(data: RemoveAgentData): this {
+    if (this.type !== MessageType.REMOVE_AGENT) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set RemoveAgent data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_remove_agent_body) {
+      try {
+        this.wasmMessage.set_remove_agent_body(data);
+      } catch (error) {
+        console.warn("Error setting remove_agent body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get RemoveAgent data for TAIP-5 RemoveAgent messages
+   * 
+   * @returns RemoveAgentData object or undefined if not set or not a RemoveAgent message
+   */
+  getRemoveAgentData(): RemoveAgentData | undefined {
+    if (this.type !== MessageType.REMOVE_AGENT) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_remove_agent_body) {
+      try {
+        const wasmRemoveAgentData = this.wasmMessage.get_remove_agent_body();
+        if (wasmRemoveAgentData) {
+          return wasmRemoveAgentData as RemoveAgentData;
+        }
+      } catch (error) {
+        console.warn("Error getting remove_agent body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields for RemoveAgent
+    if (!this._data.transfer_id || !this._data.agent) {
+      return undefined;
+    }
+    
+    return this._data as unknown as RemoveAgentData;
+  }
+
+  /**
+   * Set UpdatePolicies data according to TAIP-7
+   * 
+   * @param data - UpdatePolicies data object
+   * @returns This message for chaining
+   * @throws If the message type is not UpdatePolicies
+   */
+  setUpdatePoliciesData(data: UpdatePoliciesData): this {
+    if (this.type !== MessageType.UPDATE_POLICIES) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set UpdatePolicies data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_update_policies_body) {
+      try {
+        this.wasmMessage.set_update_policies_body(data);
+      } catch (error) {
+        console.warn("Error setting update_policies body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get UpdatePolicies data for TAIP-7 UpdatePolicies messages
+   * 
+   * @returns UpdatePoliciesData object or undefined if not set or not an UpdatePolicies message
+   */
+  getUpdatePoliciesData(): UpdatePoliciesData | undefined {
+    if (this.type !== MessageType.UPDATE_POLICIES) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_update_policies_body) {
+      try {
+        const wasmUpdatePoliciesData = this.wasmMessage.get_update_policies_body();
+        if (wasmUpdatePoliciesData) {
+          return wasmUpdatePoliciesData as UpdatePoliciesData;
+        }
+      } catch (error) {
+        console.warn("Error getting update_policies body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields for UpdatePolicies
+    if (!this._data.transfer_id || !this._data.policies) {
+      return undefined;
+    }
+    
+    return this._data as unknown as UpdatePoliciesData;
+  }
+  
   /**
    * Get the underlying WASM message
    * 

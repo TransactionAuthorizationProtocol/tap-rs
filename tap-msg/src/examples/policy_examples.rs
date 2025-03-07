@@ -2,14 +2,14 @@
 
 use crate::error::Result;
 use crate::message::{
-    Authorize, Participant, Policy, RequireAuthorization, RequirePresentation, 
-    RequireProofOfControl, TapMessageBody, Transfer, UpdatePolicies, types::Authorizable,
+    types::Authorizable, Authorize, Participant, Policy, RequireAuthorization, RequirePresentation,
+    RequireProofOfControl, TapMessageBody, Transfer, UpdatePolicies,
 };
 use crate::utils::get_current_time;
 use didcomm::Message;
 use std::collections::HashMap;
-use tap_caip::AssetId;
 use std::str::FromStr;
+use tap_caip::AssetId;
 
 /// This example demonstrates how to create a participant with policies
 pub fn create_participant_with_policies_example() -> Result<Participant> {
@@ -78,10 +78,7 @@ pub fn update_policies_example(
         .filter(|&&did| did != creator_did)
         .copied()
         .collect::<Vec<_>>();
-    let message = update.to_didcomm_with_route(
-        Some(creator_did),
-        participants,
-    )?;
+    let message = update.to_didcomm_with_route(Some(creator_did), participants)?;
 
     // Set the thread ID to link this message to the existing thread
     let message_with_thread = Message {
@@ -133,9 +130,10 @@ pub fn policy_workflow_example() -> Result<()> {
         about_agent: None,
         purpose: Some("Please provide identity credentials".to_string()),
         presentation_definition: None,
-        credentials: Some(HashMap::from([
-            ("type".to_string(), vec!["IdentityCredential".to_string()]),
-        ])),
+        credentials: Some(HashMap::from([(
+            "type".to_string(),
+            vec!["IdentityCredential".to_string()],
+        )])),
     };
 
     let update_message = UpdatePolicies {
@@ -145,16 +143,18 @@ pub fn policy_workflow_example() -> Result<()> {
     };
 
     // Convert to DIDComm message with proper routing
-    let participants = [originator_did, beneficiary_did, sender_vaspd_did, receiver_vaspd_did];
+    let participants = [
+        originator_did,
+        beneficiary_did,
+        sender_vaspd_did,
+        receiver_vaspd_did,
+    ];
     let to = participants
         .iter()
         .filter(|&&did| did != sender_vaspd_did)
         .copied()
         .collect::<Vec<_>>();
-    let message = update_message.to_didcomm_with_route(
-        Some(sender_vaspd_did),
-        to,
-    )?;
+    let message = update_message.to_didcomm_with_route(Some(sender_vaspd_did), to)?;
 
     // Link to our transfer thread
     let message_with_thread = Message {
@@ -162,7 +162,10 @@ pub fn policy_workflow_example() -> Result<()> {
         ..message
     };
 
-    println!("  Created UpdatePolicies message: {:?}", message_with_thread);
+    println!(
+        "  Created UpdatePolicies message: {:?}",
+        message_with_thread
+    );
     println!("  This message will be routed to all participants");
 
     println!("=== Policy Workflow Example Completed ===");
@@ -206,10 +209,7 @@ pub fn create_update_policies_using_authorizable_example(
     ];
 
     // Use the Authorizable trait's update_policies method to create a new UpdatePolicies message
-    let update_policies_message = original_message.update_policies(
-        policies, 
-        HashMap::new()
-    );
+    let update_policies_message = original_message.update_policies(policies, HashMap::new());
 
     // Create a reply to maintain the thread correlation
     let participants = participant_dids
@@ -217,11 +217,8 @@ pub fn create_update_policies_using_authorizable_example(
         .filter(|&&did| did != creator_did)
         .copied()
         .collect::<Vec<_>>();
-    let response = update_policies_message.create_reply(
-        original_message, 
-        creator_did, 
-        &participants
-    )?;
+    let response =
+        update_policies_message.create_reply(original_message, creator_did, &participants)?;
 
     Ok(response)
 }
@@ -238,7 +235,8 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 
     // Step 1: Create a transfer message to initiate the workflow
     let transfer = Transfer {
-        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+            .unwrap(),
         originator: Participant {
             id: originator_did.to_string(),
             role: Some("originator".to_string()),
@@ -279,15 +277,23 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 
     // Step 2: Create an UpdatePolicies message using the Authorizable trait
     // This would typically be created by a VASP to enforce compliance
-    let participants = &[originator_did, beneficiary_did, sender_vasp_did, receiver_vasp_did];
-    
+    let participants = &[
+        originator_did,
+        beneficiary_did,
+        sender_vasp_did,
+        receiver_vasp_did,
+    ];
+
     let update_policies_message = create_update_policies_using_authorizable_example(
         &transfer_message,
         sender_vasp_did,
         participants,
     )?;
 
-    println!("Update policies message created: {:?}", update_policies_message);
+    println!(
+        "Update policies message created: {:?}",
+        update_policies_message
+    );
 
     // Step 3: Create an authorization message in response to the updated policies
     let authorize = Authorize {
@@ -297,11 +303,8 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
         metadata: HashMap::new(),
     };
 
-    let authorize_message = authorize.create_reply(
-        &update_policies_message,
-        beneficiary_did,
-        participants,
-    )?;
+    let authorize_message =
+        authorize.create_reply(&update_policies_message, beneficiary_did, participants)?;
 
     println!("Authorization message created: {:?}", authorize_message);
 

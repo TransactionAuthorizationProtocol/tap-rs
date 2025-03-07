@@ -30,9 +30,7 @@ pub fn start() -> Result<(), JsValue> {
 pub enum MessageType {
     /// Transaction proposal (Transfer in TAIP-3)
     Transfer,
-    /// Identity exchange request (TAIP-8)
-    RequestPresentation,
-    /// Presentation response (TAIP-8)
+    /// Presentation message (TAIP-8)
     Presentation,
     /// Authorization response (TAIP-4)
     Authorize,
@@ -42,6 +40,12 @@ pub enum MessageType {
     Settle,
     /// Add agents to a transaction (TAIP-5)
     AddAgents,
+    /// Replace an agent in a transaction (TAIP-5)
+    ReplaceAgent,
+    /// Remove an agent from a transaction (TAIP-5)
+    RemoveAgent,
+    /// Update policies for a transaction (TAIP-7)
+    UpdatePolicies,
     /// Error message
     Error,
     /// Unknown message type
@@ -52,14 +56,14 @@ impl fmt::Display for MessageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MessageType::Transfer => write!(f, "https://tap.rsvp/schema/1.0#Transfer"),
-            MessageType::RequestPresentation => {
-                write!(f, "https://tap.rsvp/schema/1.0#RequestPresentation")
-            }
             MessageType::Presentation => write!(f, "https://tap.rsvp/schema/1.0#Presentation"),
             MessageType::Authorize => write!(f, "https://tap.rsvp/schema/1.0#Authorize"),
             MessageType::Reject => write!(f, "https://tap.rsvp/schema/1.0#Reject"),
             MessageType::Settle => write!(f, "https://tap.rsvp/schema/1.0#Settle"),
             MessageType::AddAgents => write!(f, "https://tap.rsvp/schema/1.0#AddAgents"),
+            MessageType::ReplaceAgent => write!(f, "https://tap.rsvp/schema/1.0#ReplaceAgent"),
+            MessageType::RemoveAgent => write!(f, "https://tap.rsvp/schema/1.0#RemoveAgent"),
+            MessageType::UpdatePolicies => write!(f, "https://tap.rsvp/schema/1.0#UpdatePolicies"),
             MessageType::Error => write!(f, "https://tap.rsvp/schema/1.0#Error"),
             MessageType::Unknown => write!(f, "UNKNOWN"),
         }
@@ -361,6 +365,121 @@ impl Message {
         Ok(())
     }
 
+    /// Sets a presentation body for the message (TAIP-8)
+    pub fn set_presentation_body(&mut self, presentation_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a Presentation
+        // Use a specific type to avoid never type fallback warnings
+        let presentation_body: serde_json::Value = serde_wasm_bindgen::from_value(presentation_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse presentation data: {}", e)))?;
+
+        // Store the value directly in body_data
+        self.body_data
+            .insert("presentation".to_string(), presentation_body.clone());
+
+        // Set the message type to Presentation and update the didcomm type
+        self.message_type = "Presentation".to_string();
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#Presentation", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = presentation_body;
+
+        Ok(())
+    }
+
+    /// Sets an add agents body for the message (TAIP-5)
+    pub fn set_add_agents_body(&mut self, add_agents_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to an AddAgents
+        // Use a specific type to avoid never type fallback warnings
+        let add_agents_body: serde_json::Value = serde_wasm_bindgen::from_value(add_agents_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse add agents data: {}", e)))?;
+
+        // Store the value directly in body_data
+        self.body_data.insert("add_agents".to_string(), add_agents_body.clone());
+
+        // Set the message type to AddAgents and update the didcomm type
+        self.message_type = "AddAgents".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#AddAgents", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = add_agents_body;
+
+        Ok(())
+    }
+
+    /// Sets a replace agent body for the message (TAIP-5)
+    pub fn set_replace_agent_body(&mut self, replace_agent_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a ReplaceAgent
+        // Use a specific type to avoid never type fallback warnings
+        let replace_agent_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(replace_agent_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse replace agent data: {}", e))
+            })?;
+
+        // Store the value directly in body_data
+        self.body_data
+            .insert("replace_agent".to_string(), replace_agent_body.clone());
+
+        // Set the message type to ReplaceAgent and update the didcomm type
+        self.message_type = "ReplaceAgent".to_string();
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#ReplaceAgent", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = replace_agent_body;
+
+        Ok(())
+    }
+
+    /// Sets a remove agent body for the message (TAIP-5)
+    pub fn set_remove_agent_body(&mut self, remove_agent_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a RemoveAgent
+        // Use a specific type to avoid never type fallback warnings
+        let remove_agent_body: serde_json::Value = serde_wasm_bindgen::from_value(remove_agent_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse remove agent data: {}", e)))?;
+
+        // Store the value directly in body_data
+        self.body_data
+            .insert("remove_agent".to_string(), remove_agent_body.clone());
+
+        // Set the message type to RemoveAgent and update the didcomm type
+        self.message_type = "RemoveAgent".to_string();
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#RemoveAgent", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = remove_agent_body;
+
+        Ok(())
+    }
+
+    /// Sets an update policies body for the message (TAIP-7)
+    pub fn set_update_policies_body(
+        &mut self,
+        update_policies_data: JsValue,
+    ) -> Result<(), JsValue> {
+        // Convert the JavaScript value to an UpdatePolicies
+        // Use a specific type to avoid never type fallback warnings
+        let update_policies_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(update_policies_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse update policies data: {}", e))
+            })?;
+
+        // Store the value directly in body_data
+        self.body_data
+            .insert("update_policies".to_string(), update_policies_body.clone());
+
+        // Set the message type to UpdatePolicies and update the didcomm type
+        self.message_type = "UpdatePolicies".to_string();
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#UpdatePolicies", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = update_policies_body;
+
+        Ok(())
+    }
+
     /// Gets the transfer body data
     pub fn get_transfer_body(&self) -> JsValue {
         // Check if this is a Transfer message
@@ -450,6 +569,128 @@ impl Message {
         }
 
         // Not a Settle message
+        JsValue::null()
+    }
+
+    /// Gets the presentation body data (TAIP-8)
+    pub fn get_presentation_body(&self) -> JsValue {
+        // Check if this is a Presentation message
+        if self.message_type == "Presentation"
+            || self.didcomm_message.type_.contains("#Presentation")
+        {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("presentation") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not a Presentation message
+        JsValue::null()
+    }
+
+    /// Gets the add agents body data (TAIP-5)
+    pub fn get_add_agents_body(&self) -> JsValue {
+        // Check if this is an AddAgents message
+        if self.message_type == "AddAgents" || self.didcomm_message.type_.contains("#AddAgents") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("add_agents") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not an AddAgents message
+        JsValue::null()
+    }
+
+    /// Gets the replace agent body data (TAIP-5)
+    pub fn get_replace_agent_body(&self) -> JsValue {
+        // Check if this is a ReplaceAgent message
+        if self.message_type == "ReplaceAgent"
+            || self.didcomm_message.type_.contains("#ReplaceAgent")
+        {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("replace_agent") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not a ReplaceAgent message
+        JsValue::null()
+    }
+
+    /// Gets the remove agent body data (TAIP-5)
+    pub fn get_remove_agent_body(&self) -> JsValue {
+        // Check if this is a RemoveAgent message
+        if self.message_type == "RemoveAgent" || self.didcomm_message.type_.contains("#RemoveAgent")
+        {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("remove_agent") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not a RemoveAgent message
+        JsValue::null()
+    }
+
+    /// Gets the update policies body data (TAIP-7)
+    pub fn get_update_policies_body(&self) -> JsValue {
+        // Check if this is an UpdatePolicies message
+        if self.message_type == "UpdatePolicies"
+            || self.didcomm_message.type_.contains("#UpdatePolicies")
+        {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("update_policies") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not an UpdatePolicies message
         JsValue::null()
     }
 
@@ -687,13 +928,13 @@ impl TapAgent {
             } else {
                 format!(
                     "did:key:z6Mk{}",
-                    uuid::Uuid::new_v4().to_simple().to_string()
+                    uuid::Uuid::new_v4().to_simple()
                 )
             }
         } else {
             format!(
                 "did:key:z6Mk{}",
-                uuid::Uuid::new_v4().to_simple().to_string()
+                uuid::Uuid::new_v4().to_simple()
             )
         };
 
@@ -1233,7 +1474,7 @@ impl TapNode {
 /// Creates a new DID key pair
 #[wasm_bindgen]
 pub fn create_did_key() -> Result<JsValue, JsValue> {
-    let uuid_str = uuid::Uuid::new_v4().to_simple().to_string();
+    let uuid_str = uuid::Uuid::new_v4().to_simple().to_string();  // This actually needs the to_string() as it's assigning to a String variable
 
     let mock_did = format!("did:key:z6Mk{}", uuid_str);
 

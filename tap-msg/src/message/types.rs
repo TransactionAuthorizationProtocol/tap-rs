@@ -238,7 +238,6 @@ impl Authorizable for Transfer {
     }
 }
 
-
 /// Presentation message body (TAIP-8).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Presentation {
@@ -426,11 +425,15 @@ impl TapMessageBody for UpdatePolicies {
 
     fn to_didcomm(&self) -> Result<Message> {
         // Serialize the UpdatePolicies to a JSON value
-        let mut body_json = serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-        
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
         // Ensure the @type field is correctly set in the body
         if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert("@type".to_string(), serde_json::Value::String(Self::message_type().to_string()));
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
         }
 
         let now = crate::utils::get_current_time()?;
@@ -464,24 +467,25 @@ impl TapMessageBody for UpdatePolicies {
                 message.type_
             )));
         }
-        
+
         // Create a copy of the body that we can modify
         let mut body_json = message.body.clone();
-        
+
         // Remove the @type field if present as we no longer need it in our struct
         if let Some(body_obj) = body_json.as_object_mut() {
             body_obj.remove("@type");
-            
+
             // Convert "transferId" to "transfer_id" if needed
             if let Some(transfer_id) = body_obj.remove("transferId") {
                 body_obj.insert("transfer_id".to_string(), transfer_id);
             }
         }
-        
+
         // Deserialize the body
-        let update_policies = serde_json::from_value(body_json)
-            .map_err(|e| Error::SerializationError(format!("Failed to deserialize UpdatePolicies: {}", e)))?;
-            
+        let update_policies = serde_json::from_value(body_json).map_err(|e| {
+            Error::SerializationError(format!("Failed to deserialize UpdatePolicies: {}", e))
+        })?;
+
         Ok(update_policies)
     }
 }
@@ -727,7 +731,6 @@ impl TapMessageBody for Settle {
         Ok(())
     }
 }
-
 
 impl TapMessageBody for Presentation {
     fn message_type() -> &'static str {

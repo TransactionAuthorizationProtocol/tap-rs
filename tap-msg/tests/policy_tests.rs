@@ -109,7 +109,7 @@ fn test_update_policies_validation() {
         policies: vec![Policy::RequireProofOfControl(proof_policy)],
         metadata: HashMap::new(),
     };
-    
+
     // No need for creator_did in this context
     // let _creator_did = "did:example:sender_vasp";
 
