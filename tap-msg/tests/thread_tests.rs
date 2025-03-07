@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::error::Result;
-use tap_msg::message::types::{AddAgents, Authorize, Participant, RemoveAgent, ReplaceAgent};
+use tap_msg::message::types::{AddAgents, Authorize, ConfirmRelationship, Participant, RemoveAgent, ReplaceAgent, Authorizable};
 use tap_msg::message::{TapMessage, TapMessageBody, Transfer};
 use uuid::Uuid;
 
@@ -234,6 +234,85 @@ fn test_remove_agent() -> Result<()> {
     let extracted_remove_agent = RemoveAgent::from_didcomm(&message_with_thread)?;
     assert_eq!(extracted_remove_agent.transfer_id, transfer_id);
     assert_eq!(extracted_remove_agent.agent, bob_did);
+
+    Ok(())
+}
+
+#[test]
+fn test_confirm_relationship() -> Result<()> {
+    let transfer_id = "test-transfer-123";
+    let alice_did = "did:example:alice";
+    let bob_did = "did:example:bob";
+    let org_did = "did:example:organization";
+
+    // Create a ConfirmRelationship message to confirm Bob is acting on behalf of an organization
+    let confirm_relationship = ConfirmRelationship {
+        transfer_id: transfer_id.to_string(),
+        agent_id: bob_did.to_string(),
+        for_id: org_did.to_string(),
+        role: Some("custodian".to_string()),
+        metadata: HashMap::new(),
+    };
+
+    // Validate the message
+    confirm_relationship.validate()?;
+
+    // Create a DIDComm message from the confirm_relationship
+    let message = confirm_relationship.to_didcomm_with_route(Some(alice_did), [bob_did].iter().copied())?;
+
+    // Set the thread ID
+    let message_with_thread = Message {
+        thid: Some(transfer_id.to_string()),
+        ..message
+    };
+
+    // Verify the message properties
+    assert_eq!(message_with_thread.from, Some(alice_did.to_string()));
+    assert!(message_with_thread
+        .to
+        .as_ref()
+        .unwrap()
+        .contains(&bob_did.to_string()));
+    assert_eq!(message_with_thread.thid, Some(transfer_id.to_string()));
+
+    // Extract the body back and verify
+    let extracted_confirm = ConfirmRelationship::from_didcomm(&message_with_thread)?;
+    assert_eq!(extracted_confirm.transfer_id, transfer_id);
+    assert_eq!(extracted_confirm.agent_id, bob_did);
+    assert_eq!(extracted_confirm.for_id, org_did);
+    assert_eq!(extracted_confirm.role, Some("custodian".to_string()));
+
+    // Test using the Authorizable trait
+    let transfer = Transfer {
+        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+        originator: Participant::new(alice_did),
+        beneficiary: Some(Participant::new(bob_did)),
+        amount: "10.00".to_string(),
+        agents: vec![],
+        settlement_id: None,
+        memo: None,
+        metadata: HashMap::new(),
+    };
+
+    // Create a DIDComm message from the transfer
+    let transfer_message = transfer.to_didcomm()?;
+    let mut metadata = HashMap::new();
+    metadata.insert("context".to_string(), serde_json::Value::String("test".to_string()));
+
+    // Create a ConfirmRelationship message using the Authorizable trait
+    let confirm = transfer_message.confirm_relationship(
+        bob_did.to_string(),
+        org_did.to_string(),
+        Some("custodian".to_string()),
+        metadata.clone(),
+    );
+
+    // Verify the created message
+    assert_eq!(confirm.transfer_id, transfer_message.id);
+    assert_eq!(confirm.agent_id, bob_did);
+    assert_eq!(confirm.for_id, org_did);
+    assert_eq!(confirm.role, Some("custodian".to_string()));
+    assert_eq!(confirm.metadata, metadata);
 
     Ok(())
 }

@@ -194,6 +194,26 @@ export interface StorageOptions {
 }
 
 /**
+ * ConfirmRelationship message data (TAIP-9)
+ */
+export interface ConfirmRelationshipData {
+  /** ID of the transfer being confirmed */
+  transfer_id: string;
+
+  /** ID of the agent confirming the relationship */
+  agent_id: string;
+
+  /** ID of the entity for which the relationship is being confirmed */
+  for: string;
+
+  /** Optional role of the entity in the relationship */
+  role?: string;
+
+  /** Additional metadata */
+  [key: string]: unknown;
+}
+
+/**
  * Keypair for signing and encrypting messages
  */
 export interface Keypair {

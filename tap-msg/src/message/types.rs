@@ -187,6 +187,22 @@ impl Authorizable for Transfer {
         }
     }
 
+    fn confirm_relationship(
+        &self,
+        agent_id: String,
+        for_id: String,
+        role: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ConfirmRelationship {
+        ConfirmRelationship {
+            transfer_id: self.message_id(),
+            agent_id,
+            for_id,
+            role,
+            metadata,
+        }
+    }
+
     fn update_policies(
         &self,
         policies: Vec<Policy>,
@@ -372,6 +388,66 @@ pub struct RemoveAgent {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
+/// ConfirmRelationship message body (TAIP-9).
+///
+/// This message type allows confirming a relationship between agents.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConfirmRelationship {
+    /// ID of the transfer related to this message.
+    pub transfer_id: String,
+
+    /// DID of the agent whose relationship is being confirmed.
+    pub agent_id: String,
+
+    /// DID of the entity that the agent acts on behalf of.
+    #[serde(rename = "for")]
+    pub for_id: String,
+
+    /// Role of the agent in the transaction (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
+
+    /// Additional metadata (optional).
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl ConfirmRelationship {
+    /// Creates a new ConfirmRelationship message body.
+    pub fn new(transfer_id: &str, agent_id: &str, for_id: &str, role: Option<String>) -> Self {
+        Self {
+            transfer_id: transfer_id.to_string(),
+            agent_id: agent_id.to_string(),
+            for_id: for_id.to_string(),
+            role,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Validates the ConfirmRelationship message body.
+    pub fn validate(&self) -> Result<()> {
+        if self.transfer_id.is_empty() {
+            return Err(Error::Validation(
+                "Transfer ID is required in ConfirmRelationship".to_string(),
+            ));
+        }
+
+        if self.agent_id.is_empty() {
+            return Err(Error::Validation(
+                "Agent ID is required in ConfirmRelationship".to_string(),
+            ));
+        }
+
+        if self.for_id.is_empty() {
+            return Err(Error::Validation(
+                "For ID is required in ConfirmRelationship".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
 /// UpdatePolicies message body (TAIP-7).
 ///
 /// This message type allows agents to update their policies for a transaction.
@@ -531,6 +607,26 @@ pub trait Authorizable {
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Authorize;
+    
+    /// Confirms a relationship between agents, creating a ConfirmRelationship message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_id` - DID of the agent whose relationship is being confirmed
+    /// * `for_id` - DID of the entity that the agent acts on behalf of
+    /// * `role` - Optional role of the agent in the transaction
+    /// * `metadata` - Additional metadata for the confirmation
+    ///
+    /// # Returns
+    ///
+    /// A new ConfirmRelationship message body
+    fn confirm_relationship(
+        &self,
+        agent_id: String,
+        for_id: String,
+        role: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ConfirmRelationship;
 
     /// Rejects this message, creating a Reject message as a response
     ///
@@ -832,6 +928,96 @@ impl TapMessageBody for RemoveAgent {
     }
 }
 
+impl TapMessageBody for ConfirmRelationship {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#confirmrelationship"
+    }
+
+    fn validate(&self) -> Result<()> {
+        self.validate()
+    }
+
+    fn to_didcomm(&self) -> Result<Message> {
+        // Serialize the ConfirmRelationship to a JSON value
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+            
+            // Change for_id to "for" in the serialized object
+            if let Some(for_id) = body_obj.remove("for_id") {
+                body_obj.insert("for".to_string(), for_id);
+            }
+        }
+
+        let now = crate::utils::get_current_time()?;
+
+        // Create a new Message with required fields
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: None,
+            to: None,
+            thid: None,
+            pthid: None,
+            extra_headers: std::collections::HashMap::new(),
+            created_time: Some(now),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
+
+    fn from_didcomm(message: &Message) -> Result<Self> {
+        let body = message.body.as_object().ok_or_else(|| {
+            Error::Validation("Message body is not a JSON object".to_string())
+        })?;
+
+        let transfer_id = body
+            .get("transfer_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                Error::Validation("Missing or invalid transfer_id".to_string())
+            })?;
+
+        let agent_id = body.get("agent_id").and_then(|v| v.as_str()).ok_or_else(|| {
+            Error::Validation("Missing or invalid agent_id".to_string())
+        })?;
+
+        let for_id = body.get("for").and_then(|v| v.as_str()).ok_or_else(|| {
+            Error::Validation("Missing or invalid for".to_string())
+        })?;
+
+        let role = body.get("role").and_then(|v| v.as_str()).map(ToString::to_string);
+
+        let mut metadata = HashMap::new();
+        for (k, v) in body.iter() {
+            if !["transfer_id", "agent_id", "for", "role"]
+                .contains(&k.as_str())
+            {
+                metadata.insert(k.clone(), v.clone());
+            }
+        }
+
+        Ok(Self {
+            transfer_id: transfer_id.to_string(),
+            agent_id: agent_id.to_string(),
+            for_id: for_id.to_string(),
+            role,
+            metadata,
+        })
+    }
+}
+
 impl TapMessageBody for ErrorBody {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#error"
@@ -907,6 +1093,22 @@ impl Authorizable for Message {
             block_height,
             note,
             timestamp,
+            metadata,
+        }
+    }
+
+    fn confirm_relationship(
+        &self,
+        agent_id: String,
+        for_id: String,
+        role: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ConfirmRelationship {
+        ConfirmRelationship {
+            transfer_id: self.id.clone(),
+            agent_id,
+            for_id,
+            role,
             metadata,
         }
     }

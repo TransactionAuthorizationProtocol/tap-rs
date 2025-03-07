@@ -46,6 +46,8 @@ pub enum MessageType {
     RemoveAgent,
     /// Update policies for a transaction (TAIP-7)
     UpdatePolicies,
+    /// Confirm relationship between agent and entity (TAIP-9)
+    ConfirmRelationship,
     /// Error message
     Error,
     /// Unknown message type
@@ -64,6 +66,7 @@ impl fmt::Display for MessageType {
             MessageType::ReplaceAgent => write!(f, "https://tap.rsvp/schema/1.0#ReplaceAgent"),
             MessageType::RemoveAgent => write!(f, "https://tap.rsvp/schema/1.0#RemoveAgent"),
             MessageType::UpdatePolicies => write!(f, "https://tap.rsvp/schema/1.0#UpdatePolicies"),
+            MessageType::ConfirmRelationship => write!(f, "https://tap.rsvp/schema/1.0#confirmrelationship"),
             MessageType::Error => write!(f, "https://tap.rsvp/schema/1.0#Error"),
             MessageType::Unknown => write!(f, "UNKNOWN"),
         }
@@ -691,6 +694,57 @@ impl Message {
         }
 
         // Not an UpdatePolicies message
+        JsValue::null()
+    }
+
+    /// Sets a confirm relationship body for the message (TAIP-9)
+    pub fn set_confirm_relationship_body(
+        &mut self,
+        confirm_relationship_data: JsValue,
+    ) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a JSON value
+        let confirm_relationship_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(confirm_relationship_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse confirm relationship data: {}", e))
+            })?;
+
+        // Store the value directly in body_data
+        self.body_data
+            .insert("confirm_relationship".to_string(), confirm_relationship_body.clone());
+
+        // Set the message type to ConfirmRelationship and update the didcomm type
+        self.message_type = "ConfirmRelationship".to_string();
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#confirmrelationship", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = confirm_relationship_body;
+
+        Ok(())
+    }
+
+    /// Gets the confirm relationship body data (TAIP-9)
+    pub fn get_confirm_relationship_body(&self) -> JsValue {
+        // Check if this is a ConfirmRelationship message
+        if self.message_type == "ConfirmRelationship"
+            || self.didcomm_message.type_.contains("#confirmrelationship")
+        {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("confirm_relationship") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not a ConfirmRelationship message
         JsValue::null()
     }
 

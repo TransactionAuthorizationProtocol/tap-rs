@@ -68,6 +68,8 @@ export enum MessageType {
   REMOVE_AGENT = 'https://tap.rsvp/schema/1.0#RemoveAgent',
   // Policy management message type (TAIP-7)
   UPDATE_POLICIES = 'https://tap.rsvp/schema/1.0#UpdatePolicies',
+  // Agent relationship confirmation (TAIP-9)
+  CONFIRM_RELATIONSHIP = 'https://tap.rsvp/schema/1.0#confirmrelationship',
   // Error message type
   ERROR = 'https://tap.rsvp/schema/1.0#Error',
 }
@@ -186,6 +188,26 @@ export interface UpdatePoliciesData {
   
   /** Policies to apply */
   policies: Policy[];
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-9 ConfirmRelationship message data
+ */
+export interface ConfirmRelationshipData {
+  /** ID of the transfer related to this message */
+  transfer_id: string;
+  
+  /** DID of the agent whose relationship is being confirmed */
+  agent_id: string;
+  
+  /** DID of the entity that the agent acts on behalf of */
+  for_id: string;
+  
+  /** Role of the agent in the transaction (optional) */
+  role?: string;
   
   /** Additional metadata */
   metadata?: Record<string, unknown>;
@@ -949,6 +971,66 @@ export class Message {
     return this._data as unknown as UpdatePoliciesData;
   }
   
+  /**
+   * Set ConfirmRelationship data for TAIP-9 ConfirmRelationship messages
+   * 
+   * @param data The ConfirmRelationship data to set
+   * @returns this (chainable)
+   * @throws {TapError} If the message type is not CONFIRM_RELATIONSHIP
+   */
+  setConfirmRelationshipData(data: ConfirmRelationshipData): this {
+    if (this.type !== MessageType.CONFIRM_RELATIONSHIP) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set ConfirmRelationship data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_confirm_relationship_body) {
+      try {
+        this.wasmMessage.set_confirm_relationship_body(data);
+      } catch (error) {
+        console.warn("Error setting confirm_relationship body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get ConfirmRelationship data for TAIP-9 ConfirmRelationship messages
+   * 
+   * @returns ConfirmRelationshipData object or undefined if not set or not a ConfirmRelationship message
+   */
+  getConfirmRelationshipData(): ConfirmRelationshipData | undefined {
+    if (this.type !== MessageType.CONFIRM_RELATIONSHIP) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_confirm_relationship_body) {
+      try {
+        const wasmConfirmRelationshipData = this.wasmMessage.get_confirm_relationship_body();
+        if (wasmConfirmRelationshipData) {
+          return wasmConfirmRelationshipData as ConfirmRelationshipData;
+        }
+      } catch (error) {
+        console.warn("Error getting confirm_relationship body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields for ConfirmRelationship
+    if (!this._data.transfer_id || !this._data.agent_id || !this._data.for) {
+      return undefined;
+    }
+    
+    return this._data as unknown as ConfirmRelationshipData;
+  }
+
   /**
    * Get the underlying WASM message
    * 

@@ -17,6 +17,7 @@ Each message type is documented with its corresponding TAIP specification refere
 | ReplaceAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
 | RemoveAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
 | UpdatePolicies | [TAIP-7](prds/taips/TAIPs/taip-7.md) | - [x] | - [x] | - [x] |
+| ConfirmRelationship | [TAIP-9](prds/taips/TAIPs/taip-9.md) | - [x] | - [x] | - [x] |
 | Error | - | - [x] | - [x] | - [x] |
 
 ## Message Type Details
@@ -115,6 +116,18 @@ Message for updating policies for a transaction.
 - `transfer_id`: ID of the related transfer
 - `policies`: Array of policies
 - `metadata`: Additional metadata
+
+### ConfirmRelationship (TAIP-9)
+
+Message for confirming a relationship between agents.
+
+**Structure:**
+- `transfer_id`: ID of the related transfer
+- `agent_id`: DID of the agent
+- `for`: DID of the entity the agent acts on behalf of
+- `role`: (Optional) Role of the agent in the transaction
+- `metadata`: Additional metadata
+- `attachments`: (Optional) Array containing at most one CACAO message for cryptographic proof
 
 ### Error
 
