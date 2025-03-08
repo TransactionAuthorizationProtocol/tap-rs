@@ -203,6 +203,23 @@ impl Authorizable for Transfer {
         }
     }
 
+    fn update_party(
+        &self,
+        party_type: String,
+        party: Participant,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdateParty {
+        UpdateParty {
+            transfer_id: self.message_id(),
+            party_type,
+            party,
+            note,
+            metadata,
+            context: Some("https://tap.rsvp/schema/1.0".to_string()),
+        }
+    }
+    
     fn update_policies(
         &self,
         policies: Vec<Policy>,
@@ -448,6 +465,198 @@ impl ConfirmRelationship {
     }
 }
 
+/// UpdateParty message body (TAIP-6).
+///
+/// This message type allows agents to update party information in a transaction.
+/// It enables a participant to modify their details or role within an existing transfer without
+/// creating a new transaction. This is particularly useful for situations where participant
+/// information changes during the lifecycle of a transaction.
+///
+/// # TAIP-6 Specification
+/// The UpdateParty message follows the TAIP-6 specification for updating party information
+/// in a TAP transaction. It includes JSON-LD compatibility with an optional @context field.
+///
+/// # Example
+/// ```
+/// use tap_msg::message::types::UpdateParty;
+/// use tap_msg::Participant;
+/// use std::collections::HashMap;
+///
+/// // Create a participant with updated information
+/// let updated_participant = Participant {
+///     id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
+///     role: Some("new_role".to_string()),
+///     policies: None,
+/// };
+///
+/// // Create an UpdateParty message
+/// let update_party = UpdateParty::new(
+///     "transfer-123",
+///     "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+///     updated_participant
+/// );
+///
+/// // Add an optional note
+/// let update_party_with_note = UpdateParty {
+///     note: Some("Updating role after compliance check".to_string()),
+///     ..update_party
+/// };
+/// ```
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateParty {
+    /// ID of the transaction this update relates to.
+    pub transfer_id: String,
+    
+    /// Type of party being updated (e.g., 'originator', 'beneficiary').
+    #[serde(rename = "partyType")]
+    pub party_type: String,
+    
+    /// Updated party information.
+    pub party: Participant,
+    
+    /// Optional note regarding the update.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    
+    /// Additional metadata for the update.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+    
+    /// Optional JSON-LD context.
+    #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+}
+
+impl UpdateParty {
+    /// Creates a new UpdateParty message body.
+    pub fn new(transfer_id: &str, party_type: &str, party: Participant) -> Self {
+        Self {
+            transfer_id: transfer_id.to_string(),
+            party_type: party_type.to_string(),
+            party,
+            note: None,
+            metadata: HashMap::new(),
+            context: Some("https://tap.rsvp/schema/1.0".to_string()),
+        }
+    }
+    
+    /// Validates the UpdateParty message body.
+    pub fn validate(&self) -> Result<()> {
+        if self.transfer_id.is_empty() {
+            return Err(Error::Validation("transfer_id cannot be empty".to_string()));
+        }
+        
+        if self.party_type.is_empty() {
+            return Err(Error::Validation("partyType cannot be empty".to_string()));
+        }
+        
+        if self.party.id.is_empty() {
+            return Err(Error::Validation("party.id cannot be empty".to_string()));
+        }
+        
+        Ok(())
+    }
+}
+
+impl TapMessageBody for UpdateParty {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#updateparty"
+    }
+    
+    fn validate(&self) -> Result<()> {
+        self.validate()
+    }
+    
+    fn to_didcomm(&self) -> Result<Message> {
+        // Serialize the UpdateParty to a JSON value
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        let now = crate::utils::get_current_time()?;
+
+        // Create a new Message with required fields
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: None,
+            to: None,
+            thid: None,
+            pthid: None,
+            extra_headers: std::collections::HashMap::new(),
+            created_time: Some(now),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
+    
+    fn from_didcomm(message: &Message) -> Result<Self> {
+        let body = message.body.as_object().ok_or_else(|| {
+            Error::Validation("Message body is not a JSON object".to_string())
+        })?;
+
+        let transfer_id = body
+            .get("transfer_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                Error::Validation("Missing or invalid transfer_id".to_string())
+            })?;
+
+        let party_type = body
+            .get("partyType")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                Error::Validation("Missing or invalid partyType".to_string())
+            })?;
+
+        let party = body.get("party").ok_or_else(|| {
+            Error::Validation("Missing party information".to_string())
+        })?;
+
+        let party: Participant = serde_json::from_value(party.clone())
+            .map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        let note = body.get("note").and_then(|v| v.as_str()).map(ToString::to_string);
+        
+        // Get context if available
+        let context = body.get("@context").and_then(|v| v.as_str()).map(ToString::to_string);
+
+        let mut metadata = HashMap::new();
+        for (k, v) in body.iter() {
+            if !["transfer_id", "partyType", "party", "note", "@context"]
+                .contains(&k.as_str())
+            {
+                metadata.insert(k.clone(), v.clone());
+            }
+        }
+        
+        let update_party = Self {
+            transfer_id: transfer_id.to_string(),
+            party_type: party_type.to_string(),
+            party,
+            note,
+            metadata,
+            context,
+        };
+        
+        update_party.validate()?;
+        
+        Ok(update_party)
+    }
+}
+
 /// UpdatePolicies message body (TAIP-7).
 ///
 /// This message type allows agents to update their policies for a transaction.
@@ -669,6 +878,26 @@ pub trait Authorizable {
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Settle;
+
+    /// Updates a party in the transaction, creating an UpdateParty message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `party_type` - Type of party being updated (e.g., 'originator', 'beneficiary')
+    /// * `party` - Updated party information
+    /// * `note` - Optional note about the update
+    /// * `metadata` - Additional metadata for the update
+    ///
+    /// # Returns
+    ///
+    /// A new UpdateParty message body
+    fn update_party(
+        &self,
+        party_type: String,
+        party: Participant,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdateParty;
 
     /// Updates policies for this message, creating an UpdatePolicies message as a response
     ///
@@ -1148,6 +1377,23 @@ impl Authorizable for Message {
             original,
             replacement,
             metadata,
+        }
+    }
+    
+    fn update_party(
+        &self,
+        party_type: String,
+        party: Participant,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdateParty {
+        UpdateParty {
+            transfer_id: self.id.clone(),
+            party_type,
+            party,
+            note,
+            metadata,
+            context: Some("https://tap.rsvp/schema/1.0".to_string()),
         }
     }
 

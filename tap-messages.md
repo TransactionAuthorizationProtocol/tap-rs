@@ -16,6 +16,7 @@ Each message type is documented with its corresponding TAIP specification refere
 | AddAgents | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
 | ReplaceAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
 | RemoveAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
+| UpdateParty | [TAIP-6](prds/taips/TAIPs/taip-6.md) | - [x] | - [ ] | - [ ] |
 | UpdatePolicies | [TAIP-7](prds/taips/TAIPs/taip-7.md) | - [x] | - [x] | - [x] |
 | ConfirmRelationship | [TAIP-9](prds/taips/TAIPs/taip-9.md) | - [x] | - [x] | - [x] |
 | Error | - | - [x] | - [x] | - [x] |
@@ -115,6 +116,16 @@ Message for updating policies for a transaction.
 **Structure:**
 - `transfer_id`: ID of the related transfer
 - `policies`: Array of policies
+- `metadata`: Additional metadata
+
+### UpdateParty (TAIP-6)
+
+Message for updating party information in a transaction.
+
+**Structure:**
+- `transfer_id`: ID of the related transfer
+- `partyType`: Type of party being updated (e.g., "originator", "beneficiary")
+- `party`: Party object with updated information
 - `metadata`: Additional metadata
 
 ### ConfirmRelationship (TAIP-9)
