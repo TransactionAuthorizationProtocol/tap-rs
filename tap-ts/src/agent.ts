@@ -69,7 +69,6 @@ export class Agent {
     
     // Initialize message handler maps for each message type in the TAP protocol
     this.messageHandlers.set(MessageType.TRANSFER, new Set());
-    this.messageHandlers.set(MessageType.REQUEST_PRESENTATION, new Set());
     this.messageHandlers.set(MessageType.PRESENTATION, new Set());
     this.messageHandlers.set(MessageType.AUTHORIZE, new Set());
     this.messageHandlers.set(MessageType.REJECT, new Set());

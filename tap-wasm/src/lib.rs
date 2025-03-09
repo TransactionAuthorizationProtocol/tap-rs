@@ -46,6 +46,8 @@ pub enum MessageType {
     RemoveAgent,
     /// Update policies for a transaction (TAIP-7)
     UpdatePolicies,
+    /// Update party information (TAIP-6)
+    UpdateParty,
     /// Confirm relationship between agent and entity (TAIP-9)
     ConfirmRelationship,
     /// Error message
@@ -66,6 +68,7 @@ impl fmt::Display for MessageType {
             MessageType::ReplaceAgent => write!(f, "https://tap.rsvp/schema/1.0#ReplaceAgent"),
             MessageType::RemoveAgent => write!(f, "https://tap.rsvp/schema/1.0#RemoveAgent"),
             MessageType::UpdatePolicies => write!(f, "https://tap.rsvp/schema/1.0#UpdatePolicies"),
+            MessageType::UpdateParty => write!(f, "https://tap.rsvp/schema/1.0#UpdateParty"),
             MessageType::ConfirmRelationship => write!(f, "https://tap.rsvp/schema/1.0#confirmrelationship"),
             MessageType::Error => write!(f, "https://tap.rsvp/schema/1.0#Error"),
             MessageType::Unknown => write!(f, "UNKNOWN"),
@@ -697,6 +700,33 @@ impl Message {
         JsValue::null()
     }
 
+    /// Sets an update party body for the message (TAIP-6)
+    pub fn set_update_party_body(
+        &mut self,
+        update_party_data: JsValue,
+    ) -> Result<(), JsValue> {
+        // Convert the JavaScript value to an UpdateParty
+        // Use a specific type to avoid never type fallback warnings
+        let update_party_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(update_party_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse update party data: {}", e))
+            })?;
+
+        // Store the value directly in body_data
+        self.body_data
+            .insert("update_party".to_string(), update_party_body.clone());
+
+        // Set the message type to UpdateParty and update the didcomm type
+        self.message_type = "UpdateParty".to_string();
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#UpdateParty", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = update_party_body;
+
+        Ok(())
+    }
+
     /// Sets a confirm relationship body for the message (TAIP-9)
     pub fn set_confirm_relationship_body(
         &mut self,
@@ -721,6 +751,29 @@ impl Message {
         self.didcomm_message.body = confirm_relationship_body;
 
         Ok(())
+    }
+
+    /// Gets the update party body data (TAIP-6)
+    pub fn get_update_party_body(&self) -> JsValue {
+        // Check if this is an UpdateParty message
+        if self.message_type == "UpdateParty" || self.didcomm_message.type_.contains("#UpdateParty") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("update_party") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not an UpdateParty message
+        JsValue::null()
     }
 
     /// Gets the confirm relationship body data (TAIP-9)

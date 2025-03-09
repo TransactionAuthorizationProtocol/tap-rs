@@ -68,6 +68,8 @@ export enum MessageType {
   REMOVE_AGENT = 'https://tap.rsvp/schema/1.0#RemoveAgent',
   // Policy management message type (TAIP-7)
   UPDATE_POLICIES = 'https://tap.rsvp/schema/1.0#UpdatePolicies',
+  // Party update message type (TAIP-6)
+  UPDATE_PARTY = 'https://tap.rsvp/schema/1.0#UpdateParty',
   // Agent relationship confirmation (TAIP-9)
   CONFIRM_RELATIONSHIP = 'https://tap.rsvp/schema/1.0#confirmrelationship',
   // Error message type
@@ -208,6 +210,56 @@ export interface ConfirmRelationshipData {
   
   /** Role of the agent in the transaction (optional) */
   role?: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-6 UpdateParty message data
+ * 
+ * The UpdateParty message allows transaction participants to update party information
+ * within an existing transfer without creating a new transaction. This is essential
+ * for maintaining transaction integrity while allowing flexibility in participant details.
+ * 
+ * Common use cases include:
+ * - Updating account information for a beneficiary
+ * - Changing participant roles or credentials
+ * - Correcting information after compliance verification
+ * 
+ * @example
+ * ```typescript
+ * // Create an UpdateParty message
+ * const message = new Message({ type: MessageType.UPDATE_PARTY });
+ * 
+ * // Set the UpdateParty data
+ * message.setUpdatePartyData({
+ *   transfer_id: "transfer-123",
+ *   party_type: "originator",
+ *   party: {
+ *     "@id": "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+ *     role: "business_account",
+ *     name: "Acme Corp"
+ *   },
+ *   note: "Updating role after compliance check"
+ * });
+ * ```
+ */
+export interface UpdatePartyData {
+  /** ID of the transfer related to this message */
+  transfer_id: string;
+  
+  /** Type of party being updated (e.g., "originator", "beneficiary") */
+  party_type: string;
+  
+  /** Updated participant information */
+  party: Participant;
+  
+  /** Optional note about the update */
+  note?: string;
+  
+  /** Timestamp of the update */
+  timestamp?: string;
   
   /** Additional metadata */
   metadata?: Record<string, unknown>;
@@ -1029,6 +1081,115 @@ export class Message {
     }
     
     return this._data as unknown as ConfirmRelationshipData;
+  }
+
+  /**
+   * Set UpdateParty data according to TAIP-6
+   * 
+   * This method allows setting data for an UpdateParty message (TAIP-6), which
+   * enables participants to update party information in an existing transfer.
+   * The UpdateParty message is critical for scenarios where participant details
+   * need to change after a transfer has been initiated.
+   * 
+   * @param data - UpdateParty data object containing required fields:
+   *   - transfer_id: Identifier of the transfer to update
+   *   - party_type: Type of the party being updated (e.g., "originator", "beneficiary")
+   *   - party: The updated participant information
+   *   - note: (Optional) A note explaining the reason for the update
+   *   - timestamp: (Optional) When the update was made
+   *   - metadata: (Optional) Additional data as key-value pairs
+   * 
+   * @returns This message for chaining
+   * @throws {TapError} If the message type is not UPDATE_PARTY
+   * 
+   * @example
+   * ```typescript
+   * const message = new Message({ type: MessageType.UPDATE_PARTY });
+   * message.setUpdatePartyData({
+   *   transfer_id: "transfer-abc123",
+   *   party_type: "beneficiary",
+   *   party: {
+   *     "@id": "did:key:z6MkrF9z7GeZZuUXR5tUFoCnEKJxBtChfYNNVn4TvXKBi6XQ",
+   *     role: "customer",
+   *     name: "Alice Smith",
+   *     account: {
+   *       id: "GB29NWBK60161331926819",
+   *       bank_id: "NWBKGB2L"
+   *     }
+   *   },
+   *   note: "Updated account details after verification"
+   * });
+   * ```
+   */
+  setUpdatePartyData(data: UpdatePartyData): this {
+    if (this.type !== MessageType.UPDATE_PARTY) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set UpdateParty data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_update_party_body) {
+      try {
+        this.wasmMessage.set_update_party_body(data);
+      } catch (error) {
+        console.warn("Error setting update_party body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get UpdateParty data for TAIP-6 UpdateParty messages
+   * 
+   * Retrieves the UpdateParty data from a message, which includes information
+   * about party updates in an existing transfer. This method first attempts
+   * to retrieve data from the WASM implementation if available, then falls back
+   * to the TypeScript implementation.
+   * 
+   * @returns UpdatePartyData object or undefined if not set or not an UpdateParty message
+   * 
+   * @example
+   * ```typescript
+   * // Retrieve data from an UpdateParty message
+   * const updatePartyData = message.getUpdatePartyData();
+   * if (updatePartyData) {
+   *   console.log(`Updating ${updatePartyData.party_type} in transfer ${updatePartyData.transfer_id}`);
+   *   console.log(`New party ID: ${updatePartyData.party["@id"]}`);
+   *   if (updatePartyData.note) {
+   *     console.log(`Update reason: ${updatePartyData.note}`);
+   *   }
+   * }
+   * ```
+   */
+  getUpdatePartyData(): UpdatePartyData | undefined {
+    if (this.type !== MessageType.UPDATE_PARTY) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_update_party_body) {
+      try {
+        const wasmUpdatePartyData = this.wasmMessage.get_update_party_body();
+        if (wasmUpdatePartyData) {
+          return wasmUpdatePartyData as UpdatePartyData;
+        }
+      } catch (error) {
+        console.warn("Error getting update_party body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields for UpdateParty
+    if (!this._data.transfer_id || !this._data.party_type || !this._data.party) {
+      return undefined;
+    }
+    
+    return this._data as unknown as UpdatePartyData;
   }
 
   /**
