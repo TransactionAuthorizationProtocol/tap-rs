@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tap_caip::AssetId;
 
-/// Participant in a transfer (TAIP-3).
+/// Participant in a transfer (TAIP-3, TAIP-11).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Participant {
     /// DID of the participant.
@@ -27,6 +27,11 @@ pub struct Participant {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
     pub policies: Option<Vec<Policy>>,
+
+    /// Legal Entity Identifier (LEI) according to TAIP-11 (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub lei: Option<String>,
 }
 
 impl Participant {
@@ -271,7 +276,40 @@ impl Authorizable for Transfer {
     }
 }
 
-/// Presentation message body (TAIP-8).
+/// Request Presentation message body (TAIP-10).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequestPresentation {
+    /// Transfer ID that this request is related to.
+    pub transfer_id: String,
+    
+    /// Presentation definition identifier or URI.
+    pub presentation_definition: String,
+    
+    /// Description of the request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    
+    /// Challenge to be included in the response.
+    pub challenge: String,
+    
+    /// Whether the request is for the originator's information.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub for_originator: Option<bool>,
+    
+    /// Whether the request is for the beneficiary's information.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub for_beneficiary: Option<bool>,
+    
+    /// Note for the request.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Presentation message body (TAIP-8, TAIP-10).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Presentation {
     /// Challenge from the request.
@@ -279,6 +317,14 @@ pub struct Presentation {
 
     /// Credential data.
     pub credentials: Vec<serde_json::Value>,
+    
+    /// Transfer ID that this presentation is related to (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub transfer_id: Option<String>,
+    
+    /// IVMS101 data according to TAIP-10 (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ivms101_data: Option<crate::ivms101::IVMS101Data>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
