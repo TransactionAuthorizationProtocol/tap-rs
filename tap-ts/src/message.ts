@@ -92,6 +92,9 @@ export interface RejectData {
   /** Optional note */
   note?: string;
   
+  /** Timestamp when the rejection was created */
+  timestamp?: string;
+  
   /** Optional metadata */
   metadata?: Record<string, unknown>;
 }
@@ -504,7 +507,7 @@ export class Message {
    * @returns This message for chaining
    * @throws If the message type is not Authorize
    */
-  setAuthorizeData(data: { transfer_id: string; note?: string; metadata?: Record<string, unknown> }): this {
+  setAuthorizeData(data: { transfer_id: string; note?: string; timestamp?: string; metadata?: Record<string, unknown> }): this {
     if (this.type !== MessageType.AUTHORIZE) {
       throw new TapError({
         type: ErrorType.INVALID_MESSAGE_TYPE,
@@ -532,7 +535,7 @@ export class Message {
    * 
    * @returns Authorize data object or undefined if not set or not an Authorize message
    */
-  getAuthorizeData(): { transfer_id: string; note?: string; metadata?: Record<string, unknown> } | undefined {
+  getAuthorizeData(): { transfer_id: string; note?: string; timestamp?: string; metadata?: Record<string, unknown> } | undefined {
     if (this.type !== MessageType.AUTHORIZE) {
       return undefined;
     }
@@ -542,7 +545,7 @@ export class Message {
       try {
         const wasmAuthorizeData = this.wasmMessage.get_authorize_body();
         if (wasmAuthorizeData) {
-          return wasmAuthorizeData as { transfer_id: string; note?: string; metadata?: Record<string, unknown> };
+          return wasmAuthorizeData as { transfer_id: string; note?: string; timestamp?: string; metadata?: Record<string, unknown> };
         }
       } catch (error) {
         console.warn("Error getting authorize body from WASM", error);
@@ -648,7 +651,7 @@ export class Message {
    * @returns This message for chaining
    * @throws If the message type is not Settle
    */
-  setSettleData(data: { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> }): this {
+  setSettleData(data: { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; timestamp?: string; metadata?: Record<string, unknown> }): this {
     if (this.type !== MessageType.SETTLE) {
       throw new TapError({
         type: ErrorType.INVALID_MESSAGE_TYPE,
@@ -676,7 +679,7 @@ export class Message {
    * 
    * @returns Settle data object or undefined if not set or not a Settle message
    */
-  getSettleData(): { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> } | undefined {
+  getSettleData(): { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; timestamp?: string; metadata?: Record<string, unknown> } | undefined {
     if (this.type !== MessageType.SETTLE) {
       return undefined;
     }
@@ -686,7 +689,7 @@ export class Message {
       try {
         const wasmSettleData = this.wasmMessage.get_settle_body();
         if (wasmSettleData) {
-          return wasmSettleData as { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> };
+          return wasmSettleData as { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; timestamp?: string; metadata?: Record<string, unknown> };
         }
       } catch (error) {
         console.warn("Error getting settle body from WASM", error);

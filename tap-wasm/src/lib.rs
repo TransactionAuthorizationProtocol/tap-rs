@@ -132,6 +132,9 @@ pub struct Authorize {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 
+    /// Timestamp when the authorization was created.
+    pub timestamp: String,
+
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
@@ -152,6 +155,9 @@ pub struct Reject {
     /// Optional note about the rejection.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+
+    /// Timestamp when the rejection was created.
+    pub timestamp: String,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -178,6 +184,9 @@ pub struct Settle {
     /// Optional note about the settlement.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+
+    /// Timestamp when the settlement was created.
+    pub timestamp: String,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
