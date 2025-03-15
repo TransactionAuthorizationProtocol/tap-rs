@@ -30,13 +30,17 @@ async fn create_test_message(
             "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
         )
         .unwrap(),
-        originator: tap_msg::message::Agent {
+        originator: tap_msg::Participant {
             id: from_did.to_string(),
             role: Some("originator".to_string()),
+            policies: None,
+            lei: None,
         },
-        beneficiary: Some(tap_msg::message::Agent {
+        beneficiary: Some(tap_msg::Participant {
             id: to_did.to_string(),
             role: Some("beneficiary".to_string()),
+            policies: None,
+            lei: None,
         }),
         amount: format!("{}.00", index),
         agents: vec![],

@@ -18,6 +18,9 @@ interface Participant {
   
   /** Optional role of the participant in the transaction */
   role?: string;
+
+  /** Optional Legal Entity Identifier */
+  lei?: string;
 }
 
 /**
@@ -62,6 +65,8 @@ export enum MessageType {
   AUTHORIZE = 'https://tap.rsvp/schema/1.0#Authorize',
   REJECT = 'https://tap.rsvp/schema/1.0#Reject',
   SETTLE = 'https://tap.rsvp/schema/1.0#Settle',
+  CANCEL = 'https://tap.rsvp/schema/1.0#Cancel',
+  REVERT = 'https://tap.rsvp/schema/1.0#Revert',
   // Agent management message types (TAIP-5)
   ADD_AGENTS = 'https://tap.rsvp/schema/1.0#AddAgents',
   REPLACE_AGENT = 'https://tap.rsvp/schema/1.0#ReplaceAgent',
@@ -96,6 +101,69 @@ export interface RejectData {
   timestamp?: string;
   
   /** Optional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-4 Cancel data
+ */
+export interface CancelData {
+  /** ID of the transfer being cancelled */
+  transfer_id: string;
+  
+  /** Optional reason for cancellation */
+  reason?: string;
+  
+  /** Optional note */
+  note?: string;
+  
+  /** Timestamp when the cancellation was created */
+  timestamp: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-4 Authorize data
+ */
+export interface AuthorizeData {
+  /** ID of the transfer being authorized */
+  transfer_id: string;
+  
+  /** Optional note */
+  note?: string;
+  
+  /** Timestamp when the authorization was created */
+  timestamp?: string;
+  
+  /** Optional settlement address in CAIP-10 format */
+  settlement_address?: string;
+  
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Structure for TAIP-4 Revert data
+ */
+export interface RevertData {
+  /** ID of the transfer being reverted */
+  transfer_id: string;
+  
+  /** Settlement address in CAIP-10 format to return the funds to */
+  settlement_address: string;
+  
+  /** Reason for the reversal request */
+  reason: string;
+  
+  /** Optional note */
+  note?: string;
+  
+  /** Timestamp when the revert request was created */
+  timestamp: string;
+  
+  /** Additional metadata */
   metadata?: Record<string, unknown>;
 }
 
@@ -507,7 +575,7 @@ export class Message {
    * @returns This message for chaining
    * @throws If the message type is not Authorize
    */
-  setAuthorizeData(data: { transfer_id: string; note?: string; timestamp?: string; metadata?: Record<string, unknown> }): this {
+  setAuthorizeData(data: AuthorizeData): this {
     if (this.type !== MessageType.AUTHORIZE) {
       throw new TapError({
         type: ErrorType.INVALID_MESSAGE_TYPE,
@@ -535,7 +603,7 @@ export class Message {
    * 
    * @returns Authorize data object or undefined if not set or not an Authorize message
    */
-  getAuthorizeData(): { transfer_id: string; note?: string; timestamp?: string; metadata?: Record<string, unknown> } | undefined {
+  getAuthorizeData(): AuthorizeData | undefined {
     if (this.type !== MessageType.AUTHORIZE) {
       return undefined;
     }
@@ -545,7 +613,7 @@ export class Message {
       try {
         const wasmAuthorizeData = this.wasmMessage.get_authorize_body();
         if (wasmAuthorizeData) {
-          return wasmAuthorizeData as { transfer_id: string; note?: string; timestamp?: string; metadata?: Record<string, unknown> };
+          return wasmAuthorizeData as AuthorizeData;
         }
       } catch (error) {
         console.warn("Error getting authorize body from WASM", error);
@@ -557,7 +625,16 @@ export class Message {
       return undefined;
     }
     
-    return this._data as { transfer_id: string; note?: string; metadata?: Record<string, unknown> };
+    // Create a direct copy of all authorize data fields
+    return {
+      transfer_id: String(this._data.transfer_id),
+      note: this._data.note !== undefined ? String(this._data.note) : undefined,
+      timestamp: this._data.timestamp !== undefined ? String(this._data.timestamp) : undefined,
+      settlement_address: this._data.settlement_address !== undefined ? String(this._data.settlement_address) : undefined,
+      metadata: this._data.metadata !== undefined && typeof this._data.metadata === 'object' 
+        ? { ...this._data.metadata as Record<string, unknown> } 
+        : undefined
+    };
   }
   
   /**
@@ -702,6 +779,175 @@ export class Message {
     }
     
     return this._data as { transfer_id: string; transaction_id: string; transaction_hash?: string; block_height?: number; note?: string; metadata?: Record<string, unknown> };
+  }
+
+  /**
+   * Set Cancel data according to TAIP-4
+   * 
+   * @param data - Cancel data object
+   * @returns This message for chaining
+   * @throws If the message type is not Cancel
+   */
+  setCancelData(data: CancelData): this {
+    if (this.type !== MessageType.CANCEL) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set Cancel data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_cancel_body) {
+      try {
+        this.wasmMessage.set_cancel_body(data);
+      } catch (error) {
+        console.warn("Error setting cancel body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get Cancel data for TAIP-4 Cancel messages
+   * 
+   * @returns Cancel data object or undefined if not set or not a Cancel message
+   */
+  getCancelData(): CancelData | undefined {
+    if (this.type !== MessageType.CANCEL) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_cancel_body) {
+      try {
+        const wasmCancelData = this.wasmMessage.get_cancel_body();
+        if (wasmCancelData) {
+          return wasmCancelData as CancelData;
+        }
+      } catch (error) {
+        console.warn("Error getting cancel body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields
+    if (typeof this._data.transfer_id !== 'string' || typeof this._data.timestamp !== 'string') {
+      return undefined;
+    }
+    
+    // Ensure the data has the required fields for CancelData before casting
+    const data: CancelData = {
+      transfer_id: this._data.transfer_id,
+      timestamp: this._data.timestamp,
+      metadata: {}
+    };
+    
+    // Handle optional fields
+    if (typeof this._data.reason === 'string') {
+      data.reason = this._data.reason;
+    }
+    
+    if (typeof this._data.note === 'string') {
+      data.note = this._data.note;
+    }
+    
+    // Handle metadata if it exists and is an object
+    if (this._data.metadata && typeof this._data.metadata === 'object') {
+      data.metadata = this._data.metadata as Record<string, unknown>;
+    } else {
+      // Initialize an empty metadata object if needed for test assertions
+      data.metadata = {};
+    }
+    
+    return data;
+  }
+
+  /**
+   * Set Revert data according to TAIP-4
+   * 
+   * @param data - Revert data object
+   * @returns This message for chaining
+   * @throws If the message type is not Revert
+   */
+  setRevertData(data: RevertData): this {
+    if (this.type !== MessageType.REVERT) {
+      throw new TapError({
+        type: ErrorType.INVALID_MESSAGE_TYPE,
+        message: `Cannot set Revert data on ${this.type} message`,
+      });
+    }
+    
+    // Store the data
+    Object.assign(this._data, data);
+    
+    // Use the WASM implementation if available
+    if (this.wasmMessage.set_revert_body) {
+      try {
+        this.wasmMessage.set_revert_body(data);
+      } catch (error) {
+        console.warn("Error setting revert body in WASM", error);
+      }
+    }
+    
+    return this;
+  }
+  
+  /**
+   * Get Revert data for TAIP-4 Revert messages
+   * 
+   * @returns Revert data object or undefined if not set or not a Revert message
+   */
+  getRevertData(): RevertData | undefined {
+    if (this.type !== MessageType.REVERT) {
+      return undefined;
+    }
+    
+    // Try to get from WASM first
+    if (this.wasmMessage.get_revert_body) {
+      try {
+        const wasmRevertData = this.wasmMessage.get_revert_body();
+        if (wasmRevertData) {
+          return wasmRevertData as RevertData;
+        }
+      } catch (error) {
+        console.warn("Error getting revert body from WASM", error);
+      }
+    }
+    
+    // Check if we have the minimum required fields
+    if (typeof this._data.transfer_id !== 'string' || 
+        typeof this._data.settlement_address !== 'string' || 
+        typeof this._data.reason !== 'string' || 
+        typeof this._data.timestamp !== 'string') {
+      return undefined;
+    }
+    
+    // Ensure the data has the required fields for RevertData before casting
+    const data: RevertData = {
+      transfer_id: this._data.transfer_id,
+      settlement_address: this._data.settlement_address,
+      reason: this._data.reason,
+      timestamp: this._data.timestamp,
+      metadata: {}
+    };
+    
+    // Handle optional fields
+    if (typeof this._data.note === 'string') {
+      data.note = this._data.note;
+    }
+    
+    // Handle metadata if it exists and is an object
+    if (this._data.metadata && typeof this._data.metadata === 'object') {
+      data.metadata = this._data.metadata as Record<string, unknown>;
+    } else {
+      // Initialize an empty metadata object if needed for test assertions
+      data.metadata = {};
+    }
+    
+    return data;
   }
 
   /**

@@ -2,10 +2,12 @@
  * Tests for Agent implementation
  */
 
-import { assertEquals, assertExists, assertThrows } from "https://deno.land/std/testing/asserts.ts";
+/// <reference path="../deno.d.ts" />
+import { assertEquals, assertExists, assertThrows } from "https://deno.land/std@0.177.0/testing/asserts.ts";
 import { Agent } from "../src/agent.ts";
 import { Message, MessageType } from "../src/message.ts";
 
+// @ts-ignore: Deno namespace is available at runtime
 Deno.test("Agent - Create agent", () => {
   const agent = new Agent({
     did: "did:example:123",
@@ -16,6 +18,7 @@ Deno.test("Agent - Create agent", () => {
   assertEquals(agent.isReady, true);
 });
 
+// @ts-ignore: Deno namespace is available at runtime
 Deno.test("Agent - Create message", () => {
   const agent = new Agent({
     did: "did:example:123",
@@ -27,6 +30,7 @@ Deno.test("Agent - Create message", () => {
   assertEquals(message.type, MessageType.TRANSFER); 
 });
 
+// @ts-ignore: Deno namespace is available at runtime
 Deno.test("Agent - Handle transfer message", async () => {
   const agent = new Agent({
     did: "did:example:123",
@@ -73,6 +77,7 @@ Deno.test("Agent - Handle transfer message", async () => {
   assertEquals(requestReceived, true);
 });
 
+// @ts-ignore: Deno namespace is available at runtime
 Deno.test("Agent - Handle authorize message", async () => {
   const agent = new Agent({
     did: "did:example:123",
@@ -108,6 +113,7 @@ Deno.test("Agent - Handle authorize message", async () => {
   assertEquals(responseReceived, true);
 });
 
+// @ts-ignore: Deno namespace is available at runtime
 Deno.test("Agent - Subscribe to messages", async () => {
   const agent = new Agent({
     did: "did:example:123",
@@ -129,9 +135,140 @@ Deno.test("Agent - Subscribe to messages", async () => {
   
   // Verify the subscriber was called
   assertExists(lastMessage);
-  assertEquals((lastMessage as Message).type, MessageType.ERROR);
+  assertEquals(lastMessage && (lastMessage as Message).type, MessageType.ERROR);
 });
 
+// @ts-ignore: Deno namespace is available at runtime
+Deno.test("Agent - Handle cancel message", async () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
+  
+  // Register handler for cancel message
+  let cancelReceived = false;
+  agent.registerHandler(MessageType.CANCEL, async (message) => {
+    cancelReceived = true;
+    
+    // Verify the message
+    assertEquals((message as Message).type, MessageType.CANCEL);
+    
+    const cancelData = (message as Message).getCancelData();
+    assertEquals(cancelData?.transfer_id, "mocked-transfer-id");
+    assertEquals(cancelData?.reason, "User requested cancellation");
+    assertEquals(cancelData?.note, "Test cancellation");
+  });
+  
+  // Create a cancel message
+  const message = new Message({
+    type: MessageType.CANCEL,
+  });
+  
+  const timestamp = new Date().toISOString();
+  message.setCancelData({
+    transfer_id: "mocked-transfer-id",
+    reason: "User requested cancellation",
+    note: "Test cancellation",
+    timestamp,
+    metadata: { test: "value" }
+  });
+  
+  // Process the message
+  await agent.processMessage(message);
+  
+  // Verify the handler was called
+  assertEquals(cancelReceived, true);
+});
+
+// @ts-ignore: Deno namespace is available at runtime
+Deno.test("Agent - Handle revert message", async () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
+  
+  // Register handler for revert message
+  let revertReceived = false;
+  agent.registerHandler(MessageType.REVERT, async (message) => {
+    revertReceived = true;
+    
+    // Verify the message
+    assertEquals((message as Message).type, MessageType.REVERT);
+    
+    const revertData = (message as Message).getRevertData();
+    assertEquals(revertData?.transfer_id, "mocked-transfer-id");
+    assertEquals(revertData?.settlement_address, "eip155:1:0x1234567890123456789012345678901234567890");
+    assertEquals(revertData?.reason, "Failed compliance check");
+    assertEquals(revertData?.note, "Test revert");
+  });
+  
+  // Create a revert message
+  const message = new Message({
+    type: MessageType.REVERT,
+  });
+  
+  const timestamp = new Date().toISOString();
+  message.setRevertData({
+    transfer_id: "mocked-transfer-id",
+    settlement_address: "eip155:1:0x1234567890123456789012345678901234567890",
+    reason: "Failed compliance check",
+    note: "Test revert",
+    timestamp,
+    metadata: { test: "value" }
+  });
+  
+  // Process the message
+  await agent.processMessage(message);
+  
+  // Verify the handler was called
+  assertEquals(revertReceived, true);
+});
+
+// @ts-ignore: Deno namespace is available at runtime
+Deno.test("Agent - Create message with Cancel and Revert data", () => {
+  const agent = new Agent({
+    did: "did:example:123",
+  });
+  
+  // Test creating a Cancel message
+  const timestamp = new Date().toISOString();
+  const cancelMessage = agent.createMessage(MessageType.CANCEL, {
+    cancelData: {
+      transfer_id: "test-transfer-id",
+      reason: "User requested cancellation",
+      note: "Cancel via agent",
+      timestamp,
+      metadata: { test: "value" }
+    }
+  });
+  
+  assertExists(cancelMessage);
+  assertEquals(cancelMessage.type, MessageType.CANCEL);
+  const cancelData = cancelMessage.getCancelData();
+  assertExists(cancelData);
+  assertEquals(cancelData?.transfer_id, "test-transfer-id");
+  assertEquals(cancelData?.reason, "User requested cancellation");
+  
+  // Test creating a Revert message
+  const revertMessage = agent.createMessage(MessageType.REVERT, {
+    revertData: {
+      transfer_id: "test-transfer-id",
+      settlement_address: "eip155:1:0x1234567890123456789012345678901234567890",
+      reason: "Failed compliance check",
+      note: "Revert via agent",
+      timestamp,
+      metadata: { test: "value" }
+    }
+  });
+  
+  assertExists(revertMessage);
+  assertEquals(revertMessage.type, MessageType.REVERT);
+  const revertData = revertMessage.getRevertData();
+  assertExists(revertData);
+  assertEquals(revertData?.transfer_id, "test-transfer-id");
+  assertEquals(revertData?.settlement_address, "eip155:1:0x1234567890123456789012345678901234567890");
+  assertEquals(revertData?.reason, "Failed compliance check");
+});
+
+// @ts-ignore: Deno namespace is available at runtime
 Deno.test("Agent - Handler registration and unregistration", () => {
   const agent = new Agent({
     did: "did:example:123",
@@ -156,6 +293,7 @@ Deno.test("Agent - Handler registration and unregistration", () => {
   assertEquals(agent.hasHandler(MessageType.ERROR), false);
 });
 
+// @ts-ignore: Deno namespace is available at runtime
 Deno.test("Agent - Message handling", async () => {
   const agent = new Agent({
     did: "did:example:123",
@@ -177,5 +315,5 @@ Deno.test("Agent - Message handling", async () => {
   
   // Verify the handler was called
   assertExists(handlerMessage);
-  assertEquals((handlerMessage as Message).type, MessageType.ERROR);
+  assertEquals(handlerMessage && (handlerMessage as Message).type, MessageType.ERROR);
 });

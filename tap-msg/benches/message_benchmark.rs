@@ -26,11 +26,15 @@ fn create_transfer_body() -> Transfer {
     let originator = Participant {
         id: "did:example:alice".to_string(),
         role: Some("originator".to_string()),
+        policies: None,
+        lei: None,
     };
 
     let beneficiary = Participant {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
+        policies: None,
+        lei: None,
     };
 
     // Create asset ID properly - using a valid Ethereum address format
@@ -47,7 +51,7 @@ fn create_transfer_body() -> Transfer {
         originator,
         beneficiary: Some(beneficiary),
         amount: "10.00".to_string(),
-        participants: vec![],
+        agents: vec![],
         settlement_id: None,
         memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
@@ -59,6 +63,8 @@ fn create_authorize_body() -> Authorize {
     Authorize {
         transfer_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        settlement_address: None,
         metadata: HashMap::new(),
     }
 }
@@ -70,6 +76,7 @@ fn create_reject_body() -> Reject {
         code: "COMPLIANCE_FAILURE".to_string(),
         description: "Unable to comply with transfer requirements".to_string(),
         note: Some("Further documentation needed".to_string()),
+        timestamp: chrono::Utc::now().to_rfc3339(),
         metadata: HashMap::new(),
     }
 }
@@ -82,6 +89,7 @@ fn create_settle_body() -> Settle {
         transaction_hash: Some("0xabcdef1234567890".to_string()),
         block_height: Some(12345678),
         note: Some("Transaction completed".to_string()),
+        timestamp: chrono::Utc::now().to_rfc3339(),
         metadata: HashMap::new(),
     }
 }

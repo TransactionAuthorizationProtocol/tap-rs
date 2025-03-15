@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use tap_msg::message::{
     Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
-    TapMessageBody, UpdatePolicies,
+    TapMessageBody, TapMessage, UpdatePolicies,
 };
 
 /// Test creating a participant with policies
@@ -22,6 +22,7 @@ fn test_participant_with_policies() {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
         policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
+        lei: None,
     };
 
     // Verify the policy is correctly included
@@ -174,5 +175,101 @@ fn test_all_policy_types() {
         assert_ne!(policy.nonce, 0);
     } else {
         panic!("Expected RequireProofOfControl policy");
+    }
+}
+
+/// Test DIDComm message conversion for UpdatePolicies
+#[test]
+fn test_update_policies_didcomm_conversion() {
+    // Create a presentation policy
+    let presentation_policy = RequirePresentation {
+        context: Some(vec!["https://www.w3.org/2018/credentials/v1".to_string()]),
+        from: Some(vec!["did:example:bob".to_string()]),
+        from_role: None,
+        from_agent: None,
+        about_party: Some("originator".to_string()),
+        about_agent: None,
+        purpose: Some("Please provide KYC credentials".to_string()),
+        presentation_definition: Some("https://example.com/presentations/kyc".to_string()),
+        credentials: None,
+    };
+
+    // Create a proof of control policy
+    let proof_policy = RequireProofOfControl {
+        from: Some(vec!["did:example:charlie".to_string()]),
+        from_role: None,
+        from_agent: None,
+        nonce: 12345678,
+        purpose: Some("Please prove control of your account".to_string()),
+    };
+
+    // Create the UpdatePolicies message with multiple policies
+    let original_update = UpdatePolicies {
+        transfer_id: "transfer_12345".to_string(),
+        policies: vec![
+            Policy::RequirePresentation(presentation_policy),
+            Policy::RequireProofOfControl(proof_policy),
+        ],
+        metadata: {
+            let mut map = HashMap::new();
+            map.insert(
+                "customField".to_string(),
+                serde_json::json!("custom value"),
+            );
+            map
+        },
+    };
+
+    // Convert to DIDComm message
+    let didcomm_message = original_update.to_didcomm().expect("Failed to convert to DIDComm");
+
+    // Debug: Print the actual body of the DIDComm message
+    println!("DIDComm message body: {}", serde_json::to_string_pretty(&didcomm_message.body).unwrap());
+
+    // Check that the message type is correctly set
+    assert_eq!(
+        didcomm_message.get_tap_type(),
+        Some("https://tap.rsvp/schema/1.0#updatepolicies".to_string())
+    );
+
+    // Convert back from DIDComm
+    let roundtrip_update = UpdatePolicies::from_didcomm(&didcomm_message)
+        .expect("Failed to convert from DIDComm");
+
+    // Check that the message data is preserved
+    assert_eq!(roundtrip_update.transfer_id, original_update.transfer_id);
+    assert_eq!(roundtrip_update.policies.len(), original_update.policies.len());
+    
+    // Check metadata
+    assert_eq!(
+        roundtrip_update.metadata.get("customField"),
+        original_update.metadata.get("customField")
+    );
+
+    // Check first policy is presentation policy
+    match &roundtrip_update.policies[0] {
+        Policy::RequirePresentation(policy) => {
+            assert_eq!(
+                policy.about_party.as_ref().unwrap(),
+                "originator"
+            );
+            assert_eq!(
+                policy.purpose.as_ref().unwrap(),
+                "Please provide KYC credentials"
+            );
+        },
+        _ => panic!("Expected RequirePresentation policy"),
+    }
+
+    // Check second policy is proof of control policy
+    match &roundtrip_update.policies[1] {
+        Policy::RequireProofOfControl(policy) => {
+            assert_eq!(policy.nonce, 12345678);
+            assert_eq!(
+                policy.from.as_ref().unwrap()[0],
+                "did:example:charlie"
+            );
+        },
+        _ => panic!("Expected RequireProofOfControl policy"),
     }
 }

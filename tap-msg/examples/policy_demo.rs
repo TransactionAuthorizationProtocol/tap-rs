@@ -42,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Policy::RequireAuthorization(auth_policy),
             Policy::RequirePresentation(presentation_policy),
         ]),
+        lei: None,
     };
 
     println!("Participant ID: {}", participant.id);

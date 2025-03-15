@@ -41,6 +41,7 @@ impl Participant {
             id: id.to_string(),
             role: None,
             policies: None,
+            lei: None,
         }
     }
 
@@ -50,6 +51,7 @@ impl Participant {
             id: id.to_string(),
             role: Some(role.to_string()),
             policies: None,
+            lei: None,
         }
     }
 }
@@ -148,6 +150,7 @@ impl Authorizable for Transfer {
             transfer_id: self.message_id(),
             note,
             timestamp,
+            settlement_address: None,
             metadata,
         }
     }
@@ -224,7 +227,7 @@ impl Authorizable for Transfer {
             context: Some("https://tap.rsvp/schema/1.0".to_string()),
         }
     }
-    
+
     fn update_policies(
         &self,
         policies: Vec<Policy>,
@@ -281,25 +284,25 @@ impl Authorizable for Transfer {
 pub struct RequestPresentation {
     /// Transfer ID that this request is related to.
     pub transfer_id: String,
-    
+
     /// Presentation definition identifier or URI.
     pub presentation_definition: String,
-    
+
     /// Description of the request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
-    
+
     /// Challenge to be included in the response.
     pub challenge: String,
-    
+
     /// Whether the request is for the originator's information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub for_originator: Option<bool>,
-    
+
     /// Whether the request is for the beneficiary's information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub for_beneficiary: Option<bool>,
-    
+
     /// Note for the request.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -317,14 +320,10 @@ pub struct Presentation {
 
     /// Credential data.
     pub credentials: Vec<serde_json::Value>,
-    
+
     /// Transfer ID that this presentation is related to (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transfer_id: Option<String>,
-    
-    /// IVMS101 data according to TAIP-10 (optional).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub ivms101_data: Option<crate::ivms101::IVMS101Data>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -343,6 +342,10 @@ pub struct Authorize {
 
     /// Timestamp when the authorization was created.
     pub timestamp: String,
+
+    /// Optional settlement address in CAIP-10 format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settlement_address: Option<String>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -395,6 +398,52 @@ pub struct Settle {
     pub note: Option<String>,
 
     /// Timestamp when the settlement was created.
+    pub timestamp: String,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Cancel message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Cancel {
+    /// ID of the transfer being cancelled.
+    pub transfer_id: String,
+
+    /// Optional reason for cancellation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+
+    /// Optional note.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Timestamp when the cancellation was created.
+    pub timestamp: String,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Revert message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Revert {
+    /// ID of the transfer being reverted.
+    pub transfer_id: String,
+
+    /// Settlement address in CAIP-10 format to return the funds to.
+    pub settlement_address: String,
+
+    /// Reason for the reversal request.
+    pub reason: String,
+
+    /// Optional note.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Timestamp when the revert request was created.
     pub timestamp: String,
 
     /// Additional metadata.
@@ -533,6 +582,7 @@ impl ConfirmRelationship {
 ///     id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
 ///     role: Some("new_role".to_string()),
 ///     policies: None,
+///     lei: None,
 /// };
 ///
 /// // Create an UpdateParty message
@@ -552,22 +602,22 @@ impl ConfirmRelationship {
 pub struct UpdateParty {
     /// ID of the transaction this update relates to.
     pub transfer_id: String,
-    
+
     /// Type of party being updated (e.g., 'originator', 'beneficiary').
     #[serde(rename = "partyType")]
     pub party_type: String,
-    
+
     /// Updated party information.
     pub party: Participant,
-    
+
     /// Optional note regarding the update.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-    
+
     /// Additional metadata for the update.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
-    
+
     /// Optional JSON-LD context.
     #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
@@ -585,21 +635,21 @@ impl UpdateParty {
             context: Some("https://tap.rsvp/schema/1.0".to_string()),
         }
     }
-    
+
     /// Validates the UpdateParty message body.
     pub fn validate(&self) -> Result<()> {
         if self.transfer_id.is_empty() {
             return Err(Error::Validation("transfer_id cannot be empty".to_string()));
         }
-        
+
         if self.party_type.is_empty() {
             return Err(Error::Validation("partyType cannot be empty".to_string()));
         }
-        
+
         if self.party.id.is_empty() {
             return Err(Error::Validation("party.id cannot be empty".to_string()));
         }
-        
+
         Ok(())
     }
 }
@@ -608,11 +658,11 @@ impl TapMessageBody for UpdateParty {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#updateparty"
     }
-    
+
     fn validate(&self) -> Result<()> {
         self.validate()
     }
-    
+
     fn to_didcomm(&self) -> Result<Message> {
         // Serialize the UpdateParty to a JSON value
         let mut body_json =
@@ -647,47 +697,48 @@ impl TapMessageBody for UpdateParty {
 
         Ok(message)
     }
-    
+
     fn from_didcomm(message: &Message) -> Result<Self> {
-        let body = message.body.as_object().ok_or_else(|| {
-            Error::Validation("Message body is not a JSON object".to_string())
-        })?;
+        let body = message
+            .body
+            .as_object()
+            .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
 
         let transfer_id = body
             .get("transfer_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::Validation("Missing or invalid transfer_id".to_string())
-            })?;
+            .ok_or_else(|| Error::Validation("Missing or invalid transfer_id".to_string()))?;
 
         let party_type = body
             .get("partyType")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::Validation("Missing or invalid partyType".to_string())
-            })?;
+            .ok_or_else(|| Error::Validation("Missing or invalid partyType".to_string()))?;
 
-        let party = body.get("party").ok_or_else(|| {
-            Error::Validation("Missing party information".to_string())
-        })?;
+        let party = body
+            .get("party")
+            .ok_or_else(|| Error::Validation("Missing party information".to_string()))?;
 
         let party: Participant = serde_json::from_value(party.clone())
             .map_err(|e| Error::SerializationError(e.to_string()))?;
 
-        let note = body.get("note").and_then(|v| v.as_str()).map(ToString::to_string);
-        
+        let note = body
+            .get("note")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+
         // Get context if available
-        let context = body.get("@context").and_then(|v| v.as_str()).map(ToString::to_string);
+        let context = body
+            .get("@context")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
 
         let mut metadata = HashMap::new();
         for (k, v) in body.iter() {
-            if !["transfer_id", "partyType", "party", "note", "@context"]
-                .contains(&k.as_str())
-            {
+            if !["transfer_id", "partyType", "party", "note", "@context"].contains(&k.as_str()) {
                 metadata.insert(k.clone(), v.clone());
             }
         }
-        
+
         let update_party = Self {
             transfer_id: transfer_id.to_string(),
             party_type: party_type.to_string(),
@@ -696,9 +747,9 @@ impl TapMessageBody for UpdateParty {
             metadata,
             context,
         };
-        
+
         update_party.validate()?;
-        
+
         Ok(update_party)
     }
 }
@@ -805,11 +856,6 @@ impl TapMessageBody for UpdatePolicies {
         // Remove the @type field if present as we no longer need it in our struct
         if let Some(body_obj) = body_json.as_object_mut() {
             body_obj.remove("@type");
-
-            // Convert "transferId" to "transfer_id" if needed
-            if let Some(transfer_id) = body_obj.remove("transferId") {
-                body_obj.insert("transfer_id".to_string(), transfer_id);
-            }
         }
 
         // Deserialize the body
@@ -862,7 +908,7 @@ pub trait Authorizable {
         note: Option<String>,
         metadata: HashMap<String, serde_json::Value>,
     ) -> Authorize;
-    
+
     /// Confirms a relationship between agents, creating a ConfirmRelationship message as a response
     ///
     /// # Arguments
@@ -1223,7 +1269,7 @@ impl TapMessageBody for ConfirmRelationship {
                 "@type".to_string(),
                 serde_json::Value::String(Self::message_type().to_string()),
             );
-            
+
             // Change for_id to "for" in the serialized object
             if let Some(for_id) = body_obj.remove("for_id") {
                 body_obj.insert("for".to_string(), for_id);
@@ -1253,32 +1299,34 @@ impl TapMessageBody for ConfirmRelationship {
     }
 
     fn from_didcomm(message: &Message) -> Result<Self> {
-        let body = message.body.as_object().ok_or_else(|| {
-            Error::Validation("Message body is not a JSON object".to_string())
-        })?;
+        let body = message
+            .body
+            .as_object()
+            .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
 
         let transfer_id = body
             .get("transfer_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::Validation("Missing or invalid transfer_id".to_string())
-            })?;
+            .ok_or_else(|| Error::Validation("Missing or invalid transfer_id".to_string()))?;
 
-        let agent_id = body.get("agent_id").and_then(|v| v.as_str()).ok_or_else(|| {
-            Error::Validation("Missing or invalid agent_id".to_string())
-        })?;
+        let agent_id = body
+            .get("agent_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Validation("Missing or invalid agent_id".to_string()))?;
 
-        let for_id = body.get("for").and_then(|v| v.as_str()).ok_or_else(|| {
-            Error::Validation("Missing or invalid for".to_string())
-        })?;
+        let for_id = body
+            .get("for")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Validation("Missing or invalid for".to_string()))?;
 
-        let role = body.get("role").and_then(|v| v.as_str()).map(ToString::to_string);
+        let role = body
+            .get("role")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
 
         let mut metadata = HashMap::new();
         for (k, v) in body.iter() {
-            if !["transfer_id", "agent_id", "for", "role"]
-                .contains(&k.as_str())
-            {
+            if !["transfer_id", "agent_id", "for", "role"].contains(&k.as_str()) {
                 metadata.insert(k.clone(), v.clone());
             }
         }
@@ -1328,6 +1376,7 @@ impl Authorizable for Message {
             transfer_id: self.id.clone(),
             note,
             timestamp,
+            settlement_address: None,
             metadata,
         }
     }
@@ -1425,7 +1474,7 @@ impl Authorizable for Message {
             metadata,
         }
     }
-    
+
     fn update_party(
         &self,
         party_type: String,

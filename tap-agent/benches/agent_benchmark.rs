@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tap_agent::did::MultiResolver;
 use tap_agent::{Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker};
 use tap_caip::AssetId;
-use tap_msg::message::{Agent as MessageAgent, Transfer};
+use tap_msg::{Participant, message::Transfer};
 
 /// Create a test agent with a fresh keypair
 async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
@@ -57,15 +57,19 @@ async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
 
 /// Create a test transfer message
 async fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
-    // Create originator and beneficiary agents
-    let originator = MessageAgent {
+    // Create originator and beneficiary participants
+    let originator = Participant {
         id: from_did.to_string(),
         role: Some("originator".to_string()),
+        policies: None,
+        lei: None,
     };
 
-    let beneficiary = MessageAgent {
+    let beneficiary = Participant {
         id: to_did.to_string(),
         role: Some("beneficiary".to_string()),
+        policies: None,
+        lei: None,
     };
 
     // Create a transfer body

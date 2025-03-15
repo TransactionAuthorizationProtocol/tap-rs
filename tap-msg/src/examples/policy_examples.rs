@@ -41,6 +41,7 @@ pub fn create_participant_with_policies_example() -> Result<Participant> {
     let participant = Participant {
         id: "did:example:charlie".to_string(),
         role: Some("beneficiary".to_string()),
+        lei: None,
         policies: Some(vec![
             Policy::RequireAuthorization(auth_policy),
             Policy::RequirePresentation(presentation_policy),
@@ -112,6 +113,7 @@ pub fn policy_workflow_example() -> Result<()> {
         id: beneficiary_did.to_string(),
         role: Some("beneficiary".to_string()),
         policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
+        lei: None,
     };
     println!("  Created beneficiary with policies: {:?}", beneficiary);
 
@@ -241,11 +243,13 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
             id: originator_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
+            lei: None,
         },
         beneficiary: Some(Participant {
             id: beneficiary_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
+            lei: None,
         }),
         amount: "100.00".to_string(),
         agents: vec![
@@ -253,11 +257,13 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
                 id: sender_vasp_did.to_string(),
                 role: Some("sender_vasp".to_string()),
                 policies: None,
+                lei: None,
             },
             Participant {
                 id: receiver_vasp_did.to_string(),
                 role: Some("receiver_vasp".to_string()),
                 policies: None,
+                lei: None,
             },
         ],
         settlement_id: None,
@@ -300,6 +306,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
         transfer_id: transfer_message.id.clone(),
         note: Some("Policies accepted".to_string()),
         timestamp: get_current_time()?.to_string(),
+        settlement_address: None,
         metadata: HashMap::new(),
     };
 

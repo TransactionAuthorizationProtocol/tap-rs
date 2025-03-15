@@ -27,11 +27,13 @@ fn create_test_transfer() -> Result<Message> {
             id: originator_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
+            lei: None,
         },
         beneficiary: Some(Participant {
             id: beneficiary_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
+            lei: None,
         }),
         amount: "100.00".to_string(),
         agents: vec![
@@ -39,11 +41,13 @@ fn create_test_transfer() -> Result<Message> {
                 id: "did:example:sender_vasp".to_string(),
                 role: Some("sender_vasp".to_string()),
                 policies: None,
+                lei: None,
             },
             Participant {
                 id: receiver_vasp_did.to_string(),
                 role: Some("receiver_vasp".to_string()),
                 policies: None,
+                lei: None,
             },
         ],
         settlement_id: None,
@@ -127,6 +131,7 @@ fn test_add_agents() -> Result<()> {
         id: new_agent_did.to_string(),
         role: Some("observer".to_string()),
         policies: None,
+        lei: None,
     };
 
     // Use the Authorizable trait to create an AddAgents message
@@ -159,6 +164,7 @@ fn test_replace_agent() -> Result<()> {
         id: replacement_agent_did.to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
+        lei: None,
     };
 
     // Use the Authorizable trait to create a ReplaceAgent message
@@ -278,6 +284,7 @@ fn test_reply_chain() -> Result<()> {
         transfer_id: transfer_message.id.clone(),
         note: Some("I authorize this transfer".to_string()),
         timestamp: get_current_time()?.to_string(),
+        settlement_address: None,
         metadata: HashMap::new(),
     };
 
@@ -291,6 +298,7 @@ fn test_reply_chain() -> Result<()> {
             id: "did:example:compliance".to_string(),
             role: Some("compliance".to_string()),
             policies: None,
+            lei: None,
         }],
         metadata: HashMap::new(),
     };

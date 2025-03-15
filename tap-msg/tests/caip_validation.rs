@@ -14,12 +14,14 @@ fn test_valid_transfer_body() {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
         policies: None,
+        lei: None,
     };
 
     let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
+        lei: None,
     };
 
     let body = Transfer {
@@ -50,12 +52,14 @@ fn test_transfer_with_empty_asset() {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
         policies: None,
+        lei: None,
     };
 
     let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
+        lei: None,
     };
 
     // Creating a body with valid values
@@ -83,12 +87,14 @@ fn test_transfer_with_empty_amount() {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
         policies: None,
+        lei: None,
     };
 
     let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
+        lei: None,
     };
 
     let body = Transfer {

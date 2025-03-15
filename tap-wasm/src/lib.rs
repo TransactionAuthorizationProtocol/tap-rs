@@ -69,7 +69,9 @@ impl fmt::Display for MessageType {
             MessageType::RemoveAgent => write!(f, "https://tap.rsvp/schema/1.0#RemoveAgent"),
             MessageType::UpdatePolicies => write!(f, "https://tap.rsvp/schema/1.0#UpdatePolicies"),
             MessageType::UpdateParty => write!(f, "https://tap.rsvp/schema/1.0#UpdateParty"),
-            MessageType::ConfirmRelationship => write!(f, "https://tap.rsvp/schema/1.0#confirmrelationship"),
+            MessageType::ConfirmRelationship => {
+                write!(f, "https://tap.rsvp/schema/1.0#confirmrelationship")
+            }
             MessageType::Error => write!(f, "https://tap.rsvp/schema/1.0#Error"),
             MessageType::Unknown => write!(f, "UNKNOWN"),
         }
@@ -135,6 +137,10 @@ pub struct Authorize {
     /// Timestamp when the authorization was created.
     pub timestamp: String,
 
+    /// Optional settlement address in CAIP-10 format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub settlement_address: Option<String>,
+
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
@@ -186,6 +192,52 @@ pub struct Settle {
     pub note: Option<String>,
 
     /// Timestamp when the settlement was created.
+    pub timestamp: String,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Cancel message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Cancel {
+    /// The ID of the transfer being cancelled.
+    pub transfer_id: String,
+
+    /// Optional reason for cancellation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+
+    /// Optional note.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Timestamp when the cancellation was created.
+    pub timestamp: String,
+
+    /// Additional metadata.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Revert message body (TAIP-4).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Revert {
+    /// The ID of the transfer being reverted.
+    pub transfer_id: String,
+
+    /// Settlement address in CAIP-10 format to return the funds to.
+    pub settlement_address: String,
+
+    /// Reason for the reversal request.
+    pub reason: String,
+
+    /// Optional note.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+
+    /// Timestamp when the revert request was created.
     pub timestamp: String,
 
     /// Additional metadata.
@@ -380,12 +432,58 @@ impl Message {
         Ok(())
     }
 
+    /// Sets a Cancel message body according to TAIP-4
+    pub fn set_cancel_body(&mut self, cancel_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a Cancel
+        let cancel_body: Cancel = serde_wasm_bindgen::from_value(cancel_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse cancel data: {}", e)))?;
+
+        // Convert to JSON value and store in body data
+        let json_value = serde_json::to_value(&cancel_body)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize cancel data: {}", e)))?;
+
+        self.body_data.insert("cancel".to_string(), json_value);
+
+        // Set the message type to Cancel and update the didcomm type
+        self.message_type = "Cancel".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Cancel", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = serde_json::json!(cancel_body);
+
+        Ok(())
+    }
+
+    /// Sets a Revert message body according to TAIP-4
+    pub fn set_revert_body(&mut self, revert_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a Revert
+        let revert_body: Revert = serde_wasm_bindgen::from_value(revert_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse revert data: {}", e)))?;
+
+        // Convert to JSON value and store in body data
+        let json_value = serde_json::to_value(&revert_body)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize revert data: {}", e)))?;
+
+        self.body_data.insert("revert".to_string(), json_value);
+
+        // Set the message type to Revert and update the didcomm type
+        self.message_type = "Revert".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#Revert", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = serde_json::json!(revert_body);
+
+        Ok(())
+    }
+
     /// Sets a presentation body for the message (TAIP-8)
     pub fn set_presentation_body(&mut self, presentation_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to a Presentation
         // Use a specific type to avoid never type fallback warnings
-        let presentation_body: serde_json::Value = serde_wasm_bindgen::from_value(presentation_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse presentation data: {}", e)))?;
+        let presentation_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(presentation_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse presentation data: {}", e))
+            })?;
 
         // Store the value directly in body_data
         self.body_data
@@ -410,7 +508,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse add agents data: {}", e)))?;
 
         // Store the value directly in body_data
-        self.body_data.insert("add_agents".to_string(), add_agents_body.clone());
+        self.body_data
+            .insert("add_agents".to_string(), add_agents_body.clone());
 
         // Set the message type to AddAgents and update the didcomm type
         self.message_type = "AddAgents".to_string();
@@ -450,8 +549,10 @@ impl Message {
     pub fn set_remove_agent_body(&mut self, remove_agent_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to a RemoveAgent
         // Use a specific type to avoid never type fallback warnings
-        let remove_agent_body: serde_json::Value = serde_wasm_bindgen::from_value(remove_agent_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse remove agent data: {}", e)))?;
+        let remove_agent_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(remove_agent_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse remove agent data: {}", e))
+            })?;
 
         // Store the value directly in body_data
         self.body_data
@@ -587,6 +688,52 @@ impl Message {
         JsValue::null()
     }
 
+    /// Gets the cancel body data
+    pub fn get_cancel_body(&self) -> JsValue {
+        // Check if this is a Cancel message
+        if self.message_type == "Cancel" || self.didcomm_message.type_.contains("#Cancel") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("cancel") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not a Cancel message
+        JsValue::null()
+    }
+
+    /// Gets the revert body data
+    pub fn get_revert_body(&self) -> JsValue {
+        // Check if this is a Revert message
+        if self.message_type == "Revert" || self.didcomm_message.type_.contains("#Revert") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("revert") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not a Revert message
+        JsValue::null()
+    }
+
     /// Gets the presentation body data (TAIP-8)
     pub fn get_presentation_body(&self) -> JsValue {
         // Check if this is a Presentation message
@@ -710,10 +857,7 @@ impl Message {
     }
 
     /// Sets an update party body for the message (TAIP-6)
-    pub fn set_update_party_body(
-        &mut self,
-        update_party_data: JsValue,
-    ) -> Result<(), JsValue> {
+    pub fn set_update_party_body(&mut self, update_party_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to an UpdateParty
         // Use a specific type to avoid never type fallback warnings
         let update_party_body: serde_json::Value =
@@ -748,13 +892,17 @@ impl Message {
             })?;
 
         // Store the value directly in body_data
-        self.body_data
-            .insert("confirm_relationship".to_string(), confirm_relationship_body.clone());
+        self.body_data.insert(
+            "confirm_relationship".to_string(),
+            confirm_relationship_body.clone(),
+        );
 
         // Set the message type to ConfirmRelationship and update the didcomm type
         self.message_type = "ConfirmRelationship".to_string();
-        self.didcomm_message.type_ =
-            format!("https://tap.rsvp/schema/{}#confirmrelationship", self.version);
+        self.didcomm_message.type_ = format!(
+            "https://tap.rsvp/schema/{}#confirmrelationship",
+            self.version
+        );
 
         // Set the DIDComm message body
         self.didcomm_message.body = confirm_relationship_body;
@@ -765,7 +913,8 @@ impl Message {
     /// Gets the update party body data (TAIP-6)
     pub fn get_update_party_body(&self) -> JsValue {
         // Check if this is an UpdateParty message
-        if self.message_type == "UpdateParty" || self.didcomm_message.type_.contains("#UpdateParty") {
+        if self.message_type == "UpdateParty" || self.didcomm_message.type_.contains("#UpdateParty")
+        {
             // Try to get from body_data first
             if let Some(value) = self.body_data.get("update_party") {
                 return match serde_wasm_bindgen::to_value(value) {
@@ -1042,16 +1191,10 @@ impl TapAgent {
             if let Some(did_str) = did_prop.as_string() {
                 did_str
             } else {
-                format!(
-                    "did:key:z6Mk{}",
-                    uuid::Uuid::new_v4().to_simple()
-                )
+                format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
             }
         } else {
-            format!(
-                "did:key:z6Mk{}",
-                uuid::Uuid::new_v4().to_simple()
-            )
+            format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
         };
 
         let nickname =
@@ -1590,7 +1733,7 @@ impl TapNode {
 /// Creates a new DID key pair
 #[wasm_bindgen]
 pub fn create_did_key() -> Result<JsValue, JsValue> {
-    let uuid_str = uuid::Uuid::new_v4().to_simple().to_string();  // This actually needs the to_string() as it's assigning to a String variable
+    let uuid_str = uuid::Uuid::new_v4().to_simple().to_string(); // This actually needs the to_string() as it's assigning to a String variable
 
     let mock_did = format!("did:key:z6Mk{}", uuid_str);
 

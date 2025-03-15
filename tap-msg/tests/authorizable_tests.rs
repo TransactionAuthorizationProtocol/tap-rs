@@ -121,60 +121,71 @@ fn test_full_flow() {
 fn test_update_party_message() {
     // Create a test Transfer message first
     let transfer = create_test_transfer();
-    
+
     // Get the transfer_id (in a real scenario, this would be available)
-    let transfer_message = transfer.to_didcomm().expect("Failed to convert transfer to DIDComm");
+    let transfer_message = transfer
+        .to_didcomm()
+        .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
-    
+
     // Create a participant that will be updated
     let updated_participant = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("new_role".to_string()),
         policies: None,
+        lei: None,
     };
-    
+
     // Create an UpdateParty message
-    let update_party = UpdateParty::new(
-        &transfer_id,
-        "beneficiary",
-        updated_participant.clone()
-    );
-    
+    let update_party = UpdateParty::new(&transfer_id, "beneficiary", updated_participant.clone());
+
     // Add a note
     let update_party_with_note = UpdateParty {
         note: Some("Updating party information".to_string()),
         ..update_party
     };
-    
+
     // Validate the message
     assert!(update_party_with_note.validate().is_ok());
-    
+
     // Test conversion to DIDComm
-    let didcomm_message = update_party_with_note.to_didcomm().expect("Failed to convert UpdateParty to DIDComm");
-    
+    let didcomm_message = update_party_with_note
+        .to_didcomm()
+        .expect("Failed to convert UpdateParty to DIDComm");
+
     // Verify fields
-    assert_eq!(didcomm_message.type_, "https://tap.rsvp/schema/1.0#updateparty");
-    
+    assert_eq!(
+        didcomm_message.type_,
+        "https://tap.rsvp/schema/1.0#updateparty"
+    );
+
     // Test from_didcomm
-    let round_trip = UpdateParty::from_didcomm(&didcomm_message).expect("Failed to convert DIDComm to UpdateParty");
-    
+    let round_trip = UpdateParty::from_didcomm(&didcomm_message)
+        .expect("Failed to convert DIDComm to UpdateParty");
+
     // Verify round-trip conversion
     assert_eq!(round_trip.transfer_id, transfer_id);
     assert_eq!(round_trip.party_type, "beneficiary");
     assert_eq!(round_trip.party.id, updated_participant.id);
     assert_eq!(round_trip.party.role, updated_participant.role);
-    assert_eq!(round_trip.note, Some("Updating party information".to_string()));
-    
+    assert_eq!(
+        round_trip.note,
+        Some("Updating party information".to_string())
+    );
+
     // Test using update_party from Authorizable trait
     let update_party_from_authorizable = transfer.update_party(
         "beneficiary".to_string(),
         updated_participant,
         Some("Updated via Authorizable trait".to_string()),
-        HashMap::new()
+        HashMap::new(),
     );
-    
+
     assert_eq!(update_party_from_authorizable.party_type, "beneficiary");
-    assert_eq!(update_party_from_authorizable.note, Some("Updated via Authorizable trait".to_string()));
+    assert_eq!(
+        update_party_from_authorizable.note,
+        Some("Updated via Authorizable trait".to_string())
+    );
 }
 
 fn create_test_transfer() -> Transfer {
@@ -185,18 +196,21 @@ fn create_test_transfer() -> Transfer {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
         policies: None,
+        lei: None,
     };
 
     let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
+        lei: None,
     };
 
     let agents = vec![Participant {
         id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
         role: None,
         policies: None,
+        lei: None,
     }];
 
     Transfer {

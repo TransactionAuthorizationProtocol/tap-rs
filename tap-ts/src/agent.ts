@@ -88,10 +88,12 @@ export class Agent {
    * @returns This agent instance for chaining
    */
   registerHandler(type: MessageType, handler: MessageHandler): this {
-    const handlers = this.messageHandlers.get(type);
-    if (handlers) {
-      handlers.add(handler);
+    let handlers = this.messageHandlers.get(type);
+    if (!handlers) {
+      handlers = new Set<MessageHandler>();
+      this.messageHandlers.set(type, handlers);
     }
+    handlers.add(handler);
     return this;
   }
 
@@ -334,6 +336,20 @@ export class Agent {
         // For Settle messages, set settle data if provided
         if (combinedOptions.settleData) {
           message.setSettleData(combinedOptions.settleData);
+        }
+        break;
+        
+      case MessageType.CANCEL:
+        // For Cancel messages, set cancel data if provided
+        if (combinedOptions.cancelData) {
+          message.setCancelData(combinedOptions.cancelData);
+        }
+        break;
+        
+      case MessageType.REVERT:
+        // For Revert messages, set revert data if provided
+        if (combinedOptions.revertData) {
+          message.setRevertData(combinedOptions.revertData);
         }
         break;
     }

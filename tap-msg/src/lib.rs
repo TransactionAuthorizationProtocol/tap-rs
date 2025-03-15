@@ -14,7 +14,6 @@ pub use didcomm;
 // Internal modules
 pub mod error;
 pub mod examples;
-pub mod ivms101;
 pub mod message;
 pub mod utils;
 

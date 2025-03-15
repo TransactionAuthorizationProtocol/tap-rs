@@ -14,12 +14,14 @@ async fn test_pack_tap_body() -> Result<()> {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
         policies: None,
+        lei: None,
     };
 
     let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
+        lei: None,
     };
 
     let body = Transfer {
@@ -76,12 +78,14 @@ async fn test_extract_tap_body() -> Result<()> {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
         policies: None,
+        lei: None,
     };
 
     let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
+        lei: None,
     };
 
     let body = Transfer {

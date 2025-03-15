@@ -4,7 +4,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::error::Result;
-use tap_msg::message::types::{AddAgents, Authorize, ConfirmRelationship, Participant, RemoveAgent, ReplaceAgent, Authorizable};
+use tap_msg::message::types::{
+    AddAgents, Authorizable, Authorize, ConfirmRelationship, Participant, RemoveAgent, ReplaceAgent,
+};
 use tap_msg::message::{TapMessage, TapMessageBody, Transfer};
 use uuid::Uuid;
 
@@ -24,11 +26,13 @@ fn test_create_reply() -> Result<()> {
             id: alice_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
+            lei: None,
         },
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
+            lei: None,
         }),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -46,6 +50,7 @@ fn test_create_reply() -> Result<()> {
         transfer_id: transfer_message.id.clone(),
         note: Some("Transfer authorized".to_string()),
         timestamp: chrono::Utc::now().to_rfc3339(),
+        settlement_address: None,
         metadata: HashMap::new(),
     };
 
@@ -101,6 +106,7 @@ fn test_add_agents() -> Result<()> {
             id: charlie_did.to_string(),
             role: Some("observer".to_string()),
             policies: None,
+            lei: None,
         }],
         metadata: HashMap::new(),
     };
@@ -156,6 +162,7 @@ fn test_replace_agent() -> Result<()> {
             id: charlie_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
+            lei: None,
         },
         metadata: HashMap::new(),
     };
@@ -258,7 +265,8 @@ fn test_confirm_relationship() -> Result<()> {
     confirm_relationship.validate()?;
 
     // Create a DIDComm message from the confirm_relationship
-    let message = confirm_relationship.to_didcomm_with_route(Some(alice_did), [bob_did].iter().copied())?;
+    let message =
+        confirm_relationship.to_didcomm_with_route(Some(alice_did), [bob_did].iter().copied())?;
 
     // Set the thread ID
     let message_with_thread = Message {
@@ -284,7 +292,8 @@ fn test_confirm_relationship() -> Result<()> {
 
     // Test using the Authorizable trait
     let transfer = Transfer {
-        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap(),
+        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
+            .unwrap(),
         originator: Participant::new(alice_did),
         beneficiary: Some(Participant::new(bob_did)),
         amount: "10.00".to_string(),
@@ -297,7 +306,10 @@ fn test_confirm_relationship() -> Result<()> {
     // Create a DIDComm message from the transfer
     let transfer_message = transfer.to_didcomm()?;
     let mut metadata = HashMap::new();
-    metadata.insert("context".to_string(), serde_json::Value::String("test".to_string()));
+    metadata.insert(
+        "context".to_string(),
+        serde_json::Value::String("test".to_string()),
+    );
 
     // Create a ConfirmRelationship message using the Authorizable trait
     let confirm = transfer_message.confirm_relationship(

@@ -42,8 +42,9 @@ The `tap-ivms101` module integrates IVMS101 data handling directly into `tap-msg
 ### Single-Point Tasks for tap-ivms101 Module
 
 - [ ] **Define IVMS101 Data Models:**  
-  - Create Rust structs representing IVMS101 person data (for both natural and legal persons) according to the IVMS101 standard.
-
+  - Create new rust crate tap-ivms101 to contain IVMS101 data models.
+  - Create rust structs for the entire IVMS101 standard defined here https://cdn.prod.website-files.com/648841abc97f28489cc3f2ce/6656e9c60c3029989dcd7431_IVMS101.2023%20interVASP%20data%20model%20standard.pdf
+  
 - [ ] **Implement Serialization/Deserialization:**  
   - Develop functions to serialize IVMS101 data into the standardized JSON format.
   - Develop functions to deserialize incoming IVMS101 JSON into the corresponding Rust data models.
@@ -53,19 +54,19 @@ The `tap-ivms101` module integrates IVMS101 data handling directly into `tap-msg
   - Ensure the function requires specific IVMS101 fields (e.g., name, address, ID) for either the originator or beneficiary, based on dynamic configuration.
 
 - [ ] **Create Presentation Message API:**  
-  - Design and implement an API function (e.g., `create_presentation()`) that builds a Presentation message.
+  - Design and implement an API function (e.g., `create_presentation()`) that builds a Presentation message using the ssi crate.
   - Ensure this function accepts IVMS101 data and produces a message that includes the data as a Verifiable Presentation.
 
 - [ ] **Integrate with tap-msg Message Handling:**  
-  - Extend tap-msg’s packing/unpacking logic to recognize and process PresentationRequest and Presentation messages that contain IVMS101 data.
+  - Extend tap-msg’s packing/unpacking logic to recognize and Presentation messages that contain IVMS101 data.
   - Ensure that these messages are handled dynamically as part of the TAP flow.
 
 - [ ] **Verifiable Credential Generation:**  
-  - Implement functionality to convert IVMS101 data into a Verifiable Credential.
+  - Implement functionality to convert IVMS101 Person data into a Verifiable Credential using the ssi crate
   - Bind the credential to the appropriate DID (originator or beneficiary) and sign it with the issuer’s key.
 
 - [ ] **Wrap Credential in Verifiable Presentation:**  
-  - Implement functionality to wrap the Verifiable Credential into a Verifiable Presentation.
+  - Implement functionality to wrap the Verifiable Credential into a Verifiable Presentation using the ssi crate.
   - Ensure the Verifiable Presentation includes necessary proofs (e.g., a nonce or audience restriction) per W3C standards.
 
 - [ ] **Attach Verifiable Presentation to Presentation Message:**  
