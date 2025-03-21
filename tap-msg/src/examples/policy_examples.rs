@@ -41,7 +41,7 @@ pub fn create_participant_with_policies_example() -> Result<Participant> {
     let participant = Participant {
         id: "did:example:charlie".to_string(),
         role: Some("beneficiary".to_string()),
-        lei: None,
+        leiCode: None,
         policies: Some(vec![
             Policy::RequireAuthorization(auth_policy),
             Policy::RequirePresentation(presentation_policy),
@@ -112,8 +112,8 @@ pub fn policy_workflow_example() -> Result<()> {
     let beneficiary = Participant {
         id: beneficiary_did.to_string(),
         role: Some("beneficiary".to_string()),
+        leiCode: None,
         policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
-        lei: None,
     };
     println!("  Created beneficiary with policies: {:?}", beneficiary);
 
@@ -242,28 +242,28 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
         originator: Participant {
             id: originator_did.to_string(),
             role: Some("originator".to_string()),
+            leiCode: None,
             policies: None,
-            lei: None,
         },
         beneficiary: Some(Participant {
             id: beneficiary_did.to_string(),
             role: Some("beneficiary".to_string()),
+            leiCode: None,
             policies: None,
-            lei: None,
         }),
         amount: "100.00".to_string(),
         agents: vec![
             Participant {
                 id: sender_vasp_did.to_string(),
                 role: Some("sender_vasp".to_string()),
+                leiCode: None,
                 policies: None,
-                lei: None,
             },
             Participant {
                 id: receiver_vasp_did.to_string(),
                 role: Some("receiver_vasp".to_string()),
+                leiCode: None,
                 policies: None,
-                lei: None,
             },
         ],
         settlement_id: None,

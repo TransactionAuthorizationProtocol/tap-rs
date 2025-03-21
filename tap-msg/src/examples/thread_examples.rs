@@ -24,13 +24,13 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
             id: alice_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }),
         amount: "100.00".to_string(),
         agents: vec![],
@@ -96,13 +96,13 @@ pub fn create_add_agents_example() -> Result<Message> {
             id: originator_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         beneficiary: Some(Participant {
             id: beneficiary_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }),
         amount: "100.00".to_string(),
         agents: vec![
@@ -110,13 +110,13 @@ pub fn create_add_agents_example() -> Result<Message> {
                 id: sender_vasp_did.to_string(),
                 role: Some("sender_vasp".to_string()),
                 policies: None,
-                lei: None,
+                leiCode: None,
             },
             Participant {
                 id: receiver_vasp_did.to_string(),
                 role: Some("receiver_vasp".to_string()),
                 policies: None,
-                lei: None,
+                leiCode: None,
             },
         ],
         settlement_id: None,
@@ -150,7 +150,7 @@ pub fn create_add_agents_example() -> Result<Message> {
             id: new_agent_did.to_string(),
             role: Some("compliance".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }],
         HashMap::new(),
     );
@@ -174,7 +174,7 @@ pub fn create_replace_agent_example(
         id: replacement_agent_id.to_string(),
         role: replacement_agent_role.map(ToString::to_string),
         policies: None, // No policies for this participant
-        lei: None,
+        leiCode: None,
     };
 
     // Create a ReplaceAgent message using the Authorizable trait
@@ -245,13 +245,13 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             id: alice_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -292,7 +292,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             id: charlie_did.to_string(),
             role: Some("observer".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }],
         metadata: HashMap::new(),
     };
@@ -320,7 +320,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             id: dave_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         metadata: HashMap::new(),
     };

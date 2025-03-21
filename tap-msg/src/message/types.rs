@@ -13,6 +13,7 @@ use tap_caip::AssetId;
 
 /// Participant in a transfer (TAIP-3, TAIP-11).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[allow(non_snake_case)]
 pub struct Participant {
     /// DID of the participant.
     #[serde(default)]
@@ -28,10 +29,8 @@ pub struct Participant {
     #[serde(default)]
     pub policies: Option<Vec<Policy>>,
 
-    /// Legal Entity Identifier (LEI) according to TAIP-11 (optional).
+    /// Legal Entity Identifier (LEI) code of the participant (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(default)]
-    #[allow(non_snake_case)]
     pub leiCode: Option<String>,
 }
 

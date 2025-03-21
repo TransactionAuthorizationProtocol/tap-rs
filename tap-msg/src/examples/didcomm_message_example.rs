@@ -15,14 +15,14 @@ pub fn create_transfer_message_example() -> Result<Message> {
         id: "did:example:alice".to_string(),
         role: Some("originator".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     let beneficiary = Participant {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     // Create a transfer body
