@@ -31,7 +31,8 @@ pub struct Participant {
     /// Legal Entity Identifier (LEI) according to TAIP-11 (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
-    pub lei: Option<String>,
+    #[allow(non_snake_case)]
+    pub leiCode: Option<String>,
 }
 
 impl Participant {
@@ -41,7 +42,7 @@ impl Participant {
             id: id.to_string(),
             role: None,
             policies: None,
-            lei: None,
+            leiCode: None,
         }
     }
 
@@ -51,7 +52,7 @@ impl Participant {
             id: id.to_string(),
             role: Some(role.to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }
     }
 }
@@ -582,7 +583,7 @@ impl ConfirmRelationship {
 ///     id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
 ///     role: Some("new_role".to_string()),
 ///     policies: None,
-///     lei: None,
+///     leiCode: None,
 /// };
 ///
 /// // Create an UpdateParty message

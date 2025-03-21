@@ -26,13 +26,13 @@ fn test_create_reply() -> Result<()> {
             id: alice_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -106,7 +106,7 @@ fn test_add_agents() -> Result<()> {
             id: charlie_did.to_string(),
             role: Some("observer".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }],
         metadata: HashMap::new(),
     };
@@ -162,7 +162,7 @@ fn test_replace_agent() -> Result<()> {
             id: charlie_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         metadata: HashMap::new(),
     };

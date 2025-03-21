@@ -18,7 +18,7 @@ fn test_update_party_creation() {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("new_role".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     // Create an UpdateParty message
@@ -56,7 +56,7 @@ fn test_update_party_validation() {
             id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
     );
 
@@ -84,7 +84,7 @@ fn test_update_party_validation() {
             id: "".to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         ..valid_update.clone()
     };
@@ -102,7 +102,7 @@ fn test_update_party_didcomm_conversion() {
             id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
             role: Some("updated_role".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
     );
 
@@ -139,7 +139,7 @@ fn test_authorizable_with_update_party() {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("updated_role".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     // Use the Authorizable trait to create an UpdateParty message
@@ -193,20 +193,20 @@ fn create_test_transfer() -> Transfer {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     let beneficiary = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     let agents = vec![Participant {
         id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
         role: None,
-        lei: None,
+        leiCode: None,
         policies: None,
     }];
 

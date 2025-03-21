@@ -30,6 +30,8 @@ pub fn start() -> Result<(), JsValue> {
 pub enum MessageType {
     /// Transaction proposal (Transfer in TAIP-3)
     Transfer,
+    /// Payment Request message (TAIP-14)
+    PaymentRequest,
     /// Presentation message (TAIP-8)
     Presentation,
     /// Authorization response (TAIP-4)
@@ -60,6 +62,7 @@ impl fmt::Display for MessageType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             MessageType::Transfer => write!(f, "https://tap.rsvp/schema/1.0#Transfer"),
+            MessageType::PaymentRequest => write!(f, "https://tap.rsvp/schema/1.0#PaymentRequest"),
             MessageType::Presentation => write!(f, "https://tap.rsvp/schema/1.0#Presentation"),
             MessageType::Authorize => write!(f, "https://tap.rsvp/schema/1.0#Authorize"),
             MessageType::Reject => write!(f, "https://tap.rsvp/schema/1.0#Reject"),
@@ -88,6 +91,22 @@ pub struct Participant {
     /// Role of the participant in the transaction (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
+    
+    /// Legal Entity Identifier (LEI) code of the participant (optional).
+    #[serde(skip_serializing_if = "Option::is_none", rename = "leiCode")]
+    pub lei_code: Option<String>,
+    
+    /// Human-readable name of the participant (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    
+    /// SHA-256 hash of normalized name (uppercase, no whitespace) (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name_hash: Option<String>,
+    
+    /// Reference to the party this agent is acting for (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub for_: Option<String>,
 }
 
 /// Transfer message body (TAIP-3).
@@ -116,13 +135,60 @@ pub struct Transfer {
     /// Optional memo or note for the transaction.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<String>,
+    
+    /// Optional ISO 20022 purpose code.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
+    
+    /// Optional ISO 20022 category purpose code.
+    #[serde(skip_serializing_if = "Option::is_none", rename = "categoryPurpose")]
+    pub category_purpose: Option<String>,
 
     /// Additional metadata for the transaction.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-// Deprecated types AuthorizationRequest and AuthorizationResponse removed
+/// Payment Request message body (TAIP-14).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentRequest {
+    /// Optional network asset identifier in CAIP-19 format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<String>,
+    
+    /// Optional currency code (typically ISO 4217).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+    
+    /// Amount as a decimal string.
+    pub amount: String,
+    
+    /// Optional list of supported assets.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_assets: Option<Vec<String>>,
+    
+    /// Optional invoice data or reference.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoice: Option<String>,
+    
+    /// Optional expiry time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiry: Option<String>,
+    
+    /// Merchant information.
+    pub merchant: Participant,
+    
+    /// Optional customer information.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub customer: Option<Participant>,
+    
+    /// Agents involved in the payment request.
+    pub agents: Vec<Participant>,
+    
+    /// Additional metadata for the payment request.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
 
 /// Authorization message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -359,6 +425,29 @@ impl Message {
 
         // Set the DIDComm message body
         self.didcomm_message.body = serde_json::json!(transfer_body);
+
+        Ok(())
+    }
+
+    /// Sets a Payment Request message body according to TAIP-14
+    pub fn set_payment_request_body(&mut self, payment_request_data: JsValue) -> Result<(), JsValue> {
+        // Convert the JavaScript value to a PaymentRequest
+        let payment_request_body: PaymentRequest = serde_wasm_bindgen::from_value(payment_request_data)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse payment request data: {}", e)))?;
+
+        // Convert to JSON value and store in body data
+        let json_value = serde_json::to_value(&payment_request_body).map_err(|e| {
+            JsValue::from_str(&format!("Failed to serialize payment request data: {}", e))
+        })?;
+
+        self.body_data.insert("payment_request".to_string(), json_value);
+
+        // Set the message type to PaymentRequest and update the didcomm type
+        self.message_type = "PaymentRequest".to_string();
+        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#PaymentRequest", self.version);
+
+        // Set the DIDComm message body
+        self.didcomm_message.body = serde_json::json!(payment_request_body);
 
         Ok(())
     }
@@ -616,6 +705,29 @@ impl Message {
         }
 
         // Not a Transfer message
+        JsValue::null()
+    }
+
+    /// Gets the payment request body data
+    pub fn get_payment_request_body(&self) -> JsValue {
+        // Check if this is a PaymentRequest message
+        if self.message_type == "PaymentRequest" || self.didcomm_message.type_.contains("#PaymentRequest") {
+            // Try to get from body_data first
+            if let Some(value) = self.body_data.get("payment_request") {
+                return match serde_wasm_bindgen::to_value(value) {
+                    Ok(js_value) => js_value,
+                    Err(_) => JsValue::null(),
+                };
+            }
+
+            // If not in body_data, try to get from didcomm message body
+            return match serde_wasm_bindgen::to_value(&self.didcomm_message.body) {
+                Ok(js_value) => js_value,
+                Err(_) => JsValue::null(),
+            };
+        }
+
+        // Not a PaymentRequest message
         JsValue::null()
     }
 
@@ -1250,7 +1362,11 @@ impl TapAgent {
     pub fn create_message(&self, message_type: MessageType) -> Message {
         let id = format!("msg_{}", generate_uuid_v4());
 
-        let mut message = Message::new(id, message_type.to_string(), "1.0".to_string());
+        let mut message = Message::new(
+            id,
+            message_type.to_string(),
+            "1.0".to_string(),
+        );
 
         message.set_from_did(Some(self.id.clone()));
 
@@ -1317,52 +1433,28 @@ impl TapAgent {
 
     /// Processes a received message
     pub fn process_message(&self, message: JsValue, metadata: JsValue) -> Promise {
-        // Need to create a copy of relevant data to move into the async block
+        // Clone data that needs to be moved into the async block
         let debug = self.debug;
         let message_handlers = self.message_handlers.clone();
         let message_subscribers = self.message_subscribers.clone();
+        let message_clone = message.clone();
+        let metadata_clone = metadata.clone();
+        let _agent = self.clone(); // Clone the current agent for use in the async block (currently unused)
 
         future_to_promise(async move {
-            let message_obj = match TapNode::try_parse_message_struct(&message, debug) {
-                Ok(Some(msg)) => msg,
-                Ok(None) => {
-                    let message_str = match js_sys::JSON::stringify(&message) {
-                        Ok(str) => match str.as_string() {
-                            Some(s) => s,
-                            None => {
-                                return Err(JsValue::from_str(
-                                    "Failed to convert message to string",
-                                ))
-                            }
-                        },
-                        Err(_) => {
-                            return Err(JsValue::from_str("Failed to stringify message object"))
-                        }
-                    };
-
-                    match Message::message_from_json(&message_str) {
-                        Ok(msg) => msg,
-                        Err(e) => return Err(e),
-                    }
-                }
-                Err(e) => return Err(e),
-            };
-
-            let message_type = message_obj.message_type();
-
-            let meta_obj = if !metadata.is_null() && !metadata.is_undefined() {
-                metadata
+            let message_type = if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
+                type_prop.as_string().unwrap_or_default()
             } else {
-                js_sys::Object::new().into()
+                String::new()
             };
 
             for subscriber in &message_subscribers {
-                let _ = subscriber.call2(&JsValue::NULL, &message.clone(), &meta_obj);
+                let _ = subscriber.call2(&JsValue::NULL, &message_clone.clone(), &metadata_clone);
             }
 
             if let Some(handler) = message_handlers.get(&message_type) {
                 // Convert the result of calling the handler to a JsFuture if it's a Promise
-                let result = handler.call2(&JsValue::NULL, &message, &meta_obj);
+                let result = handler.call2(&JsValue::NULL, &message_clone, &metadata_clone);
                 match result {
                     Ok(value) => {
                         if value.is_instance_of::<js_sys::Promise>() {
@@ -1490,6 +1582,8 @@ impl TapAgent {
 #[derive(Clone)]
 pub struct TapNode {
     agents: HashMap<String, TapAgent>,
+    message_handlers: HashMap<String, js_sys::Function>,
+    message_subscribers: Vec<js_sys::Function>,
     debug: bool,
 }
 
@@ -1506,6 +1600,8 @@ impl TapNode {
 
         TapNode {
             agents: HashMap::new(),
+            message_handlers: HashMap::new(),
+            message_subscribers: Vec::new(),
             debug,
         }
     }
@@ -1569,6 +1665,21 @@ impl TapNode {
                                 if debug {
                                     console::log_1(&JsValue::from_str(&format!(
                                         "Error setting transfer body: {}",
+                                        e.as_string().unwrap_or_default()
+                                    )));
+                                }
+                            }
+                        }
+                    }
+
+                    if let Ok(payment_request) =
+                        js_sys::Reflect::get(message, &JsValue::from_str("payment_request"))
+                    {
+                        if !payment_request.is_null() && !payment_request.is_undefined() {
+                            if let Err(e) = msg.set_payment_request_body(payment_request) {
+                                if debug {
+                                    console::log_1(&JsValue::from_str(&format!(
+                                        "Error setting payment request body: {}",
                                         e.as_string().unwrap_or_default()
                                     )));
                                 }
@@ -1668,62 +1779,57 @@ impl TapNode {
     pub fn process_message(&self, message: JsValue, metadata: JsValue) -> Promise {
         // Clone data that needs to be moved into the async block
         let debug = self.debug;
-        let agents = self.agents.clone();
+        let _agents = self.agents.clone(); // Currently unused
+        let message_handlers = self.message_handlers.clone();
+        let message_subscribers = self.message_subscribers.clone();
         let message_clone = message.clone();
         let metadata_clone = metadata.clone();
 
         future_to_promise(async move {
-            let to_did = if let Ok(Some(msg)) =
-                TapNode::try_parse_message_struct(&message_clone, debug)
-            {
-                msg.to_did()
-            } else if let Ok(to_prop) = Reflect::get(&message_clone, &JsValue::from_str("to_did")) {
-                to_prop.as_string()
+            let message_type = if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
+                type_prop.as_string().unwrap_or_default()
             } else {
-                None
+                String::new()
             };
 
-            if let Some(did) = to_did {
-                if let Some(agent) = agents.get(&did) {
-                    // Convert Promise to a Future that can be awaited
-                    let promise = agent.process_message(message_clone, metadata_clone);
-                    let future = wasm_bindgen_futures::JsFuture::from(promise);
-                    match future.await {
-                        Ok(result) => Ok(result),
-                        Err(e) => Err(e),
+            let meta_obj = if !metadata_clone.is_null() && !metadata_clone.is_undefined() {
+                metadata_clone
+            } else {
+                js_sys::Object::new().into()
+            };
+
+            for subscriber in &message_subscribers {
+                let _ = subscriber.call2(&JsValue::NULL, &message_clone.clone(), &meta_obj);
+            }
+
+            if let Some(handler) = message_handlers.get(&message_type) {
+                // Convert the result of calling the handler to a JsFuture if it's a Promise
+                let result = handler.call2(&JsValue::NULL, &message_clone, &meta_obj);
+                match result {
+                    Ok(value) => {
+                        if value.is_instance_of::<js_sys::Promise>() {
+                            // It's a Promise, convert to a Future and await it
+                            let future = wasm_bindgen_futures::JsFuture::from(
+                                value.dyn_into::<js_sys::Promise>().unwrap(),
+                            );
+                            match future.await {
+                                Ok(result) => Ok(result),
+                                Err(e) => Err(e),
+                            }
+                        } else {
+                            // It's not a Promise, just return it
+                            Ok(value)
+                        }
                     }
-                } else {
-                    if debug {
-                        console::log_1(&JsValue::from_str(&format!(
-                            "No agent found with DID: {}",
-                            did
-                        )));
-                    }
-                    Ok(JsValue::FALSE)
+                    Err(e) => Err(e),
                 }
             } else {
-                for agent in agents.values() {
-                    // Convert Promise to a Future that can be awaited
-                    let promise =
-                        agent.process_message(message_clone.clone(), metadata_clone.clone());
-                    let future = wasm_bindgen_futures::JsFuture::from(promise);
-                    match future.await {
-                        Ok(result) => {
-                            if result.is_truthy() {
-                                return Ok(JsValue::TRUE);
-                            }
-                        }
-                        Err(e) => {
-                            if debug {
-                                console::log_1(&JsValue::from_str(&format!(
-                                    "Error processing message: {}",
-                                    e.as_string().unwrap_or_default()
-                                )));
-                            }
-                        }
-                    }
+                if debug {
+                    console::log_1(&JsValue::from_str(&format!(
+                        "No handler registered for message type: {}",
+                        message_type
+                    )));
                 }
-
                 Ok(JsValue::FALSE)
             }
         })
