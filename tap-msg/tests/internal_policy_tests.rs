@@ -85,7 +85,7 @@ fn test_update_policies() -> Result<()> {
         from: Some(vec!["did:example:beneficiary".to_string()]),
         from_role: None,
         from_agent: None,
-        nonce: 12345678,
+        address_id: "eip155:1:0x1234567890123456789012345678901234567890".to_string(),
         purpose: Some("Please prove control of your account".to_string()),
     };
 
@@ -230,7 +230,7 @@ fn test_create_reply_maintains_thread_correlation() -> Result<()> {
         from: Some(vec!["did:example:beneficiary".to_string()]),
         from_role: None,
         from_agent: None,
-        nonce: 12345678,
+        address_id: "eip155:1:0x1234567890123456789012345678901234567890".to_string(),
         purpose: Some("Please prove control of your account".to_string()),
     };
 

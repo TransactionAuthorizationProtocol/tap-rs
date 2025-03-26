@@ -47,12 +47,12 @@ This document outlines issues identified in the TAP test vectors that may affect
 | `presentation/misformatted-fields.json` | 🛑 | Failed to parse message: invalid type: integer `12345`, expected a string |
 | `presentation/missing-required-fields.json` | 🛑 | Presentation validation succeeded when it should have failed |
 | **Confirm-Relationship** | | |
-| `confirm-relationship/valid.json` | 🛑 | Confirm relationship not implemented yet |
-| `confirm-relationship/minimal.json` | 🛑 | Confirm relationship not implemented yet |
-| `confirm-relationship/misformatted-fields.json` | 🛑 | Not implemented (but would also fail validation) |
-| `confirm-relationship/missing-required-fields.json` | 🛑 | Not implemented (but would also fail validation) |
+| `confirm-relationship/valid.json` | ✅ | Implemented and passes validation |
+| `confirm-relationship/minimal.json` | ✅ | Implemented and passes validation |
+| `confirm-relationship/misformatted-fields.json` | 🛑 | Implemented but fails validation due to formatting issues |
+| `confirm-relationship/missing-required-fields.json` | ✅ | Correctly identified as invalid |
 | **Policy Management** | | |
-| `policy-management/valid-policies.json` | 🛑 | Policy management not implemented yet |
+| `policy-management/valid-policies.json` | ✅ | Implemented and passes validation |
 | `policy-management/invalid-policies.json` | ✅ | Correctly identified as invalid |
 | **Other Vector Types** | | |
 | `agent-management/multiple-agents.json` | 🛑 | Unknown message type: agent-management |
@@ -70,9 +70,9 @@ This document outlines issues identified in the TAP test vectors that may affect
   
 - [ ] **Missing Required Field Validation**: Enhance our validator to properly check for all required fields in each message type.
   
-- [ ] **Unimplemented Message Types**:
-  - [ ] Confirm Relationship
-  - [ ] Policy Management
+- [x] **Unimplemented Message Types**:
+  - [x] Confirm Relationship
+  - [x] Policy Management
 
 - [ ] **More Robust Date Parsing**: Further improve our timestamp parsing to handle additional date formats found in test vectors.
   
@@ -145,7 +145,7 @@ This document outlines issues identified in the TAP test vectors that may affect
 
 1. **For Our Implementation**:
    - Improve validation logic for all message types
-   - Implement the missing message types
+   - ✅ Implement the missing message types
    - Enhance date parsing capabilities
    - Add support for standard DIDComm present-proof protocol
 

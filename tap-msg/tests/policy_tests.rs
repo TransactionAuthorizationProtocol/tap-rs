@@ -84,7 +84,7 @@ fn test_update_policies_validation() {
         from: Some(vec!["did:example:dave".to_string()]),
         from_role: None,
         from_agent: None,
-        nonce: 12345678,
+        address_id: "eip155:1:0x1234567890123456789012345678901234567890".to_string(),
         purpose: Some("Please prove control of your account".to_string()),
     };
 
@@ -144,7 +144,7 @@ fn test_all_policy_types() {
     assert_eq!(proof_policy.from, None);
     assert_eq!(proof_policy.from_role, None);
     assert_eq!(proof_policy.from_agent, None);
-    assert_ne!(proof_policy.nonce, 0);
+    assert_eq!(proof_policy.address_id, "");
     assert_eq!(proof_policy.purpose, None);
 
     // Create policies
@@ -172,7 +172,7 @@ fn test_all_policy_types() {
 
     if let Policy::RequireProofOfControl(policy) = &policies[2] {
         assert_eq!(policy.from, None);
-        assert_ne!(policy.nonce, 0);
+        assert_eq!(policy.address_id, "");
     } else {
         panic!("Expected RequireProofOfControl policy");
     }
@@ -199,7 +199,7 @@ fn test_update_policies_didcomm_conversion() {
         from: Some(vec!["did:example:charlie".to_string()]),
         from_role: None,
         from_agent: None,
-        nonce: 12345678,
+        address_id: "eip155:1:0x1234567890123456789012345678901234567890".to_string(),
         purpose: Some("Please prove control of your account".to_string()),
     };
 
@@ -264,7 +264,7 @@ fn test_update_policies_didcomm_conversion() {
     // Check second policy is proof of control policy
     match &roundtrip_update.policies[1] {
         Policy::RequireProofOfControl(policy) => {
-            assert_eq!(policy.nonce, 12345678);
+            assert_eq!(policy.address_id, "eip155:1:0x1234567890123456789012345678901234567890");
             assert_eq!(
                 policy.from.as_ref().unwrap()[0],
                 "did:example:charlie"

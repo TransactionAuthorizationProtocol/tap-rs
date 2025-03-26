@@ -96,38 +96,56 @@ pub struct RequireProofOfControl {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_agent: Option<Vec<String>>,
 
-    /// Randomized token to prevent replay attacks
-    pub nonce: u64,
+    /// ID of the account or address that needs to be proven
+    pub address_id: String,
 
     /// Optional human-readable purpose for this requirement
     #[serde(skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
 }
 
+/// RequireRelationshipConfirmation policy requires confirming a relationship
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RequireRelationshipConfirmation {
+    /// Optional list of roles this policy applies to
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from_role: Option<String>,
+
+    /// Optional human-readable purpose for this requirement
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purpose: Option<String>,
+    
+    /// Optional nonce for security
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<u64>,
+}
+
 /// Enum representing the different types of policies.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "@type")]
 pub enum Policy {
-    /// Require authorization from specific parties
-    #[serde(rename = "RequireAuthorization")]
+    /// Require authorization from specified agents
     RequireAuthorization(RequireAuthorization),
 
     /// Require verifiable credential presentation
-    #[serde(rename = "RequirePresentation")]
     RequirePresentation(RequirePresentation),
 
     /// Require proof of control of an account or address
-    #[serde(rename = "RequireProofOfControl")]
     RequireProofOfControl(RequireProofOfControl),
+    
+    /// Require confirmation of a relationship
+    RequireRelationshipConfirmation(RequireRelationshipConfirmation),
 }
 
 impl Policy {
     /// Validates the policy based on its specific type
     pub fn validate(&self) -> crate::error::Result<()> {
+        // Basic validation logic for policies
         match self {
             Policy::RequireAuthorization(_) => Ok(()),
             Policy::RequirePresentation(_) => Ok(()),
             Policy::RequireProofOfControl(_) => Ok(()),
+            Policy::RequireRelationshipConfirmation(_) => Ok(()),
         }
     }
 }
@@ -150,8 +168,18 @@ impl Default for RequireProofOfControl {
             from: None,
             from_role: None,
             from_agent: None,
-            nonce: rand::random::<u64>(),
+            address_id: String::new(),
             purpose: None,
+        }
+    }
+}
+
+impl Default for RequireRelationshipConfirmation {
+    fn default() -> Self {
+        RequireRelationshipConfirmation {
+            from_role: None,
+            purpose: None,
+            nonce: None,
         }
     }
 }
