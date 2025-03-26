@@ -1,9 +1,9 @@
 use std::collections::HashMap;
+use tap_msg::message::policy::RequireRelationshipConfirmation;
 use tap_msg::message::{
     Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
     UpdatePolicies,
 };
-use tap_msg::message::policy::RequireRelationshipConfirmation;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== TAP Message Policy Demo ===\n");
@@ -68,7 +68,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("      From: {:?}", p.from);
                     println!("      About Party: {:?}", p.about_party);
                     println!("      Purpose: {:?}", p.purpose);
-                    println!("      Presentation Definition: {:?}", p.presentation_definition);
+                    println!(
+                        "      Presentation Definition: {:?}",
+                        p.presentation_definition
+                    );
                 }
                 Policy::RequireProofOfControl(p) => {
                     println!("    Policy {}: RequireProofOfControl", i + 1);

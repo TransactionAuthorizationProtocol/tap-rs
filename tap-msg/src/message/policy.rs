@@ -114,7 +114,7 @@ pub struct RequireRelationshipConfirmation {
     /// Optional human-readable purpose for this requirement
     #[serde(skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
-    
+
     /// Optional nonce for security
     #[serde(skip_serializing_if = "Option::is_none")]
     pub nonce: Option<u64>,
@@ -132,7 +132,7 @@ pub enum Policy {
 
     /// Require proof of control of an account or address
     RequireProofOfControl(RequireProofOfControl),
-    
+
     /// Require confirmation of a relationship
     RequireRelationshipConfirmation(RequireRelationshipConfirmation),
 }

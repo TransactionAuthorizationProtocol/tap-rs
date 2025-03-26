@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use tap_msg::message::{
     Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
-    TapMessageBody, TapMessage, UpdatePolicies,
+    TapMessage, TapMessageBody, UpdatePolicies,
 };
 
 /// Test creating a participant with policies
@@ -212,19 +212,21 @@ fn test_update_policies_didcomm_conversion() {
         ],
         metadata: {
             let mut map = HashMap::new();
-            map.insert(
-                "customField".to_string(),
-                serde_json::json!("custom value"),
-            );
+            map.insert("customField".to_string(), serde_json::json!("custom value"));
             map
         },
     };
 
     // Convert to DIDComm message
-    let didcomm_message = original_update.to_didcomm().expect("Failed to convert to DIDComm");
+    let didcomm_message = original_update
+        .to_didcomm()
+        .expect("Failed to convert to DIDComm");
 
     // Debug: Print the actual body of the DIDComm message
-    println!("DIDComm message body: {}", serde_json::to_string_pretty(&didcomm_message.body).unwrap());
+    println!(
+        "DIDComm message body: {}",
+        serde_json::to_string_pretty(&didcomm_message.body).unwrap()
+    );
 
     // Check that the message type is correctly set
     assert_eq!(
@@ -233,13 +235,16 @@ fn test_update_policies_didcomm_conversion() {
     );
 
     // Convert back from DIDComm
-    let roundtrip_update = UpdatePolicies::from_didcomm(&didcomm_message)
-        .expect("Failed to convert from DIDComm");
+    let roundtrip_update =
+        UpdatePolicies::from_didcomm(&didcomm_message).expect("Failed to convert from DIDComm");
 
     // Check that the message data is preserved
     assert_eq!(roundtrip_update.transfer_id, original_update.transfer_id);
-    assert_eq!(roundtrip_update.policies.len(), original_update.policies.len());
-    
+    assert_eq!(
+        roundtrip_update.policies.len(),
+        original_update.policies.len()
+    );
+
     // Check metadata
     assert_eq!(
         roundtrip_update.metadata.get("customField"),
@@ -249,27 +254,24 @@ fn test_update_policies_didcomm_conversion() {
     // Check first policy is presentation policy
     match &roundtrip_update.policies[0] {
         Policy::RequirePresentation(policy) => {
-            assert_eq!(
-                policy.about_party.as_ref().unwrap(),
-                "originator"
-            );
+            assert_eq!(policy.about_party.as_ref().unwrap(), "originator");
             assert_eq!(
                 policy.purpose.as_ref().unwrap(),
                 "Please provide KYC credentials"
             );
-        },
+        }
         _ => panic!("Expected RequirePresentation policy"),
     }
 
     // Check second policy is proof of control policy
     match &roundtrip_update.policies[1] {
         Policy::RequireProofOfControl(policy) => {
-            assert_eq!(policy.address_id, "eip155:1:0x1234567890123456789012345678901234567890");
             assert_eq!(
-                policy.from.as_ref().unwrap()[0],
-                "did:example:charlie"
+                policy.address_id,
+                "eip155:1:0x1234567890123456789012345678901234567890"
             );
-        },
+            assert_eq!(policy.from.as_ref().unwrap()[0], "did:example:charlie");
+        }
         _ => panic!("Expected RequireProofOfControl policy"),
     }
 }

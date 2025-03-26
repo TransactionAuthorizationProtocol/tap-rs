@@ -91,19 +91,19 @@ pub struct Participant {
     /// Role of the participant in the transaction (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-    
+
     /// Legal Entity Identifier (LEI) code of the participant (optional).
     #[serde(skip_serializing_if = "Option::is_none", rename = "leiCode")]
     pub lei_code: Option<String>,
-    
+
     /// Human-readable name of the participant (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    
+
     /// SHA-256 hash of normalized name (uppercase, no whitespace) (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name_hash: Option<String>,
-    
+
     /// Reference to the party this agent is acting for (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub for_: Option<String>,
@@ -135,11 +135,11 @@ pub struct Transfer {
     /// Optional memo or note for the transaction.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<String>,
-    
+
     /// Optional ISO 20022 purpose code.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
-    
+
     /// Optional ISO 20022 category purpose code.
     #[serde(skip_serializing_if = "Option::is_none", rename = "categoryPurpose")]
     pub category_purpose: Option<String>,
@@ -155,36 +155,36 @@ pub struct PaymentRequest {
     /// Optional network asset identifier in CAIP-19 format.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset: Option<String>,
-    
+
     /// Optional currency code (typically ISO 4217).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
-    
+
     /// Amount as a decimal string.
     pub amount: String,
-    
+
     /// Optional list of supported assets.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supported_assets: Option<Vec<String>>,
-    
+
     /// Optional invoice data or reference.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub invoice: Option<String>,
-    
+
     /// Optional expiry time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
-    
+
     /// Merchant information.
     pub merchant: Participant,
-    
+
     /// Optional customer information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub customer: Option<Participant>,
-    
+
     /// Agents involved in the payment request.
     pub agents: Vec<Participant>,
-    
+
     /// Additional metadata for the payment request.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
@@ -430,21 +430,28 @@ impl Message {
     }
 
     /// Sets a Payment Request message body according to TAIP-14
-    pub fn set_payment_request_body(&mut self, payment_request_data: JsValue) -> Result<(), JsValue> {
+    pub fn set_payment_request_body(
+        &mut self,
+        payment_request_data: JsValue,
+    ) -> Result<(), JsValue> {
         // Convert the JavaScript value to a PaymentRequest
-        let payment_request_body: PaymentRequest = serde_wasm_bindgen::from_value(payment_request_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse payment request data: {}", e)))?;
+        let payment_request_body: PaymentRequest =
+            serde_wasm_bindgen::from_value(payment_request_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse payment request data: {}", e))
+            })?;
 
         // Convert to JSON value and store in body data
         let json_value = serde_json::to_value(&payment_request_body).map_err(|e| {
             JsValue::from_str(&format!("Failed to serialize payment request data: {}", e))
         })?;
 
-        self.body_data.insert("payment_request".to_string(), json_value);
+        self.body_data
+            .insert("payment_request".to_string(), json_value);
 
         // Set the message type to PaymentRequest and update the didcomm type
         self.message_type = "PaymentRequest".to_string();
-        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#PaymentRequest", self.version);
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#PaymentRequest", self.version);
 
         // Set the DIDComm message body
         self.didcomm_message.body = serde_json::json!(payment_request_body);
@@ -711,7 +718,9 @@ impl Message {
     /// Gets the payment request body data
     pub fn get_payment_request_body(&self) -> JsValue {
         // Check if this is a PaymentRequest message
-        if self.message_type == "PaymentRequest" || self.didcomm_message.type_.contains("#PaymentRequest") {
+        if self.message_type == "PaymentRequest"
+            || self.didcomm_message.type_.contains("#PaymentRequest")
+        {
             // Try to get from body_data first
             if let Some(value) = self.body_data.get("payment_request") {
                 return match serde_wasm_bindgen::to_value(value) {
@@ -1362,11 +1371,7 @@ impl TapAgent {
     pub fn create_message(&self, message_type: MessageType) -> Message {
         let id = format!("msg_{}", generate_uuid_v4());
 
-        let mut message = Message::new(
-            id,
-            message_type.to_string(),
-            "1.0".to_string(),
-        );
+        let mut message = Message::new(id, message_type.to_string(), "1.0".to_string());
 
         message.set_from_did(Some(self.id.clone()));
 
@@ -1442,11 +1447,12 @@ impl TapAgent {
         let _agent = self.clone(); // Clone the current agent for use in the async block (currently unused)
 
         future_to_promise(async move {
-            let message_type = if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
-                type_prop.as_string().unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let message_type =
+                if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
+                    type_prop.as_string().unwrap_or_default()
+                } else {
+                    String::new()
+                };
 
             for subscriber in &message_subscribers {
                 let _ = subscriber.call2(&JsValue::NULL, &message_clone.clone(), &metadata_clone);
@@ -1786,11 +1792,12 @@ impl TapNode {
         let metadata_clone = metadata.clone();
 
         future_to_promise(async move {
-            let message_type = if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
-                type_prop.as_string().unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let message_type =
+                if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
+                    type_prop.as_string().unwrap_or_default()
+                } else {
+                    String::new()
+                };
 
             let meta_obj = if !metadata_clone.is_null() && !metadata_clone.is_undefined() {
                 metadata_clone

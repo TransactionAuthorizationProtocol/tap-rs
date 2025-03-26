@@ -10,7 +10,7 @@ use didcomm::Message as DIDCommMessage;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::{Authorize, Reject, TapMessageBody, Transfer, Participant};
+use tap_msg::message::{Authorize, Participant, Reject, TapMessageBody, Transfer};
 
 /// Create a test transfer message body
 fn create_transfer_body() -> Transfer {

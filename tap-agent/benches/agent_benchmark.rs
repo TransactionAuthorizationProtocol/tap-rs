@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tap_agent::did::MultiResolver;
 use tap_agent::{Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker};
 use tap_caip::AssetId;
-use tap_msg::{Participant, message::Transfer};
+use tap_msg::{message::Transfer, Participant};
 
 /// Create a test agent with a fresh keypair
 async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
