@@ -2,14 +2,19 @@
 //!
 //! This module defines the structure of all TAP message types according to the specification.
 
-use crate::error::{Error, Result};
-use crate::message::policy::Policy;
-use crate::message::tap_message_trait::TapMessageBody;
-use chrono;
+extern crate serde;
+extern crate serde_json;
+
 use didcomm::Message;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
+
 use tap_caip::AssetId;
+
+use crate::error::{Error, Result};
+use crate::message::policy::Policy;
+use crate::message::tap_message_trait::TapMessageBody;
 
 /// Participant in a transfer (TAIP-3, TAIP-11).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -135,6 +140,143 @@ impl Transfer {
     /// Generates a unique message ID for authorization, rejection, or settlement
     pub fn message_id(&self) -> String {
         uuid::Uuid::new_v4().to_string()
+    }
+}
+
+impl Transfer {
+    fn from_didcomm(message: &Message) -> Result<Self> {
+        let body = message
+            .body
+            .as_object()
+            .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
+
+        // Parse the asset - handle both string and object representations
+        let asset = if let Some(asset_str) = body.get("asset").and_then(|v| v.as_str()) {
+            // Handle string representation (backward compatibility)
+            AssetId::from_str(asset_str)
+                .map_err(|e| Error::Validation(format!("Invalid asset string: {}", e)))?
+        } else if let Some(asset_obj) = body.get("asset") {
+            // Handle object representation
+            serde_json::from_value(asset_obj.clone())
+                .map_err(|e| Error::Validation(format!("Invalid asset object: {}", e)))?
+        } else {
+            return Err(Error::Validation("Missing asset field".to_string()));
+        };
+
+        // Parse required fields
+        let originator = body
+            .get("originator")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .ok_or_else(|| Error::Validation("Missing or invalid originator".to_string()))?;
+
+        let amount = body
+            .get("amount")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Validation("Missing or invalid amount".to_string()))?;
+
+        // Parse optional fields
+        let beneficiary = body
+            .get("beneficiary")
+            .and_then(|v| serde_json::from_value(v.clone()).ok());
+
+        let settlement_id = body
+            .get("settlementId")
+            .or_else(|| body.get("settlement_id"))
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+
+        let memo = body
+            .get("memo")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+
+        // Parse agents array (default to empty if missing)
+        let agents = body
+            .get("agents")
+            .and_then(|v| serde_json::from_value(v.clone()).ok())
+            .unwrap_or_default();
+
+        // Parse metadata (fields not explicitly handled)
+        let mut metadata = HashMap::new();
+        for (k, v) in body.iter() {
+            if !["asset", "originator", "beneficiary", "amount", "agents", 
+                 "settlementId", "settlement_id", "memo", "@type"].contains(&k.as_str()) {
+                metadata.insert(k.clone(), v.clone());
+            }
+        }
+
+        let transfer = Self {
+            asset,
+            originator,
+            beneficiary,
+            amount: amount.to_string(),
+            agents,
+            settlement_id,
+            memo,
+            metadata,
+        };
+
+        transfer.validate()?;
+
+        Ok(transfer)
+    }
+}
+
+impl TapMessageBody for Transfer {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#transfer"
+    }
+
+    fn validate(&self) -> Result<()> {
+        // CAIP-19 asset ID is validated by the AssetId type
+        // Transfer amount validation
+        if self.amount.is_empty() {
+            return Err(Error::Validation("Transfer amount is required".to_string()));
+        }
+
+        // Verify originator
+        if self.originator.id.is_empty() {
+            return Err(Error::Validation(
+                "Originator ID is required in Transfer".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+
+    fn to_didcomm(&self) -> Result<Message> {
+        // Serialize the Transfer to a JSON value
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        let now = crate::utils::get_current_time()?;
+
+        // Create a new Message with required fields
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: None,
+            to: None,
+            thid: None,
+            pthid: None,
+            extra_headers: std::collections::HashMap::new(),
+            created_time: Some(now),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+        };
+
+        Ok(message)
     }
 }
 
@@ -1060,29 +1202,6 @@ pub trait Authorizable {
 
 // Implementation of message type conversion for message body types
 
-impl TapMessageBody for Transfer {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#transfer"
-    }
-
-    fn validate(&self) -> Result<()> {
-        // CAIP-19 asset ID is validated by the AssetId type
-        // Transfer amount validation
-        if self.amount.is_empty() {
-            return Err(Error::Validation("Transfer amount is required".to_string()));
-        }
-
-        // Verify originator
-        if self.originator.id.is_empty() {
-            return Err(Error::Validation(
-                "Originator ID is required in Transfer".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
-}
-
 impl TapMessageBody for Authorize {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#authorize"
@@ -1502,5 +1621,477 @@ impl Authorizable for Message {
             agent,
             metadata,
         }
+    }
+}
+
+/// Payment Request message body (TAIP-14)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentRequest {
+    /// Asset identifier in CAIP-19 format (optional if currency is provided)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub asset: Option<AssetId>,
+
+    /// ISO 4217 currency code for fiat amount (optional if asset is provided)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+
+    /// Amount requested in the specified asset or currency
+    pub amount: String,
+
+    /// Array of CAIP-19 asset identifiers that can be used to settle a fiat currency amount
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supported_assets: Option<Vec<String>>,
+
+    /// URI to an invoice
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub invoice: Option<String>,
+
+    /// ISO 8601 timestamp when the request expires
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiry: Option<String>,
+
+    /// Party information for the merchant (beneficiary)
+    pub merchant: Participant,
+
+    /// Party information for the customer (originator) (optional)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub customer: Option<Participant>,
+
+    /// Array of agents involved in the payment request
+    pub agents: Vec<Participant>,
+
+    /// Additional metadata for the payment request
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl PaymentRequest {
+    /// Creates a new PaymentRequest message body
+    pub fn new(amount: String, merchant: Participant, agents: Vec<Participant>) -> Self {
+        Self {
+            asset: None,
+            currency: None,
+            amount,
+            supported_assets: None,
+            invoice: None,
+            expiry: None,
+            merchant,
+            customer: None,
+            agents,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Creates a new PaymentRequest message with asset specification
+    pub fn with_asset(
+        asset: AssetId,
+        amount: String,
+        merchant: Participant,
+        agents: Vec<Participant>,
+    ) -> Self {
+        Self {
+            asset: Some(asset),
+            currency: None,
+            amount,
+            supported_assets: None,
+            invoice: None,
+            expiry: None,
+            merchant,
+            customer: None,
+            agents,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Creates a new PaymentRequest message with currency specification
+    pub fn with_currency(
+        currency: String,
+        amount: String,
+        merchant: Participant,
+        agents: Vec<Participant>,
+    ) -> Self {
+        Self {
+            asset: None,
+            currency: Some(currency),
+            amount,
+            supported_assets: None,
+            invoice: None,
+            expiry: None,
+            merchant,
+            customer: None,
+            agents,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Validates the PaymentRequest message body
+    pub fn validate(&self) -> Result<()> {
+        // Check if at least one of asset or currency is specified
+        if self.asset.is_none() && self.currency.is_none() {
+            return Err(Error::Validation(
+                "Either asset or currency must be specified".to_string(),
+            ));
+        }
+
+        // Validate amount (must be a valid numeric string)
+        if self.amount.trim().is_empty() {
+            return Err(Error::Validation("Amount cannot be empty".to_string()));
+        }
+
+        // Validate that merchant is specified
+        if self.merchant.id.trim().is_empty() {
+            return Err(Error::Validation(
+                "Merchant DID must be specified".to_string(),
+            ));
+        }
+
+        // Validate expiry date format if provided
+        if let Some(expiry) = &self.expiry {
+            if chrono::DateTime::parse_from_rfc3339(expiry).is_err() {
+                return Err(Error::Validation(
+                    "Expiry must be a valid ISO 8601 timestamp".to_string(),
+                ));
+            }
+        }
+
+        // Validate agents field is not empty
+        if self.agents.is_empty() {
+            return Err(Error::Validation("Agents cannot be empty".to_string()));
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for PaymentRequest {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#paymentrequest"
+    }
+
+    fn validate(&self) -> Result<()> {
+        // Check if at least one of asset or currency is specified
+        if self.asset.is_none() && self.currency.is_none() {
+            return Err(Error::Validation(
+                "Either asset or currency must be specified".to_string(),
+            ));
+        }
+
+        // Validate amount (must be a valid numeric string)
+        if self.amount.trim().is_empty() {
+            return Err(Error::Validation("Amount cannot be empty".to_string()));
+        }
+
+        // Validate that merchant is specified
+        if self.merchant.id.trim().is_empty() {
+            return Err(Error::Validation(
+                "Merchant DID must be specified".to_string(),
+            ));
+        }
+
+        // Validate expiry date format if provided
+        if let Some(expiry) = &self.expiry {
+            if chrono::DateTime::parse_from_rfc3339(expiry).is_err() {
+                return Err(Error::Validation(
+                    "Expiry must be a valid ISO 8601 timestamp".to_string(),
+                ));
+            }
+        }
+
+        // Validate agents field is not empty
+        if self.agents.is_empty() {
+            return Err(Error::Validation("Agents cannot be empty".to_string()));
+        }
+
+        Ok(())
+    }
+}
+
+/// Constraints for the connection
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectionConstraints {
+    /// Array of ISO 20022 purpose codes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purposes: Option<Vec<String>>,
+
+    /// Array of ISO 20022 category purpose codes
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_purposes: Option<Vec<String>>,
+
+    /// Transaction limits
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limits: Option<TransactionLimits>,
+}
+
+/// Transaction limits for connections
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionLimits {
+    /// Maximum amount per transaction
+    #[serde(rename = "per_transaction", skip_serializing_if = "Option::is_none")]
+    pub per_transaction: Option<String>,
+
+    /// Maximum daily amount
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub daily: Option<String>,
+
+    /// Currency code for limits
+    pub currency: String,
+}
+
+/// Connect message body (TAIP-15)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Connect {
+    /// Agent details
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<Agent>,
+
+    /// DID of the party the agent represents
+    pub for_id: String,
+
+    /// Transaction constraints for the connection
+    pub constraints: ConnectionConstraints,
+
+    /// Additional metadata for the connection
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl Connect {
+    /// Creates a new Connect message body
+    pub fn new(for_id: String, constraints: ConnectionConstraints) -> Self {
+        Self {
+            agent: None,
+            for_id,
+            constraints,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Creates a new Connect message body with agent details
+    pub fn with_agent(agent: Agent, for_id: String, constraints: ConnectionConstraints) -> Self {
+        Self {
+            agent: Some(agent),
+            for_id,
+            constraints,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Validates the Connect message body
+    pub fn validate(&self) -> Result<()> {
+        // Validate for_id field
+        if self.for_id.trim().is_empty() {
+            return Err(Error::Validation("For ID cannot be empty".to_string()));
+        }
+
+        // Validate constraints
+        if let Some(limits) = &self.constraints.limits {
+            if limits.currency.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Currency code must be specified for limits".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for Connect {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#connect"
+    }
+
+    fn validate(&self) -> Result<()> {
+        // Validate for_id field
+        if self.for_id.trim().is_empty() {
+            return Err(Error::Validation("For ID cannot be empty".to_string()));
+        }
+
+        // Validate constraints
+        if let Some(limits) = &self.constraints.limits {
+            if limits.currency.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Currency code must be specified for limits".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+/// Agent details for Connect message
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Agent {
+    /// DID of the agent
+    pub id: String,
+
+    /// Name of the agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    /// Type of the agent
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
+
+    /// Service URL for the agent
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service_url: Option<String>,
+}
+
+/// AuthorizationRequired message body (TAIP-15)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthorizationRequired {
+    /// URL where the customer can review and approve the connection
+    pub authorization_url: String,
+
+    /// ISO 8601 timestamp when the authorization URL expires
+    pub expires: String,
+
+    /// Additional metadata for the authorization
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl AuthorizationRequired {
+    /// Creates a new AuthorizationRequired message body
+    pub fn new(authorization_url: String, expires: String) -> Self {
+        Self {
+            authorization_url,
+            expires,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Validates the AuthorizationRequired message body
+    pub fn validate(&self) -> Result<()> {
+        // Validate authorization_url field
+        if self.authorization_url.trim().is_empty() {
+            return Err(Error::Validation(
+                "Authorization URL cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate expires field format
+        if chrono::DateTime::parse_from_rfc3339(&self.expires).is_err() {
+            return Err(Error::Validation(
+                "Expires must be a valid ISO 8601 timestamp".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for AuthorizationRequired {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#authorizationrequired"
+    }
+
+    fn validate(&self) -> Result<()> {
+        // Validate authorization_url field
+        if self.authorization_url.trim().is_empty() {
+            return Err(Error::Validation(
+                "Authorization URL cannot be empty".to_string(),
+            ));
+        }
+
+        // Validate expires field format
+        if chrono::DateTime::parse_from_rfc3339(&self.expires).is_err() {
+            return Err(Error::Validation(
+                "Expires must be a valid ISO 8601 timestamp".to_string(),
+            ));
+        }
+
+        Ok(())
+    }
+}
+
+/// OutOfBand message body
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutOfBand {
+    /// Goal code for the out-of-band message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub goal_code: Option<String>,
+
+    /// Human-readable goal for the out-of-band message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub goal: Option<String>,
+
+    /// Array of attachments
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+
+    /// Accept property for the out-of-band message
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accept: Option<Vec<String>>,
+
+    /// Handshake protocols
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handshake_protocols: Option<Vec<String>>,
+
+    /// Additional metadata
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl OutOfBand {
+    /// Creates a new OutOfBand message body
+    pub fn new(
+        goal_code: Option<String>,
+        goal: Option<String>,
+        attachments: Vec<Attachment>,
+    ) -> Self {
+        Self {
+            goal_code,
+            goal,
+            attachments,
+            accept: None,
+            handshake_protocols: None,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Validates the OutOfBand message body
+    pub fn validate(&self) -> Result<()> {
+        // Validate attachments if any are provided
+        for attachment in &self.attachments {
+            if attachment.id.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Attachment ID cannot be empty".to_string(),
+                ));
+            }
+            if attachment.media_type.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Attachment media type cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for OutOfBand {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#outofband"
+    }
+
+    fn validate(&self) -> Result<()> {
+        // Validate attachments if any are provided
+        for attachment in &self.attachments {
+            if attachment.id.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Attachment ID cannot be empty".to_string(),
+                ));
+            }
+            if attachment.media_type.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Attachment media type cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
     }
 }

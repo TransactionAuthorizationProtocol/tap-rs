@@ -2,16 +2,19 @@
 mod errors;
 use errors::ValidationError;
 
+use serde::Deserialize;
+
 use chrono::DateTime;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
-use didcomm::messages::message::DIDCommMessage;
+use didcomm::Message as DIDCommMessage;
 use serde_json::Value;
-
 use tap_caip::AssetId;
 use tap_msg::message::TapMessageBody;
+use tap_msg::Participant;
 use tap_msg::message::Transfer;
 
 #[derive(Debug, PartialEq)]
@@ -439,16 +442,16 @@ fn convert_to_didcomm_message(message: &serde_json::Value) -> Result<DIDCommMess
 }
 
 /// Validates a date/time string by converting it to a Unix timestamp (seconds since epoch).
-/// 
+///
 /// This function supports multiple date formats:
 /// - Unix timestamps (integer seconds since epoch)
 /// - ISO 8601 format (e.g., "2022-01-01T19:23:24Z")
 /// - Simple dates (e.g., "2022-01-01") - converted to midnight UTC
 /// - Human-readable formats with flexible parsing
-/// 
+///
 /// # Arguments
 /// * `date_str` - A string representing a date/time
-/// 
+///
 /// # Returns
 /// * `Ok(u64)` - The Unix timestamp in seconds
 /// * `Err(ValidationError)` - A structured error describing the validation failure
@@ -459,12 +462,12 @@ fn parse_datetime(date_str: &str) -> Result<u64, ValidationError> {
         let full_date_str = format!("{}T00:00:00Z", date_str);
         return parse_datetime(&full_date_str);
     }
-    
+
     // Try to parse as RFC 3339 date
     if let Ok(dt) = DateTime::parse_from_rfc3339(date_str) {
         return Ok(dt.timestamp() as u64);
     }
-    
+
     // Try to parse as different datetime formats
     for fmt in &[
         "%Y-%m-%dT%H:%M:%S%.f%z",
@@ -475,76 +478,76 @@ fn parse_datetime(date_str: &str) -> Result<u64, ValidationError> {
     ] {
         if let Ok(naive_dt) = chrono::NaiveDateTime::parse_from_str(date_str, fmt) {
             // Use the recommended approach instead of deprecated from_utc
-            let dt = chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(
-                naive_dt,
-                chrono::Utc,
-            );
+            let dt =
+                chrono::DateTime::<chrono::Utc>::from_naive_utc_and_offset(naive_dt, chrono::Utc);
             return Ok(dt.timestamp() as u64);
         }
     }
-    
+
     // Try to parse string as a number (Unix timestamp)
     if let Ok(timestamp) = date_str.parse::<u64>() {
         return Ok(timestamp);
     }
-    
+
     // None of the parsing attempts succeeded
-    Err(ValidationError::DateTimeParseError { 
+    Err(ValidationError::DateTimeParseError {
         value: date_str.to_string(),
-        message: "Could not parse as ISO 8601, RFC 3339, or Unix timestamp".to_string()
+        message: "Could not parse as ISO 8601, RFC 3339, or Unix timestamp".to_string(),
     })
 }
 
 /// Validates a presentation message body.
-/// 
+///
 /// For TAP presentation messages:
 /// - An empty body is valid (credentials are typically in attachments)
 /// - If body is not empty, it should contain either "verifiableCredential" or "presentation"
-/// 
+///
 /// # Arguments
 /// * `body` - The JSON object containing the presentation message body
-/// 
+///
 /// # Returns
 /// * `Ok(())` - If validation passes
 /// * `Err(ValidationError)` - A structured error describing the validation failure
-fn validate_presentation_body(body: &serde_json::Map<String, serde_json::Value>) -> Result<(), ValidationError> {
+fn validate_presentation_body(
+    body: &serde_json::Map<String, serde_json::Value>,
+) -> Result<(), ValidationError> {
     // For presentation messages in TAP, the body is typically empty
     // The verifiable credentials are in the attachments, not in the body
     // So an empty body is valid for a presentation message
-    
+
     // If the body contains these fields, check them, but they're not required
     // because the credential data is in the attachments
     let has_cred = body.contains_key("verifiableCredential");
     let has_presentation = body.contains_key("presentation");
-    
+
     // If these fields are present, at least one must be valid
     if !body.is_empty() && !has_cred && !has_presentation {
         return Err(ValidationError::BodyValidationError(
             "Non-empty body is missing credential fields. Either 'verifiableCredential' or 'presentation' should be present if body is not empty".to_string()
         ));
     }
-    
+
     // Otherwise, an empty body is valid - the actual presentation data is in the attachments
     Ok(())
 }
 
 /// Validates a presentation test vector.
-/// 
+///
 /// This validation handles the unique aspects of presentation test vectors:
 /// - Supports DIDComm present-proof protocol format
 /// - Handles empty body with attachments
 /// - Properly validates test vectors marked with `shouldPass: false`
-/// 
+///
 /// # Arguments
 /// * `test_vector` - The test vector to validate
-/// 
+///
 /// # Returns
 /// * `Ok(TestResult)` - The result of validation (Success or Failure)
 /// * `Err(String)` - An error message if validation fails unexpectedly
 fn validate_presentation_vector(test_vector: &TestVector) -> Result<TestResult, String> {
     // First, check if the test vector has a path that indicates it should fail validation
     let expected_to_fail = !test_vector.should_pass || vector_has_invalid_path(test_vector);
-    
+
     // Special case for missing-required-fields.json
     if test_vector.message.get("id").is_some() {
         // Get filename from the test vector to see if it contains "missing-required-fields"
@@ -557,15 +560,15 @@ fn validate_presentation_vector(test_vector: &TestVector) -> Result<TestResult, 
             }
         }
     }
-    
+
     // Try to convert the message to a DIDComm message
     let didcomm_message_result = convert_to_didcomm_message(&test_vector.message);
-    
+
     // If conversion fails and we expect failure, that's a pass
     if didcomm_message_result.is_err() && expected_to_fail {
         return Ok(TestResult::Success);
     }
-    
+
     // If conversion fails but we expected success, that's a failure
     if let Err(e) = didcomm_message_result {
         if !expected_to_fail {
@@ -578,16 +581,16 @@ fn validate_presentation_vector(test_vector: &TestVector) -> Result<TestResult, 
         // Should never reach here due to the check above
         return Err(e);
     }
-    
+
     // We have a valid DIDComm message at this point
     let didcomm_message = didcomm_message_result.unwrap();
-    
+
     // For presentation messages, check for missing required attachment fields
     if test_vector.description.contains("missing required fields") && !test_vector.should_pass {
         // This test is supposed to fail, so we'll return success since we detected it correctly
         return Ok(TestResult::Success);
     }
-    
+
     // Extract body as a map if possible
     let body_map = match didcomm_message.body.as_object() {
         Some(map) => map,
@@ -603,7 +606,7 @@ fn validate_presentation_vector(test_vector: &TestVector) -> Result<TestResult, 
             });
         }
     };
-    
+
     // Validate the presentation message body
     match validate_presentation_body(body_map) {
         Ok(_) => {
@@ -618,7 +621,7 @@ fn validate_presentation_vector(test_vector: &TestVector) -> Result<TestResult, 
             }
             // Test should pass and validation succeeded - test passes
             Ok(TestResult::Success)
-        },
+        }
         Err(_) => {
             if expected_to_fail {
                 // Test should fail and validation failed - test passes
@@ -726,8 +729,9 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                                 Ok(TestResult::Failure {
                                     expected: false,
                                     actual: true,
-                                    error_message: "Transfer validation succeeded when it should have failed"
-                                        .to_string(),
+                                    error_message:
+                                        "Transfer validation succeeded when it should have failed"
+                                            .to_string(),
                                 })
                             }
                         }
@@ -1459,8 +1463,9 @@ fn validate_confirm_relationship_vector(test_vector: &TestVector) -> Result<Test
                 Ok(TestResult::Failure {
                     expected: false,
                     actual: true,
-                    error_message: "ConfirmRelationship validation succeeded when it should have failed"
-                        .to_string(),
+                    error_message:
+                        "ConfirmRelationship validation succeeded when it should have failed"
+                            .to_string(),
                 })
             }
         }
@@ -1530,7 +1535,10 @@ fn validate_update_policies_vector(test_vector: &TestVector) -> Result<TestResul
                 Ok(TestResult::Success)
             } else {
                 // Debug information for should_pass: false tests that pass validation
-                println!("DEBUG: Valid policy vector failed: {}", test_vector.file_path);
+                println!(
+                    "DEBUG: Valid policy vector failed: {}",
+                    test_vector.file_path
+                );
 
                 Ok(TestResult::Failure {
                     expected: false,
@@ -1674,25 +1682,25 @@ fn generate_compatibility_report() {
 }
 
 /// Normalizes various message type formats to a consistent format.
-/// 
+///
 /// This function handles different variations of message types:
 /// - Converts to lowercase
 /// - Normalizes aliases (e.g., "present-proof" → "presentation")
 /// - Strips protocol version information
-/// 
+///
 /// # Arguments
 /// * `message_type` - The original message type string
-/// 
+///
 /// # Returns
 /// * A normalized message type string
 fn normalize_message_type(message_type: &str) -> String {
     let lowercase = message_type.to_lowercase();
-    
+
     // Handle presentation message special case
     if lowercase.contains("present-proof") && lowercase.contains("presentation") {
         return "presentation".to_string();
     }
-    
+
     // Strip protocol version information if present
     if lowercase.contains('/') {
         let parts: Vec<&str> = lowercase.split('/').collect();
@@ -1700,7 +1708,7 @@ fn normalize_message_type(message_type: &str) -> String {
             return last.to_string();
         }
     }
-    
+
     lowercase
 }
 
