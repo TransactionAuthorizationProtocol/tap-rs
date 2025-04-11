@@ -5,7 +5,7 @@
 - [x] Fix AssetId handling in Transfer.from_didcomm to support both string and object representations
 - [x] Fix handling of optional fields (beneficiary, settlement_id, memo) during deserialization
 - [x] Improve error handling and validation logic throughout the codebase
-- [ ] Implement support for standard DIDComm present-proof protocol for presentation messages
+- [x] Implement support for standard DIDComm present-proof protocol for presentation messages
 - [ ] Create more comprehensive tests against the full range of test vectors
 - [ ] Update documentation for supported message formats and any deviations
 - [ ] Optimize message parsing and validation for improved throughput
@@ -180,7 +180,7 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
    - ✅ Improve validation logic for all message types
    - ✅ Implement the missing message types
    - ✅ Enhance date parsing capabilities
-   - ⬜ Add support for standard DIDComm present-proof protocol for presentation messages
+   - ✅ Add support for standard DIDComm present-proof protocol for presentation messages
    - Consider additional enhancements for misformatted fields tolerance
 
 2. **For Test Vector Specification**:
@@ -198,13 +198,13 @@ As of April 11, 2025, our implementation successfully validates most test vector
 2. ✅ Ensured proper handling of optional fields (beneficiary, settlement_id, memo) during deserialization
 3. ✅ Improved error handling throughout the codebase
 
-The main remaining gap is in Presentation message handling, where our implementation uses a TAP-specific format while the test vectors use the standard DIDComm present-proof protocol format.
+The main remaining gap is in Presentation message handling, where our implementation now supports the standard DIDComm present-proof protocol format used in the test vectors.
 
 ### Implementation Gaps
 
 | Message Type | Status | Issue Description |
 |--------------|--------|-------------------|
-| Presentation | ⚠️ Partial | Our implementation uses a TAP-specific format while test vectors use DIDComm's present-proof protocol. Need to implement support for the standard DIDComm present-proof format. |
+| Presentation | ✅ | Our implementation now supports the standard DIDComm present-proof protocol format. |
 
 ### Payment Request Message (TAIP-14)
 
@@ -246,10 +246,8 @@ The main remaining gap is in Presentation message handling, where our implementa
 
 ## Next Steps
 
-1. **DIDComm Present-Proof Integration**: Modify our Presentation message implementation to fully support the standard DIDComm present-proof protocol format used in the test vectors.
+1. **Additional Test Coverage**: Create more comprehensive tests that validate our implementation against the full range of test vectors from the specification.
 
-2. **Additional Test Coverage**: Create more comprehensive tests that validate our implementation against the full range of test vectors from the specification.
+2. **Documentation Updates**: Enhance our documentation to clearly describe the supported message formats and any deviations from the standard.
 
-3. **Documentation Updates**: Enhance our documentation to clearly describe the supported message formats and any deviations from the standard.
-
-4. **Performance Optimization**: Optimize message parsing and validation for improved throughput, especially for applications that need to handle high volumes of TAP messages.
+3. **Performance Optimization**: Optimize message parsing and validation for improved throughput, especially for applications that need to handle high volumes of TAP messages.

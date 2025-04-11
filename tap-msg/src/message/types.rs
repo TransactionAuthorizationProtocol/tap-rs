@@ -2095,3 +2095,266 @@ impl TapMessageBody for OutOfBand {
         Ok(())
     }
 }
+
+/// DIDComm Presentation format (using present-proof protocol)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DIDCommPresentation {
+    /// Reference to a previous message in the thread
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thid: Option<String>,
+
+    /// Optional comment
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub comment: Option<String>,
+
+    /// Goal code
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub goal_code: Option<String>,
+
+    /// Attachments containing the verifiable presentations
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<Attachment>,
+
+    /// Additional metadata
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl DIDCommPresentation {
+    /// Creates a new DIDComm Presentation
+    pub fn new(
+        thid: Option<String>,
+        attachments: Vec<Attachment>,
+    ) -> Self {
+        Self {
+            thid,
+            comment: None,
+            goal_code: None,
+            attachments,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Validate the DIDComm Presentation
+    pub fn validate(&self) -> Result<()> {
+        // Validate attachments if any are provided
+        if self.attachments.is_empty() {
+            return Err(Error::Validation(
+                "Presentation must include at least one attachment".to_string(),
+            ));
+        }
+
+        for attachment in &self.attachments {
+            if attachment.id.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Attachment ID cannot be empty".to_string(),
+                ));
+            }
+            if attachment.media_type.trim().is_empty() {
+                return Err(Error::Validation(
+                    "Attachment media type cannot be empty".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl TapMessageBody for DIDCommPresentation {
+    fn message_type() -> &'static str {
+        "https://didcomm.org/present-proof/3.0/presentation"
+    }
+
+    fn validate(&self) -> Result<()> {
+        self.validate()
+    }
+
+    fn from_didcomm(message: &Message) -> Result<Self> {
+        // Check if this is the correct message type
+        if message.type_ != "https://didcomm.org/present-proof/3.0/presentation" {
+            return Err(Error::InvalidMessageType(format!(
+                "Expected message type {}, but found {}",
+                Self::message_type(),
+                message.type_
+            )));
+        }
+
+        // Extract body and attachments
+        let body = message
+            .body
+            .as_object()
+            .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
+
+        // Extract the thread id
+        let thid = message.thid.clone();
+        
+        // Extract comment if present
+        let comment = body
+            .get("comment")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+
+        // Extract goal_code if present
+        let goal_code = body
+            .get("goal_code")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+
+        // Extract attachments
+        let attachments = if let Some(didcomm_attachments) = &message.attachments {
+            didcomm_attachments
+                .iter()
+                .filter_map(|a| {
+                    // Both id and media_type must be present
+                    if a.id.is_none() || a.media_type.is_none() {
+                        return None;
+                    }
+                    
+                    // Convert the didcomm::AttachmentData to our AttachmentData if present
+                    let data = match &a.data {
+                        didcomm::AttachmentData::Base64 { value } => {
+                            Some(AttachmentData {
+                                base64: Some(value.base64.clone()),
+                                json: None,
+                            })
+                        }
+                        didcomm::AttachmentData::Json { value } => {
+                            Some(AttachmentData {
+                                base64: None,
+                                json: Some(value.json.clone()),
+                            })
+                        }
+                        didcomm::AttachmentData::Links { .. } => {
+                            // We don't currently support links in our AttachmentData
+                            None
+                        }
+                    };
+                    
+                    // Create our Attachment
+                    Some(Attachment {
+                        id: a.id.as_ref().unwrap().clone(),
+                        media_type: a.media_type.as_ref().unwrap().clone(),
+                        data,
+                    })
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+
+        // Parse metadata (excluding known fields)
+        let mut metadata = HashMap::new();
+        for (k, v) in body.iter() {
+            if !["comment", "goal_code"].contains(&k.as_str()) {
+                metadata.insert(k.clone(), v.clone());
+            }
+        }
+
+        let presentation = Self {
+            thid,
+            comment,
+            goal_code,
+            attachments,
+            metadata,
+        };
+
+        presentation.validate()?;
+
+        Ok(presentation)
+    }
+
+    fn to_didcomm(&self) -> Result<Message> {
+        // Create message body
+        let mut body = serde_json::Map::new();
+        
+        // Add optional fields if present
+        if let Some(comment) = &self.comment {
+            body.insert("comment".to_string(), serde_json::Value::String(comment.clone()));
+        }
+
+        if let Some(goal_code) = &self.goal_code {
+            body.insert("goal_code".to_string(), serde_json::Value::String(goal_code.clone()));
+        }
+
+        // Add metadata fields
+        for (key, value) in &self.metadata {
+            body.insert(key.clone(), value.clone());
+        }
+
+        // Convert our attachments to didcomm::Attachment
+        let didcomm_attachments = if !self.attachments.is_empty() {
+            let attachments: Vec<didcomm::Attachment> = self.attachments.iter().filter_map(|a| {
+                // Convert our AttachmentData to didcomm's if present
+                let didcomm_data = match &a.data {
+                    Some(data) => {
+                        if let Some(base64_data) = &data.base64 {
+                            // Create Base64 attachment data
+                            didcomm::AttachmentData::Base64 {
+                                value: didcomm::Base64AttachmentData {
+                                    base64: base64_data.clone(),
+                                    jws: None,
+                                },
+                            }
+                        } else if let Some(json_data) = &data.json {
+                            // Create JSON attachment data
+                            didcomm::AttachmentData::Json {
+                                value: didcomm::JsonAttachmentData {
+                                    json: json_data.clone(),
+                                    jws: None,
+                                },
+                            }
+                        } else {
+                            // If neither base64 nor json is present, skip this attachment
+                            return None;
+                        }
+                    }
+                    None => {
+                        // If no data is present, skip this attachment
+                        return None;
+                    }
+                };
+                
+                // Create the didcomm Attachment
+                Some(didcomm::Attachment {
+                    id: Some(a.id.clone()),
+                    media_type: Some(a.media_type.clone()),
+                    data: didcomm_data,
+                    filename: None,
+                    format: None,
+                    byte_count: None,
+                    lastmod_time: None,
+                    description: None,
+                })
+            })
+            .collect();
+            
+            if attachments.is_empty() {
+                None
+            } else {
+                Some(attachments)
+            }
+        } else {
+            None
+        };
+
+        // Create the didcomm message
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: serde_json::Value::Object(body),
+            from: None,
+            to: None,
+            thid: self.thid.clone(),
+            pthid: None,
+            extra_headers: HashMap::new(),
+            created_time: Some(crate::utils::get_current_time()?),
+            expires_time: None,
+            from_prior: None,
+            attachments: didcomm_attachments,
+        };
+
+        Ok(message)
+    }
+}
