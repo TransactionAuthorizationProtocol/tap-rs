@@ -2145,6 +2145,13 @@ impl DIDCommPresentation {
 
     /// Validate the DIDComm Presentation
     pub fn validate(&self) -> Result<()> {
+        // Validate thread ID (thid) - required according to test vectors
+        if self.thid.is_none() {
+            return Err(Error::Validation(
+                "Thread ID (thid) is required for presentation message".to_string(),
+            ));
+        }
+
         // Validate attachments if any are provided
         if self.attachments.is_empty() {
             return Err(Error::Validation(
@@ -2153,15 +2160,51 @@ impl DIDCommPresentation {
         }
 
         for attachment in &self.attachments {
+            // Validate attachment ID
             if attachment.id.trim().is_empty() {
                 return Err(Error::Validation(
                     "Attachment ID cannot be empty".to_string(),
                 ));
             }
+
+            // Validate media type
             if attachment.media_type.trim().is_empty() {
                 return Err(Error::Validation(
                     "Attachment media type cannot be empty".to_string(),
                 ));
+            }
+
+            // Check for attachment data
+            if attachment.data.is_none() {
+                return Err(Error::Validation(
+                    "Attachment must include data".to_string(),
+                ));
+            }
+
+            // Check attachment data content
+            if let Some(data) = &attachment.data {
+                if data.base64.is_none() && data.json.is_none() {
+                    return Err(Error::Validation(
+                        "Attachment data must include either base64 or json".to_string(),
+                    ));
+                }
+
+                // If JSON data is present, validate required fields in presentation data
+                if let Some(json_data) = &data.json {
+                    // Check for @context field in JSON data - required by test vectors
+                    if json_data.get("@context").is_none() {
+                        return Err(Error::Validation(
+                            "Attachment JSON data must include @context field".to_string(),
+                        ));
+                    }
+
+                    // Check for type field in JSON data - required by test vectors
+                    if json_data.get("type").is_none() {
+                        return Err(Error::Validation(
+                            "Attachment JSON data must include type field".to_string(),
+                        ));
+                    }
+                }
             }
         }
 
@@ -2180,7 +2223,7 @@ impl TapMessageBody for DIDCommPresentation {
 
     fn from_didcomm(message: &Message) -> Result<Self> {
         // Check if this is the correct message type
-        if message.type_ != "https://didcomm.org/present-proof/3.0/presentation" {
+        if message.type_ != Self::message_type() {
             return Err(Error::InvalidMessageType(format!(
                 "Expected message type {}, but found {}",
                 Self::message_type(),
