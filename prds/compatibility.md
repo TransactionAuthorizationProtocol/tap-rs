@@ -1,6 +1,18 @@
-# TAP Test Vector Compatibility Report
+# TAP Implementation Compatibility Report
 
-This document outlines issues identified in the TAP test vectors that may affect compatibility across different TAP implementations. Items are marked with a checkbox to track progress.
+## TODO List
+
+- [x] Fix AssetId handling in Transfer.from_didcomm to support both string and object representations
+- [x] Fix handling of optional fields (beneficiary, settlement_id, memo) during deserialization
+- [x] Improve error handling and validation logic throughout the codebase
+- [ ] Implement support for standard DIDComm present-proof protocol for presentation messages
+- [ ] Create more comprehensive tests against the full range of test vectors
+- [ ] Update documentation for supported message formats and any deviations
+- [ ] Optimize message parsing and validation for improved throughput
+
+## Overview
+
+This document outlines the compatibility status of our TAP (Transaction Authorization Protocol) implementation against the TAP Interoperability Profile specification (TIPs).
 
 ## Test Vector Status
 
@@ -168,7 +180,7 @@ This document outlines issues identified in the TAP test vectors that may affect
    - ✅ Improve validation logic for all message types
    - ✅ Implement the missing message types
    - ✅ Enhance date parsing capabilities
-   - ✅ Add support for standard DIDComm present-proof protocol for presentation messages
+   - ⬜ Add support for standard DIDComm present-proof protocol for presentation messages
    - Consider additional enhancements for misformatted fields tolerance
 
 2. **For Test Vector Specification**:
@@ -180,11 +192,19 @@ This document outlines issues identified in the TAP test vectors that may affect
 
 ## Current Compatibility Status
 
-As of March 21, 2025, our implementation successfully validates 44 out of 44 test vectors (100%). The remaining failures are primarily due to the issues noted above.
+As of April 11, 2025, our implementation successfully validates most test vectors. The key improvements include:
+
+1. ✅ Fixed the AssetId handling in the Transfer message to support both string and object representations
+2. ✅ Ensured proper handling of optional fields (beneficiary, settlement_id, memo) during deserialization
+3. ✅ Improved error handling throughout the codebase
+
+The main remaining gap is in Presentation message handling, where our implementation uses a TAP-specific format while the test vectors use the standard DIDComm present-proof protocol format.
 
 ### Implementation Gaps
 
-Our implementation has addressed the gaps in Confirm Relationship, Policy Management, Payment Request, Connect, Authorization Required, and Out-of-Band message handling.
+| Message Type | Status | Issue Description |
+|--------------|--------|-------------------|
+| Presentation | ⚠️ Partial | Our implementation uses a TAP-specific format while test vectors use DIDComm's present-proof protocol. Need to implement support for the standard DIDComm present-proof format. |
 
 ### Payment Request Message (TAIP-14)
 
@@ -208,15 +228,13 @@ Our implementation has addressed the gaps in Confirm Relationship, Policy Manage
 | Testing | ✅ | Unit tests added |
 | Test Vector | ⛔ | Not yet available |
 
-### AuthorizationRequired Message (TAIP-15)
+### Authorization Required Message
 
 | Feature | Support | Description |
 |---------|---------|-------------|
 | Type: "authorizationrequired" | ✅ | Implemented in tap-msg |
 | Implementation | ✅ | AuthorizationRequired struct with validation |
-| Authorization URL | ✅ | Support for authorization URL and expiry |
-| Testing | ✅ | Unit tests added |
-| Test Vector | ⛔ | Not yet available |
+| URL validation | ✅ | Validates the authorization URL |
 
 ### Out-of-Band Message
 
@@ -224,7 +242,14 @@ Our implementation has addressed the gaps in Confirm Relationship, Policy Manage
 |---------|---------|-------------|
 | Type: "outofband" | ✅ | Implemented in tap-msg |
 | Implementation | ✅ | OutOfBand struct with validation |
-| Attachments | ✅ | Support for attachments |
-| Handshake Protocols | ✅ | Support for handshake protocols |
-| Testing | ✅ | Unit tests added |
-| Test Vector | ⛔ | Not yet available |
+| Attachment handling | ✅ | Support for various attachment formats |
+
+## Next Steps
+
+1. **DIDComm Present-Proof Integration**: Modify our Presentation message implementation to fully support the standard DIDComm present-proof protocol format used in the test vectors.
+
+2. **Additional Test Coverage**: Create more comprehensive tests that validate our implementation against the full range of test vectors from the specification.
+
+3. **Documentation Updates**: Enhance our documentation to clearly describe the supported message formats and any deviations from the standard.
+
+4. **Performance Optimization**: Optimize message parsing and validation for improved throughput, especially for applications that need to handle high volumes of TAP messages.
