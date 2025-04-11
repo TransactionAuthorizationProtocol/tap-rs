@@ -5,7 +5,7 @@
 use crate::error::{Error, Result};
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::types::{
-    AddAgents, Authorize, ErrorBody, Presentation, Reject, Settle, Transfer,
+    AddAgents, Authorize, DIDCommPresentation, ErrorBody, Presentation, Reject, Settle, Transfer,
 };
 use didcomm::Message;
 use serde_json::Value;
@@ -39,6 +39,12 @@ pub fn validate_message_body(message_type: &str, body: &Value) -> Result<()> {
             let presentation: Presentation = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             presentation.validate()
+        }
+        "https://didcomm.org/present-proof/3.0/presentation" => {
+            // Handle the standard DIDComm present-proof protocol format
+            let didcomm_presentation: DIDCommPresentation = serde_json::from_value(body.clone())
+                .map_err(|e| Error::SerializationError(e.to_string()))?;
+            didcomm_presentation.validate()
         }
         "https://tap.rsvp/schema/1.0#authorize" => {
             let authorize: Authorize = serde_json::from_value(body.clone())

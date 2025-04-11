@@ -14,8 +14,8 @@ use didcomm::Message as DIDCommMessage;
 use serde_json::Value;
 use tap_caip::AssetId;
 use tap_msg::message::TapMessageBody;
-use tap_msg::Participant;
 use tap_msg::message::Transfer;
+use tap_msg::Participant;
 
 #[derive(Debug, PartialEq)]
 enum TestResult {

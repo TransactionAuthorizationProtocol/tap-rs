@@ -199,8 +199,19 @@ impl Transfer {
         // Parse metadata (fields not explicitly handled)
         let mut metadata = HashMap::new();
         for (k, v) in body.iter() {
-            if !["asset", "originator", "beneficiary", "amount", "agents", 
-                 "settlementId", "settlement_id", "memo", "@type"].contains(&k.as_str()) {
+            if ![
+                "asset",
+                "originator",
+                "beneficiary",
+                "amount",
+                "agents",
+                "settlementId",
+                "settlement_id",
+                "memo",
+                "@type",
+            ]
+            .contains(&k.as_str())
+            {
                 metadata.insert(k.clone(), v.clone());
             }
         }
@@ -2122,10 +2133,7 @@ pub struct DIDCommPresentation {
 
 impl DIDCommPresentation {
     /// Creates a new DIDComm Presentation
-    pub fn new(
-        thid: Option<String>,
-        attachments: Vec<Attachment>,
-    ) -> Self {
+    pub fn new(thid: Option<String>, attachments: Vec<Attachment>) -> Self {
         Self {
             thid,
             comment: None,
@@ -2188,7 +2196,7 @@ impl TapMessageBody for DIDCommPresentation {
 
         // Extract the thread id
         let thid = message.thid.clone();
-        
+
         // Extract comment if present
         let comment = body
             .get("comment")
@@ -2210,27 +2218,23 @@ impl TapMessageBody for DIDCommPresentation {
                     if a.id.is_none() || a.media_type.is_none() {
                         return None;
                     }
-                    
+
                     // Convert the didcomm::AttachmentData to our AttachmentData if present
                     let data = match &a.data {
-                        didcomm::AttachmentData::Base64 { value } => {
-                            Some(AttachmentData {
-                                base64: Some(value.base64.clone()),
-                                json: None,
-                            })
-                        }
-                        didcomm::AttachmentData::Json { value } => {
-                            Some(AttachmentData {
-                                base64: None,
-                                json: Some(value.json.clone()),
-                            })
-                        }
+                        didcomm::AttachmentData::Base64 { value } => Some(AttachmentData {
+                            base64: Some(value.base64.clone()),
+                            json: None,
+                        }),
+                        didcomm::AttachmentData::Json { value } => Some(AttachmentData {
+                            base64: None,
+                            json: Some(value.json.clone()),
+                        }),
                         didcomm::AttachmentData::Links { .. } => {
                             // We don't currently support links in our AttachmentData
                             None
                         }
                     };
-                    
+
                     // Create our Attachment
                     Some(Attachment {
                         id: a.id.as_ref().unwrap().clone(),
@@ -2267,14 +2271,20 @@ impl TapMessageBody for DIDCommPresentation {
     fn to_didcomm(&self) -> Result<Message> {
         // Create message body
         let mut body = serde_json::Map::new();
-        
+
         // Add optional fields if present
         if let Some(comment) = &self.comment {
-            body.insert("comment".to_string(), serde_json::Value::String(comment.clone()));
+            body.insert(
+                "comment".to_string(),
+                serde_json::Value::String(comment.clone()),
+            );
         }
 
         if let Some(goal_code) = &self.goal_code {
-            body.insert("goal_code".to_string(), serde_json::Value::String(goal_code.clone()));
+            body.insert(
+                "goal_code".to_string(),
+                serde_json::Value::String(goal_code.clone()),
+            );
         }
 
         // Add metadata fields
@@ -2284,51 +2294,54 @@ impl TapMessageBody for DIDCommPresentation {
 
         // Convert our attachments to didcomm::Attachment
         let didcomm_attachments = if !self.attachments.is_empty() {
-            let attachments: Vec<didcomm::Attachment> = self.attachments.iter().filter_map(|a| {
-                // Convert our AttachmentData to didcomm's if present
-                let didcomm_data = match &a.data {
-                    Some(data) => {
-                        if let Some(base64_data) = &data.base64 {
-                            // Create Base64 attachment data
-                            didcomm::AttachmentData::Base64 {
-                                value: didcomm::Base64AttachmentData {
-                                    base64: base64_data.clone(),
-                                    jws: None,
-                                },
+            let attachments: Vec<didcomm::Attachment> = self
+                .attachments
+                .iter()
+                .filter_map(|a| {
+                    // Convert our AttachmentData to didcomm's if present
+                    let didcomm_data = match &a.data {
+                        Some(data) => {
+                            if let Some(base64_data) = &data.base64 {
+                                // Create Base64 attachment data
+                                didcomm::AttachmentData::Base64 {
+                                    value: didcomm::Base64AttachmentData {
+                                        base64: base64_data.clone(),
+                                        jws: None,
+                                    },
+                                }
+                            } else if let Some(json_data) = &data.json {
+                                // Create JSON attachment data
+                                didcomm::AttachmentData::Json {
+                                    value: didcomm::JsonAttachmentData {
+                                        json: json_data.clone(),
+                                        jws: None,
+                                    },
+                                }
+                            } else {
+                                // If neither base64 nor json is present, skip this attachment
+                                return None;
                             }
-                        } else if let Some(json_data) = &data.json {
-                            // Create JSON attachment data
-                            didcomm::AttachmentData::Json {
-                                value: didcomm::JsonAttachmentData {
-                                    json: json_data.clone(),
-                                    jws: None,
-                                },
-                            }
-                        } else {
-                            // If neither base64 nor json is present, skip this attachment
+                        }
+                        None => {
+                            // If no data is present, skip this attachment
                             return None;
                         }
-                    }
-                    None => {
-                        // If no data is present, skip this attachment
-                        return None;
-                    }
-                };
-                
-                // Create the didcomm Attachment
-                Some(didcomm::Attachment {
-                    id: Some(a.id.clone()),
-                    media_type: Some(a.media_type.clone()),
-                    data: didcomm_data,
-                    filename: None,
-                    format: None,
-                    byte_count: None,
-                    lastmod_time: None,
-                    description: None,
+                    };
+
+                    // Create the didcomm Attachment
+                    Some(didcomm::Attachment {
+                        id: Some(a.id.clone()),
+                        media_type: Some(a.media_type.clone()),
+                        data: didcomm_data,
+                        filename: None,
+                        format: None,
+                        byte_count: None,
+                        lastmod_time: None,
+                        description: None,
+                    })
                 })
-            })
-            .collect();
-            
+                .collect();
+
             if attachments.is_empty() {
                 None
             } else {
