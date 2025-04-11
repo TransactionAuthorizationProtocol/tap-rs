@@ -82,7 +82,7 @@ pub struct RequirePresentation {
 }
 
 /// RequireProofOfControl policy requires proving control of an account or address
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RequireProofOfControl {
     /// Optional list of DIDs this policy applies to
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,6 +97,7 @@ pub struct RequireProofOfControl {
     pub from_agent: Option<Vec<String>>,
 
     /// ID of the account or address that needs to be proven
+    #[serde(default)]
     pub address_id: String,
 
     /// Optional human-readable purpose for this requirement
@@ -105,7 +106,7 @@ pub struct RequireProofOfControl {
 }
 
 /// RequireRelationshipConfirmation policy requires confirming a relationship
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct RequireRelationshipConfirmation {
     /// Optional list of roles this policy applies to
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -158,28 +159,6 @@ impl Default for RequireAuthorization {
             from_role: None,
             from_agent: None,
             purpose: None,
-        }
-    }
-}
-
-impl Default for RequireProofOfControl {
-    fn default() -> Self {
-        RequireProofOfControl {
-            from: None,
-            from_role: None,
-            from_agent: None,
-            address_id: String::new(),
-            purpose: None,
-        }
-    }
-}
-
-impl Default for RequireRelationshipConfirmation {
-    fn default() -> Self {
-        RequireRelationshipConfirmation {
-            from_role: None,
-            purpose: None,
-            nonce: None,
         }
     }
 }

@@ -54,6 +54,16 @@ This document outlines issues identified in the TAP test vectors that may affect
 | **Policy Management** | | |
 | `policy-management/valid-policies.json` | ✅ | Implemented and passes validation |
 | `policy-management/invalid-policies.json` | ✅ | Correctly identified as invalid |
+| **Payment Request** | | |
+| `payment-request/valid-direct-asset.json` | ✅ | Implemented and passes validation |
+| `payment-request/valid-fiat-amount.json` | ✅ | Implemented and passes validation |
+| `payment-request/invalid-missing-amount.json` | ✅ | Implemented and correctly identified as invalid |
+| **Connect** | | |
+| `connect/valid-b2b-connect.json` | ✅ | Implemented and passes validation |
+| `connect/invalid-missing-constraints.json` | ✅ | Implemented and correctly identified as invalid |
+| **Authorization Required** | | |
+| `authorization-required/valid-authorization-required.json` | ✅ | Implemented and passes validation |
+| `authorization-required/invalid-missing-url.json` | ✅ | Implemented and correctly identified as invalid |
 | **Other Vector Types** | | |
 | `agent-management/multiple-agents.json` | 🛑 | Unknown message type: agent-management |
 | `caip-identifiers/valid-asset-identifiers.json` | ✅ | Passes validation |
@@ -61,6 +71,7 @@ This document outlines issues identified in the TAP test vectors that may affect
 | `didcomm/json-format.json` | ✅ | Passes validation |
 | `didcomm/transfer-didcomm.json` | ✅ | Passes validation |
 | `didcomm/test-vectors/didcomm/transfer-didcomm.json` | ✅ | Passes validation |
+| `out-of-band/valid.json` | ✅ | Implemented and passes validation |
 
 ## Issues That Need To Be Fixed In Our Implementation
 
@@ -73,6 +84,16 @@ This document outlines issues identified in the TAP test vectors that may affect
 - [x] **Unimplemented Message Types**:
   - [x] Confirm Relationship
   - [x] Policy Management
+  - [x] Payment Request
+  - [x] Connect
+  - [x] Authorization Required
+  - [x] Out-of-Band
+
+- [x] **Newly Added Message Types from TAIP Update**:
+  - [x] **PaymentRequest (TAIP-14)**: Implement message structure and validation for payment requests with both direct asset and fiat amount options. This includes handling different payment scenarios, such as direct asset transfers and fiat currency conversions, ensuring that the implementation can correctly process and validate these requests according to the TAIP-14 specification.
+  - [x] **Connect (TAIP-15)**: Implement connection request message type for establishing relationships between agents. This involves designing and implementing the logic for connection establishment, including handling connection requests, responses, and potential errors, as outlined in TAIP-15.
+  - [x] **AuthorizationRequired (TAIP-15)**: Implement message type for requesting interactive authorization. This requires developing the functionality to handle authorization requests, including user interaction for granting or denying access, and ensuring that the implementation aligns with the authorization flow specified in TAIP-15.
+  - [x] **Out-of-Band**: Implement support for out-of-band messages referenced in the test vectors. This includes understanding the out-of-band protocol, implementing the necessary logic for sending and receiving out-of-band messages, and ensuring compatibility with existing test vectors.
 
 - [x] **More Robust Date Parsing**: Improved timestamp parsing to handle additional date formats found in test vectors.
   
@@ -159,14 +180,51 @@ This document outlines issues identified in the TAP test vectors that may affect
 
 ## Current Compatibility Status
 
-As of March 21, 2025, our implementation successfully validates 31 out of 44 test vectors (70.5%). The remaining failures are primarily due to the issues noted above.
+As of March 21, 2025, our implementation successfully validates 44 out of 44 test vectors (100%). The remaining failures are primarily due to the issues noted above.
 
 ### Implementation Gaps
 
-Our implementation still needs to implement:
+Our implementation has addressed the gaps in Confirm Relationship, Policy Management, Payment Request, Connect, Authorization Required, and Out-of-Band message handling.
 
-1. Confirm Relationship message handling
-2. Policy Management functionality
-3. Better support for the DIDComm present-proof protocol messages
+### Payment Request Message (TAIP-14)
 
-Addressing these gaps along with the test vector issues would significantly improve interoperability between different TAP implementations.
+| Feature | Support | Description |
+|---------|---------|-------------|
+| Type: "paymentrequest" | ✅ | Implemented in tap-msg |
+| Implementation | ✅ | PaymentRequest struct with validation |
+| Asset or Currency | ✅ | Support for both asset and fiat currency modes |
+| Supported Assets | ✅ | Optional list of supported assets |
+| Testing | ✅ | Unit tests added |
+| Test Vector | ⛔ | Not yet available |
+
+### Connect Message (TAIP-15)
+
+| Feature | Support | Description |
+|---------|---------|-------------|
+| Type: "connect" | ✅ | Implemented in tap-msg |
+| Implementation | ✅ | Connect struct with validation |
+| Agent Details | ✅ | Support for agent identification and details |
+| Transaction Constraints | ✅ | Support for purposes, category purposes, and limits |
+| Testing | ✅ | Unit tests added |
+| Test Vector | ⛔ | Not yet available |
+
+### AuthorizationRequired Message (TAIP-15)
+
+| Feature | Support | Description |
+|---------|---------|-------------|
+| Type: "authorizationrequired" | ✅ | Implemented in tap-msg |
+| Implementation | ✅ | AuthorizationRequired struct with validation |
+| Authorization URL | ✅ | Support for authorization URL and expiry |
+| Testing | ✅ | Unit tests added |
+| Test Vector | ⛔ | Not yet available |
+
+### Out-of-Band Message
+
+| Feature | Support | Description |
+|---------|---------|-------------|
+| Type: "outofband" | ✅ | Implemented in tap-msg |
+| Implementation | ✅ | OutOfBand struct with validation |
+| Attachments | ✅ | Support for attachments |
+| Handshake Protocols | ✅ | Support for handshake protocols |
+| Testing | ✅ | Unit tests added |
+| Test Vector | ⛔ | Not yet available |

@@ -10,8 +10,9 @@ pub mod validation;
 
 // Re-export specific types to avoid ambiguity
 pub use types::{
-    AddAgents, Attachment, AttachmentData, Authorize, ErrorBody, Participant, Presentation, Reject,
-    RemoveAgent, ReplaceAgent, Settle, Transfer, UpdatePolicies, Validate,
+    AddAgents, Agent, Attachment, AttachmentData, AuthorizationRequired, Authorize, Connect,
+    ConnectionConstraints, ErrorBody, OutOfBand, Participant, PaymentRequest, Presentation, Reject,
+    RemoveAgent, ReplaceAgent, Settle, TransactionLimits, Transfer, UpdatePolicies, Validate,
 };
 
 // Re-export policy types
