@@ -2108,6 +2108,59 @@ impl TapMessageBody for OutOfBand {
 }
 
 /// DIDComm Presentation format (using present-proof protocol)
+///
+/// This struct implements the standard DIDComm present-proof protocol format as defined in
+/// [DIDComm Messaging Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present_proof).
+///
+/// It is used for exchanging verifiable presentations between parties in a DIDComm conversation.
+/// The presentation may contain identity credentials, proof of control, or other verifiable claims.
+///
+/// # Compatibility Notes
+///
+/// - This implementation is fully compatible with the standard DIDComm present-proof protocol.
+/// - The message type used is `https://didcomm.org/present-proof/3.0/presentation`.
+/// - Thread ID (`thid`) is required for proper message correlation.
+/// - At least one attachment containing a verifiable presentation is required.
+/// - Attachment data must include either base64 or JSON format data.
+/// - Verifiable presentations in JSON format must include `@context` and `type` fields.
+///
+/// # Example
+///
+/// ```
+/// use std::collections::HashMap;
+/// use tap_msg::message::{Attachment, AttachmentData, DIDCommPresentation};
+/// use serde_json::json;
+///
+/// // Create a presentation with a verifiable credential
+/// let presentation = DIDCommPresentation {
+///     thid: Some("123e4567-e89b-12d3-a456-426614174000".to_string()),
+///     comment: Some("Proof of identity".to_string()),
+///     goal_code: Some("kyc.individual".to_string()),
+///     attachments: vec![
+///         Attachment {
+///             id: "credential-1".to_string(),
+///             media_type: "application/json".to_string(),
+///             data: Some(AttachmentData {
+///                 base64: None,
+///                 json: Some(json!({
+///                     "@context": ["https://www.w3.org/2018/credentials/v1"],
+///                     "type": ["VerifiablePresentation"],
+///                     "verifiableCredential": [{
+///                         "@context": ["https://www.w3.org/2018/credentials/v1"],
+///                         "type": ["VerifiableCredential"],
+///                         "issuer": "did:web:issuer.example",
+///                         "issuanceDate": "2022-01-01T19:23:24Z",
+///                         "credentialSubject": {
+///                             "id": "did:example:ebfeb1f712ebc6f1c276e12ec21"
+///                         }
+///                     }]
+///                 })),
+///             }),
+///         }
+///     ],
+///     metadata: HashMap::new(),
+/// };
+/// ```
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DIDCommPresentation {
     /// Reference to a previous message in the thread
@@ -2144,6 +2197,35 @@ impl DIDCommPresentation {
     }
 
     /// Validate the DIDComm Presentation
+    ///
+    /// This method validates a DIDComm presentation according to the standard protocol requirements.
+    /// For a presentation to be valid, it must satisfy the following criteria:
+    ///
+    /// - Must have a thread ID (`thid`) for message correlation
+    /// - Must include at least one attachment
+    /// - Each attachment must have a non-empty ID and media type
+    /// - Each attachment must include data in either base64 or JSON format
+    /// - JSON data must include `@context` and `type` fields
+    ///
+    /// # Returns
+    ///
+    /// - `Ok(())` if the presentation is valid
+    /// - `Err(Error::Validation)` with a descriptive message if validation fails
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tap_msg::message::DIDCommPresentation;
+    /// use tap_msg::Result;
+    ///
+    /// fn check_presentation(presentation: &DIDCommPresentation) -> Result<()> {
+    ///     // Validate the presentation
+    ///     presentation.validate()?;
+    ///     
+    ///     // If we get here, the presentation is valid
+    ///     Ok(())
+    /// }
+    /// ```
     pub fn validate(&self) -> Result<()> {
         // Validate thread ID (thid) - required according to test vectors
         if self.thid.is_none() {
@@ -2211,6 +2293,20 @@ impl DIDCommPresentation {
         Ok(())
     }
 }
+/// Implementation of TapMessageBody for DIDCommPresentation
+///
+/// This implementation ensures that DIDCommPresentation can be converted to and from
+/// didcomm::Message objects, allowing seamless integration with the DIDComm
+/// messaging protocol.
+///
+/// # Details
+///
+/// - **Message Type**: Uses `https://didcomm.org/present-proof/3.0/presentation` as specified by the standard protocol
+/// - **Conversion to DIDComm**: Converts attachments to didcomm::Attachment format with appropriate data representation
+/// - **Conversion from DIDComm**: Extracts presentation data from DIDComm message, handling both Base64 and JSON formats
+///
+/// This implementation follows the [DIDComm Messaging Specification](https://identity.foundation/didcomm-messaging/spec/)
+/// and the [Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present_proof).
 
 impl TapMessageBody for DIDCommPresentation {
     fn message_type() -> &'static str {
@@ -2414,3 +2510,18 @@ impl TapMessageBody for DIDCommPresentation {
         Ok(message)
     }
 }
+
+/// Implementation of TapMessageBody for DIDCommPresentation
+///
+/// This implementation ensures that DIDCommPresentation can be converted to and from
+/// didcomm::Message objects, allowing seamless integration with the DIDComm
+/// messaging protocol.
+///
+/// # Details
+///
+/// - **Message Type**: Uses `https://didcomm.org/present-proof/3.0/presentation` as specified by the standard protocol
+/// - **Conversion to DIDComm**: Converts attachments to didcomm::Attachment format with appropriate data representation
+/// - **Conversion from DIDComm**: Extracts presentation data from DIDComm message, handling both Base64 and JSON formats
+///
+/// This implementation follows the [DIDComm Messaging Specification](https://identity.foundation/didcomm-messaging/spec/)
+/// and the [Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present_proof).

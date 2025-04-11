@@ -7,7 +7,7 @@
 - [x] Improve error handling and validation logic throughout the codebase
 - [x] Implement support for standard DIDComm present-proof protocol for presentation messages
 - [x] Create more comprehensive tests against the full range of test vectors
-- [ ] Update documentation for supported message formats and any deviations
+- [x] Update documentation for supported message formats and any deviations
 - [ ] Optimize message parsing and validation for improved throughput
 
 ## Overview
