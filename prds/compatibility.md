@@ -113,7 +113,7 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
 
 ## Issues In Test Vectors That Need To Be Reported
 
-- [ ] **Timestamp Format Inconsistencies**:
+- [x] **Timestamp Format Inconsistencies**:
 
 | Test Vector | Issue | Specification Requirement |
 |-------------|-------|---------------------------|
@@ -124,7 +124,7 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
 | `replace-agent/misformatted-fields.json` | Using integer timestamp `123456` | Should use consistent format |
 | `remove-agent/misformatted-fields.json` | Using integer timestamp `123456` | Should use consistent format |
 
-- [ ] **Message Type Format Inconsistencies**:
+- [x] **Message Type Format Inconsistencies**:
 
 | Test Vector | Issue | Specification Requirement |
 |-------------|-------|---------------------------|
@@ -132,14 +132,14 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
 | `agent-management/multiple-agents.json` | Using non-standard message type `agent-management` | Should use standard TAP message types (`add-agents`, `remove-agent`, etc.) |
 | Multiple files | Inconsistent use of camelCase vs kebab-case in message types | Should consistently use kebab-case per common convention |
 
-- [ ] **Incorrect `should_pass` Values**:
+- [x] **Incorrect `should_pass` Values**:
 
 | Test Vector | Issue | Recommended Fix |
 |-------------|-------|-----------------|
 | `presentation/missing-required-fields.json` | Missing fields but marked as `should_pass: true` | Should be marked as `should_pass: false` |
 | Several misformatted test vectors | Explicitly designed to test error handling but set `should_pass: true` | Should be marked as `should_pass: false` |
 
-- [ ] **Type Mismatches**:
+- [x] **Type Mismatches**:
 
 | Test Vector | Issue | Specification Requirement |
 |-------------|-------|---------------------------|
@@ -147,7 +147,7 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
 | `presentation/misformatted-fields.json` | Integer `12345` where string expected | Should use string for ID fields |
 | Multiple misformatted files | Using integers for string IDs | IDs should be consistently typed as strings |
 
-- [ ] **Schema Structure Issues**:
+- [x] **Schema Structure Issues**:
 
 | Test Vector | Issue | Specification Requirement |
 |-------------|-------|---------------------------|
@@ -156,7 +156,7 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
 | `didcomm/test-vectors/didcomm/transfer-didcomm.json` | Missing `purpose` field | All test vectors should have a consistent structure |
 | `didcomm/transfer-didcomm.json` | Missing `purpose` field | All test vectors should have a consistent structure |
 
-- [ ] **Inconsistent Test Vector Structure**:
+- [x] **Inconsistent Test Vector Structure**:
 
 | Issue | Description | Recommendation |
 |-------|-------------|----------------|
