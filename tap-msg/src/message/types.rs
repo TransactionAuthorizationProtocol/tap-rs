@@ -8,7 +8,6 @@ extern crate serde_json;
 use didcomm::Message;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::str::FromStr;
 
 use tap_caip::AssetId;
 
@@ -137,96 +136,172 @@ pub struct Transfer {
 }
 
 impl Transfer {
+    /// Create a new Transfer
+    ///
+    /// # Example
+    /// ```
+    /// use tap_msg::message::Transfer;
+    /// use tap_caip::{AssetId, ChainId};
+    /// use tap_msg::message::Participant;
+    /// use std::collections::HashMap;
+    ///
+    /// // Create chain ID and asset ID
+    /// let chain_id = ChainId::new("eip155", "1").unwrap();
+    /// let asset = AssetId::new(chain_id, "erc20", "0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+    /// 
+    /// // Create participant
+    /// let originator = Participant {
+    ///     id: "did:example:alice".to_string(),
+    ///     role: Some("originator".to_string()),
+    ///     policies: None,
+    ///     leiCode: None,
+    /// };
+    ///
+    /// // Create a transfer with required fields
+    /// let transfer = Transfer::builder()
+    ///     .asset(asset)
+    ///     .originator(originator)
+    ///     .amount("100".to_string())
+    ///     .build();
+    /// ```
+    pub fn builder() -> TransferBuilder {
+        TransferBuilder::default()
+    }
+
     /// Generates a unique message ID for authorization, rejection, or settlement
     pub fn message_id(&self) -> String {
         uuid::Uuid::new_v4().to_string()
     }
-}
 
-impl Transfer {
-    fn from_didcomm(message: &Message) -> Result<Self> {
-        let body = message
-            .body
-            .as_object()
-            .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
+    /// Validate the Transfer
+    pub fn validate(&self) -> Result<()> {
+        // CAIP-19 asset ID is validated by the AssetId type
+        // Transfer amount validation
+        if self.amount.is_empty() {
+            return Err(Error::Validation("Transfer amount cannot be empty".to_string()));
+        }
 
-        // Parse the asset - handle both string and object representations
-        let asset = if let Some(asset_str) = body.get("asset").and_then(|v| v.as_str()) {
-            // Handle string representation (backward compatibility)
-            AssetId::from_str(asset_str)
-                .map_err(|e| Error::Validation(format!("Invalid asset string: {}", e)))?
-        } else if let Some(asset_obj) = body.get("asset") {
-            // Handle object representation
-            serde_json::from_value(asset_obj.clone())
-                .map_err(|e| Error::Validation(format!("Invalid asset object: {}", e)))?
-        } else {
-            return Err(Error::Validation("Missing asset field".to_string()));
-        };
-
-        // Parse required fields
-        let originator = body
-            .get("originator")
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .ok_or_else(|| Error::Validation("Missing or invalid originator".to_string()))?;
-
-        let amount = body
-            .get("amount")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Validation("Missing or invalid amount".to_string()))?;
-
-        // Parse optional fields
-        let beneficiary = body
-            .get("beneficiary")
-            .and_then(|v| serde_json::from_value(v.clone()).ok());
-
-        let settlement_id = body
-            .get("settlementId")
-            .or_else(|| body.get("settlement_id"))
-            .and_then(|v| v.as_str())
-            .map(ToString::to_string);
-
-        let memo = body
-            .get("memo")
-            .and_then(|v| v.as_str())
-            .map(ToString::to_string);
-
-        // Parse agents array (default to empty if missing)
-        let agents = body
-            .get("agents")
-            .and_then(|v| serde_json::from_value(v.clone()).ok())
-            .unwrap_or_default();
-
-        // Parse metadata (fields not explicitly handled)
-        let mut metadata = HashMap::new();
-        for (k, v) in body.iter() {
-            if ![
-                "asset",
-                "originator",
-                "beneficiary",
-                "amount",
-                "agents",
-                "settlementId",
-                "settlement_id",
-                "memo",
-                "@type",
-            ]
-            .contains(&k.as_str())
-            {
-                metadata.insert(k.clone(), v.clone());
+        // Validate agents (if any are defined)
+        for agent in &self.agents {
+            if agent.id.is_empty() {
+                return Err(Error::Validation("Agent ID cannot be empty".to_string()));
             }
         }
 
-        let transfer = Self {
+        Ok(())
+    }
+}
+
+/// Builder for creating Transfer objects in a more idiomatic way
+#[derive(Default)]
+pub struct TransferBuilder {
+    asset: Option<AssetId>,
+    originator: Option<Participant>,
+    amount: Option<String>,
+    beneficiary: Option<Participant>,
+    settlement_id: Option<String>,
+    memo: Option<String>,
+    agents: Vec<Participant>,
+    metadata: HashMap<String, serde_json::Value>,
+}
+
+impl TransferBuilder {
+    /// Set the asset for this transfer
+    pub fn asset(mut self, asset: AssetId) -> Self {
+        self.asset = Some(asset);
+        self
+    }
+
+    /// Set the originator for this transfer
+    pub fn originator(mut self, originator: Participant) -> Self {
+        self.originator = Some(originator);
+        self
+    }
+
+    /// Set the amount for this transfer
+    pub fn amount(mut self, amount: String) -> Self {
+        self.amount = Some(amount);
+        self
+    }
+
+    /// Set the beneficiary for this transfer
+    pub fn beneficiary(mut self, beneficiary: Participant) -> Self {
+        self.beneficiary = Some(beneficiary);
+        self
+    }
+
+    /// Set the settlement ID for this transfer
+    pub fn settlement_id(mut self, settlement_id: String) -> Self {
+        self.settlement_id = Some(settlement_id);
+        self
+    }
+
+    /// Set the memo for this transfer
+    pub fn memo(mut self, memo: String) -> Self {
+        self.memo = Some(memo);
+        self
+    }
+
+    /// Add an agent to this transfer
+    pub fn add_agent(mut self, agent: Participant) -> Self {
+        self.agents.push(agent);
+        self
+    }
+
+    /// Set all agents for this transfer
+    pub fn agents(mut self, agents: Vec<Participant>) -> Self {
+        self.agents = agents;
+        self
+    }
+
+    /// Add a metadata field
+    pub fn add_metadata(mut self, key: String, value: serde_json::Value) -> Self {
+        self.metadata.insert(key, value);
+        self
+    }
+
+    /// Set all metadata for this transfer
+    pub fn metadata(mut self, metadata: HashMap<String, serde_json::Value>) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    /// Build the Transfer object
+    ///
+    /// # Panics
+    ///
+    /// Panics if required fields (asset, originator, amount) are not set
+    pub fn build(self) -> Transfer {
+        Transfer {
+            asset: self.asset.expect("Asset is required"),
+            originator: self.originator.expect("Originator is required"),
+            amount: self.amount.expect("Amount is required"),
+            beneficiary: self.beneficiary,
+            settlement_id: self.settlement_id,
+            memo: self.memo,
+            agents: self.agents,
+            metadata: self.metadata,
+        }
+    }
+
+    /// Try to build the Transfer object, returning an error if required fields are missing
+    pub fn try_build(self) -> Result<Transfer> {
+        let asset = self.asset.ok_or_else(|| Error::Validation("Asset is required".to_string()))?;
+        let originator = self.originator.ok_or_else(|| Error::Validation("Originator is required".to_string()))?;
+        let amount = self.amount.ok_or_else(|| Error::Validation("Amount is required".to_string()))?;
+
+        let transfer = Transfer {
             asset,
             originator,
-            beneficiary,
-            amount: amount.to_string(),
-            agents,
-            settlement_id,
-            memo,
-            metadata,
+            amount,
+            beneficiary: self.beneficiary,
+            settlement_id: self.settlement_id,
+            memo: self.memo,
+            agents: self.agents,
+            metadata: self.metadata,
         };
 
+        // Validate the created transfer
         transfer.validate()?;
 
         Ok(transfer)
@@ -239,20 +314,7 @@ impl TapMessageBody for Transfer {
     }
 
     fn validate(&self) -> Result<()> {
-        // CAIP-19 asset ID is validated by the AssetId type
-        // Transfer amount validation
-        if self.amount.is_empty() {
-            return Err(Error::Validation("Transfer amount is required".to_string()));
-        }
-
-        // Verify originator
-        if self.originator.id.is_empty() {
-            return Err(Error::Validation(
-                "Originator ID is required in Transfer".to_string(),
-            ));
-        }
-
-        Ok(())
+        self.validate()
     }
 
     fn to_didcomm(&self) -> Result<Message> {
@@ -1493,148 +1555,6 @@ impl TapMessageBody for ErrorBody {
     }
 }
 
-/// Implementation of the Authorizable trait for DIDComm Message
-impl Authorizable for Message {
-    fn authorize(
-        &self,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Authorize {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-
-        Authorize {
-            transfer_id: self.id.clone(),
-            note,
-            timestamp,
-            settlement_address: None,
-            metadata,
-        }
-    }
-
-    fn reject(
-        &self,
-        code: String,
-        description: String,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Reject {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-
-        Reject {
-            transfer_id: self.id.clone(),
-            code,
-            description,
-            note,
-            timestamp,
-            metadata,
-        }
-    }
-
-    fn settle(
-        &self,
-        transaction_id: String,
-        transaction_hash: Option<String>,
-        block_height: Option<u64>,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Settle {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-
-        Settle {
-            transfer_id: self.id.clone(),
-            transaction_id,
-            transaction_hash,
-            block_height,
-            note,
-            timestamp,
-            metadata,
-        }
-    }
-
-    fn confirm_relationship(
-        &self,
-        agent_id: String,
-        for_id: String,
-        role: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> ConfirmRelationship {
-        ConfirmRelationship {
-            transfer_id: self.id.clone(),
-            agent_id,
-            for_id,
-            role,
-            metadata,
-        }
-    }
-
-    fn update_policies(
-        &self,
-        policies: Vec<Policy>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> UpdatePolicies {
-        UpdatePolicies {
-            transfer_id: self.id.clone(),
-            policies,
-            metadata,
-        }
-    }
-
-    fn add_agents(
-        &self,
-        agents: Vec<Participant>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> AddAgents {
-        AddAgents {
-            transfer_id: self.id.clone(),
-            agents,
-            metadata,
-        }
-    }
-
-    fn replace_agent(
-        &self,
-        original: String,
-        replacement: Participant,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> ReplaceAgent {
-        ReplaceAgent {
-            transfer_id: self.id.clone(),
-            original,
-            replacement,
-            metadata,
-        }
-    }
-
-    fn update_party(
-        &self,
-        party_type: String,
-        party: Participant,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> UpdateParty {
-        UpdateParty {
-            transfer_id: self.id.clone(),
-            party_type,
-            party,
-            note,
-            metadata,
-            context: Some("https://tap.rsvp/schema/1.0".to_string()),
-        }
-    }
-
-    fn remove_agent(
-        &self,
-        agent: String,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> RemoveAgent {
-        RemoveAgent {
-            transfer_id: self.id.clone(),
-            agent,
-            metadata,
-        }
-    }
-}
-
 /// Payment Request message body (TAIP-14)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaymentRequest {
@@ -2508,5 +2428,147 @@ impl TapMessageBody for DIDCommPresentation {
         };
 
         Ok(message)
+    }
+}
+
+/// Implementation of the Authorizable trait for DIDComm Message
+impl Authorizable for Message {
+    fn authorize(
+        &self,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Authorize {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+
+        Authorize {
+            transfer_id: self.id.clone(),
+            note,
+            timestamp,
+            settlement_address: None,
+            metadata,
+        }
+    }
+
+    fn reject(
+        &self,
+        code: String,
+        description: String,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Reject {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+
+        Reject {
+            transfer_id: self.id.clone(),
+            code,
+            description,
+            note,
+            timestamp,
+            metadata,
+        }
+    }
+
+    fn settle(
+        &self,
+        transaction_id: String,
+        transaction_hash: Option<String>,
+        block_height: Option<u64>,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> Settle {
+        let timestamp = chrono::Utc::now().to_rfc3339();
+
+        Settle {
+            transfer_id: self.id.clone(),
+            transaction_id,
+            transaction_hash,
+            block_height,
+            note,
+            timestamp,
+            metadata,
+        }
+    }
+
+    fn confirm_relationship(
+        &self,
+        agent_id: String,
+        for_id: String,
+        role: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ConfirmRelationship {
+        ConfirmRelationship {
+            transfer_id: self.id.clone(),
+            agent_id,
+            for_id,
+            role,
+            metadata,
+        }
+    }
+
+    fn update_policies(
+        &self,
+        policies: Vec<Policy>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdatePolicies {
+        UpdatePolicies {
+            transfer_id: self.id.clone(),
+            policies,
+            metadata,
+        }
+    }
+
+    fn add_agents(
+        &self,
+        agents: Vec<Participant>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> AddAgents {
+        AddAgents {
+            transfer_id: self.id.clone(),
+            agents,
+            metadata,
+        }
+    }
+
+    fn replace_agent(
+        &self,
+        original: String,
+        replacement: Participant,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> ReplaceAgent {
+        ReplaceAgent {
+            transfer_id: self.id.clone(),
+            original,
+            replacement,
+            metadata,
+        }
+    }
+
+    fn update_party(
+        &self,
+        party_type: String,
+        party: Participant,
+        note: Option<String>,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> UpdateParty {
+        UpdateParty {
+            transfer_id: self.id.clone(),
+            party_type,
+            party,
+            note,
+            metadata,
+            context: Some("https://tap.rsvp/schema/1.0".to_string()),
+        }
+    }
+
+    fn remove_agent(
+        &self,
+        agent: String,
+        metadata: HashMap<String, serde_json::Value>,
+    ) -> RemoveAgent {
+        RemoveAgent {
+            transfer_id: self.id.clone(),
+            agent,
+            metadata,
+        }
     }
 }
