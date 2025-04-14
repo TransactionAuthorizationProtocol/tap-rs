@@ -2293,6 +2293,7 @@ impl DIDCommPresentation {
         Ok(())
     }
 }
+
 /// Implementation of TapMessageBody for DIDCommPresentation
 ///
 /// This implementation ensures that DIDCommPresentation can be converted to and from
@@ -2307,7 +2308,6 @@ impl DIDCommPresentation {
 ///
 /// This implementation follows the [DIDComm Messaging Specification](https://identity.foundation/didcomm-messaging/spec/)
 /// and the [Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present_proof).
-
 impl TapMessageBody for DIDCommPresentation {
     fn message_type() -> &'static str {
         "https://didcomm.org/present-proof/3.0/presentation"
@@ -2510,18 +2510,3 @@ impl TapMessageBody for DIDCommPresentation {
         Ok(message)
     }
 }
-
-/// Implementation of TapMessageBody for DIDCommPresentation
-///
-/// This implementation ensures that DIDCommPresentation can be converted to and from
-/// didcomm::Message objects, allowing seamless integration with the DIDComm
-/// messaging protocol.
-///
-/// # Details
-///
-/// - **Message Type**: Uses `https://didcomm.org/present-proof/3.0/presentation` as specified by the standard protocol
-/// - **Conversion to DIDComm**: Converts attachments to didcomm::Attachment format with appropriate data representation
-/// - **Conversion from DIDComm**: Extracts presentation data from DIDComm message, handling both Base64 and JSON formats
-///
-/// This implementation follows the [DIDComm Messaging Specification](https://identity.foundation/didcomm-messaging/spec/)
-/// and the [Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present_proof).

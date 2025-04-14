@@ -105,6 +105,8 @@ async fn test_didcomm_presentation_validation() {
             data: Some(AttachmentData {
                 base64: None,
                 json: Some(json!({
+                    "@context": ["https://www.w3.org/2018/credentials/v1"],
+                    "type": ["VerifiablePresentation"],
                     "test": "data"
                 })),
             }),
@@ -157,6 +159,8 @@ async fn test_didcomm_presentation_to_didcomm() {
             data: Some(AttachmentData {
                 base64: None,
                 json: Some(json!({
+                    "@context": ["https://www.w3.org/2018/credentials/v1"],
+                    "type": ["VerifiablePresentation"],
                     "test": "data"
                 })),
             }),
@@ -200,39 +204,103 @@ async fn test_didcomm_presentation_to_didcomm() {
 
 #[tokio::test]
 async fn test_round_trip_conversion() {
-    // Create a presentation
-    let original = DIDCommPresentation {
+    // Create a DIDComm message
+    let didcomm_message = Message {
+        id: "test-id".to_string(),
+        typ: "application/didcomm-plain+json".to_string(),
+        type_: "https://didcomm.org/present-proof/3.0/presentation".to_string(),
+        body: json!({
+            "comment": "Test comment",
+            "goal_code": "test.goal",
+            "metadata": {
+                "additional": "data"
+            }
+        }),
+        from: Some("did:example:sender".to_string()),
+        to: Some(vec!["did:example:recipient".to_string()]),
         thid: Some("test-thread-id".to_string()),
-        comment: Some("Test comment".to_string()),
-        goal_code: Some("test.goal".to_string()),
-        attachments: vec![Attachment {
-            id: "test-attachment-id".to_string(),
-            media_type: "application/json".to_string(),
-            data: Some(AttachmentData {
-                base64: None,
-                json: Some(json!({
-                    "test": "data"
-                })),
-            }),
-        }],
-        metadata: HashMap::new(),
+        pthid: None,
+        created_time: Some(1234567890),
+        expires_time: None,
+        from_prior: None,
+        attachments: Some(vec![
+            didcomm::Attachment {
+                id: Some("test-attachment-id".to_string()),
+                description: None,
+                filename: None,
+                media_type: Some("application/json".to_string()),
+                format: None,
+                lastmod_time: None,
+                byte_count: None,
+                data: didcomm::AttachmentData::Json {
+                    value: didcomm::JsonAttachmentData {
+                        json: json!({
+                            "@context": ["https://www.w3.org/2018/credentials/v1"],
+                            "type": ["VerifiablePresentation"],
+                            "test": "data"
+                        }),
+                        jws: None,
+                    },
+                },
+            },
+        ]),
+        extra_headers: HashMap::new(),
     };
 
-    // Convert to DIDComm message
-    let message = original.to_didcomm().expect("Failed to convert to DIDComm");
+    // Convert DIDComm message to DIDCommPresentation
+    let presentation = DIDCommPresentation::from_didcomm(&didcomm_message).unwrap();
 
-    // Convert back to DIDCommPresentation
-    let roundtrip = DIDCommPresentation::from_didcomm(&message)
-        .expect("Failed to convert back to DIDCommPresentation");
+    // Convert back to DIDComm message
+    let round_trip_message = presentation.to_didcomm().unwrap();
 
-    // Verify attributes match
-    assert_eq!(roundtrip.thid, original.thid);
-    assert_eq!(roundtrip.comment, original.comment);
-    assert_eq!(roundtrip.goal_code, original.goal_code);
-    assert_eq!(roundtrip.attachments.len(), original.attachments.len());
-    assert_eq!(roundtrip.attachments[0].id, original.attachments[0].id);
+    // Check that the basic properties match
+    assert_eq!(round_trip_message.type_, didcomm_message.type_);
+    assert_eq!(round_trip_message.thid, didcomm_message.thid);
+
+    // Check that the body properties match
+    let round_trip_body = round_trip_message.body.as_object().unwrap();
+    let original_body = didcomm_message.body.as_object().unwrap();
+
     assert_eq!(
-        roundtrip.attachments[0].media_type,
-        original.attachments[0].media_type
+        round_trip_body.get("comment"),
+        original_body.get("comment")
+    );
+    assert_eq!(
+        round_trip_body.get("goal_code"),
+        original_body.get("goal_code")
+    );
+    assert_eq!(
+        round_trip_body.get("metadata"),
+        original_body.get("metadata")
+    );
+
+    // Check that the attachments match
+    assert!(round_trip_message.attachments.is_some());
+    assert_eq!(
+        round_trip_message.attachments.as_ref().unwrap().len(),
+        didcomm_message.attachments.as_ref().unwrap().len()
+    );
+
+    // Get the first attachment
+    let round_trip_attachment = &round_trip_message.attachments.as_ref().unwrap()[0];
+    let original_attachment = &didcomm_message.attachments.as_ref().unwrap()[0];
+
+    // Check attachment properties
+    assert_eq!(round_trip_attachment.id, original_attachment.id);
+    assert_eq!(
+        round_trip_attachment.media_type,
+        original_attachment.media_type
+    );
+
+    // Convert back to DIDCommPresentation again to verify full round-trip
+    let round_trip_presentation = DIDCommPresentation::from_didcomm(&round_trip_message).unwrap();
+
+    // Verify key properties
+    assert_eq!(presentation.thid, round_trip_presentation.thid);
+    assert_eq!(presentation.comment, round_trip_presentation.comment);
+    assert_eq!(presentation.goal_code, round_trip_presentation.goal_code);
+    assert_eq!(
+        presentation.attachments.len(),
+        round_trip_presentation.attachments.len()
     );
 }
