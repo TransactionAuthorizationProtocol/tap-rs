@@ -4,9 +4,11 @@
 //! is intended for educational purposes only.
 
 pub mod didcomm_message_example;
+pub mod invoice_examples;
 pub mod policy_examples;
 pub mod thread_examples;
 
 pub use didcomm_message_example::*;
+pub use invoice_examples::*;
 pub use policy_examples::*;
 pub use thread_examples::*;

@@ -10,9 +10,13 @@ Core message processing for the Transaction Authorization Protocol (TAP) with in
 - **CAIP Support**: Validation for chain-agnostic identifiers (CAIP-2, CAIP-10, CAIP-19)
 - **Authorization Flows**: Support for authorization, rejection, and settlement flows
 - **Agent Policies**: TAIP-7 compliant policy implementation for defining agent requirements
+- **Invoice Support**: TAIP-16 compliant structured invoice implementation with tax and line item support
+- **Payment Requests**: TAIP-14 compliant payment requests with currency and asset options
 - **Extensibility**: Easy addition of new message types
 
 ## Usage
+
+### Basic Transfer Message
 
 ```rust
 use tap_msg::message::types::{Transfer, Participant};
@@ -56,6 +60,59 @@ let message_with_route = transfer.to_didcomm_with_route(
 
 // Create a TAP message from a DIDComm message
 let received_transfer = Transfer::from_didcomm(&message)?;
+```
+
+### Payment Request with Invoice
+
+```rust
+use tap_msg::{PaymentRequest, Invoice, LineItem, Participant};
+use tap_msg::message::tap_message_trait::TapMessageBody;
+use std::collections::HashMap;
+
+// Create a merchant and a basic invoice
+let merchant = Participant {
+    id: "did:example:merchant".to_string(),
+    role: Some("merchant".to_string()),
+    policies: None,
+    leiCode: None,
+};
+
+// Create line items for the invoice
+let line_items = vec![
+    LineItem {
+        id: "1".to_string(),
+        description: "Premium Service".to_string(),
+        quantity: 1.0,
+        unit_code: None,
+        unit_price: 100.0,
+        line_total: 100.0,
+        tax_category: None,
+    }
+];
+
+// Create a basic invoice
+let invoice = Invoice::new(
+    "INV-2023-001".to_string(),
+    "2023-06-01".to_string(),
+    "USD".to_string(),
+    line_items,
+    100.0,
+);
+
+// Create a payment request with the invoice
+let mut payment_request = PaymentRequest::with_currency(
+    "USD".to_string(),
+    "100.0".to_string(),
+    merchant,
+    vec![],  // No additional agents in this simple example
+);
+payment_request.invoice = Some(invoice);
+
+// Send the payment request to a customer
+let message = payment_request.to_didcomm_with_route(
+    Some("did:example:merchant"),
+    ["did:example:customer"].iter().copied()
+)?;
 ```
 
 ## Message Types
@@ -148,6 +205,98 @@ pub struct Settlement {
     pub txid: String,
     pub note: Option<String>,
     pub metadata: HashMap<String, String>,
+}
+```
+
+### Invoice and Payment Requests (TAIP-14, TAIP-16)
+
+TAP supports structured invoices according to TAIP-16, which can be embedded in payment requests (TAIP-14):
+
+```rust
+use tap_msg::{PaymentRequest, Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
+use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::Participant;
+use std::collections::HashMap;
+
+// Create a merchant participant
+let merchant = Participant {
+    id: "did:example:merchant".to_string(),
+    role: Some("merchant".to_string()),
+    policies: None,
+    leiCode: None,
+};
+
+// Create a simple invoice with line items
+let invoice = Invoice {
+    id: "INV001".to_string(),
+    issue_date: "2023-05-15".to_string(),
+    currency_code: "USD".to_string(),
+    line_items: vec![
+        LineItem {
+            id: "1".to_string(),
+            description: "Product A".to_string(),
+            quantity: 2.0,
+            unit_code: Some("EA".to_string()),
+            unit_price: 10.0,
+            line_total: 20.0,
+            tax_category: None,
+        },
+        LineItem {
+            id: "2".to_string(),
+            description: "Product B".to_string(),
+            quantity: 1.0,
+            unit_code: Some("EA".to_string()),
+            unit_price: 5.0,
+            line_total: 5.0,
+            tax_category: None,
+        },
+    ],
+    tax_total: None,
+    total: 25.0,
+    sub_total: Some(25.0),
+    due_date: None,
+    note: None,
+    payment_terms: None,
+    accounting_cost: None,
+    order_reference: None,
+    additional_document_reference: None,
+    metadata: HashMap::new(),
+};
+
+// Create a payment request with the invoice
+let mut payment_request = PaymentRequest::with_currency(
+    "USD".to_string(),
+    "25.0".to_string(),
+    merchant.clone(),
+    vec![],  // Agents involved in the payment
+);
+
+// Add the invoice to the payment request
+payment_request.invoice = Some(invoice);
+
+// Convert to DIDComm message to send to the customer
+let message = payment_request.to_didcomm_with_route(
+    Some("did:example:merchant"),
+    ["did:example:customer"].iter().copied()
+).unwrap();
+
+// When receiving a payment request, extract and validate the invoice
+let received_request = PaymentRequest::from_didcomm(&message).unwrap();
+received_request.validate().unwrap();
+
+if let Some(received_invoice) = received_request.invoice {
+    println!("Invoice ID: {}", received_invoice.id);
+    println!("Total amount: {}", received_invoice.total);
+    
+    // Process line items
+    for item in received_invoice.line_items {
+        println!("{} x {} @ ${} = ${}", 
+            item.quantity, 
+            item.description, 
+            item.unit_price, 
+            item.line_total
+        );
+    }
 }
 ```
 

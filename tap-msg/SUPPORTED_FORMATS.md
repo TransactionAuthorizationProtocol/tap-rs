@@ -31,7 +31,8 @@ The following message types are fully supported in our implementation:
 | ConfirmRelationship | `https://tap.rsvp/schema/1.0#ConfirmRelationship` | Full | - |
 | OutOfBand | `https://didcomm.org/out-of-band/2.0/invitation` | Full | - |
 | DIDCommPresentation | `https://didcomm.org/present-proof/3.0/presentation` | Full | Fully compliant with standard DIDComm present-proof protocol |
-| PaymentRequest | `https://tap.rsvp/schema/1.0#PaymentRequest` | Full | - |
+| PaymentRequest | `https://tap.rsvp/schema/1.0#PaymentRequest` | Full | TAIP-14 support with currency/asset options and embedded invoice |
+| Invoice | Embedded in PaymentRequest | Full | TAIP-16 compliant structured invoice with line items and tax details |
 | AuthorizationRequired | `https://tap.rsvp/schema/1.0#AuthorizationRequired` | Full | - |
 | Connect | `https://tap.rsvp/schema/1.0#Connect` | Full | - |
 
@@ -51,6 +52,8 @@ Our implementation includes the following extensions to the standard specificati
 1. **Enhanced Validation**: Additional validation logic beyond what's required in specifications
 2. **Tolerance for Format Issues**: Some message types (e.g., Settle) are tolerant of minor format issues
 3. **Additional Fields**: Support for additional metadata fields not specified in the standards
+4. **Invoice Support**: Full implementation of TAIP-16 structured invoice with validation
+5. **Embedded Invoices**: Integration of invoice objects within payment requests
 
 ## Compatibility Testing
 

@@ -1573,9 +1573,9 @@ pub struct PaymentRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supported_assets: Option<Vec<String>>,
 
-    /// URI to an invoice
+    /// Structured invoice information according to TAIP-16
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub invoice: Option<String>,
+    pub invoice: Option<crate::message::invoice::Invoice>,
 
     /// ISO 8601 timestamp when the request expires
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1688,6 +1688,37 @@ impl PaymentRequest {
         // Validate agents field is not empty
         if self.agents.is_empty() {
             return Err(Error::Validation("Agents cannot be empty".to_string()));
+        }
+
+        // Validate invoice if present
+        if let Some(invoice) = &self.invoice {
+            // Validate the invoice structure
+            invoice.validate()?;
+            
+            // Validate that invoice total matches payment amount
+            if let Ok(amount_f64) = self.amount.parse::<f64>() {
+                let difference = (amount_f64 - invoice.total).abs();
+                if difference > 0.01 { // Allow a small tolerance for floating point calculations
+                    return Err(Error::Validation(
+                        format!(
+                            "Invoice total ({}) does not match payment amount ({})", 
+                            invoice.total, amount_f64
+                        )
+                    ));
+                }
+            }
+            
+            // Validate currency consistency if both are present
+            if let Some(currency) = &self.currency {
+                if currency.to_uppercase() != invoice.currency_code.to_uppercase() {
+                    return Err(Error::Validation(
+                        format!(
+                            "Payment request currency ({}) does not match invoice currency ({})", 
+                            currency, invoice.currency_code
+                        )
+                    ));
+                }
+            }
         }
 
         Ok(())

@@ -7,6 +7,7 @@ pub mod policy;
 pub mod tap_message_trait;
 pub mod types;
 pub mod validation;
+pub mod invoice;
 
 // Re-export specific types to avoid ambiguity
 pub use types::{
@@ -15,6 +16,9 @@ pub use types::{
     Presentation, Reject, RemoveAgent, ReplaceAgent, Settle, TransactionLimits, Transfer,
     UpdatePolicies, Validate,
 };
+
+// Re-export invoice types
+pub use invoice::{Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal, OrderReference, DocumentReference};
 
 // Re-export policy types
 pub use policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl};
