@@ -20,10 +20,9 @@ pub mod utils;
 // Re-export public types for easier access
 pub use error::{Error, Result};
 pub use message::{
-    create_tap_message, AddAgents, Attachment, AttachmentData, Authorize, ErrorBody, Participant,
-    Presentation, Reject, Settle, TapMessageBody, Transfer, Validate,
-    Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal, OrderReference, DocumentReference,
-    PaymentRequest,
+    create_tap_message, AddAgents, Attachment, AttachmentData, Authorize, DocumentReference,
+    ErrorBody, Invoice, LineItem, OrderReference, Participant, PaymentRequest, Presentation,
+    Reject, Settle, TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, Transfer, Validate,
 };
 
 // Conditional compilation for WASM targets

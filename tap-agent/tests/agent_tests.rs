@@ -46,7 +46,7 @@ impl TapMessageBody for TestMessage {
         Ok(())
     }
 
-    fn to_didcomm(&self) -> TapCoreResult<didcomm::Message> {
+    fn to_didcomm(&self, from_did: Option<&str>) -> TapCoreResult<didcomm::Message> {
         // Create a new DIDComm message
         let msg = didcomm::Message {
             id: Uuid::new_v4().to_string(),
@@ -54,15 +54,15 @@ impl TapMessageBody for TestMessage {
             type_: Self::message_type().to_string(),
             body: serde_json::to_value(self)
                 .map_err(|e| TapCoreError::SerializationError(e.to_string()))?,
-            from: None,
+            from: from_did.map(|did| did.to_string()),
             to: None,
             thid: None,
             pthid: None,
-            extra_headers: Default::default(),
             created_time: None,
             expires_time: None,
             from_prior: None,
             attachments: None,
+            extra_headers: Default::default(),
         };
 
         Ok(msg)
@@ -107,7 +107,7 @@ impl TapMessageBody for PresentationMessage {
         Ok(())
     }
 
-    fn to_didcomm(&self) -> TapCoreResult<didcomm::Message> {
+    fn to_didcomm(&self, from_did: Option<&str>) -> TapCoreResult<didcomm::Message> {
         // Create a new DIDComm message
         let msg = didcomm::Message {
             id: Uuid::new_v4().to_string(),
@@ -115,15 +115,15 @@ impl TapMessageBody for PresentationMessage {
             type_: Self::message_type().to_string(),
             body: serde_json::to_value(self)
                 .map_err(|e| TapCoreError::SerializationError(e.to_string()))?,
-            from: None,
+            from: from_did.map(|did| did.to_string()),
             to: None,
             thid: None,
             pthid: None,
-            extra_headers: Default::default(),
             created_time: None,
             expires_time: None,
             from_prior: None,
             attachments: None,
+            extra_headers: Default::default(),
         };
 
         Ok(msg)

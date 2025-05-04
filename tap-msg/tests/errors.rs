@@ -2,6 +2,7 @@ use thiserror::Error;
 
 /// Errors that can occur during test vector validation
 #[derive(Error, Debug)]
+#[allow(dead_code)] // Enum used for test error handling
 pub enum ValidationError {
     /// Error parsing a DIDComm message
     #[error("Failed to parse DIDComm message: {0}")]
@@ -33,6 +34,7 @@ pub enum ValidationError {
 }
 
 /// Helper function to convert a string error to a ValidationError::Other
+#[allow(dead_code)] // Function used for test error conversion
 pub fn to_validation_error<S: AsRef<str>>(error: S) -> ValidationError {
     ValidationError::Other(error.as_ref().to_string())
 }

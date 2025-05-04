@@ -1,12 +1,14 @@
 //! Examples for thread management and messaging workflows.
 
-use crate::error::Result;
-use crate::message::{
-    types::Authorizable, AddAgents, Authorize, Participant, Policy, RemoveAgent, ReplaceAgent,
-    RequireProofOfControl, Settle, TapMessage, TapMessageBody, Transfer,
+use crate::error::{Error, Result};
+use crate::message::policy::{Policy, RequireProofOfControl};
+use crate::message::tap_message_trait::TapMessageBody;
+use crate::message::types::{
+    AddAgents, Authorizable, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
 };
-use crate::utils::get_current_time;
+
 use didcomm::Message;
+use serde_json;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -47,16 +49,24 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
     let authorize = Authorize {
         transfer_id: transfer_message.id.clone(),
         note: Some("I authorize this transfer".to_string()),
-        timestamp: get_current_time()?.to_string(),
-        settlement_address: None,
-        metadata: HashMap::new(),
     };
 
-    // Create a reply from Alice to Bob
-    let response_message =
-        authorize.create_reply(&transfer_message, alice_did, &[alice_did, bob_did])?;
+    // Create a reply to the transfer message
+    let mut authorize_reply = authorize.to_didcomm(Some(alice_did))?;
 
-    Ok(response_message)
+    // Set thread ID to maintain conversation
+    authorize_reply.thid = Some(transfer_message.id.clone());
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = [alice_did, bob_did]
+        .iter()
+        .filter(|&did| **did != *alice_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    authorize_reply.to = Some(recipients);
+
+    Ok(authorize_reply)
 }
 
 /// This example demonstrates how to create a reply using the Message trait extension
@@ -68,14 +78,26 @@ pub fn create_reply_using_message_trait_example(
     let authorize = Authorize {
         transfer_id: original_message.id.clone(),
         note: Some("Transfer authorized".to_string()),
-        timestamp: get_current_time()?.to_string(),
-        settlement_address: None,
-        metadata: HashMap::new(),
     };
 
     // Create a reply using the Message trait extension
     // This will automatically gather all participants from the original message
-    let response_message = original_message.create_reply(&authorize, creator_did)?;
+    let mut response_message = authorize.to_didcomm(Some(creator_did))?;
+
+    // Set thread ID to maintain conversation
+    response_message.thid = original_message.thid.clone();
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = original_message
+        .to
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter(|did| **did != creator_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    response_message.to = Some(recipients);
 
     Ok(response_message)
 }
@@ -132,31 +154,48 @@ pub fn create_add_agents_example() -> Result<Message> {
     let authorize = Authorize {
         transfer_id: transfer_message.id.clone(),
         note: Some("I authorize this transfer".to_string()),
-        timestamp: get_current_time()?.to_string(),
-        settlement_address: None,
-        metadata: HashMap::new(),
     };
 
     // Create a reply from the originator to the beneficiary
-    let authorize_message = authorize.create_reply(
-        &transfer_message,
-        originator_did,
-        &[originator_did, beneficiary_did],
-    )?;
+    let mut authorize_message = authorize.to_didcomm(Some(originator_did))?;
+
+    // Set thread ID to maintain conversation
+    authorize_message.thid = Some(transfer_message.id.clone());
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = [originator_did, beneficiary_did]
+        .iter()
+        .filter(|did| **did != originator_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    authorize_message.to = Some(recipients);
 
     // Create an AddAgents message
-    let add_agents = authorize_message.add_agents(
-        vec![Participant {
+    let add_agents = AddAgents {
+        transfer_id: transfer_message.id.clone(),
+        agents: vec![Participant {
             id: new_agent_did.to_string(),
             role: Some("compliance".to_string()),
             policies: None,
             leiCode: None,
         }],
-        HashMap::new(),
-    );
+    };
 
     // Create a reply using the TapMessage trait
-    let response = transfer_message.create_reply(&add_agents, originator_did)?;
+    let mut response = add_agents.to_didcomm(Some(originator_did))?;
+
+    // Set thread ID to maintain conversation
+    response.thid = Some(transfer_message.id.clone());
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = [originator_did, beneficiary_did, new_agent_did]
+        .iter()
+        .filter(|did| **did != originator_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    response.to = Some(recipients);
 
     Ok(response)
 }
@@ -169,6 +208,11 @@ pub fn create_replace_agent_example(
     replacement_agent_id: &str,
     replacement_agent_role: Option<&str>,
 ) -> Result<Message> {
+    // Extract body and deserialize to Transfer
+    let original_body_json = original_message.body.clone();
+    let original_transfer: Transfer = serde_json::from_value(original_body_json)
+        .map_err(|e| Error::SerializationError(e.to_string()))?;
+
     // Create a replacement participant
     let replacement = Participant {
         id: replacement_agent_id.to_string(),
@@ -177,12 +221,30 @@ pub fn create_replace_agent_example(
         leiCode: None,
     };
 
-    // Create a ReplaceAgent message using the Authorizable trait
-    let replace_agent =
-        original_message.replace_agent(original_agent_id.to_string(), replacement, HashMap::new());
+    // Call replace_agent on the Transfer instance
+    let replace_agent_body = original_transfer.replace_agent(
+        original_message.id.clone(),
+        original_agent_id.to_string(),
+        replacement,
+    );
 
     // Create a reply using the TapMessage trait
-    let response = original_message.create_reply(&replace_agent, creator_did)?;
+    let mut response = replace_agent_body.to_didcomm(Some(creator_did))?;
+
+    // Set thread ID to maintain conversation
+    response.thid = original_message.thid.clone();
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = original_message
+        .to
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter(|did| **did != creator_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    response.to = Some(recipients);
 
     Ok(response)
 }
@@ -193,11 +255,32 @@ pub fn create_remove_agent_example(
     creator_did: &str,
     agent_to_remove: &str,
 ) -> Result<Message> {
-    // Create a RemoveAgent message using the Authorizable trait
-    let remove_agent = original_message.remove_agent(agent_to_remove.to_string(), HashMap::new());
+    // Extract body and deserialize to Transfer
+    let original_body_json = original_message.body.clone();
+    let original_transfer: Transfer = serde_json::from_value(original_body_json)
+        .map_err(|e| Error::SerializationError(e.to_string()))?;
+
+    // Call remove_agent on the Transfer instance
+    let remove_agent_body =
+        original_transfer.remove_agent(original_message.id.clone(), agent_to_remove.to_string());
 
     // Create a reply using the TapMessage trait
-    let response = original_message.create_reply(&remove_agent, creator_did)?;
+    let mut response = remove_agent_body.to_didcomm(Some(creator_did))?;
+
+    // Set thread ID to maintain conversation
+    response.thid = original_message.thid.clone();
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = original_message
+        .to
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter(|did| **did != creator_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    response.to = Some(recipients);
 
     Ok(response)
 }
@@ -208,6 +291,11 @@ pub fn create_update_policies_example(
     creator_did: &str,
     _recipients: &[&str],
 ) -> Result<Message> {
+    // Extract body and deserialize to Transfer
+    let original_body_json = original_message.body.clone();
+    let original_transfer: Transfer = serde_json::from_value(original_body_json)
+        .map_err(|e| Error::SerializationError(e.to_string()))?;
+
     // Create a proof of control policy
     let proof_policy = RequireProofOfControl {
         from: Some(vec!["did:example:dave".to_string()]),
@@ -217,16 +305,75 @@ pub fn create_update_policies_example(
         purpose: Some("Please prove control of your account".to_string()),
     };
 
-    // Create an UpdatePolicies message using the Authorizable trait
-    let update_policies = original_message.update_policies(
+    // Call update_policies on the Transfer instance
+    let update_policies_body = original_transfer.update_policies(
+        original_message.id.clone(),
         vec![Policy::RequireProofOfControl(proof_policy)],
-        HashMap::new(),
     );
 
     // Create a reply using the TapMessage trait, which maintains thread correlation
-    let response = original_message.create_reply(&update_policies, creator_did)?;
+    let mut response = update_policies_body.to_didcomm(Some(creator_did))?;
+
+    // Set thread ID to maintain conversation
+    response.thid = original_message.thid.clone();
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = original_message
+        .to
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter(|did| **did != creator_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    response.to = Some(recipients);
 
     Ok(response)
+}
+
+/// This example demonstrates how to create a settle message as a reply to a transfer
+pub fn settle_example(
+    original_message: &Message,
+    creator_did: &str,
+    transaction_id: String,
+    transaction_hash: Option<String>,
+    block_height: Option<u64>,
+    note: Option<String>,
+) -> Result<Message> {
+    // 1. Extract body and deserialize to Transfer/Payment (assuming Transfer here)
+    let original_body_json = original_message.body.clone();
+    let original_transfer: Transfer = serde_json::from_value(original_body_json)
+        .map_err(|e| Error::SerializationError(e.to_string()))?;
+
+    // 2. Call settle on the Transfer instance
+    let settle_body = original_transfer.settle(
+        original_message.id.clone(), // Use transfer_id from original message/body
+        transaction_id,
+        transaction_hash,
+        block_height,
+        note,
+    );
+
+    // Create a reply using the TapMessage trait
+    let mut settle_message = settle_body.to_didcomm(Some(creator_did))?;
+
+    // Set thread ID to maintain conversation
+    settle_message.thid = original_message.thid.clone();
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = settle_message
+        .to
+        .as_ref()
+        .unwrap_or(&Vec::new())
+        .iter()
+        .filter(|did| **did != creator_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    settle_message.to = Some(recipients);
+
+    Ok(settle_message)
 }
 
 /// This example demonstrates a complete workflow for managing thread participants
@@ -273,14 +420,22 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     let authorize = Authorize {
         transfer_id: transfer_message.id.clone(),
         note: Some("Transfer approved".to_string()),
-        timestamp: get_current_time()?.to_string(),
-        settlement_address: None,
-        metadata: HashMap::new(),
     };
 
     // Create a reply from Bob to Alice
-    let authorize_message =
-        authorize.create_reply(&transfer_message, bob_did, &[alice_did, bob_did])?;
+    let mut authorize_message = authorize.to_didcomm(Some(bob_did))?;
+
+    // Set thread ID to maintain conversation
+    authorize_message.thid = Some(transfer_message.id.clone());
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = [alice_did, bob_did]
+        .iter()
+        .filter(|did| **did != bob_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    authorize_message.to = Some(recipients);
 
     println!("Created authorize message: {:?}", authorize_message);
 
@@ -294,23 +449,24 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             policies: None,
             leiCode: None,
         }],
-        metadata: HashMap::new(),
     };
 
     // Create the add agents message
-    let add_agents_message = add_agents
-        .to_didcomm_with_route(Some(alice_did), [bob_did, charlie_did].iter().copied())?;
+    let mut add_agents_message = add_agents.to_didcomm(Some(alice_did))?;
 
-    // Set the thread ID
-    let add_agents_message_with_thread = Message {
-        thid: Some(transfer_id.clone()),
-        ..add_agents_message
-    };
+    // Set thread ID to maintain conversation
+    add_agents_message.thid = Some(transfer_id.clone());
 
-    println!(
-        "Created add agents message: {:?}",
-        add_agents_message_with_thread
-    );
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = [alice_did, bob_did, charlie_did]
+        .iter()
+        .filter(|did| **did != alice_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    add_agents_message.to = Some(recipients);
+
+    println!("Created add agents message: {:?}", add_agents_message);
 
     // 4. Now Bob wants to replace himself with Dave
     let replace_agent = ReplaceAgent {
@@ -322,47 +478,47 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             policies: None,
             leiCode: None,
         },
-        metadata: HashMap::new(),
     };
 
     // Create the replace agent message
-    let replace_agent_message = replace_agent.to_didcomm_with_route(
-        Some(bob_did),
-        [alice_did, dave_did, charlie_did].iter().copied(),
-    )?;
+    let mut replace_agent_message = replace_agent.to_didcomm(Some(bob_did))?;
 
-    // Set the thread ID
-    let replace_agent_message_with_thread = Message {
-        thid: Some(transfer_id.clone()),
-        ..replace_agent_message
-    };
+    // Set thread ID to maintain conversation
+    replace_agent_message.thid = Some(transfer_id.clone());
 
-    println!(
-        "Created replace agent message: {:?}",
-        replace_agent_message_with_thread
-    );
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = [alice_did, dave_did, charlie_did]
+        .iter()
+        .filter(|did| **did != bob_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    replace_agent_message.to = Some(recipients);
+
+    println!("Created replace agent message: {:?}", replace_agent_message);
 
     // 5. Alice wants to remove Charlie from the thread
     let remove_agent = RemoveAgent {
         transfer_id: transfer_id.clone(),
         agent: charlie_did.to_string(),
-        metadata: HashMap::new(),
     };
 
     // Create the remove agent message
-    let remove_agent_message = remove_agent
-        .to_didcomm_with_route(Some(alice_did), [dave_did, charlie_did].iter().copied())?;
+    let mut remove_agent_message = remove_agent.to_didcomm(Some(alice_did))?;
 
-    // Set the thread ID
-    let remove_agent_message_with_thread = Message {
-        thid: Some(transfer_id.clone()),
-        ..remove_agent_message
-    };
+    // Set thread ID to maintain conversation
+    remove_agent_message.thid = Some(transfer_id.clone());
 
-    println!(
-        "Created remove agent message: {:?}",
-        remove_agent_message_with_thread
-    );
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = [alice_did, dave_did, charlie_did]
+        .iter()
+        .filter(|did| **did != alice_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    remove_agent_message.to = Some(recipients);
+
+    println!("Created remove agent message: {:?}", remove_agent_message);
 
     // 6. Now Dave can settle the transfer
     let settle = Settle {
@@ -371,16 +527,25 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         transaction_hash: Some("0xabcdef1234567890".to_string()),
         block_height: Some(12345),
         note: Some("Transfer settled".to_string()),
-        timestamp: get_current_time()?.to_string(),
-        metadata: HashMap::new(),
     };
 
-    // Dave's reply should go to Alice (originator)
-    let settle_message = settle.create_reply(
-        &remove_agent_message_with_thread,
-        dave_did,
-        &[alice_did, dave_did],
-    )?;
+    // Create a reply using the TapMessage trait
+    let mut settle_message = settle.to_didcomm(Some(dave_did))?;
+
+    // Set thread ID to maintain conversation
+    settle_message.thid = Some(transfer_id.clone());
+
+    // Set recipients to all participants except the creator
+    let recipients: Vec<String> = settle_message
+        .to
+        .as_ref()
+        .unwrap_or(&Vec::new())
+        .iter()
+        .filter(|did| **did != dave_did)
+        .map(|s| s.to_string())
+        .collect();
+
+    settle_message.to = Some(recipients);
 
     println!("Created settle message from Dave: {:?}", settle_message);
 

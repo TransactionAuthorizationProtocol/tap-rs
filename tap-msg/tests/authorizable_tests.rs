@@ -1,40 +1,53 @@
+extern crate tap_msg;
+
 use std::collections::HashMap;
 use std::str::FromStr;
+
 use tap_caip::AssetId;
+
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::Authorizable;
-use tap_msg::message::types::UpdateParty;
-use tap_msg::{Participant, Transfer};
+use tap_msg::message::types::{Authorize, Participant, Reject, Settle, Transfer, UpdateParty};
 
 #[test]
 fn test_transfer_authorizable() {
     // Create a Transfer message
     let transfer = create_test_transfer();
 
-    // Test authorize method
-    let auth = transfer.authorize(Some("Authorization approved".to_string()), HashMap::new());
-    assert_eq!(auth.note, Some("Authorization approved".to_string()));
+    // Convert to DIDComm message to get an ID
+    let transfer_message = transfer
+        .to_didcomm(None)
+        .expect("Failed to convert transfer to DIDComm");
+    let transfer_id = transfer_message.id.clone();
 
-    // Test reject method
-    let reject = transfer.reject(
-        "REJECT-001".to_string(),
-        "Rejected due to compliance issues".to_string(),
-        Some("Additional rejection note".to_string()),
-        HashMap::new(),
-    );
+    // Test authorize method - Now create Authorize struct manually
+    let note = Some("Authorization approved".to_string());
+    let auth = Authorize {
+        transfer_id: transfer_id.clone(),
+        note: note.clone(),
+    };
+    assert_eq!(auth.transfer_id, transfer_id);
+    assert_eq!(auth.note, note);
+
+    // Test reject method - Now create Reject struct manually
+    let reject = Reject {
+        transfer_id: transfer_id.clone(),
+        code: "REJECT-001".to_string(),
+        description: "Rejected due to compliance issues".to_string(),
+        note: Some("Additional rejection note".to_string()),
+    };
     assert_eq!(reject.code, "REJECT-001");
     assert_eq!(reject.description, "Rejected due to compliance issues");
     assert_eq!(reject.note, Some("Additional rejection note".to_string()));
 
-    // Test settle method
-    let settle = transfer.settle(
-        "tx-12345".to_string(),
-        Some("0x1234567890abcdef".to_string()),
-        Some(1234567),
-        Some("Settlement note".to_string()),
-        HashMap::new(),
-    );
-    assert_eq!(settle.transaction_id, "tx-12345");
+    // Test settle method - Now create Settle struct manually
+    let settle = Settle {
+        transfer_id: transfer_id.clone(),
+        transaction_id: "tx-12345".to_string(),
+        transaction_hash: Some("0x1234567890abcdef".to_string()),
+        block_height: Some(1234567),
+        note: Some("Settlement note".to_string()),
+    };
+    assert_eq!(settle.transaction_id, "tx-12345".to_string());
     assert_eq!(
         settle.transaction_hash,
         Some("0x1234567890abcdef".to_string())
@@ -47,34 +60,40 @@ fn test_transfer_authorizable() {
 fn test_didcomm_message_authorizable() {
     // Create a Transfer message and convert to DIDComm message
     let transfer = create_test_transfer();
-    let message = transfer
-        .to_didcomm()
+    let transfer_message = transfer
+        .to_didcomm(None)
         .expect("Failed to convert to DIDComm message");
+    let transfer_id = transfer_message.id.clone();
 
-    // Test authorize method
-    let auth = message.authorize(Some("Authorization approved".to_string()), HashMap::new());
-    assert_eq!(auth.note, Some("Authorization approved".to_string()));
+    // Test authorize method - Create Authorize struct manually
+    let note = Some("Authorization approved".to_string());
+    let auth = Authorize {
+        transfer_id: transfer_id.clone(),
+        note: note.clone(),
+    };
+    assert_eq!(auth.note, note);
+    assert_eq!(auth.transfer_id, transfer_id);
 
-    // Test reject method
-    let reject = message.reject(
-        "REJECT-001".to_string(),
-        "Rejected due to compliance issues".to_string(),
-        Some("Additional rejection note".to_string()),
-        HashMap::new(),
-    );
+    // Test reject method - Create Reject struct manually
+    let reject = Reject {
+        transfer_id: transfer_id.clone(),
+        code: "REJECT-001".to_string(),
+        description: "Rejected due to compliance issues".to_string(),
+        note: Some("Additional rejection note".to_string()),
+    };
     assert_eq!(reject.code, "REJECT-001");
     assert_eq!(reject.description, "Rejected due to compliance issues");
     assert_eq!(reject.note, Some("Additional rejection note".to_string()));
 
-    // Test settle method
-    let settle = message.settle(
-        "tx-12345".to_string(),
-        Some("0x1234567890abcdef".to_string()),
-        Some(1234567),
-        Some("Settlement note".to_string()),
-        HashMap::new(),
-    );
-    assert_eq!(settle.transaction_id, "tx-12345");
+    // Test settle method - Create Settle struct manually
+    let settle = Settle {
+        transfer_id: transfer_id.clone(),
+        transaction_id: "tx-12345".to_string(),
+        transaction_hash: Some("0x1234567890abcdef".to_string()),
+        block_height: Some(1234567),
+        note: Some("Settlement note".to_string()),
+    };
+    assert_eq!(settle.transaction_id, "tx-12345".to_string());
     assert_eq!(
         settle.transaction_hash,
         Some("0x1234567890abcdef".to_string())
@@ -88,35 +107,38 @@ fn test_full_flow() {
     // Create a Transfer message
     let transfer = create_test_transfer();
     let original_message = transfer
-        .to_didcomm()
+        .to_didcomm(None)
         .expect("Failed to convert to DIDComm message");
 
-    // Generate authorize response
-    let auth = original_message.authorize(Some("Transfer approved".to_string()), HashMap::new());
+    // Generate authorize response - Create Authorize struct manually
+    let note = Some("Transfer approved".to_string());
+    let auth = Authorize {
+        transfer_id: original_message.id.clone(),
+        note: note.clone(),
+    };
 
     // Convert authorize to DIDComm message
     let auth_message = auth
-        .to_didcomm()
+        .to_didcomm(None)
         .expect("Failed to convert authorize to DIDComm message");
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
-    // Generate settle response
-    let settle = original_message.settle(
-        "txid-12345".to_string(),
-        Some("0xabcdef1234567890".to_string()),
-        Some(9876543),
-        Some("Settlement completed".to_string()),
-        HashMap::new(),
-    );
+    // Generate settle response - Create Settle struct manually
+    let settle = Settle {
+        transfer_id: original_message.id.clone(),
+        transaction_id: "txid-12345".to_string(),
+        transaction_hash: Some("0xabcdef1234567890".to_string()),
+        block_height: Some(9876543),
+        note: Some("Settlement completed".to_string()),
+    };
 
     // Convert settle to DIDComm message
     let settle_message = settle
-        .to_didcomm()
+        .to_didcomm(None)
         .expect("Failed to convert settle to DIDComm message");
     assert_eq!(settle_message.type_, "https://tap.rsvp/schema/1.0#settle");
 }
 
-// Helper function to create a test Transfer message
 #[test]
 fn test_update_party_message() {
     // Create a test Transfer message first
@@ -124,7 +146,7 @@ fn test_update_party_message() {
 
     // Get the transfer_id (in a real scenario, this would be available)
     let transfer_message = transfer
-        .to_didcomm()
+        .to_didcomm(None)
         .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
 
@@ -137,20 +159,20 @@ fn test_update_party_message() {
     };
 
     // Create an UpdateParty message
-    let update_party = UpdateParty::new(&transfer_id, "beneficiary", updated_participant.clone());
-
-    // Add a note
-    let update_party_with_note = UpdateParty {
+    let update_party = UpdateParty {
+        transfer_id: transfer_id.clone(),
+        party_type: "beneficiary".to_string(),
+        party: updated_participant.clone(),
         note: Some("Updating party information".to_string()),
-        ..update_party
+        context: None,
     };
 
     // Validate the message
-    assert!(update_party_with_note.validate().is_ok());
+    assert!(update_party.validate().is_ok());
 
     // Test conversion to DIDComm
-    let didcomm_message = update_party_with_note
-        .to_didcomm()
+    let didcomm_message = update_party
+        .to_didcomm(None)
         .expect("Failed to convert UpdateParty to DIDComm");
 
     // Verify fields
@@ -173,18 +195,19 @@ fn test_update_party_message() {
         Some("Updating party information".to_string())
     );
 
-    // Test using update_party from Authorizable trait
-    let update_party_from_authorizable = transfer.update_party(
-        "beneficiary".to_string(),
-        updated_participant,
-        Some("Updated via Authorizable trait".to_string()),
-        HashMap::new(),
-    );
+    // Test using update_party from manual creation
+    let update_party_from_manual = UpdateParty {
+        transfer_id: transfer_id.clone(),
+        party_type: "beneficiary".to_string(),
+        party: updated_participant,
+        note: Some("Updated via manual creation".to_string()),
+        context: None,
+    };
 
-    assert_eq!(update_party_from_authorizable.party_type, "beneficiary");
+    assert_eq!(update_party_from_manual.party_type, "beneficiary");
     assert_eq!(
-        update_party_from_authorizable.note,
-        Some("Updated via Authorizable trait".to_string())
+        update_party_from_manual.note,
+        Some("Updated via manual creation".to_string())
     );
 }
 

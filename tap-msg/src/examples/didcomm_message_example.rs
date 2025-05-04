@@ -2,7 +2,6 @@
 
 use crate::error::Result;
 use crate::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
-use crate::utils::get_current_time;
 use didcomm::Message;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -37,8 +36,10 @@ pub fn create_transfer_message_example() -> Result<Message> {
         metadata: HashMap::new(),
     };
 
-    // Create a DIDComm message directly from the transfer body
-    let message = transfer_body.to_didcomm()?;
+    // Convert the Transfer body to a DIDComm message
+    let message = transfer_body.to_didcomm(Some(
+        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+    ))?;
 
     // The message is ready to be encrypted and sent
     Ok(message)
@@ -79,12 +80,12 @@ pub fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
         code: "COMPLIANCE_FAILURE".to_string(),
         description: "Unable to comply with transfer requirements".to_string(),
         note: Some("Further documentation needed".to_string()),
-        timestamp: get_current_time()?.to_string(),
-        metadata: HashMap::new(),
     };
 
-    // Create a DIDComm message directly from the reject body
-    let message = reject_body.to_didcomm()?;
+    // Convert the Reject body to a DIDComm message
+    let message = reject_body.to_didcomm(Some(
+        "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+    ))?;
 
     // The message is ready to be encrypted and sent
     Ok(message)
@@ -98,12 +99,12 @@ pub fn create_settle_message_example(transfer_id: &str) -> Result<Message> {
         transaction_hash: Some("0xabcdef123456789".to_string()),
         block_height: Some(12345678),
         note: Some("Transfer settled successfully".to_string()),
-        timestamp: get_current_time()?.to_string(),
-        metadata: HashMap::new(),
     };
 
-    // Create a DIDComm message directly from the settle body
-    let message = settle_body.to_didcomm()?;
+    // Convert the Settle body to a DIDComm message
+    let message = settle_body.to_didcomm(Some(
+        "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+    ))?;
 
     // The message is ready to be encrypted and sent
     Ok(message)

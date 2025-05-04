@@ -1,10 +1,11 @@
 //! Error types for the tap-msg crate.
 
+use serde_json;
 use std::result;
 use thiserror::Error;
 
 /// Core TAP error types.
-#[derive(Debug, Error)]
+#[derive(Debug, Error, Clone)]
 pub enum Error {
     /// Error related to DIDComm operations.
     #[error("DIDComm error: {0}")]
@@ -29,6 +30,13 @@ pub enum Error {
     /// Error related to CAIP validation.
     #[error("CAIP error: {0}")]
     CaipError(#[from] tap_caip::error::Error),
+}
+
+// Implement From trait for serde_json::Error
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::SerializationError(err.to_string())
+    }
 }
 
 /// Custom Result type for TAP Core operations.

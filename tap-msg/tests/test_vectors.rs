@@ -6,15 +6,12 @@ use serde::Deserialize;
 
 use chrono::DateTime;
 use std::collections::HashMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 use didcomm::Message as DIDCommMessage;
-use serde_json::Value;
 use tap_caip::AssetId;
-use tap_msg::message::TapMessageBody;
-use tap_msg::message::Transfer;
+use tap_msg::message::types::Transfer;
 use tap_msg::Participant;
 
 #[derive(Debug, PartialEq)]
@@ -29,6 +26,7 @@ enum TestResult {
 
 /// Structure to hold a test vector
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)] // Struct used for test vector deserialization
 struct TestVector {
     description: String,
     purpose: String,
@@ -45,6 +43,7 @@ struct TestVector {
 
 /// Structure to hold the expected result of a test vector
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)] // Struct used for test vector deserialization
 struct ExpectedResult {
     valid: bool,
     #[serde(default)]
@@ -53,6 +52,7 @@ struct ExpectedResult {
 
 /// Structure to hold expected error information
 #[derive(Debug, Deserialize, Clone)]
+#[allow(dead_code)] // Struct used for test vector deserialization
 struct TestVectorError {
     field: String,
     message: String,
@@ -102,8 +102,10 @@ struct TestVectorParticipant {
     #[serde(default)]
     role: Option<String>,
     #[serde(rename = "leiCode", default)]
+    #[allow(dead_code)] // Part of test vector definition
     lei_code: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     policies: Option<Vec<serde_json::Value>>,
 }
 
@@ -115,15 +117,17 @@ struct TestVectorAgent {
     #[serde(default)]
     role: Option<String>,
     #[serde(rename = "for")]
+    #[allow(dead_code)]
     for_participant: Option<String>,
 }
 
 /// Load test vectors from the given directory
+#[allow(dead_code)] // Function used for loading test vectors
 fn load_test_vectors(directory: &Path) -> Vec<TestVector> {
     let mut test_vectors = Vec::new();
 
     // Recursively walk through the directory
-    let entries = fs::read_dir(directory).unwrap();
+    let entries = std::fs::read_dir(directory).unwrap();
     for entry in entries {
         let entry = entry.unwrap();
         let path = entry.path();
@@ -134,7 +138,7 @@ fn load_test_vectors(directory: &Path) -> Vec<TestVector> {
             test_vectors.append(&mut sub_vectors);
         } else if path.extension().map_or(false, |ext| ext == "json") {
             // Read and parse JSON file
-            let content = fs::read_to_string(&path).unwrap();
+            let content = std::fs::read_to_string(&path).unwrap();
             match serde_json::from_str::<TestVector>(&content) {
                 Ok(mut test_vector) => {
                     // Store the file path in the TestVector for reference
@@ -155,8 +159,8 @@ fn load_test_vectors(directory: &Path) -> Vec<TestVector> {
 fn find_test_vectors(dir: &Path) -> Vec<PathBuf> {
     let mut result = Vec::new();
 
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.filter_map(|e| e.ok()) {
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.filter_map(Result::ok) {
             let path = entry.path();
 
             if path.is_dir() {
@@ -175,7 +179,7 @@ fn find_test_vectors(dir: &Path) -> Vec<PathBuf> {
 /// Run a single test vector
 fn run_test_vector(vector_path: &Path) -> Result<TestResult, String> {
     // Read the test vector file
-    let vector_content = fs::read_to_string(vector_path)
+    let vector_content = std::fs::read_to_string(vector_path)
         .map_err(|e| format!("Failed to read test vector file: {}", e))?;
 
     // Parse the test vector
@@ -267,8 +271,8 @@ fn test_tap_vectors() {
     println!("Found {} test vector files", vector_files.len());
 
     // Track test results
-    let mut success_count = 0;
-    let mut failure_count = 0;
+    let mut success_count = 0u32;
+    let mut failure_count = 0u32;
     let mut failures = Vec::new();
 
     // Run each test vector
@@ -1217,7 +1221,7 @@ fn validate_confirm_relationship_body(
 
     // Check for direct format (as in the test vectors)
     let has_id = body.contains_key("@id");
-    let has_for = body.contains_key("for");
+    let has_for = body.get("for").and_then(|v| v.as_str()).is_some();
 
     // Check for participants array format
     let has_participants = body.contains_key("participants");
@@ -1727,4 +1731,42 @@ fn message_types_match(type1: &str, type2: &str) -> bool {
     let without_hyphens2 = normalized2.replace("-", "");
 
     without_hyphens1 == without_hyphens2
+}
+
+/// Run test vectors from specified directories
+fn run_test_vectors(vector_paths: &[PathBuf]) -> HashMap<PathBuf, TestResult> {
+    let mut results = HashMap::new();
+
+    for vector_path in vector_paths {
+        match run_test_vector(vector_path) {
+            Ok(result) => {
+                results.insert(vector_path.clone(), result);
+            }
+            Err(e) => {
+                println!("Error running test vector {}: {}", vector_path.display(), e);
+            }
+        }
+    }
+
+    results
+}
+
+#[test]
+fn test_valid_vectors() {
+    let vector_paths = vec![
+        PathBuf::from("test-vectors/transfer/valid/transfer.json"),
+        PathBuf::from("test-vectors/transfer/valid/transfer-with-agents.json"),
+        PathBuf::from("test-vectors/transfer/valid/transfer-with-beneficiary.json"),
+        PathBuf::from("test-vectors/transfer/valid/transfer-with-memo.json"),
+        PathBuf::from("test-vectors/transfer/valid/transfer-with-metadata.json"),
+        PathBuf::from("test-vectors/transfer/valid/transfer-with-settlement-id.json"),
+    ];
+
+    let results = run_test_vectors(&vector_paths);
+
+    for (path, result) in results {
+        if let TestResult::Failure { error_message, .. } = result {
+            panic!("Test vector {:?} failed: {}", path, error_message);
+        }
+    }
 }

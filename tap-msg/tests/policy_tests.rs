@@ -1,6 +1,5 @@
 //! Tests for TAIP-7 policy implementations.
 
-use std::collections::HashMap;
 use tap_msg::message::{
     Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
     TapMessage, TapMessageBody, UpdatePolicies,
@@ -63,7 +62,6 @@ fn test_update_policies() {
     let update = UpdatePolicies {
         transfer_id: "transfer_12345".to_string(),
         policies: vec![Policy::RequirePresentation(presentation_policy)],
-        metadata: HashMap::new(),
     };
 
     // Check the message type
@@ -92,7 +90,6 @@ fn test_update_policies_validation() {
     let invalid_update = UpdatePolicies {
         transfer_id: "".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
-        metadata: HashMap::new(),
     };
     assert!(invalid_update.validate().is_err());
 
@@ -100,7 +97,6 @@ fn test_update_policies_validation() {
     let invalid_update = UpdatePolicies {
         transfer_id: "transfer_12345".to_string(),
         policies: vec![],
-        metadata: HashMap::new(),
     };
     assert!(invalid_update.validate().is_err());
 
@@ -108,11 +104,7 @@ fn test_update_policies_validation() {
     let valid_update = UpdatePolicies {
         transfer_id: "transfer_12345".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy)],
-        metadata: HashMap::new(),
     };
-
-    // No need for creator_did in this context
-    // let _creator_did = "did:example:sender_vasp";
 
     assert!(valid_update.validate().is_ok());
 }
@@ -210,16 +202,11 @@ fn test_update_policies_didcomm_conversion() {
             Policy::RequirePresentation(presentation_policy),
             Policy::RequireProofOfControl(proof_policy),
         ],
-        metadata: {
-            let mut map = HashMap::new();
-            map.insert("customField".to_string(), serde_json::json!("custom value"));
-            map
-        },
     };
 
     // Convert to DIDComm message
     let didcomm_message = original_update
-        .to_didcomm()
+        .to_didcomm(None)
         .expect("Failed to convert to DIDComm");
 
     // Debug: Print the actual body of the DIDComm message
@@ -243,12 +230,6 @@ fn test_update_policies_didcomm_conversion() {
     assert_eq!(
         roundtrip_update.policies.len(),
         original_update.policies.len()
-    );
-
-    // Check metadata
-    assert_eq!(
-        roundtrip_update.metadata.get("customField"),
-        original_update.metadata.get("customField")
     );
 
     // Check first policy is presentation policy

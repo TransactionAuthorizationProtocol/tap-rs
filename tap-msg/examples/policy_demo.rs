@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use tap_msg::message::policy::RequireRelationshipConfirmation;
 use tap_msg::message::{
     Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
     UpdatePolicies,
@@ -113,7 +111,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
             Policy::RequireProofOfControl(proof_policy),
         ],
-        metadata: HashMap::new(),
     };
 
     // Display the UpdatePolicies message

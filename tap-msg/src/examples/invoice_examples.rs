@@ -1,10 +1,10 @@
 //! Examples for using the Invoice and PaymentRequest functionality.
 
 use crate::error::Result;
-use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
-use crate::message::PaymentRequest;
+use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::types::Participant;
+use crate::message::PaymentRequest;
 use didcomm::Message;
 use std::collections::HashMap;
 
@@ -90,7 +90,7 @@ pub fn create_invoice_with_tax_example() -> Result<Invoice> {
     let tax_subtotal = TaxSubtotal {
         taxable_amount: sub_total,
         tax_amount,
-        tax_category: tax_category,
+        tax_category,
     };
 
     let tax_total = TaxTotal {
@@ -123,7 +123,10 @@ pub fn create_invoice_with_tax_example() -> Result<Invoice> {
 }
 
 /// Example of creating a PaymentRequest with an embedded invoice
-pub fn create_payment_request_with_invoice_example(merchant_did: &str, customer_did: Option<&str>) -> Result<Message> {
+pub fn create_payment_request_with_invoice_example(
+    merchant_did: &str,
+    customer_did: Option<&str>,
+) -> Result<Message> {
     // Create merchant participant
     let merchant = Participant {
         id: merchant_did.to_string(),
@@ -174,7 +177,8 @@ pub fn create_payment_request_with_invoice_example(merchant_did: &str, customer_
         vec![]
     };
 
-    let message = payment_request.to_didcomm_with_route(Some(merchant_did), recipients.iter().copied())?;
+    let message =
+        payment_request.to_didcomm_with_route(Some(merchant_did), recipients.iter().copied())?;
 
     Ok(message)
 }
@@ -192,28 +196,30 @@ pub fn process_payment_request_with_invoice_example(message: &Message) -> Result
         println!("Invoice ID: {}", invoice.id);
         println!("Currency: {}", invoice.currency_code);
         println!("Total amount: {:.2}", invoice.total);
-        
+
         // Print line items
         println!("Line items:");
         for (i, item) in invoice.line_items.iter().enumerate() {
-            println!("  {}: {} x {} @ {:.2} = {:.2}", 
-                i + 1, 
-                item.quantity, 
-                item.description, 
-                item.unit_price, 
+            println!(
+                "  {}: {} x {} @ {:.2} = {:.2}",
+                i + 1,
+                item.quantity,
+                item.description,
+                item.unit_price,
                 item.line_total
             );
         }
-        
+
         // Print tax information if present
         if let Some(tax_total) = &invoice.tax_total {
             println!("Tax amount: {:.2}", tax_total.tax_amount);
-            
+
             if let Some(tax_subtotals) = &tax_total.tax_subtotal {
                 for (i, subtotal) in tax_subtotals.iter().enumerate() {
-                    println!("  Tax {}: {:.2}% {} on {:.2} = {:.2}", 
-                        i + 1, 
-                        subtotal.tax_category.percent, 
+                    println!(
+                        "  Tax {}: {:.2}% {} on {:.2} = {:.2}",
+                        i + 1,
+                        subtotal.tax_category.percent,
                         subtotal.tax_category.tax_scheme,
                         subtotal.taxable_amount,
                         subtotal.tax_amount
@@ -221,8 +227,11 @@ pub fn process_payment_request_with_invoice_example(message: &Message) -> Result
                 }
             }
         }
-        
-        println!("Due date: {}", invoice.due_date.as_deref().unwrap_or("Not specified"));
+
+        println!(
+            "Due date: {}",
+            invoice.due_date.as_deref().unwrap_or("Not specified")
+        );
     } else {
         println!("Payment request does not contain an invoice");
     }

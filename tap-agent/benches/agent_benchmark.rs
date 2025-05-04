@@ -62,14 +62,14 @@ async fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
         id: from_did.to_string(),
         role: Some("originator".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     let beneficiary = Participant {
         id: to_did.to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     // Create a transfer body

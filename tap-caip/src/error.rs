@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 /// Error types for the CAIP library
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum Error {
     /// Error when parsing a ChainId
     #[error("Invalid CAIP-2 Chain ID: {0}")]

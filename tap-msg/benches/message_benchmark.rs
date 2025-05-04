@@ -27,14 +27,14 @@ fn create_transfer_body() -> Transfer {
         id: "did:example:alice".to_string(),
         role: Some("originator".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     let beneficiary = Participant {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     // Create asset ID properly - using a valid Ethereum address format
@@ -63,9 +63,6 @@ fn create_authorize_body() -> Authorize {
     Authorize {
         transfer_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        settlement_address: None,
-        metadata: HashMap::new(),
     }
 }
 
@@ -76,8 +73,6 @@ fn create_reject_body() -> Reject {
         code: "COMPLIANCE_FAILURE".to_string(),
         description: "Unable to comply with transfer requirements".to_string(),
         note: Some("Further documentation needed".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        metadata: HashMap::new(),
     }
 }
 
@@ -89,8 +84,6 @@ fn create_settle_body() -> Settle {
         transaction_hash: Some("0xabcdef1234567890".to_string()),
         block_height: Some(12345678),
         note: Some("Transaction completed".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        metadata: HashMap::new(),
     }
 }
 
@@ -107,28 +100,28 @@ fn bench_to_didcomm(c: &mut Criterion) {
     // Benchmark Transfer messages
     group.bench_function("transfer", |b| {
         b.iter(|| {
-            let _: Message = transfer_body.to_didcomm().unwrap();
+            let _: Message = transfer_body.to_didcomm(None).unwrap();
         })
     });
 
     // Benchmark Authorize messages
     group.bench_function("authorize", |b| {
         b.iter(|| {
-            let _: Message = authorize_body.to_didcomm().unwrap();
+            let _: Message = authorize_body.to_didcomm(None).unwrap();
         })
     });
 
     // Benchmark Reject messages
     group.bench_function("reject", |b| {
         b.iter(|| {
-            let _: Message = reject_body.to_didcomm().unwrap();
+            let _: Message = reject_body.to_didcomm(None).unwrap();
         })
     });
 
     // Benchmark Settle messages
     group.bench_function("settle", |b| {
         b.iter(|| {
-            let _: Message = settle_body.to_didcomm().unwrap();
+            let _: Message = settle_body.to_didcomm(None).unwrap();
         })
     });
 
@@ -141,16 +134,16 @@ fn bench_from_didcomm(c: &mut Criterion) {
 
     // Create test message bodies and convert to DIDComm messages
     let transfer_body = create_transfer_body();
-    let transfer_message = transfer_body.to_didcomm().unwrap();
+    let transfer_message = transfer_body.to_didcomm(None).unwrap();
 
     let authorize_body = create_authorize_body();
-    let authorize_message = authorize_body.to_didcomm().unwrap();
+    let authorize_message = authorize_body.to_didcomm(None).unwrap();
 
     let reject_body = create_reject_body();
-    let reject_message = reject_body.to_didcomm().unwrap();
+    let reject_message = reject_body.to_didcomm(None).unwrap();
 
     let settle_body = create_settle_body();
-    let settle_message = settle_body.to_didcomm().unwrap();
+    let settle_message = settle_body.to_didcomm(None).unwrap();
 
     // Benchmark Transfer messages
     group.bench_function("transfer", |b| {

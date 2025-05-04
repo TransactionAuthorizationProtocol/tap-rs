@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use tap_msg::message::invoice::{Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
-use tap_msg::message::types::PaymentRequest;
+use tap_msg::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::types::PaymentRequest;
 use tap_msg::Participant;
 
 #[test]
@@ -183,20 +183,25 @@ fn test_payment_request_with_invoice() {
     mismatched_currency.currency = Some("EUR".to_string());
     assert!(mismatched_currency.validate().is_err());
 
-    // Test conversion to DIDComm message
-    let didcomm_message = payment_request.to_didcomm().expect("Failed to convert to DIDComm");
-    
+    // Convert to DIDComm
+    let didcomm_message = payment_request
+        .to_didcomm(None)
+        .expect("Failed to convert PaymentRequest to DIDComm");
+
     // Verify DIDComm message type
-    assert_eq!(didcomm_message.type_, "https://tap.rsvp/schema/1.0#paymentrequest");
-    
+    assert_eq!(
+        didcomm_message.type_,
+        "https://tap.rsvp/schema/1.0#paymentrequest"
+    );
+
     // Verify that we can extract the message body including the invoice
     let extracted = PaymentRequest::from_didcomm(&didcomm_message)
         .expect("Failed to extract PaymentRequest from DIDComm");
-    
+
     assert_eq!(extracted.amount, "100.0");
     assert_eq!(extracted.currency, Some("USD".to_string()));
     assert!(extracted.invoice.is_some());
-    
+
     let extracted_invoice = extracted.invoice.unwrap();
     assert_eq!(extracted_invoice.id, "INV001");
     assert_eq!(extracted_invoice.currency_code, "USD");

@@ -13,10 +13,12 @@ use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
-use crate::message::tap_message_trait::TapMessageBody;
+use crate::message::tap_message_trait::{Connectable, TapMessageBody};
+use crate::message::RequireProofOfControl;
+use chrono::Utc;
 
 /// Participant in a transfer (TAIP-3, TAIP-11).
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[allow(non_snake_case)]
 pub struct Participant {
     /// DID of the participant.
@@ -61,7 +63,7 @@ impl Participant {
 }
 
 /// Attachment data for a TAP message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AttachmentData {
     /// Base64-encoded data.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -73,7 +75,7 @@ pub struct AttachmentData {
 }
 
 /// Attachment for a TAP message.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Attachment {
     /// ID of the attachment.
     pub id: String,
@@ -148,7 +150,7 @@ impl Transfer {
     /// // Create chain ID and asset ID
     /// let chain_id = ChainId::new("eip155", "1").unwrap();
     /// let asset = AssetId::new(chain_id, "erc20", "0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
-    /// 
+    ///
     /// // Create participant
     /// let originator = Participant {
     ///     id: "did:example:alice".to_string(),
@@ -176,9 +178,32 @@ impl Transfer {
     /// Validate the Transfer
     pub fn validate(&self) -> Result<()> {
         // CAIP-19 asset ID is validated by the AssetId type
-        // Transfer amount validation
+        // Validate asset
+        if self.asset.namespace().is_empty() || self.asset.reference().is_empty() {
+            return Err(Error::Validation("Asset ID is invalid".to_string()));
+        }
+
+        // Validate originator
+        if self.originator.id.is_empty() {
+            return Err(Error::Validation("Originator ID is required".to_string()));
+        }
+
+        // Validate amount
         if self.amount.is_empty() {
-            return Err(Error::Validation("Transfer amount cannot be empty".to_string()));
+            return Err(Error::Validation("Amount is required".to_string()));
+        }
+
+        // Validate amount is a positive number
+        match self.amount.parse::<f64>() {
+            Ok(amount) if amount <= 0.0 => {
+                return Err(Error::Validation("Amount must be positive".to_string()));
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Amount must be a valid number".to_string(),
+                ));
+            }
+            _ => {}
         }
 
         // Validate agents (if any are defined)
@@ -286,9 +311,15 @@ impl TransferBuilder {
 
     /// Try to build the Transfer object, returning an error if required fields are missing
     pub fn try_build(self) -> Result<Transfer> {
-        let asset = self.asset.ok_or_else(|| Error::Validation("Asset is required".to_string()))?;
-        let originator = self.originator.ok_or_else(|| Error::Validation("Originator is required".to_string()))?;
-        let amount = self.amount.ok_or_else(|| Error::Validation("Amount is required".to_string()))?;
+        let asset = self
+            .asset
+            .ok_or_else(|| Error::Validation("Asset is required".to_string()))?;
+        let originator = self
+            .originator
+            .ok_or_else(|| Error::Validation("Originator is required".to_string()))?;
+        let amount = self
+            .amount
+            .ok_or_else(|| Error::Validation("Amount is required".to_string()))?;
 
         let transfer = Transfer {
             asset,
@@ -308,16 +339,63 @@ impl TransferBuilder {
     }
 }
 
+impl Connectable for Transfer {
+    fn with_connection(&mut self, connect_id: &str) -> &mut Self {
+        // Store the connect_id in metadata
+        self.metadata.insert(
+            "connect_id".to_string(),
+            serde_json::Value::String(connect_id.to_string()),
+        );
+        self
+    }
+
+    fn has_connection(&self) -> bool {
+        self.metadata.contains_key("connect_id")
+    }
+
+    fn connection_id(&self) -> Option<&str> {
+        self.metadata.get("connect_id").and_then(|v| v.as_str())
+    }
+}
+
 impl TapMessageBody for Transfer {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#transfer"
     }
 
     fn validate(&self) -> Result<()> {
-        self.validate()
+        // Validate asset
+        if self.asset.namespace().is_empty() || self.asset.reference().is_empty() {
+            return Err(Error::Validation("Asset ID is invalid".to_string()));
+        }
+
+        // Validate originator
+        if self.originator.id.is_empty() {
+            return Err(Error::Validation("Originator ID is required".to_string()));
+        }
+
+        // Validate amount
+        if self.amount.is_empty() {
+            return Err(Error::Validation("Amount is required".to_string()));
+        }
+
+        // Validate amount is a positive number
+        match self.amount.parse::<f64>() {
+            Ok(amount) if amount <= 0.0 => {
+                return Err(Error::Validation("Amount must be positive".to_string()));
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Amount must be a valid number".to_string(),
+                ));
+            }
+            _ => {}
+        }
+
+        Ok(())
     }
 
-    fn to_didcomm(&self) -> Result<Message> {
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
         // Serialize the Transfer to a JSON value
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -330,7 +408,37 @@ impl TapMessageBody for Transfer {
             );
         }
 
-        let now = crate::utils::get_current_time()?;
+        // Extract agent DIDs directly from the message
+        let mut agent_dids = Vec::new();
+
+        // Add originator DID
+        agent_dids.push(self.originator.id.clone());
+
+        // Add beneficiary DID if present
+        if let Some(beneficiary) = &self.beneficiary {
+            agent_dids.push(beneficiary.id.clone());
+        }
+
+        // Add DIDs from agents array
+        for agent in &self.agents {
+            agent_dids.push(agent.id.clone());
+        }
+
+        // Remove duplicates
+        agent_dids.sort();
+        agent_dids.dedup();
+
+        // If from_did is provided, remove it from the recipients list to avoid sending to self
+        if let Some(from) = from_did {
+            agent_dids.retain(|did| did != from);
+        }
+
+        let now = Utc::now().timestamp() as u64;
+
+        // Get the connection ID if this message is connected to a previous message
+        let pthid = self
+            .connection_id()
+            .map(|connect_id| connect_id.to_string());
 
         // Create a new Message with required fields
         let message = Message {
@@ -338,159 +446,39 @@ impl TapMessageBody for Transfer {
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             body: body_json,
-            from: None,
-            to: None,
+            from: from_did.map(|s| s.to_string()),
+            to: Some(agent_dids),
             thid: None,
-            pthid: None,
-            extra_headers: std::collections::HashMap::new(),
+            pthid,
             created_time: Some(now),
             expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             attachments: None,
         };
 
         Ok(message)
     }
-}
 
-impl Authorizable for Transfer {
-    fn authorize(
-        &self,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Authorize {
-        let timestamp = chrono::Utc::now().to_rfc3339();
+    fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        // First create a message with the sender, automatically extracting agent DIDs
+        let mut message = self.to_didcomm(from)?;
 
-        Authorize {
-            transfer_id: self.message_id(),
-            note,
-            timestamp,
-            settlement_address: None,
-            metadata,
+        // Override with explicitly provided recipients if any
+        let to_vec: Vec<String> = to.into_iter().map(String::from).collect();
+        if !to_vec.is_empty() {
+            message.to = Some(to_vec);
         }
-    }
 
-    fn reject(
-        &self,
-        code: String,
-        description: String,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Reject {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-
-        Reject {
-            transfer_id: self.message_id(),
-            code,
-            description,
-            note,
-            timestamp,
-            metadata,
+        // Set the parent thread ID if this message is connected to a previous message
+        if let Some(connect_id) = self.connection_id() {
+            message.pthid = Some(connect_id.to_string());
         }
-    }
 
-    fn settle(
-        &self,
-        transaction_id: String,
-        transaction_hash: Option<String>,
-        block_height: Option<u64>,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Settle {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-
-        Settle {
-            transfer_id: self.message_id(),
-            transaction_id,
-            transaction_hash,
-            block_height,
-            note,
-            timestamp,
-            metadata,
-        }
-    }
-
-    fn confirm_relationship(
-        &self,
-        agent_id: String,
-        for_id: String,
-        role: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> ConfirmRelationship {
-        ConfirmRelationship {
-            transfer_id: self.message_id(),
-            agent_id,
-            for_id,
-            role,
-            metadata,
-        }
-    }
-
-    fn update_party(
-        &self,
-        party_type: String,
-        party: Participant,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> UpdateParty {
-        UpdateParty {
-            transfer_id: self.message_id(),
-            party_type,
-            party,
-            note,
-            metadata,
-            context: Some("https://tap.rsvp/schema/1.0".to_string()),
-        }
-    }
-
-    fn update_policies(
-        &self,
-        policies: Vec<Policy>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> UpdatePolicies {
-        UpdatePolicies {
-            transfer_id: self.message_id(),
-            policies,
-            metadata,
-        }
-    }
-
-    fn add_agents(
-        &self,
-        agents: Vec<Participant>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> AddAgents {
-        AddAgents {
-            transfer_id: self.message_id(),
-            agents,
-            metadata,
-        }
-    }
-
-    fn replace_agent(
-        &self,
-        original: String,
-        replacement: Participant,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> ReplaceAgent {
-        ReplaceAgent {
-            transfer_id: self.message_id(),
-            original,
-            replacement,
-            metadata,
-        }
-    }
-
-    fn remove_agent(
-        &self,
-        agent: String,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> RemoveAgent {
-        RemoveAgent {
-            transfer_id: self.message_id(),
-            agent,
-            metadata,
-        }
+        Ok(message)
     }
 }
 
@@ -554,17 +542,6 @@ pub struct Authorize {
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-
-    /// Timestamp when the authorization was created.
-    pub timestamp: String,
-
-    /// Optional settlement address in CAIP-10 format.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub settlement_address: Option<String>,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Reject message body (TAIP-4).
@@ -582,13 +559,6 @@ pub struct Reject {
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-
-    /// Timestamp when the rejection was created.
-    pub timestamp: String,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Settle message body (TAIP-4).
@@ -611,13 +581,6 @@ pub struct Settle {
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-
-    /// Timestamp when the settlement was created.
-    pub timestamp: String,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Cancel message body (TAIP-4).
@@ -633,13 +596,6 @@ pub struct Cancel {
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-
-    /// Timestamp when the cancellation was created.
-    pub timestamp: String,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Revert message body (TAIP-4).
@@ -657,13 +613,6 @@ pub struct Revert {
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
-
-    /// Timestamp when the revert request was created.
-    pub timestamp: String,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Add agents message body (TAIP-5).
@@ -674,10 +623,6 @@ pub struct AddAgents {
 
     /// Agents to add.
     pub agents: Vec<Participant>,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Replace agent message body (TAIP-5).
@@ -693,10 +638,6 @@ pub struct ReplaceAgent {
 
     /// Replacement agent.
     pub replacement: Participant,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Remove agent message body (TAIP-5).
@@ -709,10 +650,6 @@ pub struct RemoveAgent {
 
     /// DID of the agent to remove.
     pub agent: String,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// ConfirmRelationship message body (TAIP-9).
@@ -733,10 +670,6 @@ pub struct ConfirmRelationship {
     /// Role of the agent in the transaction (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-
-    /// Additional metadata (optional).
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 impl ConfirmRelationship {
@@ -747,7 +680,6 @@ impl ConfirmRelationship {
             agent_id: agent_id.to_string(),
             for_id: for_id.to_string(),
             role,
-            metadata: HashMap::new(),
         }
     }
 
@@ -772,6 +704,64 @@ impl ConfirmRelationship {
         }
 
         Ok(())
+    }
+}
+
+impl TapMessageBody for ConfirmRelationship {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#confirmrelationship"
+    }
+
+    fn validate(&self) -> Result<()> {
+        self.validate()
+    }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Call the default implementation first to get the basic structure
+        let mut message = TapMessageBody::to_didcomm(self, from_did)?;
+
+        // Explicitly set the recipient using agent_id
+        message.to = Some(vec![self.agent_id.clone()]);
+
+        Ok(message)
+    }
+
+    fn from_didcomm(message: &Message) -> Result<Self> {
+        let body = message
+            .body
+            .as_object()
+            .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
+
+        let transfer_id = body
+            .get("transfer_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Validation("Missing or invalid transfer_id".to_string()))?;
+
+        let agent_id = body
+            .get("agent_id")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Validation("Missing or invalid agent_id".to_string()))?;
+
+        let for_id = body
+            .get("for")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Validation("Missing or invalid for".to_string()))?;
+
+        let role = body
+            .get("role")
+            .and_then(|v| v.as_str())
+            .map(ToString::to_string);
+
+        let confirm_relationship = Self {
+            transfer_id: transfer_id.to_string(),
+            agent_id: agent_id.to_string(),
+            for_id: for_id.to_string(),
+            role,
+        };
+
+        confirm_relationship.validate()?;
+
+        Ok(confirm_relationship)
     }
 }
 
@@ -829,11 +819,7 @@ pub struct UpdateParty {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
 
-    /// Additional metadata for the update.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
-
-    /// Optional JSON-LD context.
+    /// Optional context for the update.
     #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
 }
@@ -846,8 +832,7 @@ impl UpdateParty {
             party_type: party_type.to_string(),
             party,
             note: None,
-            metadata: HashMap::new(),
-            context: Some("https://tap.rsvp/schema/1.0".to_string()),
+            context: None,
         }
     }
 
@@ -878,7 +863,7 @@ impl TapMessageBody for UpdateParty {
         self.validate()
     }
 
-    fn to_didcomm(&self) -> Result<Message> {
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
         // Serialize the UpdateParty to a JSON value
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -891,7 +876,7 @@ impl TapMessageBody for UpdateParty {
             );
         }
 
-        let now = crate::utils::get_current_time()?;
+        let now = Utc::now().timestamp() as u64;
 
         // Create a new Message with required fields
         let message = Message {
@@ -899,13 +884,13 @@ impl TapMessageBody for UpdateParty {
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             body: body_json,
-            from: None,
+            from: from_did.map(|s| s.to_string()),
             to: None,
             thid: None,
             pthid: None,
-            extra_headers: std::collections::HashMap::new(),
             created_time: Some(now),
             expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             attachments: None,
         };
@@ -941,25 +926,16 @@ impl TapMessageBody for UpdateParty {
             .and_then(|v| v.as_str())
             .map(ToString::to_string);
 
-        // Get context if available
         let context = body
             .get("@context")
             .and_then(|v| v.as_str())
             .map(ToString::to_string);
-
-        let mut metadata = HashMap::new();
-        for (k, v) in body.iter() {
-            if !["transfer_id", "partyType", "party", "note", "@context"].contains(&k.as_str()) {
-                metadata.insert(k.clone(), v.clone());
-            }
-        }
 
         let update_party = Self {
             transfer_id: transfer_id.to_string(),
             party_type: party_type.to_string(),
             party,
             note,
-            metadata,
             context,
         };
 
@@ -977,8 +953,6 @@ pub struct UpdatePolicies {
     #[serde(rename = "transferId")]
     pub transfer_id: String,
     pub policies: Vec<Policy>,
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 impl UpdatePolicies {
@@ -986,7 +960,6 @@ impl UpdatePolicies {
         Self {
             transfer_id: transfer_id.to_string(),
             policies,
-            metadata: HashMap::new(),
         }
     }
 
@@ -1020,7 +993,7 @@ impl TapMessageBody for UpdatePolicies {
         UpdatePolicies::validate(self)
     }
 
-    fn to_didcomm(&self) -> Result<Message> {
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
         // Serialize the UpdatePolicies to a JSON value
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -1033,7 +1006,7 @@ impl TapMessageBody for UpdatePolicies {
             );
         }
 
-        let now = crate::utils::get_current_time()?;
+        let now = Utc::now().timestamp() as u64;
 
         // Create a new Message with required fields
         let message = Message {
@@ -1041,13 +1014,13 @@ impl TapMessageBody for UpdatePolicies {
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             body: body_json,
-            from: None,
+            from: from_did.map(|s| s.to_string()),
             to: None,
             thid: None,
             pthid: None,
-            extra_headers: std::collections::HashMap::new(),
             created_time: Some(now),
             expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             attachments: None,
         };
@@ -1112,165 +1085,149 @@ pub trait Authorizable {
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transfer being authorized
     /// * `note` - Optional note about the authorization
-    /// * `metadata` - Additional metadata for the authorization
     ///
     /// # Returns
     ///
     /// A new Authorize message body
-    fn authorize(
-        &self,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Authorize;
+    fn authorize(&self, transfer_id: String, note: Option<String>) -> Authorize;
 
     /// Confirms a relationship between agents, creating a ConfirmRelationship message as a response
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transfer related to this message
     /// * `agent_id` - DID of the agent whose relationship is being confirmed
     /// * `for_id` - DID of the entity that the agent acts on behalf of
     /// * `role` - Optional role of the agent in the transaction
-    /// * `metadata` - Additional metadata for the confirmation
     ///
     /// # Returns
     ///
     /// A new ConfirmRelationship message body
     fn confirm_relationship(
         &self,
+        transfer_id: String,
         agent_id: String,
         for_id: String,
         role: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> ConfirmRelationship;
 
     /// Rejects this message, creating a Reject message as a response
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transfer being rejected
     /// * `code` - Rejection code
     /// * `description` - Description of rejection reason
     /// * `note` - Optional note about the rejection
-    /// * `metadata` - Additional metadata for the rejection
     ///
     /// # Returns
     ///
     /// A new Reject message body
     fn reject(
         &self,
+        transfer_id: String,
         code: String,
         description: String,
         note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> Reject;
 
     /// Settles this message, creating a Settle message as a response
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transfer being settled
     /// * `transaction_id` - Transaction ID
     /// * `transaction_hash` - Optional transaction hash
     /// * `block_height` - Optional block height
     /// * `note` - Optional note about the settlement
-    /// * `metadata` - Additional metadata for the settlement
     ///
     /// # Returns
     ///
     /// A new Settle message body
     fn settle(
         &self,
+        transfer_id: String,
         transaction_id: String,
         transaction_hash: Option<String>,
         block_height: Option<u64>,
         note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> Settle;
 
     /// Updates a party in the transaction, creating an UpdateParty message as a response
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transaction this update relates to
     /// * `party_type` - Type of party being updated (e.g., 'originator', 'beneficiary')
     /// * `party` - Updated party information
     /// * `note` - Optional note about the update
-    /// * `metadata` - Additional metadata for the update
     ///
     /// # Returns
     ///
     /// A new UpdateParty message body
     fn update_party(
         &self,
+        transfer_id: String,
         party_type: String,
         party: Participant,
         note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> UpdateParty;
 
     /// Updates policies for this message, creating an UpdatePolicies message as a response
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transfer being updated
     /// * `policies` - Vector of policies to be applied
-    /// * `metadata` - Additional metadata for the update
     ///
     /// # Returns
     ///
     /// A new UpdatePolicies message body
-    fn update_policies(
-        &self,
-        policies: Vec<Policy>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> UpdatePolicies;
+    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies;
 
     /// Adds agents to this message, creating an AddAgents message as a response
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transfer to add agents to
     /// * `agents` - Vector of participants to be added
-    /// * `metadata` - Additional metadata for the update
     ///
     /// # Returns
     ///
     /// A new AddAgents message body
-    fn add_agents(
-        &self,
-        agents: Vec<Participant>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> AddAgents;
+    fn add_agents(&self, transfer_id: String, agents: Vec<Participant>) -> AddAgents;
 
     /// Replaces an agent in this message, creating a ReplaceAgent message as a response
     ///
     /// # Arguments
     ///
+    /// * `transfer_id` - ID of the transfer to replace agent in
     /// * `original` - DID of the original agent to be replaced
     /// * `replacement` - New participant replacing the original agent
-    /// * `metadata` - Additional metadata for the update
     ///
     /// # Returns
     ///
     /// A new ReplaceAgent message body
     fn replace_agent(
         &self,
+        transfer_id: String,
         original: String,
         replacement: Participant,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> ReplaceAgent;
 
     /// Removes an agent from this message, creating a RemoveAgent message as a response
     ///
     /// # Arguments
     ///
-    /// * `agent` - DID of the agent to be removed
-    /// * `metadata` - Additional metadata for the update
+    /// * `transfer_id` - ID of the transfer to remove agent from
+    /// * `agent` - DID of the agent to remove
     ///
     /// # Returns
     ///
     /// A new RemoveAgent message body
-    fn remove_agent(
-        &self,
-        agent: String,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> RemoveAgent;
+    fn remove_agent(&self, transfer_id: String, agent: String) -> RemoveAgent;
 }
 
 // Implementation of message type conversion for message body types
@@ -1288,6 +1245,44 @@ impl TapMessageBody for Authorize {
         }
 
         Ok(())
+    }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: None,
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
     }
 }
 
@@ -1317,6 +1312,44 @@ impl TapMessageBody for Reject {
 
         Ok(())
     }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: None,
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
 }
 
 impl TapMessageBody for Settle {
@@ -1339,6 +1372,44 @@ impl TapMessageBody for Settle {
 
         Ok(())
     }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: Some(self.transfer_id.clone()),
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
 }
 
 impl TapMessageBody for Presentation {
@@ -1360,6 +1431,44 @@ impl TapMessageBody for Presentation {
         }
 
         Ok(())
+    }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: None,
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
     }
 }
 
@@ -1391,6 +1500,44 @@ impl TapMessageBody for AddAgents {
 
         Ok(())
     }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: Some(self.transfer_id.clone()),
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
 }
 
 impl TapMessageBody for ReplaceAgent {
@@ -1419,6 +1566,44 @@ impl TapMessageBody for ReplaceAgent {
 
         Ok(())
     }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: Some(self.transfer_id.clone()),
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
 }
 
 impl TapMessageBody for RemoveAgent {
@@ -1439,97 +1624,43 @@ impl TapMessageBody for RemoveAgent {
 
         Ok(())
     }
-}
 
-impl TapMessageBody for ConfirmRelationship {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#confirmrelationship"
-    }
-
-    fn validate(&self) -> Result<()> {
-        self.validate()
-    }
-
-    fn to_didcomm(&self) -> Result<Message> {
-        // Serialize the ConfirmRelationship to a JSON value
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         // Ensure the @type field is correctly set in the body
         if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
             body_obj.insert(
                 "@type".to_string(),
                 serde_json::Value::String(Self::message_type().to_string()),
             );
-
-            // Change for_id to "for" in the serialized object
-            if let Some(for_id) = body_obj.remove("for_id") {
-                body_obj.insert("for".to_string(), for_id);
-            }
         }
 
-        let now = crate::utils::get_current_time()?;
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
 
-        // Create a new Message with required fields
+        // Create the message
         let message = Message {
-            id: uuid::Uuid::new_v4().to_string(),
+            id,
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            body: body_json,
-            from: None,
+            from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: None,
+            thid: Some(self.transfer_id.clone()),
             pthid: None,
-            extra_headers: std::collections::HashMap::new(),
-            created_time: Some(now),
+            created_time: Some(created_time),
             expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
             from_prior: None,
+            body: body_json,
             attachments: None,
         };
 
         Ok(message)
-    }
-
-    fn from_didcomm(message: &Message) -> Result<Self> {
-        let body = message
-            .body
-            .as_object()
-            .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
-
-        let transfer_id = body
-            .get("transfer_id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Validation("Missing or invalid transfer_id".to_string()))?;
-
-        let agent_id = body
-            .get("agent_id")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Validation("Missing or invalid agent_id".to_string()))?;
-
-        let for_id = body
-            .get("for")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Validation("Missing or invalid for".to_string()))?;
-
-        let role = body
-            .get("role")
-            .and_then(|v| v.as_str())
-            .map(ToString::to_string);
-
-        let mut metadata = HashMap::new();
-        for (k, v) in body.iter() {
-            if !["transfer_id", "agent_id", "for", "role"].contains(&k.as_str()) {
-                metadata.insert(k.clone(), v.clone());
-            }
-        }
-
-        Ok(Self {
-            transfer_id: transfer_id.to_string(),
-            agent_id: agent_id.to_string(),
-            for_id: for_id.to_string(),
-            role,
-            metadata,
-        })
     }
 }
 
@@ -1552,6 +1683,44 @@ impl TapMessageBody for ErrorBody {
         }
 
         Ok(())
+    }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: None,
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
     }
 }
 
@@ -1669,16 +1838,30 @@ impl PaymentRequest {
             return Err(Error::Validation("Amount cannot be empty".to_string()));
         }
 
-        // Validate that merchant is specified
+        // Validate amount is a positive number
+        match self.amount.parse::<f64>() {
+            Ok(amount) if amount <= 0.0 => {
+                return Err(Error::Validation("Amount must be positive".to_string()));
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Amount must be a valid number".to_string(),
+                ));
+            }
+            _ => {}
+        }
+
+        // Validate merchant
         if self.merchant.id.trim().is_empty() {
-            return Err(Error::Validation(
-                "Merchant DID must be specified".to_string(),
-            ));
+            return Err(Error::Validation("Merchant ID is required".to_string()));
         }
 
         // Validate expiry date format if provided
         if let Some(expiry) = &self.expiry {
-            if chrono::DateTime::parse_from_rfc3339(expiry).is_err() {
+            if Utc::now().timestamp()
+                > (Utc::now() + chrono::Duration::seconds(expiry.parse::<i64>().unwrap()))
+                    .timestamp()
+            {
                 return Err(Error::Validation(
                     "Expiry must be a valid ISO 8601 timestamp".to_string(),
                 ));
@@ -1694,34 +1877,72 @@ impl PaymentRequest {
         if let Some(invoice) = &self.invoice {
             // Validate the invoice structure
             invoice.validate()?;
-            
+
             // Validate that invoice total matches payment amount
             if let Ok(amount_f64) = self.amount.parse::<f64>() {
                 let difference = (amount_f64 - invoice.total).abs();
-                if difference > 0.01 { // Allow a small tolerance for floating point calculations
-                    return Err(Error::Validation(
-                        format!(
-                            "Invoice total ({}) does not match payment amount ({})", 
-                            invoice.total, amount_f64
-                        )
-                    ));
+                if difference > 0.01 {
+                    // Allow a small tolerance for floating point calculations
+                    return Err(Error::Validation(format!(
+                        "Invoice total ({}) does not match payment amount ({})",
+                        invoice.total, amount_f64
+                    )));
                 }
             }
-            
+
             // Validate currency consistency if both are present
             if let Some(currency) = &self.currency {
                 if currency.to_uppercase() != invoice.currency_code.to_uppercase() {
-                    return Err(Error::Validation(
-                        format!(
-                            "Payment request currency ({}) does not match invoice currency ({})", 
-                            currency, invoice.currency_code
-                        )
-                    ));
+                    return Err(Error::Validation(format!(
+                        "Payment request currency ({}) does not match invoice currency ({})",
+                        currency, invoice.currency_code
+                    )));
                 }
             }
         }
 
         Ok(())
+    }
+
+    #[allow(dead_code)] // Suppress dead code warning for now
+    fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
+    where
+        I: IntoIterator<Item = &'a str>,
+    {
+        // First create a message with the sender, automatically extracting agent DIDs
+        let mut message = self.to_didcomm(from)?;
+
+        // Override with explicitly provided recipients if any
+        let to_vec: Vec<String> = to.into_iter().map(String::from).collect();
+        if !to_vec.is_empty() {
+            message.to = Some(to_vec);
+        }
+
+        // Set the parent thread ID if this message is connected to a previous message
+        if let Some(connect_id) = self.connection_id() {
+            message.pthid = Some(connect_id.to_string());
+        }
+
+        Ok(message)
+    }
+}
+
+impl Connectable for PaymentRequest {
+    fn with_connection(&mut self, connect_id: &str) -> &mut Self {
+        // Store the connect_id in metadata
+        self.metadata.insert(
+            "connect_id".to_string(),
+            serde_json::Value::String(connect_id.to_string()),
+        );
+        self
+    }
+
+    fn has_connection(&self) -> bool {
+        self.metadata.contains_key("connect_id")
+    }
+
+    fn connection_id(&self) -> Option<&str> {
+        self.metadata.get("connect_id").and_then(|v| v.as_str())
     }
 }
 
@@ -1743,16 +1964,30 @@ impl TapMessageBody for PaymentRequest {
             return Err(Error::Validation("Amount cannot be empty".to_string()));
         }
 
-        // Validate that merchant is specified
+        // Validate amount is a positive number
+        match self.amount.parse::<f64>() {
+            Ok(amount) if amount <= 0.0 => {
+                return Err(Error::Validation("Amount must be positive".to_string()));
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Amount must be a valid number".to_string(),
+                ));
+            }
+            _ => {}
+        }
+
+        // Validate merchant
         if self.merchant.id.trim().is_empty() {
-            return Err(Error::Validation(
-                "Merchant DID must be specified".to_string(),
-            ));
+            return Err(Error::Validation("Merchant ID is required".to_string()));
         }
 
         // Validate expiry date format if provided
         if let Some(expiry) = &self.expiry {
-            if chrono::DateTime::parse_from_rfc3339(expiry).is_err() {
+            if Utc::now().timestamp()
+                > (Utc::now() + chrono::Duration::seconds(expiry.parse::<i64>().unwrap()))
+                    .timestamp()
+            {
                 return Err(Error::Validation(
                     "Expiry must be a valid ISO 8601 timestamp".to_string(),
                 ));
@@ -1764,7 +1999,101 @@ impl TapMessageBody for PaymentRequest {
             return Err(Error::Validation("Agents cannot be empty".to_string()));
         }
 
+        // Validate invoice if present
+        if let Some(invoice) = &self.invoice {
+            // Validate the invoice structure
+            invoice.validate()?;
+
+            // Validate that invoice total matches payment amount
+            if let Ok(amount_f64) = self.amount.parse::<f64>() {
+                let difference = (amount_f64 - invoice.total).abs();
+                if difference > 0.01 {
+                    // Allow a small tolerance for floating point calculations
+                    return Err(Error::Validation(format!(
+                        "Invoice total ({}) does not match payment amount ({})",
+                        invoice.total, amount_f64
+                    )));
+                }
+            }
+
+            // Validate currency consistency if both are present
+            if let Some(currency) = &self.currency {
+                if currency.to_uppercase() != invoice.currency_code.to_uppercase() {
+                    return Err(Error::Validation(format!(
+                        "Payment request currency ({}) does not match invoice currency ({})",
+                        currency, invoice.currency_code
+                    )));
+                }
+            }
+        }
+
         Ok(())
+    }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Extract agent DIDs directly from the message
+        let mut agent_dids = Vec::new();
+
+        // Add merchant DID
+        agent_dids.push(self.merchant.id.clone());
+
+        // Add customer DID if present
+        if let Some(customer) = &self.customer {
+            agent_dids.push(customer.id.clone());
+        }
+
+        // Add DIDs from agents array
+        for agent in &self.agents {
+            agent_dids.push(agent.id.clone());
+        }
+
+        // Remove duplicates
+        agent_dids.sort();
+        agent_dids.dedup();
+
+        // If from_did is provided, remove it from the recipients list to avoid sending to self
+        if let Some(from) = from_did {
+            agent_dids.retain(|did| did != from);
+        }
+
+        let now = Utc::now().timestamp() as u64;
+
+        // Get the connection ID if this message is connected to a previous message
+        let pthid = self
+            .connection_id()
+            .map(|connect_id| connect_id.to_string());
+
+        // Create a new Message with required fields
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: Some(agent_dids),
+            thid: None,
+            pthid,
+            created_time: Some(now),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
     }
 }
 
@@ -1880,6 +2209,67 @@ impl TapMessageBody for Connect {
 
         Ok(())
     }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Extract agent DIDs directly from the message
+        let mut agent_dids = Vec::new();
+
+        // Add agent DID if present
+        if let Some(agent) = &self.agent {
+            agent_dids.push(agent.id.clone());
+        }
+
+        // Add for_id if it's a DID
+        if self.for_id.starts_with("did:") {
+            agent_dids.push(self.for_id.clone());
+        }
+
+        // Remove duplicates
+        agent_dids.sort();
+        agent_dids.dedup();
+
+        // If from_did is provided, remove it from the recipients list to avoid sending to self
+        if let Some(from) = from_did {
+            agent_dids.retain(|did| did != from);
+        }
+
+        let now = Utc::now().timestamp() as u64;
+
+        // Connect messages don't have connections, so pthid is always None
+        let pthid = None;
+
+        // Create a new Message with required fields
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: Some(agent_dids),
+            thid: None,
+            pthid,
+            created_time: Some(now),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
 }
 
 /// Agent details for Connect message
@@ -1934,11 +2324,20 @@ impl AuthorizationRequired {
             ));
         }
 
-        // Validate expires field format
-        if chrono::DateTime::parse_from_rfc3339(&self.expires).is_err() {
-            return Err(Error::Validation(
-                "Expires must be a valid ISO 8601 timestamp".to_string(),
-            ));
+        match chrono::DateTime::parse_from_rfc3339(&self.expires) {
+            Ok(expiry_time) => {
+                let expiry_time_utc = expiry_time.with_timezone(&Utc);
+                if expiry_time_utc <= Utc::now() {
+                    return Err(Error::Validation(
+                        "Expires timestamp must be in the future".to_string(),
+                    ));
+                }
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Expires must be a valid ISO 8601 timestamp string".to_string(),
+                ));
+            }
         }
 
         Ok(())
@@ -1958,14 +2357,61 @@ impl TapMessageBody for AuthorizationRequired {
             ));
         }
 
-        // Validate expires field format
-        if chrono::DateTime::parse_from_rfc3339(&self.expires).is_err() {
-            return Err(Error::Validation(
-                "Expires must be a valid ISO 8601 timestamp".to_string(),
-            ));
+        match chrono::DateTime::parse_from_rfc3339(&self.expires) {
+            Ok(expiry_time) => {
+                let expiry_time_utc = expiry_time.with_timezone(&Utc);
+                if expiry_time_utc <= Utc::now() {
+                    return Err(Error::Validation(
+                        "Expires timestamp must be in the future".to_string(),
+                    ));
+                }
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Expires must be a valid ISO 8601 timestamp string".to_string(),
+                ));
+            }
         }
 
         Ok(())
+    }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: None,
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
     }
 }
 
@@ -2056,12 +2502,50 @@ impl TapMessageBody for OutOfBand {
 
         Ok(())
     }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Create a JSON representation of self with explicit type field
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            // Add or update the @type field with the message type
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Create a new message with a random ID
+        let id = uuid::Uuid::new_v4().to_string();
+        let created_time = Utc::now().timestamp() as u64;
+
+        // Create the message
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: None,
+            pthid: None,
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
 }
 
 /// DIDComm Presentation format (using present-proof protocol)
 ///
 /// This struct implements the standard DIDComm present-proof protocol format as defined in
-/// [DIDComm Messaging Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present_proof).
+/// [DIDComm Messaging Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present-proof).
 ///
 /// It is used for exchanging verifiable presentations between parties in a DIDComm conversation.
 /// The presentation may contain identity credentials, proof of control, or other verifiable claims.
@@ -2156,7 +2640,7 @@ impl DIDCommPresentation {
     /// - Must include at least one attachment
     /// - Each attachment must have a non-empty ID and media type
     /// - Each attachment must include data in either base64 or JSON format
-    /// - JSON data must include `@context` and `type` fields
+    /// - Verifiable presentations in JSON format must include `@context` and `type` fields
     ///
     /// # Returns
     ///
@@ -2258,7 +2742,7 @@ impl DIDCommPresentation {
 /// - **Conversion from DIDComm**: Extracts presentation data from DIDComm message, handling both Base64 and JSON formats
 ///
 /// This implementation follows the [DIDComm Messaging Specification](https://identity.foundation/didcomm-messaging/spec/)
-/// and the [Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present_proof).
+/// and the [Present Proof Protocol 3.0](https://github.com/decentralized-identity/waci-didcomm/tree/main/present-proof).
 impl TapMessageBody for DIDCommPresentation {
     fn message_type() -> &'static str {
         "https://didcomm.org/present-proof/3.0/presentation"
@@ -2358,7 +2842,7 @@ impl TapMessageBody for DIDCommPresentation {
         Ok(presentation)
     }
 
-    fn to_didcomm(&self) -> Result<Message> {
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
         // Create message body
         let mut body = serde_json::Map::new();
 
@@ -2446,15 +2930,15 @@ impl TapMessageBody for DIDCommPresentation {
             id: uuid::Uuid::new_v4().to_string(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            body: serde_json::Value::Object(body),
-            from: None,
+            from: from_did.map(|s| s.to_string()),
             to: None,
             thid: self.thid.clone(),
             pthid: None,
-            extra_headers: HashMap::new(),
-            created_time: Some(crate::utils::get_current_time()?),
+            created_time: Some(Utc::now().timestamp() as u64),
             expires_time: None,
+            extra_headers: HashMap::new(),
             from_prior: None,
+            body: serde_json::Value::Object(body),
             attachments: didcomm_attachments,
         };
 
@@ -2462,144 +2946,621 @@ impl TapMessageBody for DIDCommPresentation {
     }
 }
 
-/// Implementation of the Authorizable trait for DIDComm Message
-impl Authorizable for Message {
-    fn authorize(
-        &self,
-        note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> Authorize {
-        let timestamp = chrono::Utc::now().to_rfc3339();
+/// Implementation of Authorizable for Transfer
+impl Authorizable for Transfer {
+    /// Authorizes this message, creating an Authorize message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer being authorized
+    /// * `note` - Optional note about the authorization
+    ///
+    /// # Returns
+    ///
+    /// A new Authorize message body
+    fn authorize(&self, transfer_id: String, note: Option<String>) -> Authorize {
+        Authorize { transfer_id, note }
+    }
 
-        Authorize {
-            transfer_id: self.id.clone(),
+    /// Confirms a relationship between agents, creating a ConfirmRelationship message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer related to this message
+    /// * `agent_id` - DID of the agent whose relationship is being confirmed
+    /// * `for_id` - DID of the entity that the agent acts on behalf of
+    /// * `role` - Optional role of the agent in the transaction
+    ///
+    /// # Returns
+    ///
+    /// A new ConfirmRelationship message body
+    fn confirm_relationship(
+        &self,
+        transfer_id: String,
+        agent_id: String,
+        for_id: String,
+        role: Option<String>,
+    ) -> ConfirmRelationship {
+        ConfirmRelationship {
+            transfer_id,
+            agent_id,
+            for_id,
+            role,
+        }
+    }
+
+    /// Rejects this message, creating a Reject message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer being rejected
+    /// * `code` - Rejection code
+    /// * `description` - Description of rejection reason
+    /// * `note` - Optional note about the rejection
+    ///
+    /// # Returns
+    ///
+    /// A new Reject message body
+    fn reject(
+        &self,
+        transfer_id: String,
+        code: String,
+        description: String,
+        note: Option<String>,
+    ) -> Reject {
+        Reject {
+            transfer_id,
+            code,
+            description,
             note,
-            timestamp,
-            settlement_address: None,
-            metadata,
+        }
+    }
+
+    /// Settles this message, creating a Settle message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer being settled
+    /// * `transaction_id` - Transaction ID
+    /// * `transaction_hash` - Optional transaction hash
+    /// * `block_height` - Optional block height
+    /// * `note` - Optional note about the settlement
+    ///
+    /// # Returns
+    ///
+    /// A new Settle message body
+    fn settle(
+        &self,
+        transfer_id: String,
+        transaction_id: String,
+        transaction_hash: Option<String>,
+        block_height: Option<u64>,
+        note: Option<String>,
+    ) -> Settle {
+        Settle {
+            transfer_id,
+            transaction_id,
+            transaction_hash,
+            block_height,
+            note,
+        }
+    }
+
+    /// Updates a party in the transaction, creating an UpdateParty message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transaction this update relates to
+    /// * `party_type` - Type of party being updated (e.g., 'originator', 'beneficiary')
+    /// * `party` - Updated party information
+    /// * `note` - Optional note about the update
+    ///
+    /// # Returns
+    ///
+    /// A new UpdateParty message body
+    fn update_party(
+        &self,
+        transfer_id: String,
+        party_type: String,
+        party: Participant,
+        note: Option<String>,
+    ) -> UpdateParty {
+        UpdateParty {
+            transfer_id,
+            party_type,
+            party,
+            note,
+            context: None,
+        }
+    }
+
+    /// Updates policies for this message, creating an UpdatePolicies message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer being updated
+    /// * `policies` - Vector of policies to be applied
+    ///
+    /// # Returns
+    ///
+    /// A new UpdatePolicies message body
+    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies {
+        UpdatePolicies {
+            transfer_id,
+            policies,
+        }
+    }
+
+    /// Adds agents to this message, creating an AddAgents message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer to add agents to
+    /// * `agents` - Vector of participants to be added
+    ///
+    /// # Returns
+    ///
+    /// A new AddAgents message body
+    fn add_agents(&self, transfer_id: String, agents: Vec<Participant>) -> AddAgents {
+        AddAgents {
+            transfer_id,
+            agents,
+        }
+    }
+
+    /// Replaces an agent in this message, creating a ReplaceAgent message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer to replace agent in
+    /// * `original` - DID of the original agent to be replaced
+    /// * `replacement` - New participant replacing the original agent
+    ///
+    /// # Returns
+    ///
+    /// A new ReplaceAgent message body
+    fn replace_agent(
+        &self,
+        transfer_id: String,
+        original: String,
+        replacement: Participant,
+    ) -> ReplaceAgent {
+        ReplaceAgent {
+            transfer_id,
+            original,
+            replacement,
+        }
+    }
+
+    /// Removes an agent from this message, creating a RemoveAgent message as a response
+    ///
+    /// # Arguments
+    ///
+    /// * `transfer_id` - ID of the transfer to remove agent from
+    /// * `agent` - DID of the agent to remove
+    ///
+    /// # Returns
+    ///
+    /// A new RemoveAgent message body
+    fn remove_agent(&self, transfer_id: String, agent: String) -> RemoveAgent {
+        RemoveAgent { transfer_id, agent }
+    }
+}
+
+/// Represents a TAP Payment message.
+/// This message type is used to initiate a payment request.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Payment {
+    /// Unique identifier for this payment request.
+    pub payment_id: String,
+    /// Identifier for the thread this message belongs to.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub thid: Option<String>,
+    /// Identifier for the parent thread, used for replies.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pthid: Option<String>,
+    /// The merchant requesting the payment.
+    pub merchant: Participant,
+    /// The customer making the payment.
+    pub customer: Participant,
+    /// The asset being transferred (e.g., currency and amount).
+    pub asset: AssetId,
+    /// The amount requested for payment.
+    pub amount: String,
+    /// Optional details about the order or transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order_details: Option<HashMap<String, serde_json::Value>>,
+    /// Timestamp when the payment request was created (RFC3339).
+    pub timestamp: String,
+    /// Optional expiry time for the payment request (RFC3339).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires: Option<String>,
+    /// Optional note from the merchant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub note: Option<String>,
+    /// Optional list of agents involved in processing the payment.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub agents: Vec<Participant>,
+    /// Optional metadata associated with the payment.
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+    /// Optional attachments.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attachments: Option<Vec<Attachment>>,
+}
+
+impl TapMessageBody for Payment {
+    fn message_type() -> &'static str {
+        "payment"
+    }
+
+    fn validate(&self) -> Result<()> {
+        // Validate asset
+        if self.asset.namespace().is_empty() || self.asset.reference().is_empty() {
+            return Err(Error::Validation("Asset ID is invalid".to_string()));
+        }
+
+        // Validate merchant
+        if self.merchant.id.is_empty() {
+            return Err(Error::Validation("Merchant ID is required".to_string()));
+        }
+
+        // Validate customer
+        if self.customer.id.is_empty() {
+            return Err(Error::Validation("Customer ID is required".to_string()));
+        }
+
+        // Validate amount
+        if self.amount.is_empty() {
+            return Err(Error::Validation("Amount is required".to_string()));
+        }
+        match self.amount.parse::<f64>() {
+            Ok(amount) if amount <= 0.0 => {
+                return Err(Error::Validation("Amount must be positive".to_string()));
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Amount must be a valid number".to_string(),
+                ));
+            }
+            _ => {}
+        }
+
+        // Validate timestamp format
+        if chrono::DateTime::parse_from_rfc3339(&self.timestamp).is_err() {
+            return Err(Error::Validation(
+                "Timestamp must be a valid RFC3339 string".to_string(),
+            ));
+        }
+
+        // Validate expires format if present
+        if let Some(expiry) = &self.expires {
+            if chrono::DateTime::parse_from_rfc3339(expiry).is_err() {
+                return Err(Error::Validation(
+                    "Expires must be a valid RFC3339 string".to_string(),
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    // Basic to_didcomm implementation (will be refined later if needed)
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        let mut agent_dids = vec![self.merchant.id.clone(), self.customer.id.clone()];
+        agent_dids.extend(self.agents.iter().map(|a| a.id.clone()));
+        agent_dids.sort();
+        agent_dids.dedup();
+
+        if let Some(from) = from_did {
+            agent_dids.retain(|did| did != from);
+        }
+
+        let didcomm_attachments = self.attachments.as_ref().map(|attachments| {
+            attachments
+                .iter()
+                .filter_map(crate::utils::convert_tap_attachment_to_didcomm)
+                .collect::<Vec<_>>()
+        });
+
+        let message = Message {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to: Some(agent_dids),
+            thid: self.thid.clone(),
+            pthid: self.pthid.clone(),
+            created_time: Some(Utc::now().timestamp() as u64),
+            expires_time: self.expires.as_ref().and_then(|exp| {
+                chrono::DateTime::parse_from_rfc3339(exp)
+                    .ok()
+                    .map(|dt| dt.timestamp() as u64)
+            }),
+            extra_headers: HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: didcomm_attachments,
+        };
+
+        Ok(message)
+    }
+}
+
+impl Authorizable for Payment {
+    fn authorize(&self, transfer_id: String, note: Option<String>) -> Authorize {
+        Authorize { transfer_id, note }
+    }
+
+    fn confirm_relationship(
+        &self,
+        transfer_id: String,
+        agent_id: String,
+        for_id: String,
+        role: Option<String>,
+    ) -> ConfirmRelationship {
+        ConfirmRelationship {
+            transfer_id,
+            agent_id,
+            for_id,
+            role,
         }
     }
 
     fn reject(
         &self,
+        transfer_id: String,
         code: String,
         description: String,
         note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> Reject {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-
         Reject {
-            transfer_id: self.id.clone(),
+            transfer_id,
             code,
             description,
             note,
-            timestamp,
-            metadata,
         }
     }
 
     fn settle(
         &self,
+        transfer_id: String,
         transaction_id: String,
         transaction_hash: Option<String>,
         block_height: Option<u64>,
         note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> Settle {
-        let timestamp = chrono::Utc::now().to_rfc3339();
-
         Settle {
-            transfer_id: self.id.clone(),
+            transfer_id,
             transaction_id,
             transaction_hash,
             block_height,
             note,
-            timestamp,
-            metadata,
-        }
-    }
-
-    fn confirm_relationship(
-        &self,
-        agent_id: String,
-        for_id: String,
-        role: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> ConfirmRelationship {
-        ConfirmRelationship {
-            transfer_id: self.id.clone(),
-            agent_id,
-            for_id,
-            role,
-            metadata,
-        }
-    }
-
-    fn update_policies(
-        &self,
-        policies: Vec<Policy>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> UpdatePolicies {
-        UpdatePolicies {
-            transfer_id: self.id.clone(),
-            policies,
-            metadata,
-        }
-    }
-
-    fn add_agents(
-        &self,
-        agents: Vec<Participant>,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> AddAgents {
-        AddAgents {
-            transfer_id: self.id.clone(),
-            agents,
-            metadata,
-        }
-    }
-
-    fn replace_agent(
-        &self,
-        original: String,
-        replacement: Participant,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> ReplaceAgent {
-        ReplaceAgent {
-            transfer_id: self.id.clone(),
-            original,
-            replacement,
-            metadata,
         }
     }
 
     fn update_party(
         &self,
+        transfer_id: String,
         party_type: String,
         party: Participant,
         note: Option<String>,
-        metadata: HashMap<String, serde_json::Value>,
     ) -> UpdateParty {
         UpdateParty {
-            transfer_id: self.id.clone(),
+            transfer_id,
             party_type,
             party,
             note,
-            metadata,
-            context: Some("https://tap.rsvp/schema/1.0".to_string()),
+            context: None,
         }
     }
 
-    fn remove_agent(
+    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies {
+        UpdatePolicies {
+            transfer_id,
+            policies,
+        }
+    }
+
+    fn add_agents(&self, transfer_id: String, agents: Vec<Participant>) -> AddAgents {
+        AddAgents {
+            transfer_id,
+            agents,
+        }
+    }
+
+    fn replace_agent(
         &self,
-        agent: String,
-        metadata: HashMap<String, serde_json::Value>,
-    ) -> RemoveAgent {
-        RemoveAgent {
-            transfer_id: self.id.clone(),
-            agent,
-            metadata,
+        transfer_id: String,
+        original: String,
+        replacement: Participant,
+    ) -> ReplaceAgent {
+        ReplaceAgent {
+            transfer_id,
+            original,
+            replacement,
+        }
+    }
+
+    fn remove_agent(&self, transfer_id: String, agent: String) -> RemoveAgent {
+        RemoveAgent { transfer_id, agent }
+    }
+}
+
+/// PaymentBuilder
+#[derive(Default)]
+pub struct PaymentBuilder {
+    payment_id: Option<String>,
+    thid: Option<String>,
+    pthid: Option<String>,
+    merchant: Option<Participant>,
+    customer: Option<Participant>,
+    asset: Option<AssetId>,
+    amount: Option<String>,
+    order_details: Option<HashMap<String, serde_json::Value>>,
+    timestamp: Option<String>,
+    expires: Option<String>,
+    note: Option<String>,
+    agents: Vec<Participant>,
+    metadata: HashMap<String, serde_json::Value>,
+    attachments: Option<Vec<Attachment>>,
+}
+
+impl PaymentBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn payment_id(mut self, payment_id: String) -> Self {
+        self.payment_id = Some(payment_id);
+        self
+    }
+
+    pub fn thid(mut self, thid: String) -> Self {
+        self.thid = Some(thid);
+        self
+    }
+
+    pub fn pthid(mut self, pthid: String) -> Self {
+        self.pthid = Some(pthid);
+        self
+    }
+
+    pub fn merchant(mut self, merchant: Participant) -> Self {
+        self.merchant = Some(merchant);
+        self
+    }
+
+    pub fn customer(mut self, customer: Participant) -> Self {
+        self.customer = Some(customer);
+        self
+    }
+
+    pub fn asset(mut self, asset: AssetId) -> Self {
+        self.asset = Some(asset);
+        self
+    }
+
+    pub fn amount(mut self, amount: String) -> Self {
+        self.amount = Some(amount);
+        self
+    }
+
+    pub fn order_details(mut self, order_details: HashMap<String, serde_json::Value>) -> Self {
+        self.order_details = Some(order_details);
+        self
+    }
+
+    pub fn timestamp(mut self, timestamp: String) -> Self {
+        self.timestamp = Some(timestamp);
+        self
+    }
+
+    pub fn expires(mut self, expires: String) -> Self {
+        self.expires = Some(expires);
+        self
+    }
+
+    pub fn note(mut self, note: String) -> Self {
+        self.note = Some(note);
+        self
+    }
+
+    pub fn add_agent(mut self, agent: Participant) -> Self {
+        self.agents.push(agent);
+        self
+    }
+
+    pub fn set_agents(mut self, agents: Vec<Participant>) -> Self {
+        self.agents = agents;
+        self
+    }
+
+    pub fn add_metadata(mut self, key: String, value: serde_json::Value) -> Self {
+        self.metadata.insert(key, value);
+        self
+    }
+
+    pub fn set_metadata(mut self, metadata: HashMap<String, serde_json::Value>) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    pub fn add_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachments
+            .get_or_insert_with(Vec::new)
+            .push(attachment);
+        self
+    }
+
+    pub fn set_attachments(mut self, attachments: Vec<Attachment>) -> Self {
+        self.attachments = Some(attachments);
+        self
+    }
+
+    pub fn build(self) -> Result<Payment> {
+        let payment = Payment {
+            payment_id: self
+                .payment_id
+                .ok_or_else(|| Error::Validation("Payment ID is required".to_string()))?,
+            thid: self.thid,
+            pthid: self.pthid,
+            merchant: self
+                .merchant
+                .ok_or_else(|| Error::Validation("Merchant participant is required".to_string()))?,
+            customer: self
+                .customer
+                .ok_or_else(|| Error::Validation("Customer participant is required".to_string()))?,
+            asset: self
+                .asset
+                .ok_or_else(|| Error::Validation("Asset ID is required".to_string()))?,
+            amount: self
+                .amount
+                .ok_or_else(|| Error::Validation("Amount is required".to_string()))?,
+            order_details: self.order_details,
+            timestamp: self.timestamp.unwrap_or_else(|| Utc::now().to_rfc3339()),
+            expires: self.expires,
+            note: self.note,
+            agents: self.agents,
+            metadata: self.metadata,
+            attachments: self.attachments,
+        };
+
+        payment.validate()?;
+
+        Ok(payment)
+    }
+}
+
+/// Helper methods for the Payment struct
+impl Payment {
+    /// Generates a unique message ID for authorization, rejection, or settlement
+    pub fn message_id(&self) -> String {
+        uuid::Uuid::new_v4().to_string()
+    }
+
+    /// Requires proof of control from a specific agent
+    pub fn require_proof_of_control(
+        &self,
+        _agent: String,
+        _challenge: String,
+    ) -> RequireProofOfControl {
+        RequireProofOfControl {
+            from: None,                   // Placeholder
+            from_role: None,              // Placeholder
+            from_agent: None,             // Placeholder
+            address_id: String::new(),    // Placeholder
+            purpose: Some(String::new()), // Placeholder
         }
     }
 }

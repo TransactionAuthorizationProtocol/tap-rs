@@ -279,7 +279,7 @@ async fn test_error_message() {
     };
 
     // Convert the error_body to a message
-    let message = error_body.to_didcomm().unwrap();
+    let message = error_body.to_didcomm(Some("did:example:sender")).unwrap();
 
     // Validate message has required fields
     assert!(!message.id.is_empty());

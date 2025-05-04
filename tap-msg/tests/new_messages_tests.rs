@@ -1,11 +1,13 @@
 extern crate tap_msg;
 
-use std::collections::HashMap;
+use chrono::{Duration, Utc};
+use serde_json::json;
+use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::types::{
-    Agent, Attachment, AttachmentData, AttachmentFormat, AuthorizationRequired, Connect,
-    ConnectionConstraints, OutOfBand, Participant, PaymentRequest, TransactionLimits,
+    Agent, Attachment, AttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
+    OutOfBand, Participant, PaymentRequest, TransactionLimits,
 };
 
 #[test]
@@ -170,9 +172,13 @@ fn test_connect_message() {
 #[test]
 fn test_authorization_required_message() {
     // Create an AuthorizationRequired message
+    // Calculate a future expiry date (e.g., 1 day from now)
+    let future_expiry = Utc::now() + Duration::days(1);
+    let expires_str = future_expiry.to_rfc3339();
+
     let body = AuthorizationRequired::new(
         "https://vasp.com/authorize?request=abc123".to_string(),
-        "2024-03-22T15:00:00Z".to_string(),
+        expires_str, // Use the future date string
     );
 
     // Validate the message
@@ -205,8 +211,10 @@ fn test_authorization_required_message() {
     assert!(invalid_body.validate().is_err());
 
     // Test validation fails with invalid expiry date format
-    let mut invalid_expiry_body = body.clone();
-    invalid_expiry_body.expires = "invalid-date-format".to_string();
+    let mut invalid_expiry_body = AuthorizationRequired::new(
+        "https://vasp.com/authorize?request=abc123".to_string(),
+        "invalid-date-format".to_string(),
+    );
     assert!(invalid_expiry_body.validate().is_err());
 }
 
@@ -215,7 +223,7 @@ fn test_out_of_band_message() {
     // Create an OutOfBand message
     let attachment_data = AttachmentData {
         base64: None,
-        json: Some(serde_json::json!({
+        json: Some(json!({
             "key": "value"
         })),
     };
@@ -276,4 +284,61 @@ fn test_out_of_band_message() {
 
     let invalid_media_type_body = OutOfBand::new(None, None, vec![invalid_media_type_attachment]);
     assert!(invalid_media_type_body.validate().is_err());
+}
+
+#[test]
+fn test_invalid_out_of_band_message() {
+    // Test case 1: Invalid attachment (missing id)
+    let invalid_attachment = Attachment {
+        id: "".to_string(),
+        media_type: "application/json".to_string(),
+        data: None,
+    };
+    let invalid_body = OutOfBand::new(None, None, vec![invalid_attachment]);
+    assert!(invalid_body.validate().is_err());
+
+    // Test case 2: Invalid attachment media type
+    let invalid_media_type_attachment = Attachment {
+        id: "attachment1".to_string(),
+        media_type: "".to_string(),
+        data: None,
+    };
+    let invalid_media_type_body = OutOfBand::new(None, None, vec![invalid_media_type_attachment]);
+    assert!(invalid_media_type_body.validate().is_err());
+}
+
+#[test]
+fn test_payment_request_message() {
+    let asset = AssetId::from_str("eip155:1/slip44:60").unwrap(); // Ethereum
+
+    let payment_request_body = PaymentRequest {
+        asset: Some(asset),
+        amount: "1000000000000000000".to_string(), // 1 ETH
+        // note: Some("Test payment request".to_string()), // Invalid field
+        // thid: None, // Invalid field
+        // pthid: None, // Invalid field
+        expiry: None, // Correct field name
+        merchant: Participant::new("did:example:merchant"),
+        customer: Some(Participant::new("did:example:customer")), // Wrap in Some()
+        // attachments: None, // Invalid field
+        agents: vec![Participant::new("did:example:agent1")],
+        currency: None,
+        supported_assets: None,
+        invoice: None,
+        metadata: Default::default(),
+    };
+
+    let message_result = payment_request_body.to_didcomm(Some("did:example:sender"));
+
+    assert!(message_result.is_ok());
+    let message = message_result.unwrap();
+
+    // Verify message properties
+    assert!(!message.id.is_empty()); // Check that an ID was generated
+    assert_eq!(message.typ, "application/didcomm-plain+json"); // Verify type based on TapMessageBody implementation
+    assert!(!message.body.is_null()); // Check if body is not null
+
+    let body_json = message.body;
+    let body: PaymentRequest = serde_json::from_value(body_json).unwrap();
+    assert_eq!(body.amount, "1000000000000000000"); // Verify body content
 }

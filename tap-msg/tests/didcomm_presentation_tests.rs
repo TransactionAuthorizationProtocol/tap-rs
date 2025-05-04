@@ -1,5 +1,5 @@
 use didcomm::Message;
-use serde_json::{json, Value};
+use serde_json::json;
 use std::collections::HashMap;
 use tap_msg::message::{Attachment, AttachmentData, DIDCommPresentation, TapMessageBody};
 
@@ -170,7 +170,7 @@ async fn test_didcomm_presentation_to_didcomm() {
 
     // Convert to DIDComm message
     let message = presentation
-        .to_didcomm()
+        .to_didcomm(None)
         .expect("Failed to convert to DIDComm");
 
     // Verify message attributes
@@ -223,27 +223,25 @@ async fn test_round_trip_conversion() {
         created_time: Some(1234567890),
         expires_time: None,
         from_prior: None,
-        attachments: Some(vec![
-            didcomm::Attachment {
-                id: Some("test-attachment-id".to_string()),
-                description: None,
-                filename: None,
-                media_type: Some("application/json".to_string()),
-                format: None,
-                lastmod_time: None,
-                byte_count: None,
-                data: didcomm::AttachmentData::Json {
-                    value: didcomm::JsonAttachmentData {
-                        json: json!({
-                            "@context": ["https://www.w3.org/2018/credentials/v1"],
-                            "type": ["VerifiablePresentation"],
-                            "test": "data"
-                        }),
-                        jws: None,
-                    },
+        attachments: Some(vec![didcomm::Attachment {
+            id: Some("test-attachment-id".to_string()),
+            description: None,
+            filename: None,
+            media_type: Some("application/json".to_string()),
+            format: None,
+            lastmod_time: None,
+            byte_count: None,
+            data: didcomm::AttachmentData::Json {
+                value: didcomm::JsonAttachmentData {
+                    json: json!({
+                        "@context": ["https://www.w3.org/2018/credentials/v1"],
+                        "type": ["VerifiablePresentation"],
+                        "test": "data"
+                    }),
+                    jws: None,
                 },
             },
-        ]),
+        }]),
         extra_headers: HashMap::new(),
     };
 
@@ -251,7 +249,7 @@ async fn test_round_trip_conversion() {
     let presentation = DIDCommPresentation::from_didcomm(&didcomm_message).unwrap();
 
     // Convert back to DIDComm message
-    let round_trip_message = presentation.to_didcomm().unwrap();
+    let round_trip_message = presentation.to_didcomm(None).unwrap();
 
     // Check that the basic properties match
     assert_eq!(round_trip_message.type_, didcomm_message.type_);
@@ -261,10 +259,7 @@ async fn test_round_trip_conversion() {
     let round_trip_body = round_trip_message.body.as_object().unwrap();
     let original_body = didcomm_message.body.as_object().unwrap();
 
-    assert_eq!(
-        round_trip_body.get("comment"),
-        original_body.get("comment")
-    );
+    assert_eq!(round_trip_body.get("comment"), original_body.get("comment"));
     assert_eq!(
         round_trip_body.get("goal_code"),
         original_body.get("goal_code")

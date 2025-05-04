@@ -22,7 +22,7 @@ pub enum FromType {
 }
 
 /// RequireAuthorization policy requires authorization from specific parties
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RequireAuthorization {
     /// Optional list of DIDs this policy applies to
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -42,7 +42,7 @@ pub struct RequireAuthorization {
 }
 
 /// RequirePresentation policy requires verifiable credential presentation
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct RequirePresentation {
     /// JSON-LD context for additional schemas
     #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
@@ -82,7 +82,7 @@ pub struct RequirePresentation {
 }
 
 /// RequireProofOfControl policy requires proving control of an account or address
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct RequireProofOfControl {
     /// Optional list of DIDs this policy applies to
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -106,7 +106,7 @@ pub struct RequireProofOfControl {
 }
 
 /// RequireRelationshipConfirmation policy requires confirming a relationship
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 pub struct RequireRelationshipConfirmation {
     /// Optional list of roles this policy applies to
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -122,7 +122,7 @@ pub struct RequireRelationshipConfirmation {
 }
 
 /// Enum representing the different types of policies.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "@type")]
 pub enum Policy {
     /// Require authorization from specified agents

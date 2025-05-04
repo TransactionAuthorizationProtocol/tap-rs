@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::types::{Participant, Transfer};
 
 #[test]

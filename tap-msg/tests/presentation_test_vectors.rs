@@ -1,6 +1,6 @@
 use didcomm::Message;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::Value;
 use std::env;
 use std::fs;
 use std::path::Path;
@@ -133,7 +133,7 @@ fn test_presentation_message(test_vector: &TestVector) -> Result<()> {
     }
 
     // Final check for passing vectors - test round trip conversion
-    let to_didcomm_result = presentation.to_didcomm();
+    let to_didcomm_result = presentation.to_didcomm(None);
 
     if let Err(round_trip_error) = &to_didcomm_result {
         return Err(tap_msg::Error::Validation(format!(
@@ -203,7 +203,7 @@ async fn test_presentation_round_trip() {
 
     // Convert back to DIDComm
     let round_trip_message = presentation
-        .to_didcomm()
+        .to_didcomm(None)
         .expect("Failed to convert DIDCommPresentation back to DIDComm message");
 
     // Convert again to DIDCommPresentation to verify integrity
