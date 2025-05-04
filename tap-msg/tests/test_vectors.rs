@@ -526,7 +526,7 @@ fn validate_presentation_body(
 
     // If these fields are present, at least one must be valid
     if !body.is_empty() && !has_cred && !has_presentation {
-        return Err(ValidationError::BodyValidationError(
+        return Err(ValidationError::InvalidBody(
             "Non-empty body is missing credential fields. Either 'verifiableCredential' or 'presentation' should be present if body is not empty".to_string()
         ));
     }
