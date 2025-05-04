@@ -193,17 +193,14 @@ pub struct Authorize {
 // Rejection message
 pub struct Reject {
     pub transfer_id: String,
-    pub code: String,
-    pub description: String,
-    pub note: Option<String>,
+    pub reason: String,
 }
 
 // Settlement message
 pub struct Settle {
     pub transfer_id: String,
-    pub settlement_id: Option<String>,
+    pub settlement_id: String,
     pub amount: Option<String>,
-    pub note: Option<String>,
 }
 ```
 
@@ -357,14 +354,13 @@ pub trait Authorizable {
     fn authorize(&self, note: Option<String>) -> Authorize;
     
     /// Create a rejection message for this transfer
-    fn reject(&self, code: String, description: String, note: Option<String>) -> Reject;
+    fn reject(&self, code: String, description: String) -> Reject;
     
     /// Create a settlement message for this transfer
     fn settle(
         &self,
-        settlement_id: Option<String>,
+        settlement_id: String,
         amount: Option<String>,
-        note: Option<String>,
     ) -> Settle;
     
     /// Create a cancellation message for this transfer

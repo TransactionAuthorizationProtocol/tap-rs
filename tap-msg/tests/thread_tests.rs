@@ -36,7 +36,6 @@ fn test_create_reply() -> Result<()> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -278,7 +277,6 @@ fn test_confirm_relationship() -> Result<()> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        memo: None,
         metadata: HashMap::new(),
     };
 

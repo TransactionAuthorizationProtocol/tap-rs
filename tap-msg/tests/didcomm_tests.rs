@@ -31,7 +31,6 @@ async fn test_pack_tap_body() -> Result<()> {
         amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        memo: Some("Test transaction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -95,7 +94,6 @@ async fn test_extract_tap_body() -> Result<()> {
         amount: "1.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        memo: Some("Test USDC transfer".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -112,7 +110,6 @@ async fn test_extract_tap_body() -> Result<()> {
     // Verify extraction was successful
     assert_eq!(extracted.asset, asset);
     assert_eq!(extracted.amount, "1.00");
-    assert_eq!(extracted.memo.as_ref().unwrap(), "Test USDC transfer");
 
     Ok(())
 }

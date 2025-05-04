@@ -89,7 +89,6 @@ struct TestVectorTransfer {
     agents: Vec<TestVectorAgent>,
     #[serde(rename = "settlementId", default)]
     settlement_id: Option<String>,
-    memo: Option<String>,
     #[serde(default)]
     metadata: HashMap<String, serde_json::Value>,
 }
@@ -720,7 +719,6 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                         amount: transfer_body.amount.clone(),
                         agents,
                         settlement_id: transfer_body.settlement_id.clone(),
-                        memo: transfer_body.memo.clone(),
                         metadata: transfer_body.metadata.clone(),
                     };
 

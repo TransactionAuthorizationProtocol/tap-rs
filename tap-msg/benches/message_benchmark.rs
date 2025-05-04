@@ -53,7 +53,6 @@ fn create_transfer_body() -> Transfer {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     }
 }
@@ -70,9 +69,7 @@ fn create_authorize_body() -> Authorize {
 fn create_reject_body() -> Reject {
     Reject {
         transfer_id: "test-transfer-id".to_string(),
-        code: "COMPLIANCE_FAILURE".to_string(),
-        description: "Unable to comply with transfer requirements".to_string(),
-        note: Some("Further documentation needed".to_string()),
+        reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Further documentation needed.".to_string(),
     }
 }
 
@@ -80,9 +77,8 @@ fn create_reject_body() -> Reject {
 fn create_settle_body() -> Settle {
     Settle {
         transfer_id: "123456789".to_string(),
-        settlement_id: Some("0xabcdef1234567890".to_string()),
+        settlement_id: "0xabcdef1234567890".to_string(),
         amount: Some("100.0".to_string()),
-        note: Some("Settlement complete".to_string()),
     }
 }
 

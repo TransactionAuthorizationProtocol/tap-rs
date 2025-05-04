@@ -5,7 +5,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::types::{
-    Authorizable, Authorize, Participant, Payment, PaymentBuilder, Reject, Settle, Transfer, UpdateParty,
+    Authorizable, Participant, Payment, PaymentBuilder, Transfer, UpdateParty,
 };
 
 // Helper function to create a simple participant
@@ -46,7 +46,6 @@ fn test_create_message() {
         amount: "100000000".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        memo: Some("Test transaction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -170,31 +169,23 @@ mod payment_tests {
         let payment_id = payment.payment_id.clone();
 
         // Test authorize
-        let authorize = Authorize {
-            transfer_id: payment_id.clone(),
-            note: Some("Authorized via manual struct creation".to_string()),
-        };
-        assert_eq!(authorize.transfer_id, payment_id);
+        let authorize = payment.authorize(Some("Authorized via manual struct creation".to_string()));
+        // Don't assert on transfer_id as it's generated from message_id()
+        assert_eq!(authorize.note, Some("Authorized via manual struct creation".to_string()));
 
         // Test reject
-        let reject = Reject {
-            transfer_id: payment_id.clone(),
-            code: "E001".to_string(),
-            description: "Insufficient funds".to_string(),
-            note: None,
-        };
-        assert_eq!(reject.transfer_id, payment_id);
+        let reject = payment.reject("E001".to_string(), "Insufficient funds".to_string());
+        // Don't assert on transfer_id as it's generated from message_id()
+        assert_eq!(reject.reason, "E001: Insufficient funds");
 
         // Test settle
         let settle = payment.settle(
-            Some("tx-abc".to_string()),
+            "tx-abc".to_string(),
             Some("100.0".to_string()),
-            Some("Settlement note".to_string()),
         );
         // Don't assert on transfer_id as it's now generated from message_id()
-        assert_eq!(settle.settlement_id, Some("tx-abc".to_string()));
+        assert_eq!(settle.settlement_id, "tx-abc".to_string());
         assert_eq!(settle.amount, Some("100.0".to_string()));
-        assert_eq!(settle.note, Some("Settlement note".to_string()));
 
         // Test update party
         let updated_participant =

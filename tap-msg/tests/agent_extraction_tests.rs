@@ -41,7 +41,6 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
-        memo: Some("Test extraction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -104,7 +103,6 @@ fn test_to_didcomm_excludes_sender_from_recipients() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
-        memo: Some("Test extraction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -160,7 +158,6 @@ fn test_to_didcomm_with_route_overrides_extracted_recipients() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
-        memo: Some("Test extraction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -209,7 +206,6 @@ fn test_create_tap_message_with_automatic_extraction() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone()],
         settlement_id: None,
-        memo: Some("Test extraction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -258,7 +254,6 @@ fn test_create_tap_message_with_explicit_recipients() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone()],
         settlement_id: None,
-        memo: Some("Test extraction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -313,7 +308,6 @@ fn test_to_didcomm_with_empty_agents() {
         amount: "100.00".to_string(),
         agents: vec![], // Empty agents array
         settlement_id: None,
-        memo: Some("Test empty agents".to_string()),
         metadata: HashMap::new(),
     };
 

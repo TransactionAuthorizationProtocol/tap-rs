@@ -52,7 +52,6 @@ fn create_test_transfer() -> Result<Message> {
             },
         ],
         settlement_id: None,
-        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -347,7 +346,6 @@ fn create_test_transfer_struct() -> Result<Transfer> {
             },
         ],
         settlement_id: None,
-        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
 

@@ -32,7 +32,6 @@ pub fn create_transfer_message_example() -> Result<Message> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -77,9 +76,7 @@ pub fn process_transfer_message_example(message: &Message) -> Result<()> {
 pub fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
     let reject_body = Reject {
         transfer_id: transfer_id.to_string(),
-        code: "COMPLIANCE_FAILURE".to_string(),
-        description: "Unable to comply with transfer requirements".to_string(),
-        note: Some("Further documentation needed".to_string()),
+        reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Further documentation needed.".to_string(),
     };
 
     // Convert the Reject body to a DIDComm message
@@ -95,9 +92,8 @@ pub fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
 pub fn create_settle_message_example(transfer_id: &str) -> Result<Message> {
     let settle_body = Settle {
         transfer_id: transfer_id.to_string(),
-        settlement_id: Some("0x123456789abcdef".to_string()),
+        settlement_id: "0x123456789abcdef".to_string(),
         amount: Some("100.0".to_string()),
-        note: Some("Settlement complete".to_string()),
     };
 
     // Convert the Settle body to a DIDComm message
@@ -132,14 +128,14 @@ pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
             // Handle Reject message
             let reject = Reject::from_didcomm(message)?;
             println!("Processing Rejection for transfer: {}", reject.transfer_id);
-            println!("Reason: {}", reject.description);
+            println!("Reason: {}", reject.reason);
         }
         _ if type_str.contains("settle") => {
             // Handle Settle message
             let settle = Settle::from_didcomm(message)?;
             println!("Processing Settlement for transfer: {}", settle.transfer_id);
-            println!("Settlement ID: {}", settle.settlement_id.unwrap());
-            println!("Amount: {}", settle.amount.unwrap());
+            println!("Settlement ID: {}", settle.settlement_id);
+            println!("Amount: {}", settle.amount.unwrap_or_default());
         }
         _ => {
             println!("Unknown message type");

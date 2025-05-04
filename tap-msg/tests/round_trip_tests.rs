@@ -40,7 +40,6 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        memo: Some("Test transaction".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -67,7 +66,6 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(unpacked_body.originator.id, from_did);
     assert_eq!(unpacked_body.beneficiary.as_ref().unwrap().id, to_did);
     assert_eq!(unpacked_body.amount, "100.00");
-    assert_eq!(unpacked_body.memo.as_ref().unwrap(), "Test transaction");
 
     Ok(())
 }

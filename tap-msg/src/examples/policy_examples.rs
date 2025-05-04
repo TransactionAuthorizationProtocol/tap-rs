@@ -246,7 +246,6 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
             },
         ],
         settlement_id: None,
-        memo: Some("Transfer with policy update".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -284,7 +283,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
     );
 
     // Step 3: Create an authorization message in response to the updated policies
-    let authorize_body = transfer.authorize(cloned_transfer_id, None);
+    let authorize_body = transfer.authorize(Some("Authorization with policy constraints".to_string()));
 
     // Create a reply to the update policies message
     let mut authorize_reply = authorize_body.to_didcomm(Some(beneficiary_did))?;

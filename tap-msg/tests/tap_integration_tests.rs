@@ -99,9 +99,8 @@ fn test_full_tap_flow() -> Result<()> {
     // Step 4: Settle the Transfer
     let settle_body = Settle {
         transfer_id: transfer_message.id.clone(),
-        settlement_id: Some("tx-12345".to_string()),
+        settlement_id: "tx-12345".to_string(),
         amount: Some("100".to_string()),
-        note: Some("Settlement completed".to_string()),
     };
 
     // Convert to DIDComm message
@@ -210,10 +209,8 @@ fn test_payment_flow() {
 
     // Reject the payment
     let reject_body = Reject {
-        transfer_id: payment_message2.id.clone(), // Use the ID of the message being rejected
-        code: "REJECT-001".to_string(),
-        description: "Payment limit exceeded".to_string(),
-        note: Some("Try a smaller amount".to_string()),
+        transfer_id: payment_message2.id.clone(),
+        reason: "REJECT-001: Rejected due to compliance issues".to_string(),
     };
 
     // Convert reject body to DIDComm message
@@ -322,10 +319,8 @@ fn test_complex_message_flow() -> Result<()> {
     }
     let _transfer_body_1: Transfer = serde_json::from_value(transfer_body_json_1.clone())?;
     let reject = Reject {
-        transfer_id: transfer_messages[1].id.clone(), // Use the ID of the message being rejected
-        code: "REJECT-002".to_string(),
-        description: "Amount too high".to_string(),
-        note: Some("Please reduce the amount".to_string()),
+        transfer_id: transfer_messages[1].id.clone(),
+        reason: "REJECT-002: Rejected due to amount too high".to_string(),
     };
 
     // Convert to DIDComm message
@@ -351,9 +346,8 @@ fn test_complex_message_flow() -> Result<()> {
     let _transfer_body_2: Transfer = serde_json::from_value(transfer_body_json_2.clone())?;
     let settle_body = Settle {
         transfer_id: transfer_messages[2].id.clone(),
-        settlement_id: Some("tx-67890".to_string()),
+        settlement_id: "tx-67890".to_string(),
         amount: Some("50".to_string()),
-        note: Some("Third transfer settled".to_string()),
     };
 
     // Convert to DIDComm message
@@ -467,7 +461,6 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
-        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     }
 }

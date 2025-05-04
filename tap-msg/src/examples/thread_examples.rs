@@ -37,7 +37,6 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
         amount: "100.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -142,7 +141,6 @@ pub fn create_add_agents_example() -> Result<Message> {
             },
         ],
         settlement_id: None,
-        memo: Some("Test transfer".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -337,28 +335,28 @@ pub fn create_update_policies_example(
 /// # Arguments
 ///
 /// * `transfer_id` - ID of the transfer to settle
-/// * `settlement_id` - Optional settlement ID
+/// * `settlement_id` - Settlement ID
 /// * `amount` - Optional amount settled
-/// * `note` - Optional note
 ///
 /// # Returns
 ///
 /// A DIDComm message containing the Settle message
 pub fn settle_example(
     transfer_id: String,
-    settlement_id: Option<String>,
+    settlement_id: String,
     amount: Option<String>,
-    note: Option<String>,
 ) -> Result<Message> {
+    // Create a Settle message
     let settle = Settle {
         transfer_id,
         settlement_id,
         amount,
-        note,
     };
 
     // Convert to DIDComm message
-    settle.to_didcomm(Some("did:example:creator")) // Fix: Provide the required from_did parameter
+    let settle_message = settle.to_didcomm(Some("did:example:dave"))?;
+
+    Ok(settle_message)
 }
 
 /// This example demonstrates a complete workflow for managing thread participants
@@ -388,7 +386,6 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        memo: Some("Initial transfer".to_string()),
         metadata: HashMap::new(),
     };
 
@@ -509,9 +506,8 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     println!("Step 5: Settling the transfer");
     let settle_message = settle_example(
         transfer_id.clone(),
-        Some("tx123456".to_string()),
+        "tx123456".to_string(),
         Some("100.0".to_string()),
-        Some("Settlement complete".to_string()),
     )?;
 
     // Verify that the 'to' field in the settle message includes Alice
