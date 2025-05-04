@@ -124,8 +124,12 @@ pub struct Transfer {
     #[serde(default)]
     pub agents: Vec<Participant>,
 
-    /// Settlement identifier (optional).
+    /// Memo for the transfer (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub memo: Option<String>,
+
+    /// Settlement identifier (optional).
+    #[serde(rename = "settlementId", skip_serializing_if = "Option::is_none")]
     pub settlement_id: Option<String>,
 
     /// Additional metadata for the transfer.
@@ -221,6 +225,7 @@ pub struct TransferBuilder {
     amount: Option<String>,
     beneficiary: Option<Participant>,
     settlement_id: Option<String>,
+    memo: Option<String>,
     agents: Vec<Participant>,
     metadata: HashMap<String, serde_json::Value>,
 }
@@ -253,6 +258,12 @@ impl TransferBuilder {
     /// Set the settlement ID for this transfer
     pub fn settlement_id(mut self, settlement_id: String) -> Self {
         self.settlement_id = Some(settlement_id);
+        self
+    }
+
+    /// Set the memo for this transfer
+    pub fn memo(mut self, memo: String) -> Self {
+        self.memo = Some(memo);
         self
     }
 
@@ -292,6 +303,7 @@ impl TransferBuilder {
             amount: self.amount.expect("Amount is required"),
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
+            memo: self.memo,
             agents: self.agents,
             metadata: self.metadata,
         }
@@ -315,6 +327,7 @@ impl TransferBuilder {
             amount,
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
+            memo: self.memo,
             agents: self.agents,
             metadata: self.metadata,
         };
@@ -1125,11 +1138,7 @@ pub trait Authorizable {
     /// # Returns
     ///
     /// A new Reject message body
-    fn reject(
-        &self,
-        code: String,
-        description: String,
-    ) -> Reject;
+    fn reject(&self, code: String, description: String) -> Reject;
 
     /// Settles this message, creating a Settle message as a response
     ///
@@ -1141,11 +1150,7 @@ pub trait Authorizable {
     /// # Returns
     ///
     /// A new Settle message body
-    fn settle(
-        &self,
-        settlement_id: String,
-        amount: Option<String>,
-    ) -> Settle;
+    fn settle(&self, settlement_id: String, amount: Option<String>) -> Settle;
 
     /// Updates a party in the transaction, creating an UpdateParty message as a response
     ///
@@ -1733,7 +1738,7 @@ pub struct PaymentRequest {
     pub amount: String,
 
     /// Array of CAIP-19 asset identifiers that can be used to settle a fiat currency amount
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "supportedAssets", skip_serializing_if = "Option::is_none")]
     pub supported_assets: Option<Vec<String>>,
 
     /// Structured invoice information according to TAIP-16
@@ -2952,7 +2957,10 @@ impl Authorizable for Transfer {
     ///
     /// A new Authorize message body
     fn authorize(&self, note: Option<String>) -> Authorize {
-        Authorize { transfer_id: self.message_id(), note }
+        Authorize {
+            transfer_id: self.message_id(),
+            note,
+        }
     }
 
     /// Confirms a relationship between agents, creating a ConfirmRelationship message as a response
@@ -2992,11 +3000,7 @@ impl Authorizable for Transfer {
     /// # Returns
     ///
     /// A new Reject message body
-    fn reject(
-        &self,
-        code: String,
-        description: String,
-    ) -> Reject {
+    fn reject(&self, code: String, description: String) -> Reject {
         Reject {
             transfer_id: self.message_id(),
             reason: format!("{}: {}", code, description),
@@ -3013,11 +3017,7 @@ impl Authorizable for Transfer {
     /// # Returns
     ///
     /// A new Settle message body
-    fn settle(
-        &self,
-        settlement_id: String,
-        amount: Option<String>,
-    ) -> Settle {
+    fn settle(&self, settlement_id: String, amount: Option<String>) -> Settle {
         Settle {
             transfer_id: self.message_id(),
             settlement_id,
@@ -3278,7 +3278,10 @@ impl TapMessageBody for Payment {
 
 impl Authorizable for Payment {
     fn authorize(&self, note: Option<String>) -> Authorize {
-        Authorize { transfer_id: self.message_id(), note }
+        Authorize {
+            transfer_id: self.message_id(),
+            note,
+        }
     }
 
     fn confirm_relationship(
@@ -3296,22 +3299,14 @@ impl Authorizable for Payment {
         }
     }
 
-    fn reject(
-        &self,
-        code: String,
-        description: String,
-    ) -> Reject {
+    fn reject(&self, code: String, description: String) -> Reject {
         Reject {
             transfer_id: self.message_id(),
             reason: format!("{}: {}", code, description),
         }
     }
 
-    fn settle(
-        &self,
-        settlement_id: String,
-        amount: Option<String>,
-    ) -> Settle {
+    fn settle(&self, settlement_id: String, amount: Option<String>) -> Settle {
         Settle {
             transfer_id: self.message_id(),
             settlement_id,

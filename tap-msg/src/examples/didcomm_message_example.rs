@@ -30,6 +30,7 @@ pub fn create_transfer_message_example() -> Result<Message> {
         originator,
         beneficiary: Some(beneficiary),
         amount: "10.00".to_string(),
+        memo: None,
         agents: vec![],
         settlement_id: None,
         metadata: HashMap::new(),

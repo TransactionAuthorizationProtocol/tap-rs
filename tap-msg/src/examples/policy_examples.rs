@@ -231,6 +231,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
             policies: None,
         }),
         amount: "100.00".to_string(),
+        memo: None,
         agents: vec![
             Participant {
                 id: sender_vasp_did.to_string(),
@@ -283,7 +284,8 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
     );
 
     // Step 3: Create an authorization message in response to the updated policies
-    let authorize_body = transfer.authorize(Some("Authorization with policy constraints".to_string()));
+    let authorize_body =
+        transfer.authorize(Some("Authorization with policy constraints".to_string()));
 
     // Create a reply to the update policies message
     let mut authorize_reply = authorize_body.to_didcomm(Some(beneficiary_did))?;

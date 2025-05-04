@@ -37,6 +37,7 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
         amount: "100.00".to_string(),
         agents: vec![],
         settlement_id: None,
+        memo: None,
         metadata: HashMap::new(),
     };
 
@@ -126,6 +127,7 @@ pub fn create_add_agents_example() -> Result<Message> {
             leiCode: None,
         }),
         amount: "100.00".to_string(),
+        memo: None,
         agents: vec![
             Participant {
                 id: sender_vasp_did.to_string(),
@@ -377,6 +379,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             policies: None,
             leiCode: None,
         },
+        memo: None,
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),

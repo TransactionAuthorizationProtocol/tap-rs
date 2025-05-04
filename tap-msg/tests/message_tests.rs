@@ -169,9 +169,13 @@ mod payment_tests {
         let payment_id = payment.payment_id.clone();
 
         // Test authorize
-        let authorize = payment.authorize(Some("Authorized via manual struct creation".to_string()));
+        let authorize =
+            payment.authorize(Some("Authorized via manual struct creation".to_string()));
         // Don't assert on transfer_id as it's generated from message_id()
-        assert_eq!(authorize.note, Some("Authorized via manual struct creation".to_string()));
+        assert_eq!(
+            authorize.note,
+            Some("Authorized via manual struct creation".to_string())
+        );
 
         // Test reject
         let reject = payment.reject("E001".to_string(), "Insufficient funds".to_string());
@@ -179,10 +183,7 @@ mod payment_tests {
         assert_eq!(reject.reason, "E001: Insufficient funds");
 
         // Test settle
-        let settle = payment.settle(
-            "tx-abc".to_string(),
-            Some("100.0".to_string()),
-        );
+        let settle = payment.settle("tx-abc".to_string(), Some("100.0".to_string()));
         // Don't assert on transfer_id as it's now generated from message_id()
         assert_eq!(settle.settlement_id, "tx-abc".to_string());
         assert_eq!(settle.amount, Some("100.0".to_string()));
