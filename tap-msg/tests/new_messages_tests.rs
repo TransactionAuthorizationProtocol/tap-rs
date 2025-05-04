@@ -178,7 +178,7 @@ fn test_authorization_required_message() {
 
     let body = AuthorizationRequired::new(
         "https://vasp.com/authorize?request=abc123".to_string(),
-        expires_str, // Use the future date string
+        expires_str.clone(), // Use the future date string
     );
 
     // Validate the message
@@ -206,12 +206,11 @@ fn test_authorization_required_message() {
     );
 
     // Test validation fails with empty authorization_url
-    let mut invalid_body = body.clone();
-    invalid_body.authorization_url = "".to_string();
+    let invalid_body = AuthorizationRequired::new("".to_string(), expires_str);
     assert!(invalid_body.validate().is_err());
 
     // Test validation fails with invalid expiry date format
-    let mut invalid_expiry_body = AuthorizationRequired::new(
+    let invalid_expiry_body = AuthorizationRequired::new(
         "https://vasp.com/authorize?request=abc123".to_string(),
         "invalid-date-format".to_string(),
     );

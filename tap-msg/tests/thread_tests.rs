@@ -319,7 +319,11 @@ fn test_confirm_relationship() -> Result<()> {
         .as_ref()
         .unwrap()
         .contains(&_bob_did.to_string()));
-    assert_eq!(confirm_message.thid, Some(transfer_message.id.clone()));
+    // The thid should match the transfer_id provided in the ConfirmRelationship body
+    assert_eq!(confirm_message.thid, Some(confirm_body.transfer_id.clone()));
+
+    // Check body content (role)
+    assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian",);
 
     Ok(())
 }

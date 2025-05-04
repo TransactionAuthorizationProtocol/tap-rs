@@ -136,7 +136,7 @@ fn load_test_vectors(directory: &Path) -> Vec<TestVector> {
             // Recursively process subdirectories
             let mut sub_vectors = load_test_vectors(&path);
             test_vectors.append(&mut sub_vectors);
-        } else if path.extension().map_or(false, |ext| ext == "json") {
+        } else if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
             // Read and parse JSON file
             let content = std::fs::read_to_string(&path).unwrap();
             match serde_json::from_str::<TestVector>(&content) {

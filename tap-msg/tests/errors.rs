@@ -13,8 +13,8 @@ pub enum ValidationError {
     DateTimeParseError { value: String, message: String },
 
     /// Error validating a message body
-    #[error("Body validation failed: {0}")]
-    BodyValidationError(String),
+    #[error("Invalid message body: {0}")]
+    InvalidBody(String),
 
     /// Error in message structure (missing fields, wrong types, etc.)
     #[error("Invalid message structure: {0}")]

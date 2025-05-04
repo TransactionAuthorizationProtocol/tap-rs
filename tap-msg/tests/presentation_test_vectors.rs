@@ -50,9 +50,9 @@ fn load_test_vectors(directory: &str) -> Vec<TestVector> {
         let entry = entry.expect("Failed to read directory entry");
         let path = entry.path();
 
-        if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
-            let file_content =
-                fs::read_to_string(&path).expect(&format!("Failed to read file: {:?}", path));
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
+            let file_content = fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("Failed to read file: {:?}", path));
 
             match serde_json::from_str::<TestVector>(&file_content) {
                 Ok(test_vector) => test_vectors.push(test_vector),

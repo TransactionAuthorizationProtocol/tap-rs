@@ -717,11 +717,42 @@ impl TapMessageBody for ConfirmRelationship {
     }
 
     fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
-        // Call the default implementation first to get the basic structure
-        let mut message = TapMessageBody::to_didcomm(self, from_did)?;
+        // 1. Serialize self to JSON value
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
 
-        // Explicitly set the recipient using agent_id
-        message.to = Some(vec![self.agent_id.clone()]);
+        // 2. Add/ensure '@type' field
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+            // Note: serde handles #[serde(rename = "for")] automatically during serialization
+        }
+
+        // 3. Generate ID and timestamp
+        let id = uuid::Uuid::new_v4().to_string(); // Use new_v4 as per workspace UUID settings
+        let created_time = Utc::now().timestamp_millis() as u64;
+
+        // 4. Explicitly set the recipient using agent_id
+        let to = Some(vec![self.agent_id.clone()]);
+
+        // 5. Create the Message struct
+        let message = Message {
+            id,
+            typ: "application/didcomm-plain+json".to_string(), // Standard type
+            type_: Self::message_type().to_string(),
+            from: from_did.map(|s| s.to_string()),
+            to,                                   // Use the explicitly set 'to' field
+            thid: Some(self.transfer_id.clone()), // Set thread ID from transfer_id
+            pthid: None,                          // Parent Thread ID usually set later
+            created_time: Some(created_time),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            body: body_json,
+            attachments: None,
+        };
 
         Ok(message)
     }
@@ -886,7 +917,7 @@ impl TapMessageBody for UpdateParty {
             body: body_json,
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: None,
+            thid: Some(self.transfer_id.clone()),
             pthid: None,
             created_time: Some(now),
             expires_time: None,
@@ -1016,7 +1047,7 @@ impl TapMessageBody for UpdatePolicies {
             body: body_json,
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: None,
+            thid: Some(self.transfer_id.clone()),
             pthid: None,
             created_time: Some(now),
             expires_time: None,
