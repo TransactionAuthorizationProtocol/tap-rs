@@ -567,16 +567,13 @@ pub struct Settle {
     /// ID of the transfer being settled.
     pub transfer_id: String,
 
-    /// Transaction ID/hash.
-    pub transaction_id: String,
-
-    /// Optional transaction hash.
+    /// Optional settlement ID (CAIP-220 identifier of the underlying settlement transaction).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub transaction_hash: Option<String>,
+    pub settlement_id: Option<String>,
 
-    /// Optional block height.
+    /// Optional amount settled. If specified, must be less than or equal to the original amount.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub block_height: Option<u64>,
+    pub amount: Option<String>,
 
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1168,10 +1165,8 @@ pub trait Authorizable {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - ID of the transfer being settled
-    /// * `transaction_id` - Transaction ID
-    /// * `transaction_hash` - Optional transaction hash
-    /// * `block_height` - Optional block height
+    /// * `settlement_id` - Optional settlement ID (CAIP-220 identifier)
+    /// * `amount` - Optional amount settled
     /// * `note` - Optional note about the settlement
     ///
     /// # Returns
@@ -1179,10 +1174,8 @@ pub trait Authorizable {
     /// A new Settle message body
     fn settle(
         &self,
-        transfer_id: String,
-        transaction_id: String,
-        transaction_hash: Option<String>,
-        block_height: Option<u64>,
+        settlement_id: Option<String>,
+        amount: Option<String>,
         note: Option<String>,
     ) -> Settle;
 
@@ -1395,10 +1388,12 @@ impl TapMessageBody for Settle {
             ));
         }
 
-        if self.transaction_id.is_empty() {
-            return Err(Error::Validation(
-                "Transaction ID is required in Settle".to_string(),
-            ));
+        if let Some(amount) = &self.amount {
+            if amount.is_empty() {
+                return Err(Error::Validation(
+                    "Amount must be a valid number".to_string(),
+                ));
+            }
         }
 
         Ok(())
@@ -3051,10 +3046,8 @@ impl Authorizable for Transfer {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - ID of the transfer being settled
-    /// * `transaction_id` - Transaction ID
-    /// * `transaction_hash` - Optional transaction hash
-    /// * `block_height` - Optional block height
+    /// * `settlement_id` - Optional settlement ID (CAIP-220 identifier)
+    /// * `amount` - Optional amount settled
     /// * `note` - Optional note about the settlement
     ///
     /// # Returns
@@ -3062,17 +3055,14 @@ impl Authorizable for Transfer {
     /// A new Settle message body
     fn settle(
         &self,
-        transfer_id: String,
-        transaction_id: String,
-        transaction_hash: Option<String>,
-        block_height: Option<u64>,
+        settlement_id: Option<String>,
+        amount: Option<String>,
         note: Option<String>,
     ) -> Settle {
         Settle {
-            transfer_id,
-            transaction_id,
-            transaction_hash,
-            block_height,
+            transfer_id: self.message_id(),
+            settlement_id,
+            amount,
             note,
         }
     }
@@ -3365,17 +3355,14 @@ impl Authorizable for Payment {
 
     fn settle(
         &self,
-        transfer_id: String,
-        transaction_id: String,
-        transaction_hash: Option<String>,
-        block_height: Option<u64>,
+        settlement_id: Option<String>,
+        amount: Option<String>,
         note: Option<String>,
     ) -> Settle {
         Settle {
-            transfer_id,
-            transaction_id,
-            transaction_hash,
-            block_height,
+            transfer_id: self.message_id(),
+            settlement_id,
+            amount,
             note,
         }
     }

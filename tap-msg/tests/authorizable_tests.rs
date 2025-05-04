@@ -3,10 +3,13 @@ extern crate tap_msg;
 use std::collections::HashMap;
 use std::str::FromStr;
 
+use didcomm::Message;
 use tap_caip::AssetId;
-
+use tap_msg::error::Result;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::{Authorize, Participant, Reject, Settle, Transfer, UpdateParty};
+use tap_msg::message::types::{
+    Authorizable, Authorize, Participant, Reject, Transfer, UpdateParty,
+};
 
 #[test]
 fn test_transfer_authorizable() {
@@ -39,20 +42,15 @@ fn test_transfer_authorizable() {
     assert_eq!(reject.description, "Rejected due to compliance issues");
     assert_eq!(reject.note, Some("Additional rejection note".to_string()));
 
-    // Test settle method - Now create Settle struct manually
-    let settle = Settle {
-        transfer_id: transfer_id.clone(),
-        transaction_id: "tx-12345".to_string(),
-        transaction_hash: Some("0x1234567890abcdef".to_string()),
-        block_height: Some(1234567),
-        note: Some("Settlement note".to_string()),
-    };
-    assert_eq!(settle.transaction_id, "tx-12345".to_string());
-    assert_eq!(
-        settle.transaction_hash,
-        Some("0x1234567890abcdef".to_string())
+    // Test settle method
+    let settle = transfer.settle(
+        Some("tx-12345".to_string()),
+        Some("100".to_string()),
+        Some("Settlement note".to_string()),
     );
-    assert_eq!(settle.block_height, Some(1234567));
+
+    assert_eq!(settle.settlement_id, Some("tx-12345".to_string()));
+    assert_eq!(settle.amount, Some("100".to_string()));
     assert_eq!(settle.note, Some("Settlement note".to_string()));
 }
 
@@ -85,20 +83,15 @@ fn test_didcomm_message_authorizable() {
     assert_eq!(reject.description, "Rejected due to compliance issues");
     assert_eq!(reject.note, Some("Additional rejection note".to_string()));
 
-    // Test settle method - Create Settle struct manually
-    let settle = Settle {
-        transfer_id: transfer_id.clone(),
-        transaction_id: "tx-12345".to_string(),
-        transaction_hash: Some("0x1234567890abcdef".to_string()),
-        block_height: Some(1234567),
-        note: Some("Settlement note".to_string()),
-    };
-    assert_eq!(settle.transaction_id, "tx-12345".to_string());
-    assert_eq!(
-        settle.transaction_hash,
-        Some("0x1234567890abcdef".to_string())
+    // Test settle method
+    let settle = transfer.settle(
+        Some("tx-12345".to_string()),
+        Some("100".to_string()),
+        Some("Settlement note".to_string()),
     );
-    assert_eq!(settle.block_height, Some(1234567));
+
+    assert_eq!(settle.settlement_id, Some("tx-12345".to_string()));
+    assert_eq!(settle.amount, Some("100".to_string()));
     assert_eq!(settle.note, Some("Settlement note".to_string()));
 }
 
@@ -124,13 +117,11 @@ fn test_full_flow() {
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
     // Generate settle response - Create Settle struct manually
-    let settle = Settle {
-        transfer_id: original_message.id.clone(),
-        transaction_id: "txid-12345".to_string(),
-        transaction_hash: Some("0xabcdef1234567890".to_string()),
-        block_height: Some(9876543),
-        note: Some("Settlement completed".to_string()),
-    };
+    let settle = transfer.settle(
+        Some("txid-12345".to_string()),
+        Some("100".to_string()),
+        Some("Settlement completed".to_string()),
+    );
 
     // Convert settle to DIDComm message
     let settle_message = settle

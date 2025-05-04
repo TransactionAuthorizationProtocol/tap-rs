@@ -5,7 +5,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::types::{
-    Authorize, Participant, Payment, PaymentBuilder, Reject, Settle, Transfer, UpdateParty,
+    Authorizable, Authorize, Participant, Payment, PaymentBuilder, Reject, Settle, Transfer, UpdateParty,
 };
 
 // Helper function to create a simple participant
@@ -186,14 +186,15 @@ mod payment_tests {
         assert_eq!(reject.transfer_id, payment_id);
 
         // Test settle
-        let settle = Settle {
-            transfer_id: payment_id.clone(),
-            transaction_id: "tx-abc".to_string(),
-            transaction_hash: None,
-            block_height: None,
-            note: None,
-        };
-        assert_eq!(settle.transfer_id, payment_id);
+        let settle = payment.settle(
+            Some("tx-abc".to_string()),
+            Some("100.0".to_string()),
+            Some("Settlement note".to_string()),
+        );
+        // Don't assert on transfer_id as it's now generated from message_id()
+        assert_eq!(settle.settlement_id, Some("tx-abc".to_string()));
+        assert_eq!(settle.amount, Some("100.0".to_string()));
+        assert_eq!(settle.note, Some("Settlement note".to_string()));
 
         // Test update party
         let updated_participant =

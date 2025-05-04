@@ -79,11 +79,10 @@ fn create_reject_body() -> Reject {
 /// Create a test Settle message body
 fn create_settle_body() -> Settle {
     Settle {
-        transfer_id: "test-transfer-id".to_string(),
-        transaction_id: "0xabcdef1234567890".to_string(),
-        transaction_hash: Some("0xabcdef1234567890".to_string()),
-        block_height: Some(12345678),
-        note: Some("Transaction completed".to_string()),
+        transfer_id: "123456789".to_string(),
+        settlement_id: Some("0xabcdef1234567890".to_string()),
+        amount: Some("100.0".to_string()),
+        note: Some("Settlement complete".to_string()),
     }
 }
 

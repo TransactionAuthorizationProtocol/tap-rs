@@ -332,48 +332,33 @@ pub fn create_update_policies_example(
     Ok(response)
 }
 
-/// This example demonstrates how to create a settle message as a reply to a transfer
+/// This example demonstrates creating a Settle message
+///
+/// # Arguments
+///
+/// * `transfer_id` - ID of the transfer to settle
+/// * `settlement_id` - Optional settlement ID
+/// * `amount` - Optional amount settled
+/// * `note` - Optional note
+///
+/// # Returns
+///
+/// A DIDComm message containing the Settle message
 pub fn settle_example(
-    original_message: &Message,
-    creator_did: &str,
-    transaction_id: String,
-    transaction_hash: Option<String>,
-    block_height: Option<u64>,
+    transfer_id: String,
+    settlement_id: Option<String>,
+    amount: Option<String>,
     note: Option<String>,
 ) -> Result<Message> {
-    // 1. Extract body and deserialize to Transfer/Payment (assuming Transfer here)
-    let original_body_json = original_message.body.clone();
-    let original_transfer: Transfer = serde_json::from_value(original_body_json)
-        .map_err(|e| Error::SerializationError(e.to_string()))?;
-
-    // 2. Call settle on the Transfer instance
-    let settle_body = original_transfer.settle(
-        original_message.id.clone(), // Use transfer_id from original message/body
-        transaction_id,
-        transaction_hash,
-        block_height,
+    let settle = Settle {
+        transfer_id,
+        settlement_id,
+        amount,
         note,
-    );
+    };
 
-    // Create a reply using the TapMessage trait
-    let mut settle_message = settle_body.to_didcomm(Some(creator_did))?;
-
-    // Set thread ID to maintain conversation
-    settle_message.thid = original_message.thid.clone();
-
-    // Set recipients to all participants except the creator
-    let recipients: Vec<String> = settle_message
-        .to
-        .as_ref()
-        .unwrap_or(&Vec::new())
-        .iter()
-        .filter(|did| **did != creator_did)
-        .map(|s| s.to_string())
-        .collect();
-
-    settle_message.to = Some(recipients);
-
-    Ok(settle_message)
+    // Convert to DIDComm message
+    settle.to_didcomm(Some("did:example:creator")) // Fix: Provide the required from_did parameter
 }
 
 /// This example demonstrates a complete workflow for managing thread participants
@@ -521,33 +506,13 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     println!("Created remove agent message: {:?}", remove_agent_message);
 
     // 6. Now Dave can settle the transfer
-    let settle = Settle {
-        transfer_id: transfer_message.id.clone(),
-        transaction_id: "tx123456".to_string(),
-        transaction_hash: Some("0xabcdef1234567890".to_string()),
-        block_height: Some(12345),
-        note: Some("Transfer settled".to_string()),
-    };
-
-    // Create a reply using the TapMessage trait
-    let mut settle_message = settle.to_didcomm(Some(dave_did))?;
-
-    // Set thread ID to maintain conversation
-    settle_message.thid = Some(transfer_id.clone());
-
-    // Set recipients to all participants except the creator
-    let recipients: Vec<String> = settle_message
-        .to
-        .as_ref()
-        .unwrap_or(&Vec::new())
-        .iter()
-        .filter(|did| **did != dave_did)
-        .map(|s| s.to_string())
-        .collect();
-
-    settle_message.to = Some(recipients);
-
-    println!("Created settle message from Dave: {:?}", settle_message);
+    println!("Step 5: Settling the transfer");
+    let settle_message = settle_example(
+        transfer_id.clone(),
+        Some("tx123456".to_string()),
+        Some("100.0".to_string()),
+        Some("Settlement complete".to_string()),
+    )?;
 
     // Verify that the 'to' field in the settle message includes Alice
     if let Some(to) = &settle_message.to {

@@ -99,10 +99,9 @@ fn test_full_tap_flow() -> Result<()> {
     // Step 4: Settle the Transfer
     let settle_body = Settle {
         transfer_id: transfer_message.id.clone(),
-        transaction_id: "tx-12345".to_string(), // Changed to String
-        transaction_hash: Some("0xabc123".to_string()), // Use correct field
-        block_height: Some(123456),             // Use correct field
-        note: Some("Settlement complete".to_string()), // Keep note
+        settlement_id: Some("tx-12345".to_string()),
+        amount: Some("100".to_string()),
+        note: Some("Settlement completed".to_string()),
     };
 
     // Convert to DIDComm message
@@ -352,9 +351,8 @@ fn test_complex_message_flow() -> Result<()> {
     let _transfer_body_2: Transfer = serde_json::from_value(transfer_body_json_2.clone())?;
     let settle_body = Settle {
         transfer_id: transfer_messages[2].id.clone(),
-        transaction_id: "tx-67890".to_string(),
-        transaction_hash: Some("0xdef456".to_string()), // Use correct field
-        block_height: Some(7654321),                    // Use correct field
+        settlement_id: Some("tx-67890".to_string()),
+        amount: Some("50".to_string()),
         note: Some("Third transfer settled".to_string()),
     };
 

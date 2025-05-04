@@ -184,27 +184,46 @@ let didcomm_msg = update_policies.to_didcomm_with_route(
 TAP supports various authorization messages for compliance workflows:
 
 ```rust
-// Authorization response
-pub struct AuthorizationResponse {
-    pub transfer_id: Uuid,
-    pub status: String,
+// Authorization message
+pub struct Authorize {
+    pub transfer_id: String,
     pub note: Option<String>,
-    pub metadata: HashMap<String, String>,
 }
 
-// Authorization rejection
-pub struct Rejection {
-    pub transfer_id: Uuid,
+// Rejection message
+pub struct Reject {
+    pub transfer_id: String,
+    pub code: String,
+    pub description: String,
     pub note: Option<String>,
-    pub metadata: HashMap<String, String>,
 }
 
 // Settlement message
-pub struct Settlement {
-    pub transfer_id: Uuid,
-    pub txid: String,
+pub struct Settle {
+    pub transfer_id: String,
+    pub settlement_id: Option<String>,
+    pub amount: Option<String>,
     pub note: Option<String>,
-    pub metadata: HashMap<String, String>,
+}
+```
+
+### Error Messages
+
+TAP provides standardized error messages:
+
+```rust
+pub struct ErrorBody {
+    /// Error code.
+    pub code: String,
+
+    /// Error description.
+    pub description: String,
+
+    /// Original message ID (if applicable).
+    pub original_message_id: Option<String>,
+
+    /// Additional metadata.
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 ```
 
@@ -331,9 +350,28 @@ The `Authorizable` trait provides methods for handling authorization, rejection,
 
 ```rust
 pub trait Authorizable {
-    fn authorize(&self, note: Option<String>, metadata: HashMap<String, String>) -> AuthorizationResponse;
-    fn reject(&self, note: Option<String>, metadata: HashMap<String, String>) -> Rejection;
-    fn settle(&self, txid: String, note: Option<String>, metadata: HashMap<String, String>) -> Settlement;
+    /// Get the transfer ID for this message
+    fn get_transfer_id(&self) -> String;
+    
+    /// Create an authorization message for this transfer
+    fn authorize(&self, note: Option<String>) -> Authorize;
+    
+    /// Create a rejection message for this transfer
+    fn reject(&self, code: String, description: String, note: Option<String>) -> Reject;
+    
+    /// Create a settlement message for this transfer
+    fn settle(
+        &self,
+        settlement_id: Option<String>,
+        amount: Option<String>,
+        note: Option<String>,
+    ) -> Settle;
+    
+    /// Create a cancellation message for this transfer
+    fn cancel(&self, reason: Option<String>, note: Option<String>) -> Cancel;
+    
+    /// Updates policies for this message, creating an UpdatePolicies message as a response
+    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies;
 }
 ```
 

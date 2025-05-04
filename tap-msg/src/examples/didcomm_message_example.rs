@@ -95,10 +95,9 @@ pub fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
 pub fn create_settle_message_example(transfer_id: &str) -> Result<Message> {
     let settle_body = Settle {
         transfer_id: transfer_id.to_string(),
-        transaction_id: "0x123456789abcdef".to_string(),
-        transaction_hash: Some("0xabcdef123456789".to_string()),
-        block_height: Some(12345678),
-        note: Some("Transfer settled successfully".to_string()),
+        settlement_id: Some("0x123456789abcdef".to_string()),
+        amount: Some("100.0".to_string()),
+        note: Some("Settlement complete".to_string()),
     };
 
     // Convert the Settle body to a DIDComm message
@@ -139,7 +138,8 @@ pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
             // Handle Settle message
             let settle = Settle::from_didcomm(message)?;
             println!("Processing Settlement for transfer: {}", settle.transfer_id);
-            println!("Transaction ID: {}", settle.transaction_id);
+            println!("Settlement ID: {}", settle.settlement_id.unwrap());
+            println!("Amount: {}", settle.amount.unwrap());
         }
         _ => {
             println!("Unknown message type");
