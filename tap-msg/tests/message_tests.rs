@@ -47,6 +47,7 @@ fn test_create_message() {
         agents: vec![originator, beneficiary],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Convert to DIDComm message

@@ -219,6 +219,7 @@ fn create_test_transfer() -> Transfer {
         agents,
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     }
 }
 

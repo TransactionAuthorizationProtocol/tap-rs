@@ -42,6 +42,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Convert to DIDComm message with no sender specified
@@ -104,6 +105,7 @@ fn test_to_didcomm_excludes_sender_from_recipients() {
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Convert to DIDComm message with sender specified as agent1
@@ -159,6 +161,7 @@ fn test_to_didcomm_with_route_overrides_extracted_recipients() {
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Create explicit recipients list that's different from the agents
@@ -207,6 +210,7 @@ fn test_create_tap_message_with_automatic_extraction() {
         agents: vec![agent1.clone(), agent2.clone()],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Create message with specific ID but use automatic extraction for recipients
@@ -255,6 +259,7 @@ fn test_create_tap_message_with_explicit_recipients() {
         agents: vec![agent1.clone(), agent2.clone()],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Create message with explicit recipients
@@ -309,6 +314,7 @@ fn test_to_didcomm_with_empty_agents() {
         agents: vec![], // Empty agents array
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Convert to DIDComm message

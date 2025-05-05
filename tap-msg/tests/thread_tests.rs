@@ -37,6 +37,7 @@ fn test_create_reply() -> Result<()> {
         agents: vec![],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Create the initial transfer message
@@ -278,6 +279,7 @@ fn test_confirm_relationship() -> Result<()> {
         agents: vec![],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: Some("Test memo".to_string()),
     };
 
     // Create a DIDComm message from the transfer

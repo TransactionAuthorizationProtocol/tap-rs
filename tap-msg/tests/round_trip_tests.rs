@@ -41,6 +41,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         agents: vec![originator, beneficiary],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Pack the message using the direct conversion method

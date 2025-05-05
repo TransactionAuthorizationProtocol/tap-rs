@@ -53,6 +53,7 @@ fn create_test_transfer() -> Result<Message> {
         ],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     transfer.to_didcomm_with_route(
@@ -347,6 +348,7 @@ fn create_test_transfer_struct() -> Result<Transfer> {
         ],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     Ok(transfer)

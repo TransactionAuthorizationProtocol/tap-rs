@@ -91,6 +91,8 @@ struct TestVectorTransfer {
     settlement_id: Option<String>,
     #[serde(default)]
     metadata: HashMap<String, serde_json::Value>,
+    #[serde(default)]
+    memo: Option<String>,
 }
 
 /// Struct to hold a Participant from a test vector
@@ -720,6 +722,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                         agents,
                         settlement_id: transfer_body.settlement_id.clone(),
                         metadata: transfer_body.metadata.clone(),
+                        memo: transfer_body.memo.clone(),
                     };
 
                     // Validate the transfer

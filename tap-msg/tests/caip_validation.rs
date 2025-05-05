@@ -31,6 +31,7 @@ fn test_valid_transfer_body() {
         agents: vec![originator, beneficiary],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Validate the transfer body - no error should be returned
@@ -69,6 +70,7 @@ fn test_transfer_with_empty_asset() {
         agents: vec![originator, beneficiary],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Validation should pass
@@ -102,6 +104,7 @@ fn test_transfer_with_empty_amount() {
         agents: vec![originator, beneficiary],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Validation should fail for empty amount

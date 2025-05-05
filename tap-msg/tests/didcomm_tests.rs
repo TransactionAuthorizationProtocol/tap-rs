@@ -32,6 +32,7 @@ async fn test_pack_tap_body() -> Result<()> {
         agents: vec![originator, beneficiary],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Test packing the message body using the new to_didcomm_with_route method
@@ -95,6 +96,7 @@ async fn test_extract_tap_body() -> Result<()> {
         agents: vec![originator, beneficiary],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
     };
 
     // Pack the message body
