@@ -19,6 +19,7 @@ use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle, Transfer};
 use tap_msg::Participant;
+use chrono;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -77,6 +78,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let authorize = Authorize {
         transfer_id: transfer_id.clone(),
         note: Some(format!("Authorizing transfer to settlement address: {}", settlement_address)),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        settlement_address: Some(settlement_address.to_string()),
+        metadata: HashMap::new(),
     };
     
     let packed_authorize = beneficiary_agent.send_message(&authorize, &originator_did).await?;
@@ -101,8 +105,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let settle = Settle {
         transfer_id: transfer_id.clone(),
-        settlement_id: settlement_id.to_string(),
-        amount: Some(transfer.amount.clone()),
+        transaction_id: settlement_id.to_string(),
+        transaction_hash: Some(settlement_id.to_string()),
+        block_height: Some(12345678),
+        note: Some(format!("Transfer of {} settled", transfer.amount)),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        metadata: HashMap::new(),
     };
     
     let packed_settle = originator_agent.send_message(&settle, &beneficiary_did).await?;
@@ -115,8 +123,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let received_settle: Settle = beneficiary_agent.receive_message(&packed_settle).await?;
     println!("Beneficiary received settlement confirmation:");
     println!("  Transfer ID: {}", received_settle.transfer_id);
-    println!("  Settlement ID: {}", received_settle.settlement_id);
-    println!("  Amount: {}\n", received_settle.amount.unwrap_or_default());
+    println!("  Transaction ID: {}", received_settle.transaction_id);
+    if let Some(note) = received_settle.note {
+        println!("  Note: {}\n", note);
+    }
     
     println!("=== Transfer flow completed successfully ===");
     

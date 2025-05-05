@@ -13,6 +13,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
+use chrono::Utc;
 use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
@@ -196,6 +197,7 @@ async fn main() -> Result<()> {
                 leiCode: None,
             },
         ],
+        metadata: HashMap::new(),
     };
     
     // Send AddAgents message to originator VASP
@@ -227,7 +229,11 @@ async fn main() -> Result<()> {
     
     let reject = Reject {
         transfer_id: transfer_id.clone(),
-        reason: "compliance.policy: Additional beneficiary information required".to_string(),
+        code: "compliance.policy".to_string(),
+        description: "Additional beneficiary information required".to_string(),
+        note: Some("Please provide additional beneficiary information to comply with regulations".to_string()),
+        timestamp: Utc::now().to_rfc3339(),
+        metadata: HashMap::new(),
     };
     
     let packed_reject = beneficiary_vasp.send_message(&reject, &originator_vasp_did).await?;
@@ -236,14 +242,24 @@ async fn main() -> Result<()> {
     let received_reject: Reject = originator_vasp.receive_message(&packed_reject).await?;
     println!("Originator VASP received rejection:");
     println!("  Transfer ID: {}", received_reject.transfer_id);
-    println!("  Reason: {}\n", received_reject.reason);
+    println!("  Code: {}", received_reject.code);
+    println!("  Description: {}", received_reject.description);
+    if let Some(note) = &received_reject.note {
+        println!("  Note: {}", note);
+    }
+    println!("  Timestamp: {}", received_reject.timestamp);
+    println!();
     
     // Step 8: After resolving the compliance concerns, the beneficiary VASP authorizes
     println!("Step 7: After resolving compliance concerns, beneficiary VASP authorizes the transfer");
     
+    let settlement_address = "eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
     let authorize = Authorize {
         transfer_id: transfer_id.clone(),
-        note: Some("Compliance requirements satisfied, transfer authorized".to_string()),
+        note: Some("Transfer authorized after compliance review".to_string()),
+        timestamp: Utc::now().to_rfc3339(),
+        settlement_address: Some(settlement_address.to_string()),
+        metadata: HashMap::new(),
     };
     
     let packed_authorize_vasp = beneficiary_vasp.send_message(&authorize, &originator_vasp_did).await?;
@@ -262,6 +278,9 @@ async fn main() -> Result<()> {
     let authorize_wallet = Authorize {
         transfer_id: transfer_id.clone(),
         note: Some("Wallet ready to receive funds".to_string()),
+        timestamp: Utc::now().to_rfc3339(),
+        settlement_address: Some(settlement_address.to_string()),
+        metadata: HashMap::new(),
     };
     
     let packed_authorize_wallet = beneficiary_wallet.send_message(&authorize_wallet, &originator_wallet_did).await?;
@@ -287,6 +306,9 @@ async fn main() -> Result<()> {
     let api_authorize = Authorize {
         transfer_id: transfer_id.clone(),
         note: Some(api_note.clone()),
+        timestamp: Utc::now().to_rfc3339(),
+        settlement_address: Some(settlement_address.to_string()),
+        metadata: HashMap::new(),
     };
     
     let packed_api_authorize = originator_wallet_api.send_message(&api_authorize, &beneficiary_wallet_api_did).await?;
@@ -308,8 +330,12 @@ async fn main() -> Result<()> {
     
     let settle = Settle {
         transfer_id: transfer_id.clone(),
-        settlement_id: settlement_id.to_string(),
-        amount: Some(transfer.amount.clone()),
+        transaction_id: settlement_id.to_string(),
+        transaction_hash: Some(settlement_id.to_string()),
+        block_height: Some(12345678),
+        note: Some(format!("Settlement of {} completed", transfer.amount)),
+        timestamp: Utc::now().to_rfc3339(),
+        metadata: HashMap::new(),
     };
     
     // Send settlement to all relevant parties
@@ -317,16 +343,21 @@ async fn main() -> Result<()> {
     let packed_settle_wallet = originator_wallet.send_message(&settle, &beneficiary_wallet_did).await?;
     
     println!("Settlement sent to beneficiary VASP and wallet");
-    println!("  Settlement ID: {}\n", settlement_id);
+    println!("  Transaction ID: {}\n", settlement_id);
     
     // Step 12: Wallet API confirms settlement details
     println!("Step 11: Wallet APIs confirm settlement details");
     
-    // Originator wallet API sends settlement confirmation to beneficiary wallet API
+    // Originator wallet API settles the transfer
+    let api_settlement_id = "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
     let api_settle = Settle {
         transfer_id: transfer_id.clone(),
-        settlement_id: settlement_id.to_string(),
-        amount: Some(transfer.amount.clone()),
+        transaction_id: api_settlement_id.to_string(),
+        transaction_hash: Some(api_settlement_id.to_string()),
+        block_height: Some(12345678),
+        note: Some(format!("API settlement of {} completed", transfer.amount)),
+        timestamp: Utc::now().to_rfc3339(),
+        metadata: HashMap::new(),
     };
     
     let packed_api_settle = originator_wallet_api.send_message(&api_settle, &beneficiary_wallet_api_did).await?;
@@ -335,9 +366,15 @@ async fn main() -> Result<()> {
     let received_api_settle: Settle = beneficiary_wallet_api.receive_message(&packed_api_settle).await?;
     println!("Beneficiary wallet API received settlement confirmation:");
     println!("  Transfer ID: {}", received_api_settle.transfer_id);
-    println!("  Settlement ID: {}", received_api_settle.settlement_id);
-    if let Some(amount) = &received_api_settle.amount {
-        println!("  Amount: {}\n", amount);
+    println!("  Transaction ID: {}", received_api_settle.transaction_id);
+    if let Some(transaction_hash) = &received_api_settle.transaction_hash {
+        println!("  Transaction Hash: {}", transaction_hash);
+    }
+    if let Some(block_height) = &received_api_settle.block_height {
+        println!("  Block Height: {}", block_height);
+    }
+    if let Some(note) = &received_api_settle.note {
+        println!("  Note: {}\n", note);
     }
     
     // Step 13: Beneficiaries receive settlement confirmation
@@ -349,9 +386,15 @@ async fn main() -> Result<()> {
     
     println!("Settlement received by beneficiary VASP and wallet:");
     println!("  Transfer ID: {}", received_settle_vasp.transfer_id);
-    println!("  Settlement ID: {}", received_settle_vasp.settlement_id);
-    if let Some(amount) = &received_settle_vasp.amount {
-        println!("  Amount: {}", amount);
+    println!("  Transaction ID: {}", received_settle_vasp.transaction_id);
+    if let Some(transaction_hash) = &received_settle_vasp.transaction_hash {
+        println!("  Transaction Hash: {}", transaction_hash);
+    }
+    if let Some(block_height) = &received_settle_vasp.block_height {
+        println!("  Block Height: {}", block_height);
+    }
+    if let Some(note) = &received_settle_vasp.note {
+        println!("  Note: {}", note);
     }
     
     println!("\n=== Multi-agent transfer flow with dynamic agent addition completed successfully ===");

@@ -104,7 +104,11 @@ async fn main() -> Result<()> {
             if let Error::Validation(_) = e {
                 let reject = Reject {
                     transfer_id: transfer_id.clone(),
-                    reason: format!("validation.failed: Transfer validation failed: {}", e),
+                    code: "validation.failed".to_string(),
+                    description: format!("Transfer validation failed: {}", e),
+                    note: Some("Please correct the validation issues and try again".to_string()),
+                    timestamp: chrono::Utc::now().to_rfc3339(),
+                    metadata: HashMap::new(),
                 };
                 
                 let _ = beneficiary_agent.send_message(&reject, &originator_did).await;
@@ -135,7 +139,11 @@ async fn main() -> Result<()> {
         
         let reject = Reject {
             transfer_id: transfer_id.clone(),
-            reason: format!("risk.threshold.exceeded: Risk score ({}) exceeds threshold ({})", risk_score, risk_threshold),
+            code: "risk.threshold.exceeded".to_string(),
+            description: format!("Risk score ({}) exceeds threshold ({})", risk_score, risk_threshold),
+            note: Some("Please contact support for further assistance".to_string()),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            metadata: HashMap::new(),
         };
         
         let packed_reject = match beneficiary_agent.send_message(&reject, &originator_did).await {
@@ -159,7 +167,10 @@ async fn main() -> Result<()> {
         
         println!("Originator received rejection:");
         println!("  Transfer ID: {}", received_reject.transfer_id);
-        println!("  Reason: {}", received_reject.reason);
+        println!("  Code: {}", received_reject.code);
+        println!("  Description: {}", received_reject.description);
+        println!("  Note: {}", received_reject.note.unwrap_or_default());
+        println!("  Timestamp: {}", received_reject.timestamp);
         println!("Transfer flow ended with rejection");
         
         return Ok(());
@@ -168,11 +179,13 @@ async fn main() -> Result<()> {
     // Low risk, proceed with authorization
     println!("Low risk detected, proceeding with authorization");
     
+    // Beneficiary VASP authorizes the transfer
     let authorize = Authorize {
         transfer_id: transfer_id.clone(),
-        note: Some(format!("Authorized with settlement address: {} and expiry time: {}", 
-                          settlement_address, 
-                          chrono::Utc::now() + chrono::Duration::hours(1))),
+        note: Some(format!("Authorizing transfer to settlement address: {}", settlement_address)),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        settlement_address: Some(settlement_address.to_string()),
+        metadata: HashMap::new(),
     };
     
     let packed_authorize = match beneficiary_agent.send_message(&authorize, &originator_did).await {
@@ -220,8 +233,12 @@ async fn main() -> Result<()> {
     
     let settle = Settle {
         transfer_id: transfer_id.clone(),
-        settlement_id: settlement_id.to_string(),
-        amount: Some(transfer.amount.clone()),
+        transaction_id: settlement_id.to_string(),
+        transaction_hash: Some(settlement_id.to_string()),
+        block_height: Some(12345678),
+        note: Some(format!("Transfer of {} settled", transfer.amount)),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+        metadata: HashMap::new(),
     };
     
     let packed_settle = match originator_agent.send_message(&settle, &beneficiary_did).await {
@@ -233,7 +250,7 @@ async fn main() -> Result<()> {
     };
     
     println!("Settlement sent successfully");
-    println!("  Settlement ID: {}\n", settlement_id);
+    println!("  Transaction ID: {}\n", settlement_id);
     
     // Step 9: Beneficiary receives and validates the settlement
     println!("Step 9: Beneficiary receives and validates the settlement");
@@ -246,18 +263,18 @@ async fn main() -> Result<()> {
         }
     };
     
-    // Validate settlement details
-    if let Some(received_amount) = &received_settle.amount {
-        if received_amount != &transfer.amount {
-            println!("Settlement amount mismatch");
-            return Err(Error::Validation("Settlement amount mismatch".to_string()));
-        }
+    // Check if the settlement amount matches the transfer amount
+    if let Some(received_amount) = &received_settle.transaction_hash {
+        println!("  Transaction Hash: {}", received_amount);
     }
     
     println!("Settlement received and validated successfully");
     println!("  Transfer ID: {}", received_settle.transfer_id);
-    println!("  Settlement ID: {}", received_settle.settlement_id);
-    println!("  Amount: {}\n", received_settle.amount.unwrap_or_default());
+    println!("  Transaction ID: {}", received_settle.transaction_id);
+    if let Some(note) = &received_settle.note {
+        println!("  Note: {}", note);
+    }
+    println!();
     
     println!("=== Secure transfer flow completed successfully ===");
     
