@@ -3,7 +3,9 @@
 //! This example shows a more complex scenario with multiple agents:
 //! 1. Originator VASP and Wallet
 //! 2. Beneficiary VASP and Wallet
-//! 3. Rejection handling and recovery
+//! 3. Wallet API agents that join the flow dynamically
+//! 4. Rejection handling and recovery
+//! 5. Agent addition using TAIP-5 AddAgents message
 //! 
 //! Run with: cargo run --example multi_agent_flow
 
@@ -18,7 +20,7 @@ use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_agent::error::Result;
 use tap_caip::AssetId;
-use tap_msg::message::{Authorize, Reject, Settle, Transfer};
+use tap_msg::message::{AddAgents, Authorize, Reject, Settle, Transfer};
 use tap_msg::Participant;
 
 #[tokio::main]
@@ -42,6 +44,13 @@ async fn main() -> Result<()> {
         "8zYZK2vvsAyVYpNpnYzTnUPjBuWdWpYmPpQmwErV9XQg",
     ).await?;
     
+    // Create originator wallet API agent
+    let (originator_wallet_api, originator_wallet_api_did) = create_agent(
+        "did:key:z6MkgYAFirTGpAaHxfQrJxSUVNBsrGZEXEqnawEUCPnVKVXJ",
+        "CnEDU0Jxr6Jx9XH+61JrGK8Bz1xm0xwLOqVDjd+5FVM",
+        "CnEDU0Jxr6Jx9XH+61JrGK8Bz1xm0xwLOqVDjd+5FVM",
+    ).await?;
+    
     // Create beneficiary VASP agent
     let (beneficiary_vasp, beneficiary_vasp_did) = create_agent(
         "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
@@ -56,11 +65,20 @@ async fn main() -> Result<()> {
         "5TVS4YKJxmqVVQUM7xbVsYiFrCbdwgLLdu6QB98q3a4",
     ).await?;
     
+    // Create beneficiary wallet API agent
+    let (beneficiary_wallet_api, beneficiary_wallet_api_did) = create_agent(
+        "did:key:z6MkqyYXcBQH7dJyXWrTrEKJNEjXnkajQ2xjGPEgBsqVRmVS",
+        "D9WbJ5H9sTNXLVLYARpVSXhwrLGJUHNn6vJUUXFqYj4",
+        "D9WbJ5H9sTNXLVLYARpVSXhwrLGJUHNn6vJUUXFqYj4",
+    ).await?;
+    
     println!("Created agents with DIDs:");
     println!("  Originator VASP: {}", originator_vasp_did);
     println!("  Originator Wallet: {}", originator_wallet_did);
+    println!("  Originator Wallet API: {}", originator_wallet_api_did);
     println!("  Beneficiary VASP: {}", beneficiary_vasp_did);
-    println!("  Beneficiary Wallet: {}\n", beneficiary_wallet_did);
+    println!("  Beneficiary Wallet: {}", beneficiary_wallet_did);
+    println!("  Beneficiary Wallet API: {}\n", beneficiary_wallet_api_did);
     
     // Step 2: Create a transfer request
     println!("Step 1: Originator VASP creates a transfer request");
@@ -75,68 +93,137 @@ async fn main() -> Result<()> {
     };
     let transfer_id = uuid::Uuid::new_v4().to_string();
     
+    // Create originator and beneficiary parties (different from the agents)
+    let originator_party = "did:pkh:eip155:1:0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"; // Example customer DID
+    let beneficiary_party = "did:pkh:eip155:1:0x71C7656EC7ab88b098defB751B7401B5f6d8976F"; // Example recipient DID
+    
+    // Include both originator and beneficiary agents in the initial transfer
     let transfer = Transfer {
         asset,
         originator: Participant {
-            id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+            id: originator_party.to_string(),
             role: Some("originator".to_string()),
             policies: None,
             leiCode: None,
         },
         beneficiary: Some(Participant {
-            id: "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH".to_string(),
+            id: beneficiary_party.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
         }),
         amount: "100.0".to_string(),
         agents: vec![
+            // Originator agents
             Participant {
-                id: "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k".to_string(),
+                id: originator_vasp_did.clone(),
+                role: Some("originatorVASP".to_string()),
+                policies: None,
+                leiCode: None,
+            },
+            Participant {
+                id: originator_wallet_did.clone(),
                 role: Some("originatorWallet".to_string()),
                 policies: None,
                 leiCode: None,
             },
             Participant {
-                id: "did:key:z6MkrJVkLHBdQQS5y2CnXAHJcgBWMVv7V5aukAtQyBx4qJA4".to_string(),
-                role: Some("beneficiaryWallet".to_string()),
+                id: originator_wallet_api_did.clone(),
+                role: Some("originatorWalletAPI".to_string()),
+                policies: None,
+                leiCode: None,
+            },
+            // Beneficiary agent
+            Participant {
+                id: beneficiary_vasp_did.clone(),
+                role: Some("beneficiaryVASP".to_string()),
                 policies: None,
                 leiCode: None,
             },
         ],
         settlement_id: None,
-        memo: Some("Multi-agent transfer example".to_string()),
+        memo: Some("Multi-agent transfer example with dynamic agent addition".to_string()),
         metadata: HashMap::new(),
     };
     
     println!("Transfer details:");
     println!("  Asset: {}", transfer.asset);
     println!("  Amount: {}", transfer.amount);
-    println!("  From: {}", transfer.originator.id);
-    println!("  To: {}\n", transfer.beneficiary.as_ref().unwrap().id);
+    println!("  From: {} (party)", transfer.originator.id);
+    println!("  To: {} (party)", transfer.beneficiary.as_ref().unwrap().id);
+    println!("  Initial agents:");
+    println!("    - {} (originator VASP)", originator_vasp_did);
+    println!("    - {} (originator wallet)", originator_wallet_did);
+    println!("    - {} (originator wallet API)", originator_wallet_api_did);
+    println!("    - {} (beneficiary VASP)", beneficiary_vasp_did);
+    println!();
     
-    // Step 3: Send the transfer to both the beneficiary VASP and wallet
-    println!("Step 2: Sending transfer to beneficiary VASP and wallet");
+    // Step 3: Send the transfer to the beneficiary VASP
+    println!("Step 2: Sending transfer to beneficiary VASP");
     
     // Pack and send to VASP
     let packed_transfer_vasp = originator_vasp.send_message(&transfer, &beneficiary_vasp_did).await?;
     
-    // Pack and send to wallet
-    let packed_transfer_wallet = originator_vasp.send_message(&transfer, &beneficiary_wallet_did).await?;
+    println!("Transfer sent to beneficiary VASP\n");
     
-    println!("Transfer sent to both beneficiary VASP and wallet\n");
+    // Step 4: Beneficiary VASP receives the transfer
+    println!("Step 3: Beneficiary VASP receives the transfer");
     
-    // Step 4: Beneficiaries receive the transfer
-    println!("Step 3: Beneficiaries receive the transfer");
+    // Receive at VASP
+    let received_transfer_vasp: Transfer = beneficiary_vasp.receive_message(&packed_transfer_vasp).await?;
     
-    // Receive at VASP and wallet
-    let _received_transfer_vasp: Transfer = beneficiary_vasp.receive_message(&packed_transfer_vasp).await?;
-    let _received_transfer_wallet: Transfer = beneficiary_wallet.receive_message(&packed_transfer_wallet).await?;
+    println!("Transfer received by beneficiary VASP");
+    println!("  Transfer ID: {}", transfer_id);
+    println!("  Initial agents count: {}\n", received_transfer_vasp.agents.len());
     
-    println!("Transfer received by both beneficiary VASP and wallet\n");
+    // Step 5: Beneficiary VASP adds their wallet and wallet API as agents
+    println!("Step 4: Beneficiary VASP adds their wallet and wallet API as agents");
     
-    // Step 5: Initial rejection by beneficiary VASP
-    println!("Let's assume the beneficiary VASP initially rejects the transfer due to compliance concerns");
+    // Create AddAgents message to add the beneficiary wallet and wallet API
+    let add_agents = AddAgents {
+        transfer_id: transfer_id.clone(),
+        agents: vec![
+            Participant {
+                id: beneficiary_wallet_did.clone(),
+                role: Some("beneficiaryWallet".to_string()),
+                policies: None,
+                leiCode: None,
+            },
+            Participant {
+                id: beneficiary_wallet_api_did.clone(),
+                role: Some("beneficiaryWalletAPI".to_string()),
+                policies: None,
+                leiCode: None,
+            },
+        ],
+    };
+    
+    // Send AddAgents message to originator VASP
+    let packed_add_agents = beneficiary_vasp.send_message(&add_agents, &originator_vasp_did).await?;
+    
+    println!("Beneficiary VASP sends AddAgents message to add wallet and wallet API");
+    println!("  Added agents: {} (beneficiary wallet), {} (beneficiary wallet API)\n", 
+             beneficiary_wallet_did, beneficiary_wallet_api_did);
+    
+    // Step 6: Originator VASP receives the AddAgents message
+    println!("Step 5: Originator VASP receives the AddAgents message");
+    
+    // Receive AddAgents message
+    let received_add_agents: AddAgents = originator_vasp.receive_message(&packed_add_agents).await?;
+    
+    println!("Originator VASP received AddAgents message:");
+    println!("  Transfer ID: {}", received_add_agents.transfer_id);
+    println!("  Added agents count: {}", received_add_agents.agents.len());
+    
+    // In a real implementation, the originator would update their local state with the new agents
+    println!("  Added agents: {} ({}), {} ({})\n", 
+             received_add_agents.agents[0].id, 
+             received_add_agents.agents[0].role.as_ref().unwrap_or(&"unknown".to_string()),
+             received_add_agents.agents[1].id,
+             received_add_agents.agents[1].role.as_ref().unwrap_or(&"unknown".to_string()));
+    
+    // Step 7: Initial rejection by beneficiary VASP for compliance
+    println!("Step 6: Beneficiary VASP initially rejects the transfer due to compliance concerns");
     
     let reject = Reject {
         transfer_id: transfer_id.clone(),
@@ -151,9 +238,8 @@ async fn main() -> Result<()> {
     println!("  Transfer ID: {}", received_reject.transfer_id);
     println!("  Reason: {}\n", received_reject.reason);
     
-    // Step 4: After resolving the compliance concerns (in a real scenario), 
-    // the beneficiary VASP now authorizes the transfer
-    println!("Step 4: After resolving compliance concerns, beneficiary VASP authorizes the transfer");
+    // Step 8: After resolving the compliance concerns, the beneficiary VASP authorizes
+    println!("Step 7: After resolving compliance concerns, beneficiary VASP authorizes the transfer");
     
     let authorize = Authorize {
         transfer_id: transfer_id.clone(),
@@ -166,12 +252,12 @@ async fn main() -> Result<()> {
     let received_authorize: Authorize = originator_vasp.receive_message(&packed_authorize_vasp).await?;
     println!("Originator VASP received authorization:");
     println!("  Transfer ID: {}", received_authorize.transfer_id);
-    if let Some(note) = received_authorize.note {
+    if let Some(note) = &received_authorize.note {
         println!("  Note: {}\n", note);
     }
     
-    // Step 5: Beneficiary wallet also authorizes the transfer
-    println!("Step 5: Beneficiary wallet also authorizes the transfer");
+    // Step 9: Beneficiary wallet also authorizes the transfer
+    println!("Step 8: Beneficiary wallet also authorizes the transfer");
     
     let authorize_wallet = Authorize {
         transfer_id: transfer_id.clone(),
@@ -184,12 +270,37 @@ async fn main() -> Result<()> {
     let received_authorize_wallet: Authorize = originator_wallet.receive_message(&packed_authorize_wallet).await?;
     println!("Originator wallet received authorization:");
     println!("  Transfer ID: {}", received_authorize_wallet.transfer_id);
-    if let Some(note) = received_authorize_wallet.note {
+    if let Some(note) = &received_authorize_wallet.note {
         println!("  Note: {}\n", note);
     }
     
-    // Step 6: Originator wallet initiates settlement
-    println!("Step 6: Originator wallet initiates settlement");
+    // Step 10: Wallet APIs exchange information
+    println!("Step 9: Wallet APIs exchange technical information for settlement");
+    
+    // Simulate wallet API communication (in a real scenario, this would be more complex)
+    let api_note = format!(
+        "API technical details: callback_url=https://api.wallet.example/callbacks/{}, nonce={}",
+        transfer_id,
+        uuid::Uuid::new_v4().to_string()
+    );
+    
+    let api_authorize = Authorize {
+        transfer_id: transfer_id.clone(),
+        note: Some(api_note.clone()),
+    };
+    
+    let packed_api_authorize = originator_wallet_api.send_message(&api_authorize, &beneficiary_wallet_api_did).await?;
+    
+    // Beneficiary wallet API receives the technical details
+    let received_api_authorize: Authorize = beneficiary_wallet_api.receive_message(&packed_api_authorize).await?;
+    println!("Beneficiary wallet API received technical details:");
+    println!("  Transfer ID: {}", received_api_authorize.transfer_id);
+    if let Some(note) = &received_api_authorize.note {
+        println!("  Technical details: {}\n", note);
+    }
+    
+    // Step 11: Originator wallet initiates settlement
+    println!("Step 10: Originator wallet initiates settlement");
     
     // In a real scenario, the wallet would submit the transaction to the blockchain
     // and get a transaction ID. Here we simulate it with a mock transaction ID.
@@ -201,28 +312,49 @@ async fn main() -> Result<()> {
         amount: Some(transfer.amount.clone()),
     };
     
-    // Send settlement to both VASP and wallet
+    // Send settlement to all relevant parties
     let packed_settle_vasp = originator_wallet.send_message(&settle, &beneficiary_vasp_did).await?;
     let packed_settle_wallet = originator_wallet.send_message(&settle, &beneficiary_wallet_did).await?;
     
-    println!("Settlement sent to both beneficiary VASP and wallet");
+    println!("Settlement sent to beneficiary VASP and wallet");
     println!("  Settlement ID: {}\n", settlement_id);
     
-    // Step 7: Beneficiaries receive settlement confirmation
-    println!("Step 7: Beneficiaries receive settlement confirmation");
+    // Step 12: Wallet API confirms settlement details
+    println!("Step 11: Wallet APIs confirm settlement details");
+    
+    // Originator wallet API sends settlement confirmation to beneficiary wallet API
+    let api_settle = Settle {
+        transfer_id: transfer_id.clone(),
+        settlement_id: settlement_id.to_string(),
+        amount: Some(transfer.amount.clone()),
+    };
+    
+    let packed_api_settle = originator_wallet_api.send_message(&api_settle, &beneficiary_wallet_api_did).await?;
+    
+    // Beneficiary wallet API receives settlement confirmation
+    let received_api_settle: Settle = beneficiary_wallet_api.receive_message(&packed_api_settle).await?;
+    println!("Beneficiary wallet API received settlement confirmation:");
+    println!("  Transfer ID: {}", received_api_settle.transfer_id);
+    println!("  Settlement ID: {}", received_api_settle.settlement_id);
+    if let Some(amount) = &received_api_settle.amount {
+        println!("  Amount: {}\n", amount);
+    }
+    
+    // Step 13: Beneficiaries receive settlement confirmation
+    println!("Step 12: Beneficiaries receive settlement confirmation");
     
     // Receive at VASP and wallet
     let received_settle_vasp: Settle = beneficiary_vasp.receive_message(&packed_settle_vasp).await?;
     let _received_settle_wallet: Settle = beneficiary_wallet.receive_message(&packed_settle_wallet).await?;
     
-    println!("Settlement received by both beneficiary VASP and wallet:");
+    println!("Settlement received by beneficiary VASP and wallet:");
     println!("  Transfer ID: {}", received_settle_vasp.transfer_id);
     println!("  Settlement ID: {}", received_settle_vasp.settlement_id);
-    if let Some(amount) = received_settle_vasp.amount {
+    if let Some(amount) = &received_settle_vasp.amount {
         println!("  Amount: {}", amount);
     }
     
-    println!("\n=== Multi-agent transfer flow completed successfully ===");
+    println!("\n=== Multi-agent transfer flow with dynamic agent addition completed successfully ===");
     
     Ok(())
 }
