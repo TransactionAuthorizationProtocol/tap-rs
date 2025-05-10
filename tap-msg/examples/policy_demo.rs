@@ -115,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Display the UpdatePolicies message
     println!("  UpdatePolicies Message:");
-    println!("  Transfer ID: {}", update.transaction_id);
+    println!("  Transaction ID: {}", update.transaction_id);
     println!("  Policies count: {}", update.policies.len());
 
     for (i, policy) in update.policies.iter().enumerate() {
