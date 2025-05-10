@@ -1,8 +1,74 @@
-//! TAP Node implementation
+//! # TAP Node Implementation
 //!
-//! This crate provides a node implementation for the Transaction Authorization Protocol (TAP).
-//! The TAP Node is responsible for managing multiple agents, routing messages, and coordinating
-//! between different TAP agents.
+//! This crate provides a complete node implementation for the Transaction Authorization Protocol (TAP).
+//! The TAP Node acts as a central hub for managing multiple TAP agents, routing messages between them,
+//! and coordinating the entire transaction lifecycle in a secure and scalable manner.
+//!
+//! ## Overview
+//!
+//! The Transaction Authorization Protocol (TAP) is designed for secure, privacy-preserving financial
+//! transactions between parties. A TAP Node serves as the infrastructure layer that:
+//!
+//! - Manages multiple TAP agents with different roles and capabilities
+//! - Processes incoming and outgoing TAP messages
+//! - Routes messages to the appropriate agents based on DID addressing
+//! - Handles message validation, transformation, and delivery
+//! - Provides an event system for monitoring and reacting to node activities
+//! - Scales to handle high message throughput with a processing pool
+//!
+//! ## Architecture
+//!
+//! The TAP Node is built with several key components:
+//!
+//! - **Agent Registry**: Maintains a collection of TAP agents by their DIDs
+//! - **Message Processors**: Process, validate, and transform messages
+//! - **Message Routers**: Determine the target agent for a message
+//! - **Processor Pool**: Provides concurrent message processing for scalability
+//! - **Event Bus**: Broadcasts node events to subscribers
+//! - **DID Resolver**: Resolves DIDs to DID Documents for message verification
+//!
+//! ## Usage Example
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//! use tap_agent::{AgentConfig, DefaultAgent};
+//! use tap_node::{NodeConfig, TapNode, DefaultAgentExt};
+//! use tap_node::message::processor_pool::ProcessorPoolConfig;
+//! use tokio::time::Duration;
+//!
+//! async fn example() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Create a node with default configuration
+//!     let config = NodeConfig::default();
+//!     let mut node = TapNode::new(config);
+//!
+//!     // Configure and start the processor pool
+//!     let pool_config = ProcessorPoolConfig {
+//!         workers: 4,
+//!         channel_capacity: 100,
+//!         worker_timeout: Duration::from_secs(30),
+//!     };
+//!     node.start(pool_config).await?;
+//!
+//!     // Create and register a TAP agent
+//!     // (simplified - in practice you would need to set up proper crypto)
+//!     let agent_config = AgentConfig::new("did:example:123".to_string());
+//!     let agent = DefaultAgent::new(agent_config, Arc::new(/* message packer */));
+//!     node.register_agent(Arc::new(agent)).await?;
+//!
+//!     // The node is now ready to process messages
+//!     // You would typically listen for incoming messages and call:
+//!     // node.receive_message(message).await?;
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Thread Safety and Async
+//!
+//! The TAP Node is designed to be thread-safe and fully async, making it suitable for
+//! high-throughput environments. The core `TapNode` structure can be safely cloned and
+//! shared between threads, with all mutable state protected by appropriate synchronization
+//! primitives.
 
 pub mod agent;
 pub mod error;
@@ -73,10 +139,32 @@ pub struct NodeConfig {
     pub processor_pool: Option<ProcessorPoolConfig>,
 }
 
-/// The TAP Node
+/// # The TAP Node
 ///
-/// The TAP Node is responsible for coordinating message processing, routing, and delivery
-/// to TAP Agents. It serves as a central hub for all TAP communications.
+/// The TAP Node is the core component responsible for coordinating message processing, routing, and delivery
+/// to TAP Agents. It serves as a central hub for all TAP communications and transaction coordination.
+///
+/// ## Core Responsibilities
+///
+/// - **Agent Management**: Registration and deregistration of TAP Agents
+/// - **Message Processing**: Processing incoming and outgoing messages through middleware chains
+/// - **Message Routing**: Determining the appropriate recipient for each message
+/// - **Event Publishing**: Broadcasting node events to subscribers
+/// - **Scalability**: Managing concurrent message processing through worker pools
+///
+/// ## Lifecycle
+///
+/// 1. Create a node with appropriate configuration
+/// 2. Register one or more agents with the node
+/// 3. Start the processor pool (if high throughput is required)
+/// 4. Process incoming/outgoing messages
+/// 5. Publish and respond to events
+///
+/// ## Thread Safety
+///
+/// The `TapNode` is designed to be thread-safe and can be shared across multiple
+/// threads using an `Arc<TapNode>`. All internal mutability is handled through
+/// appropriate synchronization primitives.
 #[derive(Clone)]
 pub struct TapNode {
     /// Agent registry
@@ -150,12 +238,50 @@ impl TapNode {
         Ok(())
     }
 
-    /// Receive a message
+    /// Receive and process an incoming message
+    ///
+    /// This method handles the complete lifecycle of an incoming message:
+    ///
+    /// 1. Processing the message through all registered processors
+    /// 2. Routing the message to determine the appropriate target agent
+    /// 3. Dispatching the message to the target agent
+    ///
+    /// The processing pipeline may transform or even drop the message based on
+    /// validation rules or other processing logic. If a message is dropped during
+    /// processing, this method will return Ok(()) without an error.
+    ///
+    /// # Parameters
+    ///
+    /// * `message` - The DIDComm message to be processed
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the message was successfully processed and dispatched (or intentionally dropped)
+    /// * `Err(Error)` if there was an error during processing, routing, or dispatching
+    ///
+    /// # Errors
+    ///
+    /// This method can return errors for several reasons:
+    /// * Processing errors from message processors
+    /// * Routing errors if no target agent can be determined
+    /// * Dispatch errors if the target agent cannot be found or fails to process the message
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use tap_node::{TapNode, NodeConfig};
+    /// # use tap_msg::didcomm::Message;
+    /// # async fn example(node: &TapNode, message: Message) -> Result<(), tap_node::Error> {
+    /// // Process an incoming message
+    /// node.receive_message(message).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn receive_message(&self, message: Message) -> Result<()> {
         // Process the incoming message
         let processed_message = match self.incoming_processor.process_incoming(message).await? {
             Some(msg) => msg,
-            None => return Ok(()), // Message was dropped
+            None => return Ok(()), // Message was dropped during processing
         };
 
         // Route the message to the appropriate agent

@@ -1,105 +1,217 @@
 # TAP Node
 
-TAP node orchestration and message routing for the Transaction Authorization Protocol (TAP).
+A high-performance, asynchronous node implementation for the Transaction Authorization Protocol (TAP). This crate provides a complete node infrastructure for managing TAP agents, routing messages, and coordinating secure financial transactions.
 
-## Features
+## Overview
 
-- **Multi-Agent Coordination**: Manage multiple TAP agents within a single node
-- **Message Routing**: Route incoming messages to the appropriate agent
-- **DID Resolution**: Resolve DIDs for message routing and key discovery
-- **Asynchronous Processing**: Process messages concurrently using Tokio
-- **Event System**: Publish/subscribe system for TAP events
-- **Message Queueing**: Queue management for pending messages
+The TAP Node acts as a central hub for TAP communications, managing multiple agents, processing messages, and coordinating the transaction lifecycle. It is designed for high-throughput environments, with support for concurrent message processing, event-driven architecture, and robust error handling.
+
+## Key Features
+
+- **Multi-Agent Management**: Register and manage multiple TAP agents with different roles and capabilities
+- **Message Processing Pipeline**: Process messages through configurable middleware chains
+- **Message Routing**: Intelligently route messages to the appropriate agent based on DID addressing
+- **Concurrent Processing**: Scale to high throughput with worker pools for message processing
+- **Event Publishing**: Comprehensive event system for monitoring and reacting to node activities
+- **DID Resolution**: Resolve DIDs for message verification and routing
+- **Configurable Components**: Customize node behavior with pluggable components
+- **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
+- **WASM Compatibility**: Optional WASM support for browser environments
+
+## Installation
+
+Add the crate to your `Cargo.toml`:
+
+```toml
+[dependencies]
+tap-node = { path = "../tap-node" }
+tap-agent = { path = "../tap-agent" }
+tap-msg = { path = "../tap-msg" }
+```
+
+## Architecture
+
+The TAP Node is built with a modular architecture:
+
+```
+┌───────────────────────────────────────────────┐
+│                   TAP Node                     │
+├───────────────┬───────────────┬───────────────┤
+│ Agent Registry│ Message Router│  Event Bus    │
+├───────────────┼───────────────┼───────────────┤
+│ Message       │ Processor Pool│  Resolver     │
+│ Processors    │               │               │
+└───────────────┴───────────────┴───────────────┘
+        │               │               │
+        ▼               ▼               ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐
+│   TAP Agent   │ │   TAP Agent   │ │   TAP Agent   │
+└───────────────┘ └───────────────┘ └───────────────┘
+```
 
 ## Usage
 
+### Basic Setup
+
 ```rust
-use tap_node::node::{TapNode, DefaultTapNode};
-use tap_agent::agent::{Agent, DefaultAgent};
-use tap_agent::config::AgentConfig;
+use tap_node::{NodeConfig, TapNode};
+use tap_agent::{AgentConfig, DefaultAgent};
 use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
-use tap_agent::did::DefaultDIDResolver;
+use tap_agent::did::MultiResolver;
 use std::sync::Arc;
+use tokio::time::Duration;
 
-// Create resolvers
-let did_resolver = Arc::new(DefaultDIDResolver::new());
-let secret_resolver = Arc::new(BasicSecretResolver::new());
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Configure the node
+    let config = NodeConfig {
+        debug: true,
+        max_agents: Some(10),
+        enable_message_logging: true,
+        log_message_content: false,
+        processor_pool: None,
+    };
 
-// Create the TAP node
-let mut node = DefaultTapNode::new(did_resolver.clone(), secret_resolver.clone());
+    // Create a new node
+    let mut node = TapNode::new(config);
 
-// Create and register an agent
-let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
-let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
-let agent = Arc::new(DefaultAgent::new(config, message_packer));
-node.register_agent(agent).await?;
+    // Start processor pool for high throughput
+    let pool_config = tap_node::message::processor_pool::ProcessorPoolConfig {
+        workers: 4,
+        channel_capacity: 100,
+        worker_timeout: Duration::from_secs(30),
+    };
+    node.start(pool_config).await?;
 
-// Process an incoming message
-let result = node.process_message("incoming_message").await;
-```
+    // Create and register an agent
+    let agent_config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
+    let did_resolver = Arc::new(MultiResolver::default());
+    let secret_resolver = Arc::new(BasicSecretResolver::new());
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+    let agent = DefaultAgent::new(agent_config, message_packer);
+    node.register_agent(Arc::new(agent)).await?;
 
-## Components
+    // The node is now ready to process messages
 
-### TapNode
-
-The core node interface that manages agents and routes messages:
-
-```rust
-pub trait TapNode: Send + Sync {
-    /// Register a new agent with the node
-    async fn register_agent(&mut self, agent: Arc<dyn Agent>) -> Result<(), Error>;
-    
-    /// Process an incoming message
-    async fn process_message(&self, message: &str) -> Result<(), Error>;
-    
-    /// Route a message to the appropriate agent
-    async fn route_message(&self, message: &didcomm::Message) -> Result<(), Error>;
-    
-    /// Get an agent by DID
-    fn get_agent(&self, did: &str) -> Option<Arc<dyn Agent>>;
+    Ok(())
 }
 ```
 
-### Message Processing Flow
-
-1. An incoming message is received as a serialized string
-2. The node deserializes and unpacks the message
-3. The message is validated as a valid TAP message
-4. The node determines the target agent based on the recipient DID
-5. The message is routed to the appropriate agent for processing
-6. The agent processes the message and returns a response if needed
-
-### Event System
-
-The node includes a pub/sub event system for TAP events:
+### Processing Messages
 
 ```rust
-// Subscribe to all transfer events
-let mut subscription = node.subscribe_to_events("transfer").await?;
+use tap_msg::didcomm::Message;
 
-// Handle events asynchronously
-tokio::spawn(async move {
-    while let Some(event) = subscription.recv().await {
-        println!("Received event: {:?}", event);
-    }
-});
+// Receive and process an incoming message
+async fn handle_message(node: &TapNode, message: Message) -> Result<(), tap_node::Error> {
+    // Process through the node's pipeline
+    node.receive_message(message).await?;
+    Ok(())
+}
+
+// Send a message from one agent to another
+async fn send_message(node: &TapNode, from_did: &str, to_did: &str, message: Message) -> Result<String, tap_node::Error> {
+    // Process and dispatch the message, returns the packed message
+    let packed = node.send_message(from_did, to_did, message).await?;
+    Ok(packed)
+}
 ```
 
-### DID Resolution
-
-The node handles DID resolution for message routing and agent discovery:
+### Event Handling
 
 ```rust
-// Resolve a DID to find the recipient agent
-let did_doc = node.resolve_did("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK").await?;
+use std::sync::Arc;
+use async_trait::async_trait;
+use tap_node::event::{EventBus, EventSubscriber, NodeEvent};
+
+// Create a custom event subscriber
+struct MyEventHandler;
+
+#[async_trait]
+impl EventSubscriber for MyEventHandler {
+    async fn handle_event(&self, event: NodeEvent) {
+        match event {
+            NodeEvent::MessageReceived { message } => {
+                println!("Message received: {:?}", message);
+            },
+            NodeEvent::AgentRegistered { did } => {
+                println!("Agent registered: {}", did);
+            },
+            _ => {}
+        }
+    }
+}
+
+// Subscribe to events
+async fn subscribe_to_events(node: &TapNode) {
+    let event_bus = node.get_event_bus();
+    let handler = Arc::new(MyEventHandler);
+    event_bus.subscribe(handler).await;
+
+    // Or use a channel-based approach
+    let mut receiver = event_bus.subscribe_channel();
+    tokio::spawn(async move {
+        while let Ok(event) = receiver.recv().await {
+            println!("Event received: {:?}", event);
+        }
+    });
+}
+```
+
+## Custom Message Processors
+
+You can create custom message processors to extend the node's capabilities:
+
+```rust
+use async_trait::async_trait;
+use tap_node::error::Result;
+use tap_node::message::processor::MessageProcessor;
+use tap_msg::didcomm::Message;
+
+#[derive(Clone, Debug)]
+struct MyCustomProcessor;
+
+#[async_trait]
+impl MessageProcessor for MyCustomProcessor {
+    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+        // Custom processing logic here
+        println!("Processing message: {}", message.id);
+
+        // Return the processed message
+        Ok(Some(message))
+    }
+
+    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+        // Custom outgoing message processing
+        Ok(Some(message))
+    }
+}
 ```
 
 ## Integration with Other Crates
 
-- **tap-agent**: Uses agents for message processing
-- **tap-msg**: Uses TAP message types for protocol handling
-- **tap-http**: Can be used with tap-http for HTTP-based DIDComm messaging
+The TAP Node integrates with the TAP ecosystem:
+
+- **tap-agent**: Provides the agent implementation used by the node
+- **tap-msg**: Defines the message types and formats
+- **tap-caip**: Handles chain-agnostic identifiers used in transactions
+- **tap-http**: Can be used to create HTTP endpoints for the node
+- **tap-wasm**: Enables WASM compatibility for browser environments
+
+## Performance Considerations
+
+The TAP Node is designed for high performance:
+
+- Use processor pools for concurrent message processing
+- Configure worker counts based on your hardware
+- Consider message validation trade-offs
+- Use appropriate channel capacities for your workload
+- Profile your specific use case for optimal settings
 
 ## Examples
 
-See the [examples directory](./examples) for more detailed usage examples.
+See the `benches/stress_test.rs` file for a benchmark of the node's performance with different message loads.
+
+## License
+
+This crate is licensed under the terms of the MIT license.
