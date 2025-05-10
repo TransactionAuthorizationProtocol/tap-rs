@@ -23,7 +23,26 @@ fn hash_did(did: &str) -> Result<String> {
 
 /// Node DID resolver
 ///
-/// This resolver combines multiple DID resolvers for different DID methods
+/// This resolver combines multiple DID resolvers for different DID methods,
+/// providing a unified interface for resolving DIDs across various methods.
+///
+/// The resolver supports:
+/// - did:key method, which is used for keys represented as DIDs
+/// - Multi-resolver, which combines multiple method-specific resolvers
+///
+/// # Resolution Process
+///
+/// When a DID is received for resolution:
+///
+/// 1. The method is extracted from the DID (e.g., "key" from "did:key:z6Mk...")
+/// 2. The appropriate resolver for that method is selected
+/// 3. The resolver processes the DID and returns a DID Document
+/// 4. The DID Document provides cryptographic material and service endpoints
+///
+/// # Thread Safety
+///
+/// The NodeResolver is thread-safe and can be safely shared across threads
+/// using `Arc<NodeResolver>`. All mutable state is protected by RwLock.
 #[derive(Default)]
 pub struct NodeResolver {
     /// Resolvers for different DID methods
@@ -31,22 +50,20 @@ pub struct NodeResolver {
 }
 
 impl NodeResolver {
-    /// Create a new node resolver
+    /// Create a new node resolver with default resolvers
     pub fn new() -> Self {
-        let resolvers = RwLock::new(HashMap::new());
+        // Create a HashMap to store our resolvers
+        let mut resolvers_map = HashMap::new();
 
-        // Instantiate and register default resolvers in a real implementation
-        // Here's what it might look like:
-        // {
-        //     use tap_agent::{KeyResolver, MultiResolver, PkhResolver, WebResolver};
-        //
-        //     let mut resolvers_map = HashMap::new();
-        //     resolvers_map.insert("key".to_string(), Arc::new(KeyResolver::new()) as Arc<dyn SyncDIDResolver>);
-        //     resolvers_map.insert("web".to_string(), Arc::new(WebResolver::new()) as Arc<dyn SyncDIDResolver>);
-        //     resolvers_map.insert("pkh".to_string(), Arc::new(PkhResolver::new()) as Arc<dyn SyncDIDResolver>);
-        //
-        //     resolvers = RwLock::new(resolvers_map);
-        // }
+        // Create a MultiResolver that can handle multiple methods
+        let multi_resolver = tap_agent::did::MultiResolver::default();
+        resolvers_map.insert(
+            "multi".to_string(),
+            Arc::new(multi_resolver) as Arc<dyn SyncDIDResolver>,
+        );
+
+        // Initialize the resolvers RwLock with our map
+        let resolvers = RwLock::new(resolvers_map);
 
         Self { resolvers }
     }
@@ -73,26 +90,58 @@ impl NodeResolver {
     }
 
     /// Resolve a DID to a DID Document
+    ///
+    /// This method takes a DID and returns the corresponding DID Document.
+    /// The DID Document contains the cryptographic material and service endpoints
+    /// associated with the DID.
+    ///
+    /// # Parameters
+    ///
+    /// * `did` - The DID to resolve
+    ///
+    /// # Returns
+    ///
+    /// The DID Document as a JSON Value
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - No resolver is found for the DID method
+    /// - The DID resolution fails
+    /// - The DID Document cannot be serialized to JSON
     pub async fn resolve(&self, did: &str) -> Result<serde_json::Value> {
-        // Get the resolver for this DID method
-        let resolver = self
-            .get_resolver(did)
-            .await
-            .ok_or_else(|| Error::Resolver(format!("No resolver found for DID: {}", did)))?;
+        // First try to use a method-specific resolver
+        let method_parts: Vec<&str> = did.split(':').collect();
+        if method_parts.len() >= 3 && method_parts[0] == "did" {
+            let _method = method_parts[1];
 
-        // Resolve the DID
-        let _did_doc = resolver
-            .resolve(did)
-            .await
-            .map_err(|e| Error::Resolver(format!("Failed to resolve DID {}: {}", did, e)))?;
+            // Get a resolver for this method
+            let resolver = self
+                .get_resolver(did)
+                .await
+                .ok_or_else(|| Error::Resolver(format!("No resolver found for DID: {}", did)))?;
 
-        // Generate hash from DID
+            // Resolve the DID
+            let did_doc_option = resolver
+                .resolve(did)
+                .await
+                .map_err(|e| Error::Resolver(format!("Failed to resolve DID {}: {}", did, e)))?;
+
+            // Check if we got a DID Document
+            if let Some(did_doc) = did_doc_option {
+                // Serialize the DID Document to JSON
+                return serde_json::to_value(did_doc).map_err(Error::Serialization);
+            }
+        }
+
+        // If we couldn't resolve with a method-specific resolver or the DID format was invalid,
+        // fall back to a simple hash-based approach for testing/development
         let hash = hash_did(did)?;
 
-        // Serialize to JSON
+        // Create a simple DID Document
         serde_json::to_value(json!({
             "id": did,
-            "publicKey": [
+            "verificationMethod": [
                 {
                     "id": format!("{}#keys-1", did),
                     "type": "Ed25519VerificationKey2018",

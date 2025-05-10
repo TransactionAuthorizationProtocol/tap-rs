@@ -161,23 +161,31 @@ impl MessageProcessor for LoggingMessageProcessor {
     }
 }
 
-/// A message processor that validates message structure and content
+/// A message processor that validates messages
 ///
-/// The `ValidationMessageProcessor` ensures that messages flowing through the
-/// TAP node adhere to protocol requirements and structural constraints.
-/// It performs checks on required fields, message format, and protocol compliance.
+/// This processor validates incoming and outgoing DIDComm messages to ensure they
+/// conform to the expected structure and protocol requirements.
 ///
-/// # Validation Checks
+/// In a production implementation, this would perform comprehensive validation including:
+/// - Field validation (required fields, format, values)
+/// - Protocol compliance checks for each message type
+/// - Signature verification
+/// - Timestamp and expiration checks
+/// - Security and authorization checks
 ///
-/// For both incoming and outgoing messages, this processor checks:
+/// # Implementation
 ///
-/// - Presence of required fields (`id`, `type`, etc.)
-/// - Content format and structure
-/// - Compliance with protocol requirements
-/// - Signature validity (if configured to do so)
+/// Currently, this implementation validates:
+/// - The message ID is not empty
+/// - The message type is not empty
+/// - Any 'from' or 'to' DIDs follow the 'did:' prefix format
+/// - Basic protocol-specific requirements based on message type
 ///
-/// Messages that fail validation will be dropped (returning `Ok(None)`),
-/// preventing invalid messages from proceeding through the processing pipeline.
+/// # Message Flow
+///
+/// The validator sits in the message processor pipeline and can filter out invalid
+/// messages by returning Ok(None), or let valid messages continue through the
+/// pipeline by returning Ok(Some(message)).
 #[derive(Debug, Clone)]
 pub struct ValidationMessageProcessor;
 
@@ -186,134 +194,189 @@ impl MessageProcessor for ValidationMessageProcessor {
     async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
         debug!("Validating incoming message: {}", message.id);
 
-        // Basic structural validation
-        if let Err(err) = self.validate_message_structure(&message) {
-            info!("Message {} failed structural validation: {}", message.id, err);
+        // Basic validation - ID and type should not be empty
+        if message.id.is_empty() {
+            info!("Message has empty ID, rejecting");
             return Ok(None);
         }
 
-        // Protocol-specific validation
-        if let Err(err) = self.validate_protocol_compliance(&message) {
-            info!("Message {} failed protocol validation: {}", message.id, err);
+        if message.typ.is_empty() {
+            info!("Message has empty type, rejecting");
             return Ok(None);
         }
 
-        // Message passed all validation checks
+        // Validate DID format if present
+        if let Some(from) = &message.from {
+            if !from.starts_with("did:") {
+                info!("Invalid 'from' DID format: {}", from);
+                return Ok(None);
+            }
+        }
+
+        // Validate recipient DIDs
+        if let Some(to) = &message.to {
+            if to.is_empty() {
+                info!("Message has empty 'to' field");
+                return Ok(None);
+            }
+
+            // All DIDs should have valid format
+            for recipient in to {
+                if !recipient.starts_with("did:") {
+                    info!("Invalid recipient DID format: {}", recipient);
+                    return Ok(None);
+                }
+            }
+        }
+
+        // Validate body
+        if message.body == serde_json::json!(null) {
+            info!("Message has null body, rejecting");
+            return Ok(None);
+        }
+
+        // Validate pthid if present
+        if let Some(pthid) = &message.pthid {
+            if pthid.is_empty() {
+                info!("Message has empty parent thread ID, rejecting");
+                return Ok(None);
+            }
+        }
+
+        // Validate timestamp
+        if let Some(created_time) = message.created_time {
+            let now = chrono::Utc::now().timestamp() as u64;
+            // Check if the timestamp is more than 5 minutes in the future
+            if created_time > now + 300 {
+                info!("Message has future timestamp, rejecting");
+                return Ok(None);
+            }
+        }
+
+        // Protocol-specific validation based on message type
+        let typ = &message.typ;
+
+        // Validate TAP messages
+        if typ.starts_with("https://tap.rsvp/schema/") {
+            // TAP-specific validations
+            // Check that it's a valid TAP message type
+            if !typ.contains("transfer") && !typ.contains("authorize") &&
+               !typ.contains("reject") && !typ.contains("settle") {
+                info!("Unknown TAP message type: {}", typ);
+                return Ok(None);
+            }
+        }
+        // Validate DIDComm messages
+        else if typ.starts_with("https://didcomm.org/") {
+            // DIDComm-specific validations
+            // Add more specific DIDComm validations here
+        }
+        // Unknown message type protocol
+        else if !typ.starts_with("https://tap.rsvp/schema/") && !typ.starts_with("https://didcomm.org/") {
+            info!("Unknown message protocol: {}", typ);
+            // Reject unknown message protocols
+            return Ok(None);
+        }
+
+        // Message passed validation
         Ok(Some(message))
     }
 
     async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
         debug!("Validating outgoing message: {}", message.id);
 
-        // Basic structural validation
-        if let Err(err) = self.validate_message_structure(&message) {
-            info!("Outgoing message {} failed structural validation: {}", message.id, err);
-            return Ok(None);
-        }
+        // For outgoing messages, apply the same validations as incoming messages
+        // In a production system, there might be different validations for outgoing vs incoming
 
-        // Protocol-specific validation
-        if let Err(err) = self.validate_protocol_compliance(&message) {
-            info!("Outgoing message {} failed protocol validation: {}", message.id, err);
-            return Ok(None);
-        }
-
-        // Message passed all validation checks
-        Ok(Some(message))
-    }
-}
-
-impl ValidationMessageProcessor {
-    /// Validate the basic structure of a DIDComm message
-    ///
-    /// Checks that the message has all required fields and that they are properly formatted.
-    fn validate_message_structure(&self, message: &Message) -> std::result::Result<(), String> {
-        // Check for required fields
+        // Basic validation - ID and type should not be empty
         if message.id.is_empty() {
-            return Err("Message is missing required 'id' field".to_string());
+            info!("Outgoing message has empty ID, rejecting");
+            return Ok(None);
         }
 
         if message.typ.is_empty() {
-            return Err("Message is missing required 'type' field".to_string());
+            info!("Outgoing message has empty type, rejecting");
+            return Ok(None);
         }
 
-        // Validate 'from' field if present (should be a valid DID)
+        // Validate DID format if present
         if let Some(from) = &message.from {
             if !from.starts_with("did:") {
-                return Err(format!("Invalid 'from' DID format: {}", from));
+                info!("Invalid 'from' DID format in outgoing message: {}", from);
+                return Ok(None);
             }
         }
 
-        // Validate 'to' field if present (should be a list of valid DIDs)
+        // Validate recipient DIDs
         if let Some(to) = &message.to {
             if to.is_empty() {
-                return Err("Message has empty 'to' field".to_string());
+                info!("Outgoing message has empty 'to' field");
+                return Ok(None);
             }
 
-            // Check each recipient DID
+            // All DIDs should have valid format
             for recipient in to {
                 if !recipient.starts_with("did:") {
-                    return Err(format!("Invalid recipient DID format: {}", recipient));
+                    info!(
+                        "Invalid recipient DID format in outgoing message: {}",
+                        recipient
+                    );
+                    return Ok(None);
                 }
             }
         }
 
-        // Check message created time if present
+        // Validate body
+        if message.body == serde_json::json!(null) {
+            info!("Outgoing message has null body, rejecting");
+            return Ok(None);
+        }
+
+        // Validate pthid if present
+        if let Some(pthid) = &message.pthid {
+            if pthid.is_empty() {
+                info!("Outgoing message has empty parent thread ID, rejecting");
+                return Ok(None);
+            }
+        }
+
+        // Validate timestamp
         if let Some(created_time) = message.created_time {
-            // Ensure time is not in the future (with a small tolerance)
-            let current_time = chrono::Utc::now().timestamp() as u64;
-            const FUTURE_TOLERANCE_SECONDS: u64 = 300; // 5 minutes
-
-            if created_time > current_time + FUTURE_TOLERANCE_SECONDS {
-                return Err(format!(
-                    "Message created time is too far in the future: {} (current time: {})",
-                    created_time, current_time
-                ));
+            let now = chrono::Utc::now().timestamp() as u64;
+            // Check if the timestamp is more than 5 minutes in the future
+            if created_time > now + 300 {
+                info!("Outgoing message has future timestamp, rejecting");
+                return Ok(None);
             }
         }
 
-        Ok(())
-    }
+        // Protocol-specific validation based on message type
+        let typ = &message.typ;
 
-    /// Validate protocol-specific requirements for the message
-    ///
-    /// This checks that the message complies with TAP protocol requirements
-    /// based on its message type.
-    fn validate_protocol_compliance(&self, message: &Message) -> std::result::Result<(), String> {
-        // Check message type to determine which protocol-specific validation to apply
-        let message_type = &message.typ;
-
-        // For TAP messages, the type should start with the TAP schema prefix
-        if message_type.starts_with("https://tap.rsvp/schema/") {
+        // Validate TAP messages
+        if typ.starts_with("https://tap.rsvp/schema/") {
             // TAP-specific validations
-
-            // For messages that require a body, check that it exists
-            if !message_type.ends_with("ack") && message.body.is_none() {
-                return Err("TAP message is missing required body".to_string());
+            // Check that it's a valid TAP message type
+            if !typ.contains("transfer") && !typ.contains("authorize") &&
+               !typ.contains("reject") && !typ.contains("settle") {
+                info!("Unknown TAP message type in outgoing message: {}", typ);
+                return Ok(None);
             }
-
-            // If a pthid is present, it should follow the expected format
-            if let Some(pthid) = &message.pthid {
-                if pthid.is_empty() {
-                    return Err("Message has empty 'pthid' field".to_string());
-                }
-            }
-
-            // Additional TAP-specific validations could be added here
-        } else if message_type.starts_with("https://didcomm.org/") {
-            // Standard DIDComm message validations
-
-            // DIDComm messages should have a valid protocol version
-            if let Some(version) = &message.body_enc {
-                if version != "json" && !version.starts_with("application/json") {
-                    return Err(format!("Unsupported body encoding: {}", version));
-                }
-            }
-        } else {
-            // Unknown message type
-            return Err(format!("Unsupported message type: {}", message_type));
+        }
+        // Validate DIDComm messages
+        else if typ.starts_with("https://didcomm.org/") {
+            // DIDComm-specific validations
+            // Add more specific DIDComm validations here
+        }
+        // Unknown message type protocol
+        else if !typ.starts_with("https://tap.rsvp/schema/") && !typ.starts_with("https://didcomm.org/") {
+            info!("Unknown message protocol in outgoing message: {}", typ);
+            // Reject unknown message protocols
+            return Ok(None);
         }
 
-        Ok(())
+        // Message passed validation
+        Ok(Some(message))
     }
 }
 

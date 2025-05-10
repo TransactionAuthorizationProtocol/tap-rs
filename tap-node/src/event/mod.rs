@@ -329,26 +329,28 @@ pub trait EventSubscriber: Send + Sync {
 ///
 /// # Example Usage
 ///
-/// ```
+/// ```rust,no_run
 /// use std::sync::Arc;
 /// use tap_node::event::{EventBus, NodeEvent};
 ///
-/// // Create a new event bus
-/// let event_bus = Arc::new(EventBus::new());
+/// async fn example() {
+///     // Create a new event bus
+///     let event_bus = Arc::new(EventBus::new());
 ///
-/// // Subscribe to events using a channel
-/// let mut receiver = event_bus.subscribe_channel();
+///     // Subscribe to events using a channel
+///     let mut receiver = event_bus.subscribe_channel();
 ///
-/// // Publish an event
-/// let event = NodeEvent::AgentRegistered { did: "did:example:123".to_string() };
-/// event_bus.publish_event(event).await;
+///     // Publish an event using public methods
+///     let did = "did:example:123".to_string();
+///     event_bus.publish_agent_registered(did).await;
 ///
-/// // Process events from the channel
-/// tokio::spawn(async move {
-///     while let Ok(event) = receiver.recv().await {
-///         println!("Received event: {:?}", event);
-///     }
-/// });
+///     // Process events from the channel
+///     tokio::spawn(async move {
+///         while let Ok(event) = receiver.recv().await {
+///             println!("Received event: {:?}", event);
+///         }
+///     });
+/// }
 /// ```
 pub struct EventBus {
     /// Sender for events

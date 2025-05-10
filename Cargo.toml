@@ -50,7 +50,7 @@ js-sys = { version = "0.3" }
 wasm-bindgen-futures = { version = "0.4" }
 serde-wasm-bindgen = { version = "0.4" }
 console_error_panic_hook = { version = "0.1" }
-web-sys = { version = "0.3", features = ["console"] }
+web-sys = { version = "0.3", features = ["console", "Headers", "Request", "RequestInit", "RequestMode", "Response", "Window", "Blob"] }
 getrandom = { version = "0.2", features = ["js"] }
 
 # Testing

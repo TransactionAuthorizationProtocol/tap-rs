@@ -35,13 +35,13 @@ async fn create_test_message(
             id: from_did.to_string(),
             role: Some("originator".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         },
         beneficiary: Some(tap_msg::Participant {
             id: to_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
-            lei: None,
+            leiCode: None,
         }),
         amount: format!("{}.00", index),
         agents: vec![],
@@ -51,7 +51,7 @@ async fn create_test_message(
     };
 
     // Convert to DIDComm message
-    let message = body.to_didcomm().unwrap();
+    let message = body.to_didcomm(Some(from_did)).unwrap();
     (message, body)
 }
 

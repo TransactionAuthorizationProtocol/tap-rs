@@ -13,7 +13,7 @@ pub use processor::{
 };
 pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
 pub use router::DefaultMessageRouter;
-pub use sender::{HttpMessageSender, NodeMessageSender};
+pub use sender::{HttpMessageSender, MessageSender, NodeMessageSender};
 
 // Import the Message type from tap-msg
 use crate::error::Result;

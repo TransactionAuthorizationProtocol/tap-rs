@@ -21,7 +21,7 @@ wasm-bindgen = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
 wasm-bindgen-futures = { workspace = true, optional = true }
 console_error_panic_hook = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true }
+web-sys = { workspace = true, optional = true, features = ["Headers", "Request", "RequestInit", "RequestMode", "Response", "Window"] }
 
 # Serialization
 serde = { workspace = true }
@@ -42,6 +42,9 @@ chrono = { workspace = true }
 log = "0.4"
 didcomm = "0.4"
 
+# HTTP client for native
+reqwest = { version = "0.11", features = ["json"], optional = true }
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
@@ -53,7 +56,7 @@ harness = false
 
 [features]
 default = ["native"]
-native = ["tokio/full"]
+native = ["tokio/full", "reqwest"]
 wasm = [
   "wasm-bindgen",
   "js-sys",

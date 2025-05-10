@@ -2,24 +2,30 @@
 //!
 //! This file contains integration tests for message processors in the TAP Node.
 
-use tap_msg::didcomm::{self, Message};
+use tap_msg::didcomm::Message;
 use tap_node::message::processor::{MessageProcessor, ValidationMessageProcessor};
+use serde_json::json;
 
 /// Create a valid test message for validation
 fn create_test_message(id: &str, typ: &str, from: Option<&str>, to: Option<Vec<&str>>) -> Message {
-    let mut msg = didcomm::Message::new();
-    msg.id = id.to_string();
-    msg.typ = typ.to_string();
-
-    if let Some(from_did) = from {
-        msg.from = Some(from_did.to_string());
+    let from_did = from.map(|s| s.to_string());
+    let to_dids = to.map(|v| v.iter().map(|&s| s.to_string()).collect());
+    
+    Message {
+        id: id.to_string(),
+        typ: typ.to_string(),
+        type_: typ.to_string(),
+        body: json!({"test": "body"}),
+        from: from_did,
+        to: to_dids,
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
+        expires_time: None,
+        thid: None,
+        pthid: None,
+        attachments: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     }
-
-    if let Some(to_dids) = to {
-        msg.to = Some(to_dids.iter().map(|&s| s.to_string()).collect());
-    }
-
-    msg
 }
 
 #[tokio::test]
@@ -32,7 +38,7 @@ async fn test_validation_processor_accepts_valid_messages() {
         "test-123",
         "https://tap.rsvp/schema/1.0#transfer",
         None,
-        None
+        None,
     );
 
     // Process the message
@@ -54,7 +60,7 @@ async fn test_validation_processor_rejects_empty_id() {
         "", // Empty ID should be rejected
         "https://tap.rsvp/schema/1.0#transfer",
         None,
-        None
+        None,
     );
 
     // Process the message
@@ -73,10 +79,8 @@ async fn test_validation_processor_rejects_empty_type() {
 
     // Create a message with an empty type
     let message = create_test_message(
-        "test-123",
-        "", // Empty type should be rejected
-        None,
-        None
+        "test-123", "", // Empty type should be rejected
+        None, None,
     );
 
     // Process the message
@@ -98,7 +102,7 @@ async fn test_validation_processor_rejects_invalid_from_did() {
         "test-123",
         "https://tap.rsvp/schema/1.0#transfer",
         Some("invalid-did-format"), // Invalid DID format
-        None
+        None,
     );
 
     // Process the message
@@ -120,7 +124,7 @@ async fn test_validation_processor_rejects_invalid_to_did() {
         "test-123",
         "https://tap.rsvp/schema/1.0#transfer",
         None,
-        Some(vec!["invalid-did-format"]) // Invalid DID format
+        Some(vec!["invalid-did-format"]), // Invalid DID format
     );
 
     // Process the message
@@ -142,7 +146,9 @@ async fn test_validation_processor_accepts_valid_did_formats() {
         "test-123",
         "https://tap.rsvp/schema/1.0#transfer",
         Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
-        Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp"])
+        Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp",
+        ]),
     );
 
     // Process the message

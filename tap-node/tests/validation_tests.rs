@@ -5,6 +5,7 @@
 
 use tap_msg::didcomm::Message;
 use tap_node::message::processor::{MessageProcessor, ValidationMessageProcessor};
+use serde_json::json;
 
 #[tokio::test]
 async fn test_valid_message_passes_validation() {
@@ -15,21 +16,23 @@ async fn test_valid_message_passes_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        body: Some(serde_json::json!({
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should pass validation
@@ -55,21 +58,23 @@ async fn test_missing_id_fails_validation() {
     let message = Message {
         id: "".to_string(), // Empty ID
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        body: Some(serde_json::json!({
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -88,21 +93,23 @@ async fn test_missing_type_fails_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "".to_string(), // Empty type
-        body: Some(serde_json::json!({
+        type_: "".to_string(), // Empty type
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -121,21 +128,23 @@ async fn test_invalid_from_did_fails_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        body: Some(serde_json::json!({
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("invalid-did-format".to_string()), // Invalid DID format
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -154,21 +163,21 @@ async fn test_invalid_to_did_fails_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        body: Some(serde_json::json!({
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
         to: Some(vec!["invalid-recipient-did".to_string()]), // Invalid DID format
-        created_time: Some(chrono::Utc::now().timestamp()),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -187,21 +196,23 @@ async fn test_future_timestamp_fails_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        body: Some(serde_json::json!({
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp() + 3600), // 1 hour in the future
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some((chrono::Utc::now().timestamp() + 3600) as u64), // 1 hour in the future
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -220,21 +231,23 @@ async fn test_unknown_message_type_fails_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "unknown-message-type".to_string(), // Unknown type
-        body: Some(serde_json::json!({
+        type_: "unknown-message-type".to_string(), // Unknown type
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -253,17 +266,19 @@ async fn test_missing_body_fails_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        body: None, // Missing body
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        body: json!(null), // Empty body
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -274,25 +289,27 @@ async fn test_missing_body_fails_validation() {
 }
 
 #[tokio::test]
-async fn test_invalid_body_encoding_fails_validation() {
+async fn test_invalid_body_format_fails_validation() {
     // Create a processor
     let processor = ValidationMessageProcessor;
 
-    // Create a DIDComm message with an invalid body encoding
+    // Create a DIDComm message with an invalid body format
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "https://didcomm.org/basicmessage/1.0/message".to_string(),
-        body: Some(serde_json::json!({"content": "Hello world"})),
+        type_: "https://didcomm.org/basicmessage/1.0/message".to_string(),
+        body: json!(null), // null is not a valid body format
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("unsupported-encoding".to_string()), // Invalid encoding
         thid: Some("thread-123".to_string()),
         pthid: None,
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
@@ -311,21 +328,23 @@ async fn test_empty_pthid_fails_validation() {
     let message = Message {
         id: "test-id-123".to_string(),
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        body: Some(serde_json::json!({
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
             "transaction_id": "tx-123456"
-        })),
+        }),
         from: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
-        to: Some(vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()]),
-        created_time: Some(chrono::Utc::now().timestamp()),
+        to: Some(vec![
+            "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string(),
+        ]),
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
-        body_enc: Some("json".to_string()),
         thid: Some("thread-123".to_string()),
         pthid: Some("".to_string()), // Empty pthid
-        ack: None,
         attachments: None,
-        please_ack: None,
+        from_prior: None,
+        extra_headers: Default::default(),
     };
 
     // Process the message - it should fail validation
