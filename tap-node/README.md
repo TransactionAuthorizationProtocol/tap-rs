@@ -197,6 +197,64 @@ impl MessageProcessor for MyCustomProcessor {
 }
 ```
 
+## Message Transport
+
+TAP Node provides multiple options for sending messages between nodes:
+
+### HTTP Message Sender
+
+For standard request-response communication patterns:
+
+```rust
+use tap_node::{HttpMessageSender, MessageSender};
+
+// Create an HTTP sender with default settings
+let sender = HttpMessageSender::new("https://recipient-endpoint.example.com".to_string());
+
+// Create with custom settings (timeout and retries)
+let sender = HttpMessageSender::with_options(
+    "https://recipient-endpoint.example.com".to_string(),
+    5000,  // 5 second timeout
+    3      // 3 retries with exponential backoff
+);
+
+// Send a packed message to recipients
+sender.send(
+    packed_message,
+    vec!["did:example:recipient".to_string()]
+).await?;
+```
+
+### WebSocket Message Sender
+
+For real-time bidirectional communication:
+
+```rust
+use tap_node::{WebSocketMessageSender, MessageSender};
+
+// Create a WebSocket sender with default settings
+let sender = WebSocketMessageSender::new("https://recipient-endpoint.example.com".to_string());
+
+// Create with custom settings
+let sender = WebSocketMessageSender::with_options(
+    "https://recipient-endpoint.example.com".to_string(),
+    30000,  // 30 second connection timeout
+    5       // 5 reconnection attempts
+);
+
+// Send a message over an established WebSocket connection
+sender.send(
+    packed_message,
+    vec!["did:example:recipient".to_string()]
+).await?;
+```
+
+Key benefits of the WebSocket transport:
+- Persistent connections for lower latency
+- Bidirectional communication
+- Connection state awareness
+- Reduced overhead for frequent messages
+
 ## Integration with Other Crates
 
 The TAP Node integrates with the TAP ecosystem:
@@ -219,7 +277,21 @@ The TAP Node is designed for high performance:
 
 ## Examples
 
-See the `benches/stress_test.rs` file for a benchmark of the node's performance with different message loads.
+The package includes several examples:
+
+- `benches/stress_test.rs` - Benchmark of node performance with different message loads
+- `examples/http_message_flow.rs` - Example of using HTTP for message delivery
+- `examples/websocket_message_flow.rs` - Example of using WebSockets for real-time communication
+
+Run examples with:
+
+```bash
+# Run with HTTP support
+cargo run --example http_message_flow --features native
+
+# Run with WebSocket support
+cargo run --example websocket_message_flow --features websocket
+```
 
 ## License
 
