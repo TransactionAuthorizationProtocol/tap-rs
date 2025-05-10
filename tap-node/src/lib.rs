@@ -103,7 +103,9 @@ pub mod message;
 pub mod resolver;
 
 pub use error::{Error, Result};
-pub use message::sender::{HttpMessageSender, MessageSender, NodeMessageSender};
+pub use message::sender::{
+    HttpMessageSender, MessageSender, NodeMessageSender, WebSocketMessageSender,
+};
 
 use std::sync::Arc;
 

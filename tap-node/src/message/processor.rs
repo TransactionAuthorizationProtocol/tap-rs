@@ -260,8 +260,11 @@ impl MessageProcessor for ValidationMessageProcessor {
         if typ.starts_with("https://tap.rsvp/schema/") {
             // TAP-specific validations
             // Check that it's a valid TAP message type
-            if !typ.contains("transfer") && !typ.contains("authorize") &&
-               !typ.contains("reject") && !typ.contains("settle") {
+            if !typ.contains("transfer")
+                && !typ.contains("authorize")
+                && !typ.contains("reject")
+                && !typ.contains("settle")
+            {
                 info!("Unknown TAP message type: {}", typ);
                 return Ok(None);
             }
@@ -272,7 +275,9 @@ impl MessageProcessor for ValidationMessageProcessor {
             // Add more specific DIDComm validations here
         }
         // Unknown message type protocol
-        else if !typ.starts_with("https://tap.rsvp/schema/") && !typ.starts_with("https://didcomm.org/") {
+        else if !typ.starts_with("https://tap.rsvp/schema/")
+            && !typ.starts_with("https://didcomm.org/")
+        {
             info!("Unknown message protocol: {}", typ);
             // Reject unknown message protocols
             return Ok(None);
@@ -357,8 +362,11 @@ impl MessageProcessor for ValidationMessageProcessor {
         if typ.starts_with("https://tap.rsvp/schema/") {
             // TAP-specific validations
             // Check that it's a valid TAP message type
-            if !typ.contains("transfer") && !typ.contains("authorize") &&
-               !typ.contains("reject") && !typ.contains("settle") {
+            if !typ.contains("transfer")
+                && !typ.contains("authorize")
+                && !typ.contains("reject")
+                && !typ.contains("settle")
+            {
                 info!("Unknown TAP message type in outgoing message: {}", typ);
                 return Ok(None);
             }
@@ -369,7 +377,9 @@ impl MessageProcessor for ValidationMessageProcessor {
             // Add more specific DIDComm validations here
         }
         // Unknown message type protocol
-        else if !typ.starts_with("https://tap.rsvp/schema/") && !typ.starts_with("https://didcomm.org/") {
+        else if !typ.starts_with("https://tap.rsvp/schema/")
+            && !typ.starts_with("https://didcomm.org/")
+        {
             info!("Unknown message protocol in outgoing message: {}", typ);
             // Reject unknown message protocols
             return Ok(None);

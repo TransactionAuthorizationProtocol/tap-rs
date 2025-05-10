@@ -21,7 +21,9 @@ wasm-bindgen = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
 wasm-bindgen-futures = { workspace = true, optional = true }
 console_error_panic_hook = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true, features = ["Headers", "Request", "RequestInit", "RequestMode", "Response", "Window"] }
+web-sys = { workspace = true, optional = true, features = [
+  "Headers", "Request", "RequestInit", "RequestMode", "Response", "Window"
+] }
 
 # Serialization
 serde = { workspace = true }
@@ -35,7 +37,7 @@ anyhow = { workspace = true }
 tracing = { workspace = true }
 dashmap = "5.4" # Concurrent HashMap implementation
 uuid = { workspace = true }
-futures = "0.3"
+futures = { version = "0.3" }
 sha2 = "0.10"
 base58 = "0.2"
 chrono = { workspace = true }
@@ -45,10 +47,14 @@ didcomm = "0.4"
 # HTTP client for native
 reqwest = { version = "0.11", features = ["json"], optional = true }
 
+# WebSocket support for native
+tokio-tungstenite = { version = "0.20", features = ["native-tls"], optional = true }
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
-futures = "0.3"
+futures = { version = "0.3" }
+env_logger = "0.10"
 
 [[bench]]
 name = "stress_test"
@@ -57,10 +63,18 @@ harness = false
 [features]
 default = ["native"]
 native = ["tokio/full", "reqwest"]
+websocket = ["tokio-tungstenite"]
+native-with-websocket = ["native", "websocket"]
 wasm = [
   "wasm-bindgen",
   "js-sys",
   "wasm-bindgen-futures",
   "console_error_panic_hook",
   "web-sys"
+]
+wasm-with-websocket = [
+  "wasm",
+  "web-sys/WebSocket",
+  "web-sys/MessageEvent",
+  "web-sys/BinaryType"
 ]

@@ -2,15 +2,15 @@
 //!
 //! This file contains integration tests for message processors in the TAP Node.
 
+use serde_json::json;
 use tap_msg::didcomm::Message;
 use tap_node::message::processor::{MessageProcessor, ValidationMessageProcessor};
-use serde_json::json;
 
 /// Create a valid test message for validation
 fn create_test_message(id: &str, typ: &str, from: Option<&str>, to: Option<Vec<&str>>) -> Message {
     let from_did = from.map(|s| s.to_string());
     let to_dids = to.map(|v| v.iter().map(|&s| s.to_string()).collect());
-    
+
     Message {
         id: id.to_string(),
         typ: typ.to_string(),

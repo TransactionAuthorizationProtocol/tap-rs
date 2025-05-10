@@ -1,8 +1,8 @@
-use std::sync::Arc;
 use serde_json::json;
-use tap_agent::{AgentConfig, DefaultAgent};
-use tap_agent::crypto::{DefaultMessagePacker, DebugSecretsResolver, BasicSecretResolver}; 
+use std::sync::Arc;
+use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver, DefaultMessagePacker};
 use tap_agent::did::MultiResolver;
+use tap_agent::{AgentConfig, DefaultAgent};
 use tap_node::{HttpMessageSender, NodeConfig, TapNode};
 
 // Create a simple message
@@ -25,14 +25,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create resolvers and message packers
     let resolver = Arc::new(MultiResolver::default());
     let secrets = Arc::new(BasicSecretResolver::new());
-    
+
     let alice_packer = Arc::new(DefaultMessagePacker::new(resolver.clone(), secrets.clone()));
     let bob_packer = Arc::new(DefaultMessagePacker::new(resolver.clone(), secrets.clone()));
 
     // Create two test agents
     let agent1_config = AgentConfig::new("did:example:alice".to_string());
     let agent1 = Arc::new(DefaultAgent::new(agent1_config, alice_packer));
-    
+
     let agent2_config = AgentConfig::new("did:example:bob".to_string());
     let agent2 = Arc::new(DefaultAgent::new(agent2_config, bob_packer));
 
@@ -70,34 +70,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an HTTP message sender for external dispatch
     let sender = HttpMessageSender::with_options(
         "https://recipient-node.example.com".to_string(),
-        5000,  // 5 second timeout
-        2      // 2 retries
+        5000, // 5 second timeout
+        2,    // 2 retries
     );
 
     // In a real application, you would send this to the receiving node
     // For this example, we'll just log what would happen
     println!("Would send message to did:example:bob via HTTP");
-    
+
     // This would actually send the message in a real environment
     // sender.send(packed_message, vec!["did:example:bob".to_string()]).await?;
-    
+
     // For demonstration, let's show how to configure HTTP sender for different environments
-    
+
     #[cfg(feature = "reqwest")]
     {
         println!("Using native HTTP implementation with reqwest");
     }
-    
+
     #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
     {
         println!("Using WASM HTTP implementation with web-sys");
     }
-    
+
     #[cfg(all(not(target_arch = "wasm32"), not(feature = "reqwest")))]
     {
         println!("Using fallback implementation - no actual HTTP requests will be made");
     }
-    
+
     #[cfg(all(target_arch = "wasm32", not(feature = "wasm")))]
     {
         println!("Using WASM fallback implementation - no actual HTTP requests will be made");

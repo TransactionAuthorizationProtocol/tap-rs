@@ -3,9 +3,9 @@
 //! This file contains tests for the validation functionality of the TAP Node,
 //! specifically testing the ValidationMessageProcessor implementation.
 
+use serde_json::json;
 use tap_msg::didcomm::Message;
 use tap_node::message::processor::{MessageProcessor, ValidationMessageProcessor};
-use serde_json::json;
 
 #[tokio::test]
 async fn test_valid_message_passes_validation() {
@@ -92,7 +92,7 @@ async fn test_missing_type_fails_validation() {
     // Create a message missing the type field
     let message = Message {
         id: "test-id-123".to_string(),
-        typ: "".to_string(), // Empty type
+        typ: "".to_string(),   // Empty type
         type_: "".to_string(), // Empty type
         body: json!({
             "amount": "100.00",

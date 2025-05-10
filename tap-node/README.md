@@ -13,6 +13,8 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 - **Message Routing**: Intelligently route messages to the appropriate agent based on DID addressing
 - **Concurrent Processing**: Scale to high throughput with worker pools for message processing
 - **Event Publishing**: Comprehensive event system for monitoring and reacting to node activities
+- **Flexible Message Delivery**: Send messages via HTTP or WebSockets with robust error handling
+- **Cross-Platform Support**: Native and WASM environments for both HTTP and WebSocket transports
 - **DID Resolution**: Resolve DIDs for message verification and routing
 - **Configurable Components**: Customize node behavior with pluggable components
 - **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
@@ -27,6 +29,13 @@ Add the crate to your `Cargo.toml`:
 tap-node = { path = "../tap-node" }
 tap-agent = { path = "../tap-agent" }
 tap-msg = { path = "../tap-msg" }
+
+# Optional features
+tap-node = { path = "../tap-node", features = ["native"] } # Enable HTTP support
+tap-node = { path = "../tap-node", features = ["websocket"] } # Enable WebSocket support
+tap-node = { path = "../tap-node", features = ["native-with-websocket"] } # Enable both HTTP and WebSocket
+tap-node = { path = "../tap-node", features = ["wasm"] } # Enable WASM support
+tap-node = { path = "../tap-node", features = ["wasm-with-websocket"] } # Enable WASM with WebSocket
 ```
 
 ## Architecture
