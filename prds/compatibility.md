@@ -88,11 +88,11 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
 ## Issues That Need To Be Fixed In Our Implementation
 
 - [x] **Presentation Message Protocol Support**: Enhanced our implementation to support the DIDComm present-proof protocol format used in the test vectors.
-  
+
 - [x] **Improve Validation Logic**: Updated our presentation validation logic to handle empty bodies with attachments properly.
-  
+
 - [x] **Missing Required Field Validation**: Enhanced our validator to properly check for missing fields in presentation and transfer messages.
-  
+
 - [x] **Unimplemented Message Types**:
   - [x] Confirm Relationship
   - [x] Policy Management
@@ -102,13 +102,13 @@ This document outlines the compatibility status of our TAP (Transaction Authoriz
   - [x] Out-of-Band
 
 - [x] **Newly Added Message Types from TAIP Update**:
-  - [x] **PaymentRequest (TAIP-14)**: Implement message structure and validation for payment requests with both direct asset and fiat amount options. This includes handling different payment scenarios, such as direct asset transfers and fiat currency conversions, ensuring that the implementation can correctly process and validate these requests according to the TAIP-14 specification.
+  - [x] **Payment (TAIP-14)**: Implement message structure and validation for payment requests with both direct asset and fiat amount options. This includes handling different payment scenarios, such as direct asset transfers and fiat currency conversions, ensuring that the implementation can correctly process and validate these requests according to the TAIP-14 specification.
   - [x] **Connect (TAIP-15)**: Implement connection request message type for establishing relationships between agents. This involves designing and implementing the logic for connection establishment, including handling connection requests, responses, and potential errors, as outlined in TAIP-15.
   - [x] **AuthorizationRequired (TAIP-15)**: Implement message type for requesting interactive authorization. This requires developing the functionality to handle authorization requests, including user interaction for granting or denying access, and ensuring that the implementation aligns with the authorization flow specified in TAIP-15.
   - [x] **Out-of-Band**: Implement support for out-of-band messages referenced in the test vectors. This includes understanding the out-of-band protocol, implementing the necessary logic for sending and receiving out-of-band messages, and ensuring compatibility with existing test vectors.
 
 - [x] **More Robust Date Parsing**: Improved timestamp parsing to handle additional date formats found in test vectors.
-  
+
 - [x] **Better Invalid Test Vector Detection**: Implemented proper handling of test vectors with `shouldPass: false` flag, especially for presentation messages.
 
 ## Issues In Test Vectors That Need To Be Reported
@@ -210,8 +210,8 @@ The main remaining gap is in Presentation message handling, where our implementa
 
 | Feature | Support | Description |
 |---------|---------|-------------|
-| Type: "paymentrequest" | ✅ | Implemented in tap-msg |
-| Implementation | ✅ | PaymentRequest struct with validation |
+| Type: "Payment" | ✅ | Implemented in tap-msg |
+| Implementation | ✅ | Payment struct with validation |
 | Asset or Currency | ✅ | Support for both asset and fiat currency modes |
 | Supported Assets | ✅ | Optional list of supported assets |
 | Testing | ✅ | Unit tests added |

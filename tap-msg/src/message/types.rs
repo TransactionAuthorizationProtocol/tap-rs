@@ -801,6 +801,8 @@ impl TapMessageBody for ConfirmRelationship {
     }
 }
 
+impl_tap_message!(ConfirmRelationship);
+
 /// UpdateParty message body (TAIP-6).
 ///
 /// This message type allows agents to update party information in a transaction.
@@ -981,6 +983,8 @@ impl TapMessageBody for UpdateParty {
     }
 }
 
+impl_tap_message!(UpdateParty);
+
 /// UpdatePolicies message body (TAIP-7).
 ///
 /// This message type allows agents to update their policies for a transaction.
@@ -1090,6 +1094,8 @@ impl TapMessageBody for UpdatePolicies {
         Ok(update_policies)
     }
 }
+
+impl_tap_message!(UpdatePolicies);
 
 /// Error message body.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1365,6 +1371,8 @@ impl TapMessageBody for Reject {
     }
 }
 
+impl_tap_message!(Reject);
+
 impl TapMessageBody for Settle {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#settle"
@@ -1563,6 +1571,8 @@ impl TapMessageBody for AddAgents {
     }
 }
 
+impl_tap_message!(AddAgents);
+
 impl TapMessageBody for ReplaceAgent {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#replaceagent"
@@ -1629,6 +1639,8 @@ impl TapMessageBody for ReplaceAgent {
     }
 }
 
+impl_tap_message!(ReplaceAgent);
+
 impl TapMessageBody for RemoveAgent {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#removeagent"
@@ -1686,6 +1698,8 @@ impl TapMessageBody for RemoveAgent {
         Ok(message)
     }
 }
+
+impl_tap_message!(RemoveAgent);
 
 impl TapMessageBody for ErrorBody {
     fn message_type() -> &'static str {

@@ -20,7 +20,7 @@ Core message processing for the Transaction Authorization Protocol (TAP) with in
 
 ```rust
 use tap_msg::message::types::{Transfer, Participant};
-use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::tap_message_trait::{TapMessageBody, TapMessage};
 use tap_caip::AssetId;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -31,14 +31,19 @@ let asset = AssetId::from_str("eip155:1/erc20:0xdac17f958d2ee523a2206206994597c1
 let originator = Participant {
     id: "did:example:sender".to_string(),
     role: Some("originator".to_string()),
+    policies: None,
+    leiCode: None,
 };
 
 let beneficiary = Participant {
     id: "did:example:receiver".to_string(),
     role: Some("beneficiary".to_string()),
+    policies: None,
+    leiCode: None,
 };
 
 let transfer = Transfer {
+    transaction_id: uuid::Uuid::new_v4().to_string(),
     asset,
     originator,
     beneficiary: Some(beneficiary),
@@ -50,16 +55,20 @@ let transfer = Transfer {
 };
 
 // Convert to a DIDComm message
-let message = transfer.to_didcomm()?;
+let message = transfer.to_didcomm(Some("did:example:sender"))?;
 
 // Or with routing information
 let message_with_route = transfer.to_didcomm_with_route(
-    Some("did:example:sender"), 
+    Some("did:example:sender"),
     ["did:example:receiver"].iter().copied()
 )?;
 
 // Create a TAP message from a DIDComm message
 let received_transfer = Transfer::from_didcomm(&message)?;
+
+// Using the TapMessage trait for thread correlation
+let thread_id = received_transfer.thread_id(); // Returns the transaction_id
+let message_id = received_transfer.message_id(); // Returns the transaction_id for standard messages
 ```
 
 ### Payment Request with Invoice
@@ -123,6 +132,7 @@ The `Transfer` struct represents a TAP transfer message, which is the core messa
 
 ```rust
 pub struct Transfer {
+    pub transaction_id: String,
     pub asset: AssetId,
     pub originator: Participant,
     pub beneficiary: Option<Participant>,
@@ -130,7 +140,7 @@ pub struct Transfer {
     pub agents: Vec<Participant>,
     pub settlement_id: Option<String>,
     pub memo: Option<String>,
-    pub metadata: HashMap<String, String>,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 ```
 
@@ -161,12 +171,10 @@ let participant = Participant {
 };
 
 // Create an UpdatePolicies message to dynamically update policies
-let proof_policy = RequireProofOfControl::default(); // Uses random nonce
+let proof_policy = RequireProofOfControl::default(); // Uses default values
 let update_policies = UpdatePolicies {
-    transfer_id: "transfer_12345".to_string(),
-    context: "https://tap.rsvp/schemas/1.0".to_string(),
+    transaction_id: "transfer_12345".to_string(),
     policies: vec![Policy::RequireProofOfControl(proof_policy)],
-    metadata: HashMap::new(),
 };
 
 // Validate the message
@@ -186,19 +194,19 @@ TAP supports various authorization messages for compliance workflows:
 ```rust
 // Authorization message
 pub struct Authorize {
-    pub transfer_id: String,
+    pub transaction_id: String,
     pub note: Option<String>,
 }
 
 // Rejection message
 pub struct Reject {
-    pub transfer_id: String,
+    pub transaction_id: String,
     pub reason: String,
 }
 
 // Settlement message
 pub struct Settle {
-    pub transfer_id: String,
+    pub transaction_id: String,
     pub settlement_id: String,
     pub amount: Option<String>,
 }
@@ -347,29 +355,167 @@ The `Authorizable` trait provides methods for handling authorization, rejection,
 
 ```rust
 pub trait Authorizable {
-    /// Get the transfer ID for this message
-    fn get_transfer_id(&self) -> String;
-    
-    /// Create an authorization message for this transfer
+    /// Get the message ID for this message
+    fn message_id(&self) -> &str;
+
+    /// Create an authorization message for this message
     fn authorize(&self, note: Option<String>) -> Authorize;
-    
-    /// Create a rejection message for this transfer
+
+    /// Create a rejection message for this message
     fn reject(&self, code: String, description: String) -> Reject;
-    
-    /// Create a settlement message for this transfer
+
+    /// Create a settlement message for this message
     fn settle(
         &self,
         settlement_id: String,
         amount: Option<String>,
     ) -> Settle;
-    
-    /// Create a cancellation message for this transfer
+
+    /// Create a cancellation message for this message
     fn cancel(&self, reason: Option<String>, note: Option<String>) -> Cancel;
-    
+
     /// Updates policies for this message, creating an UpdatePolicies message as a response
-    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies;
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies;
+
+    /// Add agents to this message, creating an AddAgents message as a response
+    fn add_agents(&self, transaction_id: String, agents: Vec<Participant>) -> AddAgents;
+
+    /// Replace an agent in this message, creating a ReplaceAgent message as a response
+    fn replace_agent(
+        &self,
+        transaction_id: String,
+        original: String,
+        replacement: Participant,
+    ) -> ReplaceAgent;
+
+    /// Remove an agent from this message, creating a RemoveAgent message as a response
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
 }
 ```
+
+## Message Threading
+
+TAP messages support thread correlation through the `TapMessage` trait, which is implemented for all message types using the `impl_tap_message!` macro. This provides:
+
+1. Thread ID tracking
+2. Parent thread ID tracking
+3. Message correlation
+4. Reply creation
+
+```rust
+pub trait TapMessage {
+    /// Validates the message content
+    fn validate(&self) -> Result<()>;
+
+    /// Checks if this is a TAP message
+    fn is_tap_message(&self) -> bool;
+
+    /// Gets the TAP message type for this message
+    fn get_tap_type(&self) -> Option<String>;
+
+    /// Attempts to convert the message to the specified TAP message type
+    fn body_as<T: TapMessageBody>(&self) -> Result<T>;
+
+    /// Gets all participants involved in this message
+    fn get_all_participants(&self) -> Vec<String>;
+
+    /// Creates a reply to this message with the specified body and creator DID
+    fn create_reply<T: TapMessageBody>(
+        &self,
+        body: &T,
+        creator_did: &str,
+    ) -> Result<Message>;
+
+    /// Gets the message type for this message
+    fn message_type(&self) -> &'static str;
+
+    /// Gets the thread ID for this message, if any
+    fn thread_id(&self) -> Option<&str>;
+
+    /// Gets the parent thread ID for this message, if any
+    fn parent_thread_id(&self) -> Option<&str>;
+
+    /// Gets the unique message ID for this message
+    fn message_id(&self) -> &str;
+}
+```
+
+## Adding New Message Types
+
+To add a new TAP message type, follow these steps:
+
+1. Define your message struct with required fields (must include `transaction_id: String` for most messages)
+2. Implement the `TapMessageBody` trait for your struct
+3. Apply the `impl_tap_message!` macro to implement the `TapMessage` trait
+
+Here's an example:
+
+```rust
+use tap_msg::message::tap_message_trait::{TapMessageBody, TapMessage};
+use tap_msg::impl_tap_message;
+use tap_msg::error::Result;
+use didcomm::Message;
+use serde::{Serialize, Deserialize};
+use std::collections::HashMap;
+
+/// Define your new message struct
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MyNewMessage {
+    /// Required transaction ID for most messages
+    pub transaction_id: String,
+
+    /// Other fields specific to your message
+    pub field1: String,
+    pub field2: Option<String>,
+
+    /// Optional metadata field
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Implement the TapMessageBody trait
+impl TapMessageBody for MyNewMessage {
+    /// Define the message type string (typically follows the TAP schema format)
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#mynewmessage"
+    }
+
+    /// Implement validation logic for your message fields
+    fn validate(&self) -> Result<()> {
+        if self.transaction_id.is_empty() {
+            return Err(Error::Validation("Transaction ID is required".to_string()));
+        }
+
+        if self.field1.is_empty() {
+            return Err(Error::Validation("Field1 is required".to_string()));
+        }
+
+        Ok(())
+    }
+
+    /// Implement conversion to DIDComm message
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        // Implement conversion logic
+        // ...
+    }
+
+    /// Optional: Implement conversion from DIDComm message
+    fn from_didcomm(message: &Message) -> Result<Self> {
+        // Implement conversion logic
+        // ...
+    }
+}
+
+/// Apply the impl_tap_message! macro to implement the TapMessage trait
+impl_tap_message!(MyNewMessage);
+```
+
+For message types with non-standard fields, you can use the specialized variants of the macro:
+
+- `impl_tap_message!(MessageType)` - For standard messages with `transaction_id: String`
+- `impl_tap_message!(MessageType, optional_transaction_id)` - For messages with `transaction_id: Option<String>`
+- `impl_tap_message!(MessageType, thread_based)` - For messages using `thid: Option<String>` instead of transaction_id
+- `impl_tap_message!(MessageType, generated_id)` - For messages with neither transaction_id nor thread_id
 
 ## Examples
 

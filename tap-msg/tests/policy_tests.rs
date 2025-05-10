@@ -66,12 +66,12 @@ fn test_update_policies() {
 
     // Check the message type
     assert_eq!(
-        UpdatePolicies::message_type(),
+        <UpdatePolicies as TapMessageBody>::message_type(),
         "https://tap.rsvp/schema/1.0#updatepolicies"
     );
 
     // Validate the message
-    assert!(update.validate().is_ok());
+    assert!(TapMessageBody::validate(&update).is_ok());
 }
 
 /// Test validation of UpdatePolicies message
@@ -91,14 +91,14 @@ fn test_update_policies_validation() {
         transaction_id: "".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
     };
-    assert!(invalid_update.validate().is_err());
+    assert!(TapMessageBody::validate(&invalid_update).is_err());
 
     // Test with empty policies
     let invalid_update = UpdatePolicies {
         transaction_id: "transfer_12345".to_string(),
         policies: vec![],
     };
-    assert!(invalid_update.validate().is_err());
+    assert!(TapMessageBody::validate(&invalid_update).is_err());
 
     // Valid message should pass validation
     let valid_update = UpdatePolicies {
@@ -106,7 +106,7 @@ fn test_update_policies_validation() {
         policies: vec![Policy::RequireProofOfControl(proof_policy)],
     };
 
-    assert!(valid_update.validate().is_ok());
+    assert!(TapMessageBody::validate(&valid_update).is_ok());
 }
 
 /// Test all policy types

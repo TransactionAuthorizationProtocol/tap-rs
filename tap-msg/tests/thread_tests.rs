@@ -94,7 +94,7 @@ fn test_add_agents() -> Result<()> {
     };
 
     // Validate the message
-    add_agents.validate()?;
+    TapMessageBody::validate(&add_agents)?;
 
     // Create a DIDComm message from the add_agents
     let message = add_agents
@@ -149,7 +149,7 @@ fn test_replace_agent() -> Result<()> {
     };
 
     // Validate the message
-    replace_agent.validate()?;
+    TapMessageBody::validate(&replace_agent)?;
 
     // Create a DIDComm message from the replace_agent
     let message = replace_agent
@@ -197,7 +197,7 @@ fn test_remove_agent() -> Result<()> {
     };
 
     // Validate the message
-    remove_agent.validate()?;
+    TapMessageBody::validate(&remove_agent)?;
 
     // Create a DIDComm message from the remove_agent
     let message =
@@ -383,7 +383,7 @@ fn test_add_agents_missing_transfer_id() {
     };
 
     // Validate the message
-    assert!(add_agents.validate().is_err());
+    assert!(TapMessageBody::validate(&add_agents).is_err());
 }
 
 #[test]
@@ -399,7 +399,7 @@ fn test_add_agents_empty() {
     };
 
     // Validate the message
-    let err = add_agents.validate().unwrap_err();
+    let err = TapMessageBody::validate(&add_agents).unwrap_err();
     match err {
         Error::Validation(s) => assert!(s.contains("At least one agent")),
         _ => panic!("Expected Validation error"),
