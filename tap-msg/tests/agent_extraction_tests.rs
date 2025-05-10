@@ -35,6 +35,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: agent1.clone(),
         beneficiary: Some(agent2.clone()),
@@ -98,6 +99,7 @@ fn test_to_didcomm_excludes_sender_from_recipients() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: agent1.clone(),
         beneficiary: Some(agent2.clone()),
@@ -154,6 +156,7 @@ fn test_to_didcomm_with_route_overrides_extracted_recipients() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: agent1.clone(),
         beneficiary: Some(agent2.clone()),
@@ -203,6 +206,7 @@ fn test_create_tap_message_with_automatic_extraction() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: agent1.clone(),
         beneficiary: Some(agent2.clone()),
@@ -252,6 +256,7 @@ fn test_create_tap_message_with_explicit_recipients() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: agent1.clone(),
         beneficiary: Some(agent2.clone()),
@@ -307,6 +312,7 @@ fn test_to_didcomm_with_empty_agents() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),

@@ -10,25 +10,25 @@
 /// use tap_msg::message::tap_message_trait::{TapMessageBody, TapMessage};
 /// use tap_msg::error::Result;
 /// use serde::{Serialize, Deserialize};
-/// 
+///
 /// // Your struct that implements TapMessageBody
 /// #[derive(Serialize, Deserialize)]
 /// struct MyMessage {
-///     transfer_id: String,
+///     transaction_id: String,
 ///     // other fields...
 /// }
-/// 
+///
 /// impl TapMessageBody for MyMessage {
 ///     fn validate(&self) -> Result<()> {
 ///         Ok(())
 ///     }
-///     
+///
 ///     // Note: This is a static method, not an instance method
 ///     fn message_type() -> &'static str {
 ///         "my-message"
 ///     }
 /// }
-/// 
+///
 /// // Implement TapMessage trait
 /// impl_tap_message!(MyMessage);
 /// ```
@@ -56,20 +56,36 @@ macro_rules! impl_tap_message {
                 body: &T,
                 creator_did: &str,
             ) -> $crate::error::Result<didcomm::Message> {
-                $crate::message::tap_message_trait::TapMessage::create_reply(self, body, creator_did)
+                // Create the base message with creator as sender
+                let mut message = body.to_didcomm(Some(creator_did))?;
+
+                // Set the thread ID to maintain the conversation thread
+                if let Some(thread_id) = self.thread_id() {
+                    message.thid = Some(thread_id.to_string());
+                } else {
+                    // If no thread ID exists, use the original message ID as the thread ID
+                    message.thid = Some(self.message_id().to_string());
+                }
+
+                // Set the parent thread ID if this thread is part of a larger transaction
+                if let Some(parent_thread_id) = self.parent_thread_id() {
+                    message.pthid = Some(parent_thread_id.to_string());
+                }
+
+                Ok(message)
             }
             fn message_type(&self) -> &'static str {
                 <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
             }
             fn thread_id(&self) -> Option<&str> {
-                // for types with transfer_id
-                Some(&self.transfer_id)
+                // for types with transaction_id
+                Some(&self.transaction_id)
             }
             fn parent_thread_id(&self) -> Option<&str> {
                 None
             }
             fn message_id(&self) -> &str {
-                &self.transfer_id
+                &self.transaction_id
             }
         }
     };

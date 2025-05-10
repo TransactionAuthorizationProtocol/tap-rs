@@ -12,6 +12,7 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
+use crate::impl_tap_message;
 use crate::message::policy::Policy;
 use crate::message::tap_message_trait::{Connectable, TapMessageBody};
 use crate::message::RequireProofOfControl;
@@ -132,6 +133,10 @@ pub struct Transfer {
     #[serde(rename = "settlementId", skip_serializing_if = "Option::is_none")]
     pub settlement_id: Option<String>,
 
+    /// Transaction identifier (not stored in the struct but accessible via the TapMessage trait).
+    #[serde(skip)]
+    pub transaction_id: String,
+
     /// Additional metadata for the transfer.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
@@ -226,6 +231,7 @@ pub struct TransferBuilder {
     beneficiary: Option<Participant>,
     settlement_id: Option<String>,
     memo: Option<String>,
+    transaction_id: Option<String>,
     agents: Vec<Participant>,
     metadata: HashMap<String, serde_json::Value>,
 }
@@ -267,6 +273,12 @@ impl TransferBuilder {
         self
     }
 
+    /// Set the transaction ID for this transfer
+    pub fn transaction_id(mut self, transaction_id: String) -> Self {
+        self.transaction_id = Some(transaction_id);
+        self
+    }
+
     /// Add an agent to this transfer
     pub fn add_agent(mut self, agent: Participant) -> Self {
         self.agents.push(agent);
@@ -304,6 +316,7 @@ impl TransferBuilder {
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
             memo: self.memo,
+            transaction_id: self.transaction_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             agents: self.agents,
             metadata: self.metadata,
         }
@@ -322,6 +335,7 @@ impl TransferBuilder {
             .ok_or_else(|| Error::Validation("Amount is required".to_string()))?;
 
         let transfer = Transfer {
+            transaction_id: self.transaction_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             asset,
             originator,
             amount,
@@ -482,11 +496,13 @@ impl TapMessageBody for Transfer {
     }
 }
 
+impl_tap_message!(Transfer);
+
 /// Request Presentation message body (TAIP-10).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RequestPresentation {
     /// Transfer ID that this request is related to.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Presentation definition identifier or URI.
     pub presentation_definition: String,
@@ -526,7 +542,7 @@ pub struct Presentation {
 
     /// Transfer ID that this presentation is related to (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub transfer_id: Option<String>,
+    pub transaction_id: Option<String>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -536,8 +552,8 @@ pub struct Presentation {
 /// Authorize message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Authorize {
-    /// ID of the transfer being authorized.
-    pub transfer_id: String,
+    /// ID of the transaction being authorized.
+    pub transaction_id: String,
 
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -547,8 +563,8 @@ pub struct Authorize {
 /// Reject message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reject {
-    /// ID of the transfer being rejected.
-    pub transfer_id: String,
+    /// ID of the transaction being rejected.
+    pub transaction_id: String,
 
     /// Reason for rejection.
     pub reason: String,
@@ -557,8 +573,8 @@ pub struct Reject {
 /// Settle message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settle {
-    /// ID of the transfer being settled.
-    pub transfer_id: String,
+    /// ID of the transaction being settled.
+    pub transaction_id: String,
 
     /// Settlement ID (CAIP-220 identifier of the underlying settlement transaction).
     pub settlement_id: String,
@@ -572,7 +588,7 @@ pub struct Settle {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cancel {
     /// ID of the transfer being cancelled.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Optional reason for cancellation.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -587,7 +603,7 @@ pub struct Cancel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Revert {
     /// ID of the transfer being reverted.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Settlement address in CAIP-10 format to return the funds to.
     pub settlement_address: String,
@@ -603,8 +619,9 @@ pub struct Revert {
 /// Add agents message body (TAIP-5).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AddAgents {
-    /// ID of the transfer to add agents to.
-    pub transfer_id: String,
+    /// ID of the transaction to add agents to.
+    #[serde(rename = "transfer_id")]
+    pub transaction_id: String,
 
     /// Agents to add.
     pub agents: Vec<Participant>,
@@ -615,8 +632,9 @@ pub struct AddAgents {
 /// This message type allows replacing an agent with another agent in a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReplaceAgent {
-    /// ID of the transfer to replace agent in.
-    pub transfer_id: String,
+    /// ID of the transaction to replace agent in.
+    #[serde(rename = "transfer_id")]
+    pub transaction_id: String,
 
     /// DID of the original agent to replace.
     pub original: String,
@@ -630,8 +648,9 @@ pub struct ReplaceAgent {
 /// This message type allows removing an agent from a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemoveAgent {
-    /// ID of the transfer to remove agent from.
-    pub transfer_id: String,
+    /// ID of the transaction to remove agent from.
+    #[serde(rename = "transfer_id")]
+    pub transaction_id: String,
 
     /// DID of the agent to remove.
     pub agent: String,
@@ -642,8 +661,9 @@ pub struct RemoveAgent {
 /// This message type allows confirming a relationship between agents.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfirmRelationship {
-    /// ID of the transfer related to this message.
-    pub transfer_id: String,
+    /// ID of the transaction related to this message.
+    #[serde(rename = "transfer_id")]
+    pub transaction_id: String,
 
     /// DID of the agent whose relationship is being confirmed.
     pub agent_id: String,
@@ -659,9 +679,9 @@ pub struct ConfirmRelationship {
 
 impl ConfirmRelationship {
     /// Creates a new ConfirmRelationship message body.
-    pub fn new(transfer_id: &str, agent_id: &str, for_id: &str, role: Option<String>) -> Self {
+    pub fn new(transaction_id: &str, agent_id: &str, for_id: &str, role: Option<String>) -> Self {
         Self {
-            transfer_id: transfer_id.to_string(),
+            transaction_id: transaction_id.to_string(),
             agent_id: agent_id.to_string(),
             for_id: for_id.to_string(),
             role,
@@ -670,7 +690,7 @@ impl ConfirmRelationship {
 
     /// Validates the ConfirmRelationship message body.
     pub fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transfer ID is required in ConfirmRelationship".to_string(),
             ));
@@ -729,7 +749,7 @@ impl TapMessageBody for ConfirmRelationship {
             type_: Self::message_type().to_string(),
             from: from_did.map(|s| s.to_string()),
             to,                                   // Use the explicitly set 'to' field
-            thid: Some(self.transfer_id.clone()), // Set thread ID from transfer_id
+            thid: Some(self.transaction_id.clone()),
             pthid: None,                          // Parent Thread ID usually set later
             created_time: Some(created_time),
             expires_time: None,
@@ -769,7 +789,7 @@ impl TapMessageBody for ConfirmRelationship {
             .map(ToString::to_string);
 
         let confirm_relationship = Self {
-            transfer_id: transfer_id.to_string(),
+            transaction_id: transfer_id.to_string(),
             agent_id: agent_id.to_string(),
             for_id: for_id.to_string(),
             role,
@@ -822,7 +842,7 @@ impl TapMessageBody for ConfirmRelationship {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdateParty {
     /// ID of the transaction this update relates to.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Type of party being updated (e.g., 'originator', 'beneficiary').
     #[serde(rename = "partyType")]
@@ -842,9 +862,9 @@ pub struct UpdateParty {
 
 impl UpdateParty {
     /// Creates a new UpdateParty message body.
-    pub fn new(transfer_id: &str, party_type: &str, party: Participant) -> Self {
+    pub fn new(transaction_id: &str, party_type: &str, party: Participant) -> Self {
         Self {
-            transfer_id: transfer_id.to_string(),
+            transaction_id: transaction_id.to_string(),
             party_type: party_type.to_string(),
             party,
             note: None,
@@ -854,8 +874,8 @@ impl UpdateParty {
 
     /// Validates the UpdateParty message body.
     pub fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
-            return Err(Error::Validation("transfer_id cannot be empty".to_string()));
+        if self.transaction_id.is_empty() {
+            return Err(Error::Validation("transaction_id cannot be empty".to_string()));
         }
 
         if self.party_type.is_empty() {
@@ -902,7 +922,7 @@ impl TapMessageBody for UpdateParty {
             body: body_json,
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: Some(self.transfer_id.clone()),
+            thid: Some(self.transaction_id.clone()),
             pthid: None,
             created_time: Some(now),
             expires_time: None,
@@ -920,10 +940,10 @@ impl TapMessageBody for UpdateParty {
             .as_object()
             .ok_or_else(|| Error::Validation("Message body is not a JSON object".to_string()))?;
 
-        let transfer_id = body
-            .get("transfer_id")
+        let transaction_id = body
+            .get("transaction_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Validation("Missing or invalid transfer_id".to_string()))?;
+            .ok_or_else(|| Error::Validation("Missing or invalid transaction_id".to_string()))?;
 
         let party_type = body
             .get("partyType")
@@ -948,7 +968,7 @@ impl TapMessageBody for UpdateParty {
             .map(ToString::to_string);
 
         let update_party = Self {
-            transfer_id: transfer_id.to_string(),
+            transaction_id: transaction_id.to_string(),
             party_type: party_type.to_string(),
             party,
             note,
@@ -966,23 +986,23 @@ impl TapMessageBody for UpdateParty {
 /// This message type allows agents to update their policies for a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UpdatePolicies {
-    #[serde(rename = "transferId")]
-    pub transfer_id: String,
+    #[serde(rename = "transactionId")]
+    pub transaction_id: String,
     pub policies: Vec<Policy>,
 }
 
 impl UpdatePolicies {
-    pub fn new(transfer_id: &str, policies: Vec<Policy>) -> Self {
+    pub fn new(transaction_id: &str, policies: Vec<Policy>) -> Self {
         Self {
-            transfer_id: transfer_id.to_string(),
+            transaction_id: transaction_id.to_string(),
             policies,
         }
     }
 
     pub fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
-                "UpdatePolicies must have a transfer_id".to_string(),
+                "UpdatePolicies must have a transaction_id".to_string(),
             ));
         }
 
@@ -1032,7 +1052,7 @@ impl TapMessageBody for UpdatePolicies {
             body: body_json,
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: Some(self.transfer_id.clone()),
+            thid: Some(self.transaction_id.clone()),
             pthid: None,
             created_time: Some(now),
             expires_time: None,
@@ -1122,7 +1142,7 @@ pub trait Authorizable {
     /// A new ConfirmRelationship message body
     fn confirm_relationship(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         agent_id: String,
         for_id: String,
         role: Option<String>,
@@ -1166,7 +1186,7 @@ pub trait Authorizable {
     /// A new UpdateParty message body
     fn update_party(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         party_type: String,
         party: Participant,
         note: Option<String>,
@@ -1182,7 +1202,7 @@ pub trait Authorizable {
     /// # Returns
     ///
     /// A new UpdatePolicies message body
-    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies;
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies;
 
     /// Adds agents to this message, creating an AddAgents message as a response
     ///
@@ -1194,7 +1214,7 @@ pub trait Authorizable {
     /// # Returns
     ///
     /// A new AddAgents message body
-    fn add_agents(&self, transfer_id: String, agents: Vec<Participant>) -> AddAgents;
+    fn add_agents(&self, transaction_id: String, agents: Vec<Participant>) -> AddAgents;
 
     /// Replaces an agent in this message, creating a ReplaceAgent message as a response
     ///
@@ -1209,7 +1229,7 @@ pub trait Authorizable {
     /// A new ReplaceAgent message body
     fn replace_agent(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         original: String,
         replacement: Participant,
     ) -> ReplaceAgent;
@@ -1224,7 +1244,7 @@ pub trait Authorizable {
     /// # Returns
     ///
     /// A new RemoveAgent message body
-    fn remove_agent(&self, transfer_id: String, agent: String) -> RemoveAgent;
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
 }
 
 // Implementation of message type conversion for message body types
@@ -1235,9 +1255,9 @@ impl TapMessageBody for Authorize {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
-                "Transfer ID is required in Authorize".to_string(),
+                "Transaction ID is required in Authorize".to_string(),
             ));
         }
 
@@ -1283,15 +1303,17 @@ impl TapMessageBody for Authorize {
     }
 }
 
+impl_tap_message!(Authorize);
+
 impl TapMessageBody for Reject {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#reject"
     }
 
     fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
-                "Transfer ID is required in Reject".to_string(),
+                "Transaction ID is required in Reject".to_string(),
             ));
         }
 
@@ -1349,9 +1371,9 @@ impl TapMessageBody for Settle {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
-                "Transfer ID is required in Settle".to_string(),
+                "Transaction ID is required in Settle".to_string(),
             ));
         }
 
@@ -1397,7 +1419,7 @@ impl TapMessageBody for Settle {
             type_: Self::message_type().to_string(),
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: Some(self.transfer_id.clone()),
+            thid: Some(self.transaction_id.clone()),
             pthid: None,
             created_time: Some(created_time),
             expires_time: None,
@@ -1410,6 +1432,8 @@ impl TapMessageBody for Settle {
         Ok(message)
     }
 }
+
+impl_tap_message!(Settle);
 
 impl TapMessageBody for Presentation {
     fn message_type() -> &'static str {
@@ -1477,7 +1501,7 @@ impl TapMessageBody for AddAgents {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transfer ID is required in AddAgents".to_string(),
             ));
@@ -1525,7 +1549,7 @@ impl TapMessageBody for AddAgents {
             type_: Self::message_type().to_string(),
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: Some(self.transfer_id.clone()),
+            thid: Some(self.transaction_id.clone()),
             pthid: None,
             created_time: Some(created_time),
             expires_time: None,
@@ -1545,7 +1569,7 @@ impl TapMessageBody for ReplaceAgent {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transfer ID is required in ReplaceAgent".to_string(),
             ));
@@ -1591,7 +1615,7 @@ impl TapMessageBody for ReplaceAgent {
             type_: Self::message_type().to_string(),
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: Some(self.transfer_id.clone()),
+            thid: Some(self.transaction_id.clone()),
             pthid: None,
             created_time: Some(created_time),
             expires_time: None,
@@ -1611,7 +1635,7 @@ impl TapMessageBody for RemoveAgent {
     }
 
     fn validate(&self) -> Result<()> {
-        if self.transfer_id.is_empty() {
+        if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transfer ID is required in RemoveAgent".to_string(),
             ));
@@ -1649,7 +1673,7 @@ impl TapMessageBody for RemoveAgent {
             type_: Self::message_type().to_string(),
             from: from_did.map(|s| s.to_string()),
             to: None,
-            thid: Some(self.transfer_id.clone()),
+            thid: Some(self.transaction_id.clone()),
             pthid: None,
             created_time: Some(created_time),
             expires_time: None,
@@ -2958,7 +2982,7 @@ impl Authorizable for Transfer {
     /// A new Authorize message body
     fn authorize(&self, note: Option<String>) -> Authorize {
         Authorize {
-            transfer_id: self.message_id(),
+            transaction_id: self.message_id(),
             note,
         }
     }
@@ -2977,13 +3001,13 @@ impl Authorizable for Transfer {
     /// A new ConfirmRelationship message body
     fn confirm_relationship(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         agent_id: String,
         for_id: String,
         role: Option<String>,
     ) -> ConfirmRelationship {
         ConfirmRelationship {
-            transfer_id,
+            transaction_id,
             agent_id,
             for_id,
             role,
@@ -3002,7 +3026,7 @@ impl Authorizable for Transfer {
     /// A new Reject message body
     fn reject(&self, code: String, description: String) -> Reject {
         Reject {
-            transfer_id: self.message_id(),
+            transaction_id: self.message_id(),
             reason: format!("{}: {}", code, description),
         }
     }
@@ -3019,7 +3043,7 @@ impl Authorizable for Transfer {
     /// A new Settle message body
     fn settle(&self, settlement_id: String, amount: Option<String>) -> Settle {
         Settle {
-            transfer_id: self.message_id(),
+            transaction_id: self.message_id(),
             settlement_id,
             amount,
         }
@@ -3039,13 +3063,13 @@ impl Authorizable for Transfer {
     /// A new UpdateParty message body
     fn update_party(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         party_type: String,
         party: Participant,
         note: Option<String>,
     ) -> UpdateParty {
         UpdateParty {
-            transfer_id,
+            transaction_id,
             party_type,
             party,
             note,
@@ -3057,15 +3081,15 @@ impl Authorizable for Transfer {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - ID of the transfer being updated
+    /// * `transaction_id` - ID of the transaction being updated
     /// * `policies` - Vector of policies to be applied
     ///
     /// # Returns
     ///
     /// A new UpdatePolicies message body
-    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies {
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies {
         UpdatePolicies {
-            transfer_id,
+            transaction_id,
             policies,
         }
     }
@@ -3074,15 +3098,15 @@ impl Authorizable for Transfer {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - ID of the transfer to add agents to
+    /// * `transaction_id` - ID of the transaction to add agents to
     /// * `agents` - Vector of participants to be added
     ///
     /// # Returns
     ///
     /// A new AddAgents message body
-    fn add_agents(&self, transfer_id: String, agents: Vec<Participant>) -> AddAgents {
+    fn add_agents(&self, transaction_id: String, agents: Vec<Participant>) -> AddAgents {
         AddAgents {
-            transfer_id,
+            transaction_id,
             agents,
         }
     }
@@ -3091,7 +3115,7 @@ impl Authorizable for Transfer {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - ID of the transfer to replace agent in
+    /// * `transaction_id` - ID of the transaction to replace agent in
     /// * `original` - DID of the original agent to be replaced
     /// * `replacement` - New participant replacing the original agent
     ///
@@ -3100,12 +3124,12 @@ impl Authorizable for Transfer {
     /// A new ReplaceAgent message body
     fn replace_agent(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         original: String,
         replacement: Participant,
     ) -> ReplaceAgent {
         ReplaceAgent {
-            transfer_id,
+            transaction_id,
             original,
             replacement,
         }
@@ -3115,14 +3139,14 @@ impl Authorizable for Transfer {
     ///
     /// # Arguments
     ///
-    /// * `transfer_id` - ID of the transfer to remove agent from
+    /// * `transaction_id` - ID of the transaction to remove agent from
     /// * `agent` - DID of the agent to remove
     ///
     /// # Returns
     ///
     /// A new RemoveAgent message body
-    fn remove_agent(&self, transfer_id: String, agent: String) -> RemoveAgent {
-        RemoveAgent { transfer_id, agent }
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
+        RemoveAgent { transaction_id, agent }
     }
 }
 
@@ -3131,7 +3155,7 @@ impl Authorizable for Transfer {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Payment {
     /// Unique identifier for this payment request.
-    pub payment_id: String,
+    pub transaction_id: String,
     /// Identifier for the thread this message belongs to.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub thid: Option<String>,
@@ -3276,23 +3300,25 @@ impl TapMessageBody for Payment {
     }
 }
 
+impl_tap_message!(Payment);
+
 impl Authorizable for Payment {
     fn authorize(&self, note: Option<String>) -> Authorize {
         Authorize {
-            transfer_id: self.message_id(),
+            transaction_id: self.message_id(),
             note,
         }
     }
 
     fn confirm_relationship(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         agent_id: String,
         for_id: String,
         role: Option<String>,
     ) -> ConfirmRelationship {
         ConfirmRelationship {
-            transfer_id,
+            transaction_id,
             agent_id,
             for_id,
             role,
@@ -3301,14 +3327,14 @@ impl Authorizable for Payment {
 
     fn reject(&self, code: String, description: String) -> Reject {
         Reject {
-            transfer_id: self.message_id(),
+            transaction_id: self.message_id(),
             reason: format!("{}: {}", code, description),
         }
     }
 
     fn settle(&self, settlement_id: String, amount: Option<String>) -> Settle {
         Settle {
-            transfer_id: self.message_id(),
+            transaction_id: self.message_id(),
             settlement_id,
             amount,
         }
@@ -3316,13 +3342,13 @@ impl Authorizable for Payment {
 
     fn update_party(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         party_type: String,
         party: Participant,
         note: Option<String>,
     ) -> UpdateParty {
         UpdateParty {
-            transfer_id,
+            transaction_id,
             party_type,
             party,
             note,
@@ -3330,42 +3356,42 @@ impl Authorizable for Payment {
         }
     }
 
-    fn update_policies(&self, transfer_id: String, policies: Vec<Policy>) -> UpdatePolicies {
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies {
         UpdatePolicies {
-            transfer_id,
+            transaction_id,
             policies,
         }
     }
 
-    fn add_agents(&self, transfer_id: String, agents: Vec<Participant>) -> AddAgents {
+    fn add_agents(&self, transaction_id: String, agents: Vec<Participant>) -> AddAgents {
         AddAgents {
-            transfer_id,
+            transaction_id,
             agents,
         }
     }
 
     fn replace_agent(
         &self,
-        transfer_id: String,
+        transaction_id: String,
         original: String,
         replacement: Participant,
     ) -> ReplaceAgent {
         ReplaceAgent {
-            transfer_id,
+            transaction_id,
             original,
             replacement,
         }
     }
 
-    fn remove_agent(&self, transfer_id: String, agent: String) -> RemoveAgent {
-        RemoveAgent { transfer_id, agent }
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
+        RemoveAgent { transaction_id, agent }
     }
 }
 
 /// PaymentBuilder
 #[derive(Default)]
 pub struct PaymentBuilder {
-    payment_id: Option<String>,
+    transaction_id: Option<String>,
     thid: Option<String>,
     pthid: Option<String>,
     merchant: Option<Participant>,
@@ -3386,8 +3412,8 @@ impl PaymentBuilder {
         Self::default()
     }
 
-    pub fn payment_id(mut self, payment_id: String) -> Self {
-        self.payment_id = Some(payment_id);
+    pub fn transaction_id(mut self, transaction_id: String) -> Self {
+        self.transaction_id = Some(transaction_id);
         self
     }
 
@@ -3475,9 +3501,9 @@ impl PaymentBuilder {
 
     pub fn build(self) -> Result<Payment> {
         let payment = Payment {
-            payment_id: self
-                .payment_id
-                .ok_or_else(|| Error::Validation("Payment ID is required".to_string()))?,
+            transaction_id: self
+                .transaction_id
+                .ok_or_else(|| Error::Validation("Transaction ID is required".to_string()))?,
             thid: self.thid,
             pthid: self.pthid,
             merchant: self

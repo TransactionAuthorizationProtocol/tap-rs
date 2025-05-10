@@ -60,7 +60,7 @@ fn test_update_policies() {
 
     // Create the UpdatePolicies message
     let update = UpdatePolicies {
-        transfer_id: "transfer_12345".to_string(),
+        transaction_id: "transfer_12345".to_string(),
         policies: vec![Policy::RequirePresentation(presentation_policy)],
     };
 
@@ -88,21 +88,21 @@ fn test_update_policies_validation() {
 
     // Test with empty transfer_id
     let invalid_update = UpdatePolicies {
-        transfer_id: "".to_string(),
+        transaction_id: "".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy.clone())],
     };
     assert!(invalid_update.validate().is_err());
 
     // Test with empty policies
     let invalid_update = UpdatePolicies {
-        transfer_id: "transfer_12345".to_string(),
+        transaction_id: "transfer_12345".to_string(),
         policies: vec![],
     };
     assert!(invalid_update.validate().is_err());
 
     // Valid message should pass validation
     let valid_update = UpdatePolicies {
-        transfer_id: "transfer_12345".to_string(),
+        transaction_id: "transfer_12345".to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy)],
     };
 
@@ -197,7 +197,7 @@ fn test_update_policies_didcomm_conversion() {
 
     // Create the UpdatePolicies message with multiple policies
     let original_update = UpdatePolicies {
-        transfer_id: "transfer_12345".to_string(),
+        transaction_id: "transfer_12345".to_string(),
         policies: vec![
             Policy::RequirePresentation(presentation_policy),
             Policy::RequireProofOfControl(proof_policy),
@@ -226,7 +226,7 @@ fn test_update_policies_didcomm_conversion() {
         UpdatePolicies::from_didcomm(&didcomm_message).expect("Failed to convert from DIDComm");
 
     // Check that the message data is preserved
-    assert_eq!(roundtrip_update.transfer_id, original_update.transfer_id);
+    assert_eq!(roundtrip_update.transaction_id, original_update.transaction_id);
     assert_eq!(
         roundtrip_update.policies.len(),
         original_update.policies.len()

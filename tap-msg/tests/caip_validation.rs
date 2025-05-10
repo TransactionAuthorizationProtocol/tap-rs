@@ -24,6 +24,7 @@ fn test_valid_transfer_body() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -63,6 +64,7 @@ fn test_transfer_with_empty_asset() {
 
     // Creating a body with valid values
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -97,6 +99,7 @@ fn test_transfer_with_empty_amount() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),

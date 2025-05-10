@@ -101,7 +101,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create an UpdatePolicies message
     let update = UpdatePolicies {
-        transfer_id: "123e4567-e89b-12d3-a456-426614174000".to_string(),
+        transaction_id: "123e4567-e89b-12d3-a456-426614174000".to_string(),
         policies: vec![
             Policy::RequireAuthorization(RequireAuthorization {
                 from: Some(vec!["did:example:charlie".to_string()]),
@@ -115,7 +115,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Display the UpdatePolicies message
     println!("  UpdatePolicies Message:");
-    println!("  Transfer ID: {}", update.transfer_id);
+    println!("  Transfer ID: {}", update.transaction_id);
     println!("  Policies count: {}", update.policies.len());
 
     for (i, policy) in update.policies.iter().enumerate() {

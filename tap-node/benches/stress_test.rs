@@ -26,6 +26,7 @@ async fn create_test_message(
 ) -> (DIDCommMessage, Transfer) {
     // Create a simple transfer message
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: tap_caip::AssetId::from_str(
             "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
         )

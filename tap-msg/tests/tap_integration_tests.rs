@@ -76,7 +76,7 @@ fn test_full_tap_flow() -> Result<()> {
     }
     let _transfer_body: Transfer = serde_json::from_value(transfer_body_json.clone())?;
     let authorize_body = Authorize {
-        transfer_id: transfer_message.id.clone(), // Use the ID of the message being authorized
+        transaction_id: transfer_message.id.clone(), // Use the ID of the message being authorized
         note: Some("Transfer authorized".to_string()),
     };
 
@@ -98,7 +98,7 @@ fn test_full_tap_flow() -> Result<()> {
 
     // Step 4: Settle the Transfer
     let settle_body = Settle {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         settlement_id: "tx-12345".to_string(),
         amount: Some("100".to_string()),
     };
@@ -167,7 +167,7 @@ fn test_payment_flow() {
 
     // Step 3: Authorize the PaymentRequest
     let authorize_body = Authorize {
-        transfer_id: payment_message.id.clone(), // Use the ID of the message being authorized
+        transaction_id: payment_message.id.clone(), // Use the ID of the message being authorized
         note: Some("Payment authorized".to_string()),
     };
 
@@ -209,7 +209,7 @@ fn test_payment_flow() {
 
     // Reject the payment
     let reject_body = Reject {
-        transfer_id: payment_message2.id.clone(),
+        transaction_id: payment_message2.id.clone(),
         reason: "REJECT-001: Rejected due to compliance issues".to_string(),
     };
 
@@ -293,7 +293,7 @@ fn test_complex_message_flow() -> Result<()> {
     }
     let _transfer_body: Transfer = serde_json::from_value(transfer_body_json.clone())?;
     let authorize_body = Authorize {
-        transfer_id: transfer_messages[0].id.clone(),
+        transaction_id: transfer_messages[0].id.clone(),
         note: Some("First transfer authorized".to_string()),
     };
 
@@ -319,7 +319,7 @@ fn test_complex_message_flow() -> Result<()> {
     }
     let _transfer_body_1: Transfer = serde_json::from_value(transfer_body_json_1.clone())?;
     let reject = Reject {
-        transfer_id: transfer_messages[1].id.clone(),
+        transaction_id: transfer_messages[1].id.clone(),
         reason: "REJECT-002: Rejected due to amount too high".to_string(),
     };
 
@@ -345,7 +345,7 @@ fn test_complex_message_flow() -> Result<()> {
     }
     let _transfer_body_2: Transfer = serde_json::from_value(transfer_body_json_2.clone())?;
     let settle_body = Settle {
-        transfer_id: transfer_messages[2].id.clone(),
+        transaction_id: transfer_messages[2].id.clone(),
         settlement_id: "tx-67890".to_string(),
         amount: Some("50".to_string()),
     };
@@ -366,7 +366,7 @@ fn test_complex_message_flow() -> Result<()> {
     updated_originator.leiCode = Some("NEWLEICODE123".to_string());
 
     let update_party = UpdateParty {
-        transfer_id: transfer_messages[2].id.clone(),
+        transaction_id: transfer_messages[2].id.clone(),
         party_type: "originator".to_string(),
         party: updated_originator.clone(),
         note: Some("Originator LEI updated".to_string()),
@@ -455,6 +455,7 @@ fn create_test_transfer() -> Transfer {
     }];
 
     Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator,
         beneficiary: Some(beneficiary),

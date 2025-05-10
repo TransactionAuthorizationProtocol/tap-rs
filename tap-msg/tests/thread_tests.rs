@@ -19,6 +19,7 @@ fn test_create_reply() -> Result<()> {
 
     // Create a transfer from Alice to Bob
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Participant {
@@ -46,7 +47,7 @@ fn test_create_reply() -> Result<()> {
 
     // Create an authorize response from Bob to Alice
     let authorize = Authorize {
-        transfer_id: transfer_message.id.clone(), // Get ID from message
+        transaction_id: transfer_message.id.clone(), // Get ID from message
         note: None,
     };
 
@@ -83,7 +84,7 @@ fn test_add_agents() -> Result<()> {
 
     // Create an AddAgents message to add Charlie
     let add_agents = AddAgents {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transfer_id.to_string(),
         agents: vec![Participant {
             id: charlie_did.to_string(),
             role: Some("observer".to_string()),
@@ -121,7 +122,7 @@ fn test_add_agents() -> Result<()> {
 
     // Extract the body back and verify
     let extracted_add_agents = AddAgents::from_didcomm(&message_with_thread)?;
-    assert_eq!(extracted_add_agents.transfer_id, transfer_id);
+    assert_eq!(extracted_add_agents.transaction_id, transfer_id);
     assert_eq!(extracted_add_agents.agents.len(), 1);
     assert_eq!(extracted_add_agents.agents[0].id, charlie_did);
 
@@ -137,7 +138,7 @@ fn test_replace_agent() -> Result<()> {
 
     // Create a ReplaceAgent message to replace Bob with Charlie
     let replace_agent = ReplaceAgent {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transfer_id.to_string(),
         original: _bob_did.to_string(),
         replacement: Participant {
             id: charlie_did.to_string(),
@@ -176,7 +177,7 @@ fn test_replace_agent() -> Result<()> {
 
     // Extract the body back and verify
     let extracted_replace_agent = ReplaceAgent::from_didcomm(&message_with_thread)?;
-    assert_eq!(extracted_replace_agent.transfer_id, transfer_id);
+    assert_eq!(extracted_replace_agent.transaction_id, transfer_id);
     assert_eq!(extracted_replace_agent.original, _bob_did);
     assert_eq!(extracted_replace_agent.replacement.id, charlie_did);
 
@@ -191,7 +192,7 @@ fn test_remove_agent() -> Result<()> {
 
     // Create a RemoveAgent message to remove Bob
     let remove_agent = RemoveAgent {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transfer_id.to_string(),
         agent: _bob_did.to_string(),
     };
 
@@ -219,7 +220,7 @@ fn test_remove_agent() -> Result<()> {
 
     // Extract the body back and verify
     let extracted_remove_agent = RemoveAgent::from_didcomm(&message_with_thread)?;
-    assert_eq!(extracted_remove_agent.transfer_id, transfer_id);
+    assert_eq!(extracted_remove_agent.transaction_id, transfer_id);
     assert_eq!(extracted_remove_agent.agent, _bob_did);
 
     Ok(())
@@ -234,7 +235,7 @@ fn test_confirm_relationship() -> Result<()> {
 
     // Create a ConfirmRelationship message to confirm Bob is acting on behalf of an organization
     let confirm_relationship = ConfirmRelationship {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
         for_id: org_did.to_string(),
         role: Some("custodian".to_string()),
@@ -264,13 +265,14 @@ fn test_confirm_relationship() -> Result<()> {
 
     // Extract the body back and verify
     let extracted_confirm = ConfirmRelationship::from_didcomm(&message_with_thread)?;
-    assert_eq!(extracted_confirm.transfer_id, transfer_id);
+    assert_eq!(extracted_confirm.transaction_id, transfer_id);
     assert_eq!(extracted_confirm.agent_id, _bob_did);
     assert_eq!(extracted_confirm.for_id, org_did);
     assert_eq!(extracted_confirm.role, Some("custodian".to_string()));
 
     // Test using the Authorizable trait
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Participant::new(_alice_did),
@@ -303,7 +305,7 @@ fn test_confirm_relationship() -> Result<()> {
 
     // Create a ConfirmRelationship message using the Authorizable trait
     let confirm_body = transfer_body.confirm_relationship(
-        transfer_id.to_string(),       // Argument 1: transfer_id
+        transfer_id.to_string(),       // Argument 1: transaction_id
         _bob_did.to_string(),          // Argument 2: agent_id
         org_did.to_string(),           // Argument 3: for_id
         Some("custodian".to_string()), // Argument 4: Role
@@ -320,7 +322,7 @@ fn test_confirm_relationship() -> Result<()> {
         .unwrap()
         .contains(&_bob_did.to_string()));
     // The thid should match the transfer_id provided in the ConfirmRelationship body
-    assert_eq!(confirm_message.thid, Some(confirm_body.transfer_id.clone()));
+    assert_eq!(confirm_message.thid, Some(confirm_body.transaction_id.clone()));
 
     // Check body content (role)
     assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian",);
@@ -376,7 +378,7 @@ fn test_add_agents_missing_transfer_id() {
 
     // Create an AddAgents message to add the agents
     let add_agents = AddAgents {
-        transfer_id: _tx_id,
+        transaction_id: _tx_id,
         agents,
     };
 
@@ -392,7 +394,7 @@ fn test_add_agents_empty() {
 
     // Create an AddAgents message to add no agents
     let add_agents = AddAgents {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transfer_id.to_string(),
         agents: vec![],
     };
 

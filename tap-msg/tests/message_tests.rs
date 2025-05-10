@@ -40,6 +40,7 @@ fn test_create_message() {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -88,7 +89,7 @@ mod payment_tests {
         let asset_id_str = "eip155:1/slip44:60";
 
         PaymentBuilder::new()
-            .payment_id("pay_123".to_string())
+            .transaction_id("pay_123".to_string())
             .merchant(create_participant(merchant_did))
             .customer(create_participant(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
@@ -100,7 +101,7 @@ mod payment_tests {
     #[test]
     fn test_build_valid_payment() {
         let payment = create_valid_payment();
-        assert_eq!(payment.payment_id, "pay_123");
+        assert_eq!(payment.transaction_id, "pay_123");
         assert_eq!(payment.amount.parse::<f64>().unwrap(), 100.50);
     }
 
@@ -110,7 +111,7 @@ mod payment_tests {
         let customer_did = "did:key:z6MkhTBLxt9a7sWX77zn1GnzYam743kc9HvzA9qnKXqpVmXC";
         let asset_id_str = "eip155:1/slip44:60";
 
-        // Missing payment_id
+        // Missing transaction_id
         let res = PaymentBuilder::new()
             .merchant(create_participant(merchant_did))
             .customer(create_participant(customer_did))
@@ -121,7 +122,7 @@ mod payment_tests {
 
         // Invalid amount (zero)
         let res = PaymentBuilder::new()
-            .payment_id("pay_000".to_string())
+            .transaction_id("pay_000".to_string())
             .merchant(create_participant(merchant_did))
             .customer(create_participant(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
@@ -133,7 +134,7 @@ mod payment_tests {
 
         // Missing merchant
         let res = PaymentBuilder::new()
-            .payment_id("pay_111".to_string())
+            .transaction_id("pay_111".to_string())
             .customer(create_participant(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("50".to_string())
@@ -167,7 +168,7 @@ mod payment_tests {
     #[test]
     fn test_payment_authorizable_trait() {
         let payment = create_valid_payment();
-        let payment_id = payment.payment_id.clone();
+        let transaction_id = payment.transaction_id.clone();
 
         // Test authorize
         let authorize =
@@ -194,12 +195,12 @@ mod payment_tests {
             Participant::new("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
 
         let update_party = UpdateParty {
-            transfer_id: payment_id.clone(),
+            transaction_id: transaction_id.clone(),
             party_type: "beneficiary".to_string(),
             party: updated_participant.clone(),
             note: Some("Updated via manual struct creation".to_string()),
             context: None,
         };
-        assert_eq!(update_party.transfer_id, payment_id);
+        assert_eq!(update_party.transaction_id, transaction_id);
     }
 }

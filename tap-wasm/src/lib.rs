@@ -194,7 +194,7 @@ pub struct PaymentRequest {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Authorize {
     /// The ID of the transfer being authorized.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Optional note about the authorization.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -216,7 +216,7 @@ pub struct Authorize {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reject {
     /// The ID of the transfer being rejected.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Reason code for the rejection.
     pub code: String,
@@ -240,36 +240,22 @@ pub struct Reject {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settle {
     /// The ID of the transfer being settled.
-    pub transfer_id: String,
-
-    /// Transaction ID on the external ledger.
     pub transaction_id: String,
 
-    /// Optional transaction hash.
+    /// Settlement ID on the external ledger.
+    pub settlement_id: String,
+
+    /// Optional amount settled.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub transaction_hash: Option<String>,
+    pub amount: Option<String>,
 
-    /// Block height of the transaction (optional).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub block_height: Option<u64>,
-
-    /// Optional note about the settlement.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-
-    /// Timestamp when the settlement was created.
-    pub timestamp: String,
-
-    /// Additional metadata.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 /// Cancel message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cancel {
     /// The ID of the transfer being cancelled.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Optional reason for cancellation.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -291,7 +277,7 @@ pub struct Cancel {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Revert {
     /// The ID of the transfer being reverted.
-    pub transfer_id: String,
+    pub transaction_id: String,
 
     /// Settlement address in CAIP-10 format to return the funds to.
     pub settlement_address: String,

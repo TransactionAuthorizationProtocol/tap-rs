@@ -60,7 +60,7 @@ fn create_transfer_body() -> Transfer {
 /// Create a test Authorize message body
 fn create_authorize_body() -> Authorize {
     Authorize {
-        transfer_id: "test-transfer-id".to_string(),
+        transaction_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
     }
 }
@@ -68,7 +68,7 @@ fn create_authorize_body() -> Authorize {
 /// Create a test Reject message body
 fn create_reject_body() -> Reject {
     Reject {
-        transfer_id: "test-transfer-id".to_string(),
+        transaction_id: "test-transfer-id".to_string(),
         reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Further documentation needed.".to_string(),
     }
 }
@@ -76,7 +76,7 @@ fn create_reject_body() -> Reject {
 /// Create a test Settle message body
 fn create_settle_body() -> Settle {
     Settle {
-        transfer_id: "123456789".to_string(),
+        transaction_id: "123456789".to_string(),
         settlement_id: "0xabcdef1234567890".to_string(),
         amount: Some("100.0".to_string()),
     }

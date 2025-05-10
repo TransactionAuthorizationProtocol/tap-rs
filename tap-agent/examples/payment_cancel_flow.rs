@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Step 3: Customer decides to cancel the payment");
     
     let cancel = Cancel {
-        transfer_id: payment_id.clone(),
+        transaction_id: payment_id.clone(),
         reason: Some("Changed my mind".to_string()),
         note: Some("Will consider purchasing at a later date".to_string()),
         timestamp: Utc::now().to_rfc3339(),
@@ -99,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let received_cancel: Cancel = merchant_agent.receive_message(&packed_cancel).await?;
     println!("Merchant received cancellation:");
-    println!("  Payment ID: {}", received_cancel.transfer_id);
+    println!("  Payment ID: {}", received_cancel.transaction_id);
     if let Some(reason) = received_cancel.reason {
         println!("  Reason: {}", reason);
     }

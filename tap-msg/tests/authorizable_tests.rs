@@ -30,9 +30,9 @@ fn test_transfer_authorizable() {
     // Update the auth object with the transfer_id from the original transfer message
     let mut auth =
         Authorize::from_didcomm(&auth_message).expect("Failed to convert DIDComm to Authorize");
-    auth.transfer_id = transfer_id.clone();
+    auth.transaction_id = transfer_id.clone();
 
-    assert_eq!(auth.transfer_id, transfer_id);
+    assert_eq!(auth.transaction_id, transfer_id);
     assert_eq!(auth.note, note);
 
     // Test reject method - Now create Reject struct manually
@@ -73,10 +73,10 @@ fn test_didcomm_message_authorizable() {
     // Update the auth object with the transfer_id from the original transfer message
     let mut auth =
         Authorize::from_didcomm(&auth_message).expect("Failed to convert DIDComm to Authorize");
-    auth.transfer_id = transfer_id.clone();
+    auth.transaction_id = transfer_id.clone();
 
     assert_eq!(auth.note, note);
-    assert_eq!(auth.transfer_id, transfer_id);
+    assert_eq!(auth.transaction_id, transfer_id);
 
     // Test reject method - Create Reject struct manually
     let reject = transfer.reject(
@@ -144,7 +144,7 @@ fn test_update_party_message() {
 
     // Create an UpdateParty message
     let update_party = UpdateParty {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         party_type: "beneficiary".to_string(),
         party: updated_participant.clone(),
         note: Some("Updating party information".to_string()),
@@ -170,7 +170,7 @@ fn test_update_party_message() {
         .expect("Failed to convert DIDComm to UpdateParty");
 
     // Verify round-trip conversion
-    assert_eq!(round_trip.transfer_id, transfer_id);
+    assert_eq!(round_trip.transaction_id, transfer_id);
     assert_eq!(round_trip.party_type, "beneficiary");
     assert_eq!(round_trip.party.id, updated_participant.id);
     assert_eq!(round_trip.party.role, updated_participant.role);
@@ -181,7 +181,7 @@ fn test_update_party_message() {
 
     // Test using update_party from manual creation
     let update_party_from_manual = UpdateParty {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         party_type: "beneficiary".to_string(),
         party: updated_participant,
         note: Some("Updated via manual creation".to_string()),
@@ -221,6 +221,7 @@ fn create_test_transfer() -> Transfer {
     }];
 
     Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator,
         beneficiary: Some(beneficiary),

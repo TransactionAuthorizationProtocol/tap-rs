@@ -212,6 +212,7 @@ fn create_test_transfer() -> Transfer {
     }];
 
     Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator,
         beneficiary: Some(beneficiary),

@@ -33,6 +33,7 @@ pub fn create_transfer_message_example() -> Result<Message> {
         memo: None,
         agents: vec![],
         settlement_id: None,
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         metadata: HashMap::new(),
     };
 
@@ -74,9 +75,9 @@ pub fn process_transfer_message_example(message: &Message) -> Result<()> {
 }
 
 /// Example function to create a Reject message.
-pub fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
+pub fn create_reject_message_example(transaction_id: &str) -> Result<Message> {
     let reject_body = Reject {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transaction_id.to_string(),
         reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Further documentation needed.".to_string(),
     };
 
@@ -90,9 +91,9 @@ pub fn create_reject_message_example(transfer_id: &str) -> Result<Message> {
 }
 
 /// Example function to create a Settle message.
-pub fn create_settle_message_example(transfer_id: &str) -> Result<Message> {
+pub fn create_settle_message_example(transaction_id: &str) -> Result<Message> {
     let settle_body = Settle {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transaction_id.to_string(),
         settlement_id: "0x123456789abcdef".to_string(),
         amount: Some("100.0".to_string()),
     };
@@ -122,19 +123,19 @@ pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
             let authorize = Authorize::from_didcomm(message)?;
             println!(
                 "Processing Authorization for transfer: {}",
-                authorize.transfer_id
+                authorize.transaction_id
             );
         }
         _ if type_str.contains("reject") => {
             // Handle Reject message
             let reject = Reject::from_didcomm(message)?;
-            println!("Processing Rejection for transfer: {}", reject.transfer_id);
+            println!("Processing Rejection for transfer: {}", reject.transaction_id);
             println!("Reason: {}", reject.reason);
         }
         _ if type_str.contains("settle") => {
             // Handle Settle message
             let settle = Settle::from_didcomm(message)?;
-            println!("Processing Settlement for transfer: {}", settle.transfer_id);
+            println!("Processing Settlement for transfer: {}", settle.transaction_id);
             println!("Settlement ID: {}", settle.settlement_id);
             println!("Amount: {}", settle.amount.unwrap_or_default());
         }

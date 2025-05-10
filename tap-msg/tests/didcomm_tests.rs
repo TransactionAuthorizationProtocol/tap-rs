@@ -25,6 +25,7 @@ async fn test_pack_tap_body() -> Result<()> {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
@@ -89,6 +90,7 @@ async fn test_extract_tap_body() -> Result<()> {
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),

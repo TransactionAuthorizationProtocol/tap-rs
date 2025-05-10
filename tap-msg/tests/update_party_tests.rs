@@ -9,7 +9,7 @@ use tap_msg::message::types::{Participant, Transfer, UpdateParty};
 #[test]
 fn test_update_party_creation() {
     // Create a transfer ID (simulating an existing transfer)
-    let transfer_id = "12345-67890-abcdef";
+    let transaction_id = "12345-67890-abcdef";
 
     // Create a participant that will be updated
     let mut updated_participant =
@@ -18,7 +18,7 @@ fn test_update_party_creation() {
 
     // Create an UpdateParty message
     let update_party = UpdateParty {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transaction_id.to_string(),
         party_type: "beneficiary".to_string(),
         party: updated_participant.clone(),
         note: None,
@@ -26,7 +26,7 @@ fn test_update_party_creation() {
     };
 
     // Verify fields
-    assert_eq!(update_party.transfer_id, transfer_id);
+    assert_eq!(update_party.transaction_id, transaction_id);
     assert_eq!(update_party.party_type, "beneficiary");
     assert_eq!(update_party.party.id, updated_participant.id);
     assert_eq!(update_party.party.role, updated_participant.role);
@@ -68,7 +68,7 @@ fn test_update_party_creation() {
 fn test_update_party_validation() {
     // Test with valid data
     let valid_update = UpdateParty {
-        transfer_id: "transfer-123".to_string(),
+        transaction_id: "transfer-123".to_string(),
         party_type: "beneficiary".to_string(),
         party: {
             let mut p =
@@ -82,13 +82,13 @@ fn test_update_party_validation() {
 
     assert!(valid_update.validate().is_ok());
 
-    // Test with empty transfer_id
-    let invalid_transfer_id = UpdateParty {
-        transfer_id: "".to_string(),
+    // Test with empty transaction_id
+    let invalid_transaction_id = UpdateParty {
+        transaction_id: "".to_string(),
         ..valid_update.clone()
     };
 
-    assert!(invalid_transfer_id.validate().is_err());
+    assert!(invalid_transaction_id.validate().is_err());
 
     // Test with empty party_type
     let invalid_party_type = UpdateParty {
@@ -111,7 +111,7 @@ fn test_update_party_validation() {
 fn test_update_party_didcomm_conversion() {
     // Create a valid UpdateParty message
     let update_party = UpdateParty {
-        transfer_id: "transfer-456".to_string(),
+        transaction_id: "transfer-456".to_string(),
         party_type: "originator".to_string(),
         party: {
             let mut p =
@@ -139,7 +139,7 @@ fn test_update_party_didcomm_conversion() {
         .expect("Failed to convert DIDComm to UpdateParty");
 
     // Verify round-trip conversion
-    assert_eq!(round_trip.transfer_id, update_party.transfer_id);
+    assert_eq!(round_trip.transaction_id, update_party.transaction_id);
     assert_eq!(round_trip.party_type, update_party.party_type);
     assert_eq!(round_trip.party.id, update_party.party.id);
     assert_eq!(round_trip.party.role, update_party.party.role);
@@ -148,13 +148,13 @@ fn test_update_party_didcomm_conversion() {
 
 #[test]
 fn test_update_party_beneficiary() {
-    let transfer_id = "transfer-456".to_string();
+    let transaction_id = "transfer-456".to_string();
     let mut updated_participant =
         Participant::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
     updated_participant.leiCode = Some("UPDATEDLEICODE456".to_string());
 
     let update_party = UpdateParty {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transaction_id.clone(),
         party_type: "beneficiary".to_string(),
         party: updated_participant.clone(),
         note: None,
@@ -162,7 +162,7 @@ fn test_update_party_beneficiary() {
     };
 
     // Verify fields
-    assert_eq!(update_party.transfer_id, transfer_id);
+    assert_eq!(update_party.transaction_id, transaction_id);
     assert_eq!(update_party.party_type, "beneficiary");
     assert_eq!(update_party.party.id, updated_participant.id);
     assert_eq!(
@@ -174,13 +174,13 @@ fn test_update_party_beneficiary() {
 
 #[test]
 fn test_update_party_intermediary() {
-    let transfer_id = "transfer-789".to_string();
+    let transaction_id = "transfer-789".to_string();
     let mut updated_participant =
         Participant::new("did:key:z6Mkff4Y1wG9Bf7qY9LqfXQ3n8Yk5tW6RzX2n5k3f8j7sJg");
     updated_participant.leiCode = Some("UPDATEDLEICODE789".to_string());
 
     let update_party = UpdateParty {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transaction_id.clone(),
         party_type: "intermediary".to_string(),
         party: updated_participant.clone(),
         note: None,
@@ -188,7 +188,7 @@ fn test_update_party_intermediary() {
     };
 
     // Verify fields
-    assert_eq!(update_party.transfer_id, transfer_id);
+    assert_eq!(update_party.transaction_id, transaction_id);
     assert_eq!(update_party.party_type, "intermediary");
     assert_eq!(update_party.party.id, updated_participant.id);
     assert_eq!(
@@ -215,14 +215,14 @@ fn test_authorizable_with_update_party() {
 
     // Create the first UpdateParty message manually, referencing the transfer message ID
     let update_party = UpdateParty {
-        transfer_id: transfer_message.id.clone(), // Use the ID from the message
+        transaction_id: transfer_message.id.clone(), // Use the ID from the message
         party_type: "beneficiary".to_string(),
         party: updated_participant_1.clone(),
         note: Some("Updated via manual struct creation".to_string()),
         context: None,
     };
 
-    assert_eq!(update_party.transfer_id, transfer_message.id);
+    assert_eq!(update_party.transaction_id, transfer_message.id);
 
     // Now test creating UpdateParty for a different participant (e.g., originator)
     // We can reuse the same transfer_message ID if it's for the same transfer
@@ -233,7 +233,7 @@ fn test_authorizable_with_update_party() {
 
     // Create the second UpdateParty message
     let update_party_from_message = UpdateParty {
-        transfer_id: transfer_message.id.clone(), // Still references the same transfer
+        transaction_id: transfer_message.id.clone(), // Still references the same transfer
         party_type: "originator".to_string(),
         party: updated_participant_2.clone(),
         note: Some("Updated via DIDComm message".to_string()),
@@ -271,6 +271,7 @@ fn create_test_transfer() -> Transfer {
     )];
 
     Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator,
         beneficiary: Some(beneficiary),

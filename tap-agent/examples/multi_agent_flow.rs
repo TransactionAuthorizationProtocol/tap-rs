@@ -100,6 +100,7 @@ async fn main() -> Result<()> {
     
     // Include both originator and beneficiary agents in the initial transfer
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator: Participant {
             id: originator_party.to_string(),
@@ -182,7 +183,7 @@ async fn main() -> Result<()> {
     
     // Create AddAgents message to add the beneficiary wallet and wallet API
     let add_agents = AddAgents {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         agents: vec![
             Participant {
                 id: beneficiary_wallet_did.clone(),
@@ -214,7 +215,7 @@ async fn main() -> Result<()> {
     let received_add_agents: AddAgents = originator_vasp.receive_message(&packed_add_agents).await?;
     
     println!("Originator VASP received AddAgents message:");
-    println!("  Transfer ID: {}", received_add_agents.transfer_id);
+    println!("  Transfer ID: {}", received_add_agents.transaction_id);
     println!("  Added agents count: {}", received_add_agents.agents.len());
     
     // In a real implementation, the originator would update their local state with the new agents
@@ -228,7 +229,7 @@ async fn main() -> Result<()> {
     println!("Step 6: Beneficiary VASP initially rejects the transfer due to compliance concerns");
     
     let reject = Reject {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         code: "compliance.policy".to_string(),
         description: "Additional beneficiary information required".to_string(),
         note: Some("Please provide additional beneficiary information to comply with regulations".to_string()),
@@ -241,7 +242,7 @@ async fn main() -> Result<()> {
     // Originator receives the rejection
     let received_reject: Reject = originator_vasp.receive_message(&packed_reject).await?;
     println!("Originator VASP received rejection:");
-    println!("  Transfer ID: {}", received_reject.transfer_id);
+    println!("  Transfer ID: {}", received_reject.transaction_id);
     println!("  Code: {}", received_reject.code);
     println!("  Description: {}", received_reject.description);
     if let Some(note) = &received_reject.note {
@@ -255,7 +256,7 @@ async fn main() -> Result<()> {
     
     let settlement_address = "eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
     let authorize = Authorize {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         note: Some("Transfer authorized after compliance review".to_string()),
         timestamp: Utc::now().to_rfc3339(),
         settlement_address: Some(settlement_address.to_string()),
@@ -267,7 +268,7 @@ async fn main() -> Result<()> {
     // Originator receives the authorization
     let received_authorize: Authorize = originator_vasp.receive_message(&packed_authorize_vasp).await?;
     println!("Originator VASP received authorization:");
-    println!("  Transfer ID: {}", received_authorize.transfer_id);
+    println!("  Transfer ID: {}", received_authorize.transaction_id);
     if let Some(note) = &received_authorize.note {
         println!("  Note: {}\n", note);
     }
@@ -276,7 +277,7 @@ async fn main() -> Result<()> {
     println!("Step 8: Beneficiary wallet also authorizes the transfer");
     
     let authorize_wallet = Authorize {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         note: Some("Wallet ready to receive funds".to_string()),
         timestamp: Utc::now().to_rfc3339(),
         settlement_address: Some(settlement_address.to_string()),
@@ -288,7 +289,7 @@ async fn main() -> Result<()> {
     // Originator wallet receives the authorization
     let received_authorize_wallet: Authorize = originator_wallet.receive_message(&packed_authorize_wallet).await?;
     println!("Originator wallet received authorization:");
-    println!("  Transfer ID: {}", received_authorize_wallet.transfer_id);
+    println!("  Transfer ID: {}", received_authorize_wallet.transaction_id);
     if let Some(note) = &received_authorize_wallet.note {
         println!("  Note: {}\n", note);
     }
@@ -304,7 +305,7 @@ async fn main() -> Result<()> {
     );
     
     let api_authorize = Authorize {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         note: Some(api_note.clone()),
         timestamp: Utc::now().to_rfc3339(),
         settlement_address: Some(settlement_address.to_string()),
@@ -316,7 +317,7 @@ async fn main() -> Result<()> {
     // Beneficiary wallet API receives the technical details
     let received_api_authorize: Authorize = beneficiary_wallet_api.receive_message(&packed_api_authorize).await?;
     println!("Beneficiary wallet API received technical details:");
-    println!("  Transfer ID: {}", received_api_authorize.transfer_id);
+    println!("  Transfer ID: {}", received_api_authorize.transaction_id);
     if let Some(note) = &received_api_authorize.note {
         println!("  Technical details: {}\n", note);
     }
@@ -329,7 +330,7 @@ async fn main() -> Result<()> {
     let settlement_id = "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
     
     let settle = Settle {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         transaction_id: settlement_id.to_string(),
         transaction_hash: Some(settlement_id.to_string()),
         block_height: Some(12345678),
@@ -351,7 +352,7 @@ async fn main() -> Result<()> {
     // Originator wallet API settles the transfer
     let api_settlement_id = "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
     let api_settle = Settle {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         transaction_id: api_settlement_id.to_string(),
         transaction_hash: Some(api_settlement_id.to_string()),
         block_height: Some(12345678),
@@ -365,7 +366,7 @@ async fn main() -> Result<()> {
     // Beneficiary wallet API receives settlement confirmation
     let received_api_settle: Settle = beneficiary_wallet_api.receive_message(&packed_api_settle).await?;
     println!("Beneficiary wallet API received settlement confirmation:");
-    println!("  Transfer ID: {}", received_api_settle.transfer_id);
+    println!("  Transfer ID: {}", received_api_settle.transaction_id);
     println!("  Transaction ID: {}", received_api_settle.transaction_id);
     if let Some(transaction_hash) = &received_api_settle.transaction_hash {
         println!("  Transaction Hash: {}", transaction_hash);
@@ -385,7 +386,7 @@ async fn main() -> Result<()> {
     let _received_settle_wallet: Settle = beneficiary_wallet.receive_message(&packed_settle_wallet).await?;
     
     println!("Settlement received by beneficiary VASP and wallet:");
-    println!("  Transfer ID: {}", received_settle_vasp.transfer_id);
+    println!("  Transfer ID: {}", received_settle_vasp.transaction_id);
     println!("  Transaction ID: {}", received_settle_vasp.transaction_id);
     if let Some(transaction_hash) = &received_settle_vasp.transaction_hash {
         println!("  Transaction Hash: {}", transaction_hash);

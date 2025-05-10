@@ -76,11 +76,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let transfer_id = uuid::Uuid::new_v4().to_string();
     
     let authorize = Authorize {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         note: Some(format!("Authorizing transfer to settlement address: {}", settlement_address)),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        settlement_address: Some(settlement_address.to_string()),
-        metadata: HashMap::new(),
     };
     
     let packed_authorize = beneficiary_agent.send_message(&authorize, &originator_did).await?;
@@ -91,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let received_authorize: Authorize = originator_agent.receive_message(&packed_authorize).await?;
     println!("Originator received authorization:");
-    println!("  Transfer ID: {}", received_authorize.transfer_id);
+    println!("  Transfer ID: {}", received_authorize.transaction_id);
     if let Some(note) = received_authorize.note {
         println!("  Note: {}\n", note);
     }
@@ -104,13 +101,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let settlement_id = "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
     
     let settle = Settle {
-        transfer_id: transfer_id.clone(),
-        transaction_id: settlement_id.to_string(),
-        transaction_hash: Some(settlement_id.to_string()),
-        block_height: Some(12345678),
-        note: Some(format!("Transfer of {} settled", transfer.amount)),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        metadata: HashMap::new(),
+        transaction_id: transfer_id.clone(),
+        settlement_id: settlement_id.to_string(),
+        amount: Some(transfer.amount.clone()),
     };
     
     let packed_settle = originator_agent.send_message(&settle, &beneficiary_did).await?;
@@ -122,10 +115,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let received_settle: Settle = beneficiary_agent.receive_message(&packed_settle).await?;
     println!("Beneficiary received settlement confirmation:");
-    println!("  Transfer ID: {}", received_settle.transfer_id);
-    println!("  Transaction ID: {}", received_settle.transaction_id);
-    if let Some(note) = received_settle.note {
-        println!("  Note: {}\n", note);
+    println!("  Transfer ID: {}", received_settle.transaction_id);
+    println!("  Settlement ID: {}", received_settle.settlement_id);
+    if let Some(amount) = &received_settle.amount {
+        println!("  Amount: {}\n", amount);
     }
     
     println!("=== Transfer flow completed successfully ===");
@@ -208,6 +201,7 @@ fn create_transfer_message(
     
     // Create a transfer message
     Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
         originator,
         beneficiary: Some(beneficiary),

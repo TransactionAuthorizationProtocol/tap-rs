@@ -53,7 +53,7 @@ pub fn create_participant_with_policies_example() -> Result<Participant> {
 
 /// This example demonstrates how to update policies for a transaction
 pub fn update_policies_example(
-    transfer_id: &str,
+    transaction_id: &str,
     creator_did: &str,
     recipients: &[&str],
 ) -> Result<Message> {
@@ -68,7 +68,7 @@ pub fn update_policies_example(
 
     // Create an UpdatePolicies message
     let update = UpdatePolicies {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transaction_id.to_string(),
         policies: vec![Policy::RequireProofOfControl(proof_policy)],
     };
 
@@ -82,7 +82,7 @@ pub fn update_policies_example(
 
     // Set the thread ID to link this message to the existing thread
     let message_with_thread = Message {
-        thid: Some(transfer_id.to_string()),
+        thid: Some(transaction_id.to_string()),
         ..message
     };
 
@@ -138,7 +138,7 @@ pub fn policy_workflow_example() -> Result<()> {
     };
 
     let update_message = UpdatePolicies {
-        transfer_id: transfer_id.to_string(),
+        transaction_id: transfer_id.to_string(),
         policies: vec![Policy::RequirePresentation(presentation_policy)],
     };
 
@@ -176,7 +176,7 @@ pub fn policy_workflow_example() -> Result<()> {
 pub fn create_update_policies_using_authorizable_example(
     original_message: &Result<Message>,
     policies: Vec<Policy>,
-    transfer_id: &str,
+    _transaction_id: &str,
     creator_did: &str,
     participant_dids: &[String],
 ) -> Result<Message> {
@@ -190,7 +190,9 @@ pub fn create_update_policies_using_authorizable_example(
     let transfer_body: Transfer = serde_json::from_value(body_json.clone())
         .map_err(|e| crate::error::Error::SerializationError(e.to_string()))?;
     // 3. Call update_policies on the Transfer struct (Authorizable trait impl)
-    let update_policies_message = transfer_body.update_policies(transfer_id.to_string(), policies);
+    // Extract or generate a transaction ID
+    let transaction_id = transfer_body.transaction_id.clone();
+    let update_policies_message = transfer_body.update_policies(transaction_id, policies);
 
     // Convert the update to a DIDComm message
     let mut update_policies_reply = update_policies_message.to_didcomm(Some(creator_did))?;
@@ -216,6 +218,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 
     // Step 1: Create a transfer message to initiate the workflow
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Participant {
@@ -305,7 +308,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 pub fn create_authorize_example() -> Result<()> {
     // Create an example Authorize message body
     let authorize_message = Authorize {
-        transfer_id: "transfer_12345".to_string(),
+        transaction_id: "transfer_12345".to_string(),
         note: Some("Authorized with policy constraints".to_string()),
     };
 

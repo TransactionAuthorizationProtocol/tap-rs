@@ -103,7 +103,7 @@ async fn main() -> Result<()> {
             // In case of validation error, send a rejection
             if let Error::Validation(_) = e {
                 let reject = Reject {
-                    transfer_id: transfer_id.clone(),
+                    transaction_id: transfer_id.clone(),
                     code: "validation.failed".to_string(),
                     description: format!("Transfer validation failed: {}", e),
                     note: Some("Please correct the validation issues and try again".to_string()),
@@ -138,7 +138,7 @@ async fn main() -> Result<()> {
         println!("High risk detected, rejecting transfer");
         
         let reject = Reject {
-            transfer_id: transfer_id.clone(),
+            transaction_id: transfer_id.clone(),
             code: "risk.threshold.exceeded".to_string(),
             description: format!("Risk score ({}) exceeds threshold ({})", risk_score, risk_threshold),
             note: Some("Please contact support for further assistance".to_string()),
@@ -166,7 +166,7 @@ async fn main() -> Result<()> {
         };
         
         println!("Originator received rejection:");
-        println!("  Transfer ID: {}", received_reject.transfer_id);
+        println!("  Transfer ID: {}", received_reject.transaction_id);
         println!("  Code: {}", received_reject.code);
         println!("  Description: {}", received_reject.description);
         println!("  Note: {}", received_reject.note.unwrap_or_default());
@@ -181,7 +181,7 @@ async fn main() -> Result<()> {
     
     // Beneficiary VASP authorizes the transfer
     let authorize = Authorize {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         note: Some(format!("Authorizing transfer to settlement address: {}", settlement_address)),
         timestamp: chrono::Utc::now().to_rfc3339(),
         settlement_address: Some(settlement_address.to_string()),
@@ -210,7 +210,7 @@ async fn main() -> Result<()> {
     };
     
     println!("Authorization received and validated successfully");
-    println!("  Transfer ID: {}", received_authorize.transfer_id);
+    println!("  Transfer ID: {}", received_authorize.transaction_id);
     
     if let Some(note) = &received_authorize.note {
         println!("  Note: {}", note);
@@ -232,7 +232,7 @@ async fn main() -> Result<()> {
     let settlement_id = "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
     
     let settle = Settle {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         transaction_id: settlement_id.to_string(),
         transaction_hash: Some(settlement_id.to_string()),
         block_height: Some(12345678),
@@ -269,7 +269,7 @@ async fn main() -> Result<()> {
     }
     
     println!("Settlement received and validated successfully");
-    println!("  Transfer ID: {}", received_settle.transfer_id);
+    println!("  Transfer ID: {}", received_settle.transaction_id);
     println!("  Transaction ID: {}", received_settle.transaction_id);
     if let Some(note) = &received_settle.note {
         println!("  Note: {}", note);
@@ -370,6 +370,7 @@ fn create_transfer_message(
     
     // Create a transfer message
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
         originator,
         beneficiary: Some(beneficiary),

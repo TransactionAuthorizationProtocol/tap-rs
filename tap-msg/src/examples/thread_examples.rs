@@ -20,6 +20,7 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
 
     // Create a Transfer message
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Participant {
@@ -47,7 +48,7 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
 
     // Create an Authorize message
     let authorize = Authorize {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         note: Some("I authorize this transfer".to_string()),
     };
 
@@ -76,7 +77,7 @@ pub fn create_reply_using_message_trait_example(
 ) -> Result<Message> {
     // Create an Authorize response
     let authorize = Authorize {
-        transfer_id: original_message.id.clone(),
+        transaction_id: original_message.id.clone(),
         note: Some("Transfer authorized".to_string()),
     };
 
@@ -112,6 +113,7 @@ pub fn create_add_agents_example() -> Result<Message> {
 
     // Create a Transfer
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Participant {
@@ -152,7 +154,7 @@ pub fn create_add_agents_example() -> Result<Message> {
 
     // Create an Authorize message first
     let authorize = Authorize {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         note: Some("I authorize this transfer".to_string()),
     };
 
@@ -173,7 +175,7 @@ pub fn create_add_agents_example() -> Result<Message> {
 
     // Create an AddAgents message
     let add_agents = AddAgents {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         agents: vec![Participant {
             id: new_agent_did.to_string(),
             role: Some("compliance".to_string()),
@@ -344,13 +346,13 @@ pub fn create_update_policies_example(
 ///
 /// A DIDComm message containing the Settle message
 pub fn settle_example(
-    transfer_id: String,
+    transaction_id: String,
     settlement_id: String,
     amount: Option<String>,
 ) -> Result<Message> {
     // Create a Settle message
     let settle = Settle {
-        transfer_id,
+        transaction_id,
         settlement_id,
         amount,
     };
@@ -371,6 +373,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
 
     // Create a transfer from Alice to Bob
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Participant {
@@ -403,7 +406,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
 
     // 2. Now Bob wants to reply to the transfer
     let authorize = Authorize {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         note: Some("Transfer approved".to_string()),
     };
 
@@ -427,7 +430,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     // 3. Now Alice wants to add Charlie to the thread
     // Create an AddAgents message
     let add_agents = AddAgents {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         agents: vec![Participant {
             id: charlie_did.to_string(),
             role: Some("observer".to_string()),
@@ -455,7 +458,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
 
     // 4. Now Bob wants to replace himself with Dave
     let replace_agent = ReplaceAgent {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         original: bob_did.to_string(),
         replacement: Participant {
             id: dave_did.to_string(),
@@ -484,7 +487,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
 
     // 5. Alice wants to remove Charlie from the thread
     let remove_agent = RemoveAgent {
-        transfer_id: transfer_id.clone(),
+        transaction_id: transfer_id.clone(),
         agent: charlie_did.to_string(),
     };
 

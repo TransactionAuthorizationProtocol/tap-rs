@@ -22,6 +22,7 @@ fn create_test_transfer() -> Result<Message> {
     let receiver_vasp_did = "did:example:receiver_vasp";
 
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Participant {
@@ -92,7 +93,7 @@ fn test_update_policies() -> Result<()> {
 
     // Use the Authorizable trait to create an UpdatePolicies message
     let update_policies = UpdatePolicies {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         policies: vec![
             TapPolicy::RequireAuthorization(auth_policy),
             TapPolicy::RequireProofOfControl(proof_policy),
@@ -136,7 +137,7 @@ fn test_add_agents() -> Result<()> {
 
     // Use the Authorizable trait to create an AddAgents message
     let add_agents = AddAgents {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         agents: vec![new_agent.clone()],
     };
 
@@ -179,7 +180,7 @@ fn test_authorizable_trait_methods() -> Result<()> {
     );
 
     // Validate the created message body
-    assert_eq!(replace_agent_body.transfer_id, "test-transfer-123"); // Compare with known ID
+    assert_eq!(replace_agent_body.transaction_id, "test-transfer-123"); // Compare with known ID
     assert_eq!(replace_agent_body.original, original_agent_did);
     assert_eq!(replace_agent_body.replacement.id, replacement_agent_did);
     assert_eq!(
@@ -193,7 +194,7 @@ fn test_authorizable_trait_methods() -> Result<()> {
         transfer.remove_agent("test-transfer-123".to_string(), agent_to_remove.to_string());
 
     // Validate the created message body
-    assert_eq!(remove_agent_body.transfer_id, "test-transfer-123"); // Compare with known ID
+    assert_eq!(remove_agent_body.transaction_id, "test-transfer-123"); // Compare with known ID
     assert_eq!(remove_agent_body.agent, agent_to_remove);
 
     // It seems we don't need to convert these specific bodies to full messages for this test
@@ -223,7 +224,7 @@ fn test_reply_creation_maintains_thread() -> Result<()> {
     };
 
     let update_policies = UpdatePolicies {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         policies: vec![TapPolicy::RequireProofOfControl(proof_policy)],
     };
 
@@ -239,7 +240,7 @@ fn test_reply_creation_maintains_thread() -> Result<()> {
 
     // Verify that the message body contains the right content
     let body = reply.body_as::<UpdatePolicies>()?;
-    assert_eq!(body.transfer_id, transfer_message.id);
+    assert_eq!(body.transaction_id, transfer_message.id);
     assert_eq!(body.policies.len(), 1);
 
     Ok(())
@@ -256,7 +257,7 @@ fn test_reply_chain() -> Result<()> {
 
     // Step 1: VASP updates policies
     let update_policies = UpdatePolicies {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         policies: vec![TapPolicy::RequireAuthorization(RequireAuthorization {
             from: Some(vec![beneficiary_did.to_string()]),
             from_role: None,
@@ -270,7 +271,7 @@ fn test_reply_chain() -> Result<()> {
 
     // Step 2: Beneficiary authorizes in response
     let authorize = Authorize {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         note: Some("I authorize this transfer".to_string()),
     };
 
@@ -280,7 +281,7 @@ fn test_reply_chain() -> Result<()> {
 
     // Step 3: VASP adds an agent
     let add_agents = AddAgents {
-        transfer_id: transfer_message.id.clone(),
+        transaction_id: transfer_message.id.clone(),
         agents: vec![Participant {
             id: "did:example:compliance".to_string(),
             role: Some("compliance".to_string()),
@@ -300,14 +301,14 @@ fn test_reply_chain() -> Result<()> {
 
     // Verify the message sequence
     let body1 = policies_message.body_as::<UpdatePolicies>()?;
-    assert_eq!(body1.transfer_id, transfer_message.id);
+    assert_eq!(body1.transaction_id, transfer_message.id);
 
     let body2 = authorize_message.body_as::<Authorize>()?;
-    assert_eq!(body2.transfer_id, transfer_message.id);
+    assert_eq!(body2.transaction_id, transfer_message.id);
     assert_eq!(body2.note, Some("I authorize this transfer".to_string()));
 
     let body3 = add_agents_message.body_as::<AddAgents>()?;
-    assert_eq!(body3.transfer_id, transfer_message.id);
+    assert_eq!(body3.transaction_id, transfer_message.id);
     assert_eq!(body3.agents[0].id, "did:example:compliance");
 
     Ok(())
@@ -327,6 +328,7 @@ fn create_test_transfer_struct() -> Result<Transfer> {
         policies: None,
     };
     let transfer = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator,

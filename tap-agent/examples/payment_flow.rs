@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Step 3: Customer authorizes the payment");
     
     let authorize = Authorize {
-        transfer_id: payment_id.clone(),
+        transaction_id: payment_id.clone(),
         note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
         timestamp: chrono::Utc::now().to_rfc3339(),
         settlement_address: Some(settlement_address.to_string()),
@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let received_authorize: Authorize = merchant_agent.receive_message(&packed_authorize).await?;
     println!("Merchant received authorization:");
-    println!("  Payment ID: {}", received_authorize.transfer_id);
+    println!("  Payment ID: {}", received_authorize.transaction_id);
     if let Some(note) = received_authorize.note {
         println!("  Note: {}\n", note);
     }
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let settlement_id = "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
     
     let settle = Settle {
-        transfer_id: payment_id.clone(),
+        transaction_id: payment_id.clone(),
         transaction_id: settlement_id.to_string(),
         transaction_hash: Some(settlement_id.to_string()),
         block_height: Some(12345678),
@@ -128,7 +128,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let received_settle: Settle = merchant_agent.receive_message(&packed_settle).await?;
     println!("Merchant received settlement confirmation:");
-    println!("  Payment ID: {}", received_settle.transfer_id);
+    println!("  Payment ID: {}", received_settle.transaction_id);
     println!("  Transaction ID: {}", received_settle.transaction_id);
     if let Some(note) = received_settle.note {
         println!("  Note: {}\n", note);

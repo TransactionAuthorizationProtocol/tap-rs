@@ -34,6 +34,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     };
 
     let body = Transfer {
+        transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: asset.clone(),
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),

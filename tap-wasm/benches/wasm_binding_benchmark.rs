@@ -87,7 +87,7 @@ fn bench_message_conversion(c: &mut Criterion) {
     let transfer_message = transfer_body.to_didcomm().unwrap();
 
     let authorize_body = Authorize {
-        transfer_id: "test-transfer-id".to_string(),
+        transaction_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
         timestamp: chrono::Utc::now().to_rfc3339(),
         settlement_address: None,
@@ -96,7 +96,7 @@ fn bench_message_conversion(c: &mut Criterion) {
     let authorize_message = authorize_body.to_didcomm().unwrap();
 
     let reject_body = Reject {
-        transfer_id: "test-transfer-id".to_string(),
+        transaction_id: "test-transfer-id".to_string(),
         code: "COMPLIANCE_FAILURE".to_string(),
         description: "Unable to comply with transfer requirements".to_string(),
         note: Some("Transfer rejected for testing".to_string()),
