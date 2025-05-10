@@ -93,9 +93,14 @@ macro_rules! impl_tap_message {
                 false
             }
             fn get_tap_type(&self) -> Option<String> {
-                Some(<Self as $crate::message::tap_message_trait::TapMessageBody>::message_type().to_string())
+                Some(
+                    <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
+                        .to_string(),
+                )
             }
-            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(&self) -> $crate::error::Result<T> {
+            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(
+                &self,
+            ) -> $crate::error::Result<T> {
                 unimplemented!()
             }
             fn get_all_participants(&self) -> Vec<String> {
@@ -150,9 +155,14 @@ macro_rules! impl_tap_message {
                 false
             }
             fn get_tap_type(&self) -> Option<String> {
-                Some(<Self as $crate::message::tap_message_trait::TapMessageBody>::message_type().to_string())
+                Some(
+                    <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
+                        .to_string(),
+                )
             }
-            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(&self) -> $crate::error::Result<T> {
+            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(
+                &self,
+            ) -> $crate::error::Result<T> {
                 unimplemented!()
             }
             fn get_all_participants(&self) -> Vec<String> {
@@ -210,9 +220,14 @@ macro_rules! impl_tap_message {
                 false
             }
             fn get_tap_type(&self) -> Option<String> {
-                Some(<Self as $crate::message::tap_message_trait::TapMessageBody>::message_type().to_string())
+                Some(
+                    <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
+                        .to_string(),
+                )
             }
-            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(&self) -> $crate::error::Result<T> {
+            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(
+                &self,
+            ) -> $crate::error::Result<T> {
                 unimplemented!()
             }
             fn get_all_participants(&self) -> Vec<String> {
@@ -265,9 +280,14 @@ macro_rules! impl_tap_message {
                 false
             }
             fn get_tap_type(&self) -> Option<String> {
-                Some(<Self as $crate::message::tap_message_trait::TapMessageBody>::message_type().to_string())
+                Some(
+                    <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
+                        .to_string(),
+                )
             }
-            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(&self) -> $crate::error::Result<T> {
+            fn body_as<T: $crate::message::tap_message_trait::TapMessageBody>(
+                &self,
+            ) -> $crate::error::Result<T> {
                 unimplemented!()
             }
             fn get_all_participants(&self) -> Vec<String> {

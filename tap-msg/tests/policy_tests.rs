@@ -226,7 +226,10 @@ fn test_update_policies_didcomm_conversion() {
         UpdatePolicies::from_didcomm(&didcomm_message).expect("Failed to convert from DIDComm");
 
     // Check that the message data is preserved
-    assert_eq!(roundtrip_update.transaction_id, original_update.transaction_id);
+    assert_eq!(
+        roundtrip_update.transaction_id,
+        original_update.transaction_id
+    );
     assert_eq!(
         roundtrip_update.policies.len(),
         original_update.policies.len()

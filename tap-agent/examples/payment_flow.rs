@@ -1,11 +1,11 @@
 //! Example demonstrating a complete TAIP-14 payment flow with TAIP-4 authorization
-//! 
+//!
 //! This example shows how a merchant and customer can participate in a payment flow:
 //! 1. Merchant agent initiates a payment request
 //! 2. Customer agent authorizes the payment
 //! 3. Customer agent settles the payment
 //! 4. Merchant agent completes the payment
-//! 
+//!
 //! Run with: cargo run --example payment_flow
 
 use std::collections::HashMap;
@@ -18,129 +18,130 @@ use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_caip::AssetId;
-use tap_msg::{Authorize, PaymentRequest, Participant, Settle};
-use chrono;
+use tap_msg::message::types::{Authorize, Settle};
+use tap_msg::{Participant, PaymentRequest};
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("=== TAIP-14 Payment Flow with TAIP-4 Authorization ===\n");
-    
-    // Create merchant agent (Payment Service Provider - PSP)
-    let (merchant_agent, merchant_did) = create_agent(
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-        "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-        "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh",
-    ).await;
-    
-    // Create customer agent (Customer Wallet)
-    let (customer_agent, customer_did) = create_agent(
-        "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k",
-        "8zYZK2vvsAyVYpNpnYzTnUPjBuWdWpYmPpQmwErV9XQg",
-        "8zYZK2vvsAyVYpNpnYzTnUPjBuWdWpYmPpQmwErV9XQg",
-    ).await;
-    
-    println!("Created merchant agent with DID: {}", merchant_did);
-    println!("Created customer agent with DID: {}\n", customer_did);
-    
-    // Create a settlement address (in a real scenario, this would be a blockchain address)
-    let settlement_address = "did:pkh:eip155:1:0x1234a96D359eC26a11e2C2b3d8f8B8942d5Bfcdb";
-    
-    // Step 1: Merchant creates and sends a payment request
-    println!("Step 1: Merchant creates a payment request");
-    
-    // Generate a unique payment ID
-    let payment_id = uuid::Uuid::new_v4().to_string();
-    
-    let payment = create_payment_message(&merchant_did, &customer_did, settlement_address);
-    println!("Payment details:");
-    println!("  Asset: {}", payment.asset.as_ref().unwrap());
-    println!("  Amount: {}", payment.amount);
-    println!("  Merchant: {}", payment.merchant.id);
-    if let Some(customer) = &payment.customer {
-        println!("  Customer: {}", customer.id);
-    }
-    println!();
-    
-    // Pack the payment message
-    let packed_payment = merchant_agent.send_message(&payment, &customer_did).await?;
-    println!("Merchant sends the payment request to the customer\n");
-    
-    // Step 2: Customer receives and processes the payment request
-    println!("Step 2: Customer receives and processes the payment request");
-    
-    let received_payment: PaymentRequest = customer_agent.receive_message(&packed_payment).await?;
-    println!("Customer received payment request:");
-    println!("  Asset: {}", received_payment.asset.as_ref().unwrap());
-    println!("  Amount: {}", received_payment.amount);
-    println!("  Merchant: {}", received_payment.merchant.id);
-    if let Some(customer) = &received_payment.customer {
-        println!("  Customer: {}", customer.id);
-    }
-    println!();
-    
-    // Step 3: Customer authorizes the payment
-    println!("Step 3: Customer authorizes the payment");
-    
-    let authorize = Authorize {
-        transaction_id: payment_id.clone(),
-        note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        settlement_address: Some(settlement_address.to_string()),
-        metadata: HashMap::new(),
-    };
-    
-    let packed_authorize = customer_agent.send_message(&authorize, &merchant_did).await?;
-    println!("Customer sends authorization to the merchant\n");
-    
-    // Step 4: Merchant receives the authorization
-    println!("Step 4: Merchant receives the authorization");
-    
-    let received_authorize: Authorize = merchant_agent.receive_message(&packed_authorize).await?;
-    println!("Merchant received authorization:");
-    println!("  Payment ID: {}", received_authorize.transaction_id);
-    if let Some(note) = received_authorize.note {
-        println!("  Note: {}\n", note);
-    }
-    
-    // Step 5: Customer settles the payment
-    println!("Step 5: Customer settles the payment");
-    
-    // In a real scenario, the customer would submit the transaction to the blockchain
-    // and get a transaction ID. Here we simulate it with a mock transaction ID.
-    let settlement_id = "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
-    
-    let settle = Settle {
-        transaction_id: payment_id.clone(),
-        transaction_id: settlement_id.to_string(),
-        transaction_hash: Some(settlement_id.to_string()),
-        block_height: Some(12345678),
-        note: Some(format!("Payment of {} settled", payment.amount)),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        metadata: HashMap::new(),
-    };
-    
-    let packed_settle = customer_agent.send_message(&settle, &merchant_did).await?;
-    println!("Customer sends settlement confirmation to the merchant");
-    println!("  Settlement ID: {}\n", settlement_id);
-    
-    // Step 6: Merchant receives the settlement confirmation
-    println!("Step 6: Merchant receives the settlement confirmation");
-    
-    let received_settle: Settle = merchant_agent.receive_message(&packed_settle).await?;
-    println!("Merchant received settlement confirmation:");
-    println!("  Payment ID: {}", received_settle.transaction_id);
-    println!("  Transaction ID: {}", received_settle.transaction_id);
-    if let Some(note) = received_settle.note {
-        println!("  Note: {}\n", note);
-    }
-    
-    // Step 7: Merchant fulfills the order (out of band)
-    println!("Step 7: Merchant fulfills the order (out of band)");
-    println!("  Merchant has received the payment and will now fulfill the order.\n");
-    
-    println!("=== Payment flow completed successfully ===");
-    
-    Ok(())
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    tokio_test::block_on(async {
+        println!("=== TAIP-14 Payment Flow with TAIP-4 Authorization ===\n");
+
+        // Create merchant agent (Payment Service Provider - PSP)
+        let (merchant_agent, merchant_did) = create_agent(
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+            "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh",
+        )
+        .await;
+
+        // Create customer agent (Customer Wallet)
+        let (customer_agent, customer_did) = create_agent(
+            "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k",
+            "8zYZK2vvsAyVYpNpnYzTnUPjBuWdWpYmPpQmwErV9XQg",
+            "8zYZK2vvsAyVYpNpnYzTnUPjBuWdWpYmPpQmwErV9XQg",
+        )
+        .await;
+
+        println!("Created merchant agent with DID: {}", merchant_did);
+        println!("Created customer agent with DID: {}\n", customer_did);
+
+        // Create a settlement address (in a real scenario, this would be a blockchain address)
+        let settlement_address = "did:pkh:eip155:1:0x1234a96D359eC26a11e2C2b3d8f8B8942d5Bfcdb";
+
+        // Step 1: Merchant creates and sends a payment request
+        println!("Step 1: Merchant creates a payment request");
+
+        // Generate a unique payment ID
+        let payment_id = uuid::Uuid::new_v4().to_string();
+
+        let payment = create_payment_message(&merchant_did, &customer_did, settlement_address);
+        println!("Payment details:");
+        println!("  Asset: {}", payment.asset.as_ref().unwrap());
+        println!("  Amount: {}", payment.amount);
+        println!("  Merchant: {}", payment.merchant.id);
+        if let Some(customer) = &payment.customer {
+            println!("  Customer: {}", customer.id);
+        }
+        println!();
+
+        // Pack the payment message
+        let packed_payment = merchant_agent.send_message(&payment, &customer_did).await?;
+        println!("Merchant sends the payment request to the customer\n");
+
+        // Step 2: Customer receives and processes the payment request
+        println!("Step 2: Customer receives and processes the payment request");
+
+        let received_payment: PaymentRequest =
+            customer_agent.receive_message(&packed_payment).await?;
+        println!("Customer received payment request:");
+        println!("  Asset: {}", received_payment.asset.as_ref().unwrap());
+        println!("  Amount: {}", received_payment.amount);
+        println!("  Merchant: {}", received_payment.merchant.id);
+        if let Some(customer) = &received_payment.customer {
+            println!("  Customer: {}", customer.id);
+        }
+        println!();
+
+        // Step 3: Customer authorizes the payment
+        println!("Step 3: Customer authorizes the payment");
+
+        let authorize = Authorize {
+            transaction_id: payment_id.clone(),
+            note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
+        };
+
+        let packed_authorize = customer_agent
+            .send_message(&authorize, &merchant_did)
+            .await?;
+        println!("Customer sends authorization to the merchant\n");
+
+        // Step 4: Merchant receives the authorization
+        println!("Step 4: Merchant receives the authorization");
+
+        let received_authorize: Authorize =
+            merchant_agent.receive_message(&packed_authorize).await?;
+        println!("Merchant received authorization:");
+        println!("  Payment ID: {}", received_authorize.transaction_id);
+        if let Some(note) = received_authorize.note {
+            println!("  Note: {}\n", note);
+        }
+
+        // Step 5: Customer settles the payment
+        println!("Step 5: Customer settles the payment");
+
+        // In a real scenario, the customer would submit the transaction to the blockchain
+        // and get a transaction ID. Here we simulate it with a mock transaction ID.
+        let settlement_id =
+            "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
+
+        let settle = Settle {
+            transaction_id: payment_id.clone(),
+            settlement_id: settlement_id.to_string(),
+            amount: Some(payment.amount.clone()),
+        };
+
+        let packed_settle = customer_agent.send_message(&settle, &merchant_did).await?;
+        println!("Customer sends settlement confirmation to the merchant");
+        println!("  Settlement ID: {}\n", settlement_id);
+
+        // Step 6: Merchant receives the settlement confirmation
+        println!("Step 6: Merchant receives the settlement confirmation");
+
+        let received_settle: Settle = merchant_agent.receive_message(&packed_settle).await?;
+        println!("Merchant received settlement confirmation:");
+        println!("  Payment ID: {}", received_settle.transaction_id);
+        println!("  Settlement ID: {}", received_settle.settlement_id);
+        if let Some(amount) = &received_settle.amount {
+            println!("  Amount: {}\n", amount);
+        }
+
+        // Step 7: Merchant fulfills the order (out of band)
+        println!("Step 7: Merchant fulfills the order (out of band)");
+        println!("  Merchant has received the payment and will now fulfill the order.\n");
+
+        println!("=== Payment flow completed successfully ===");
+
+        Ok(())
+    })
 }
 
 /// Create an agent with the given DID and key material
@@ -151,12 +152,12 @@ async fn create_agent(
 ) -> (Arc<DefaultAgent>, String) {
     // Create agent configuration
     let agent_config = AgentConfig::new(did.to_string());
-    
+
     // Create DID resolver
     let mut did_resolver = MultiResolver::new();
     did_resolver.register_method("key", KeyResolver::new());
     let did_resolver = Arc::new(did_resolver);
-    
+
     // Create secret resolver with the agent's key
     let mut secret_resolver = BasicSecretResolver::new();
     let secret = Secret {
@@ -171,19 +172,16 @@ async fn create_agent(
             }),
         },
     };
-    
+
     secret_resolver.add_secret(did, secret);
     let secret_resolver = Arc::new(secret_resolver);
-    
+
     // Create message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        did_resolver,
-        secret_resolver,
-    ));
-    
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+
     // Create agent
     let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));
-    
+
     (agent, did.to_string())
 }
 
@@ -200,14 +198,14 @@ fn create_payment_message(
         policies: None,
         leiCode: None,
     };
-    
+
     let customer = Participant {
         id: customer_did.to_string(),
         role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
     };
-    
+
     // Create settlement agent
     let settlement_agent = Participant {
         id: settlement_address.to_string(),
@@ -215,10 +213,12 @@ fn create_payment_message(
         policies: None,
         leiCode: None,
     };
-    
+
     // Create a payment message
     PaymentRequest {
-        asset: Some(AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap()),
+        asset: Some(
+            AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+        ),
         currency: None,
         amount: "100.0".to_string(),
         supported_assets: None,

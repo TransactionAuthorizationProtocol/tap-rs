@@ -248,7 +248,6 @@ pub struct Settle {
     /// Optional amount settled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
-
 }
 
 /// Cancel message body (TAIP-4).

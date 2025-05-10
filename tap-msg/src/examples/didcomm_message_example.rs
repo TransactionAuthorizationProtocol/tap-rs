@@ -129,13 +129,19 @@ pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
         _ if type_str.contains("reject") => {
             // Handle Reject message
             let reject = Reject::from_didcomm(message)?;
-            println!("Processing Rejection for transfer: {}", reject.transaction_id);
+            println!(
+                "Processing Rejection for transfer: {}",
+                reject.transaction_id
+            );
             println!("Reason: {}", reject.reason);
         }
         _ if type_str.contains("settle") => {
             // Handle Settle message
             let settle = Settle::from_didcomm(message)?;
-            println!("Processing Settlement for transfer: {}", settle.transaction_id);
+            println!(
+                "Processing Settlement for transfer: {}",
+                settle.transaction_id
+            );
             println!("Settlement ID: {}", settle.settlement_id);
             println!("Amount: {}", settle.amount.unwrap_or_default());
         }

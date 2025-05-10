@@ -316,7 +316,9 @@ impl TransferBuilder {
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
             memo: self.memo,
-            transaction_id: self.transaction_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            transaction_id: self
+                .transaction_id
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             agents: self.agents,
             metadata: self.metadata,
         }
@@ -335,7 +337,9 @@ impl TransferBuilder {
             .ok_or_else(|| Error::Validation("Amount is required".to_string()))?;
 
         let transfer = Transfer {
-            transaction_id: self.transaction_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            transaction_id: self
+                .transaction_id
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             asset,
             originator,
             amount,
@@ -599,6 +603,59 @@ pub struct Cancel {
     pub note: Option<String>,
 }
 
+impl TapMessageBody for Cancel {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#cancel"
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.transaction_id.is_empty() {
+            return Err(Error::Validation(
+                "Cancel message must have a transaction_id".into(),
+            ));
+        }
+        Ok(())
+    }
+
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+        let msg_id = uuid::Uuid::new_v4().to_string();
+
+        let body_json = serde_json::to_value(self)
+            .map_err(|e| Error::SerializationError(format!("Failed to serialize Cancel: {}", e)))?;
+
+        Ok(Message {
+            id: msg_id,
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: from_did.map(|s| s.to_string()),
+            to: None,
+            thid: Some(self.transaction_id.clone()),
+            pthid: None,
+            extra_headers: HashMap::new(),
+            attachments: None,
+            created_time: None,
+            expires_time: None,
+            from_prior: None,
+        })
+    }
+
+    fn from_didcomm(msg: &Message) -> Result<Self> {
+        if msg.type_ != Self::message_type() {
+            return Err(Error::InvalidMessageType(format!(
+                "Expected message type {}, got {}",
+                Self::message_type(),
+                msg.type_
+            )));
+        }
+
+        serde_json::from_value(msg.body.clone())
+            .map_err(|e| Error::SerializationError(format!("Failed to deserialize Cancel: {}", e)))
+    }
+}
+
+impl_tap_message!(Cancel);
+
 /// Revert message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Revert {
@@ -748,9 +805,9 @@ impl TapMessageBody for ConfirmRelationship {
             typ: "application/didcomm-plain+json".to_string(), // Standard type
             type_: Self::message_type().to_string(),
             from: from_did.map(|s| s.to_string()),
-            to,                                   // Use the explicitly set 'to' field
+            to, // Use the explicitly set 'to' field
             thid: Some(self.transaction_id.clone()),
-            pthid: None,                          // Parent Thread ID usually set later
+            pthid: None, // Parent Thread ID usually set later
             created_time: Some(created_time),
             expires_time: None,
             extra_headers: std::collections::HashMap::new(),
@@ -877,7 +934,9 @@ impl UpdateParty {
     /// Validates the UpdateParty message body.
     pub fn validate(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
-            return Err(Error::Validation("transaction_id cannot be empty".to_string()));
+            return Err(Error::Validation(
+                "transaction_id cannot be empty".to_string(),
+            ));
         }
 
         if self.party_type.is_empty() {
@@ -3160,7 +3219,10 @@ impl Authorizable for Transfer {
     ///
     /// A new RemoveAgent message body
     fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
-        RemoveAgent { transaction_id, agent }
+        RemoveAgent {
+            transaction_id,
+            agent,
+        }
     }
 }
 
@@ -3398,7 +3460,10 @@ impl Authorizable for Payment {
     }
 
     fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
-        RemoveAgent { transaction_id, agent }
+        RemoveAgent {
+            transaction_id,
+            agent,
+        }
     }
 }
 

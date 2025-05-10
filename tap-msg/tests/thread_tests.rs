@@ -322,7 +322,10 @@ fn test_confirm_relationship() -> Result<()> {
         .unwrap()
         .contains(&_bob_did.to_string()));
     // The thid should match the transfer_id provided in the ConfirmRelationship body
-    assert_eq!(confirm_message.thid, Some(confirm_body.transaction_id.clone()));
+    assert_eq!(
+        confirm_message.thid,
+        Some(confirm_body.transaction_id.clone())
+    );
 
     // Check body content (role)
     assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian",);
