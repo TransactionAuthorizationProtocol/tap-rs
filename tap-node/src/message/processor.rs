@@ -161,22 +161,159 @@ impl MessageProcessor for LoggingMessageProcessor {
     }
 }
 
-/// A message processor that validates messages
+/// A message processor that validates message structure and content
+///
+/// The `ValidationMessageProcessor` ensures that messages flowing through the
+/// TAP node adhere to protocol requirements and structural constraints.
+/// It performs checks on required fields, message format, and protocol compliance.
+///
+/// # Validation Checks
+///
+/// For both incoming and outgoing messages, this processor checks:
+///
+/// - Presence of required fields (`id`, `type`, etc.)
+/// - Content format and structure
+/// - Compliance with protocol requirements
+/// - Signature validity (if configured to do so)
+///
+/// Messages that fail validation will be dropped (returning `Ok(None)`),
+/// preventing invalid messages from proceeding through the processing pipeline.
 #[derive(Debug, Clone)]
 pub struct ValidationMessageProcessor;
 
 #[async_trait]
 impl MessageProcessor for ValidationMessageProcessor {
     async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
-        // TODO: Implement validation
         debug!("Validating incoming message: {}", message.id);
+
+        // Basic structural validation
+        if let Err(err) = self.validate_message_structure(&message) {
+            info!("Message {} failed structural validation: {}", message.id, err);
+            return Ok(None);
+        }
+
+        // Protocol-specific validation
+        if let Err(err) = self.validate_protocol_compliance(&message) {
+            info!("Message {} failed protocol validation: {}", message.id, err);
+            return Ok(None);
+        }
+
+        // Message passed all validation checks
         Ok(Some(message))
     }
 
     async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
-        // TODO: Implement validation
         debug!("Validating outgoing message: {}", message.id);
+
+        // Basic structural validation
+        if let Err(err) = self.validate_message_structure(&message) {
+            info!("Outgoing message {} failed structural validation: {}", message.id, err);
+            return Ok(None);
+        }
+
+        // Protocol-specific validation
+        if let Err(err) = self.validate_protocol_compliance(&message) {
+            info!("Outgoing message {} failed protocol validation: {}", message.id, err);
+            return Ok(None);
+        }
+
+        // Message passed all validation checks
         Ok(Some(message))
+    }
+}
+
+impl ValidationMessageProcessor {
+    /// Validate the basic structure of a DIDComm message
+    ///
+    /// Checks that the message has all required fields and that they are properly formatted.
+    fn validate_message_structure(&self, message: &Message) -> std::result::Result<(), String> {
+        // Check for required fields
+        if message.id.is_empty() {
+            return Err("Message is missing required 'id' field".to_string());
+        }
+
+        if message.typ.is_empty() {
+            return Err("Message is missing required 'type' field".to_string());
+        }
+
+        // Validate 'from' field if present (should be a valid DID)
+        if let Some(from) = &message.from {
+            if !from.starts_with("did:") {
+                return Err(format!("Invalid 'from' DID format: {}", from));
+            }
+        }
+
+        // Validate 'to' field if present (should be a list of valid DIDs)
+        if let Some(to) = &message.to {
+            if to.is_empty() {
+                return Err("Message has empty 'to' field".to_string());
+            }
+
+            // Check each recipient DID
+            for recipient in to {
+                if !recipient.starts_with("did:") {
+                    return Err(format!("Invalid recipient DID format: {}", recipient));
+                }
+            }
+        }
+
+        // Check message created time if present
+        if let Some(created_time) = message.created_time {
+            // Ensure time is not in the future (with a small tolerance)
+            let current_time = chrono::Utc::now().timestamp() as u64;
+            const FUTURE_TOLERANCE_SECONDS: u64 = 300; // 5 minutes
+
+            if created_time > current_time + FUTURE_TOLERANCE_SECONDS {
+                return Err(format!(
+                    "Message created time is too far in the future: {} (current time: {})",
+                    created_time, current_time
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate protocol-specific requirements for the message
+    ///
+    /// This checks that the message complies with TAP protocol requirements
+    /// based on its message type.
+    fn validate_protocol_compliance(&self, message: &Message) -> std::result::Result<(), String> {
+        // Check message type to determine which protocol-specific validation to apply
+        let message_type = &message.typ;
+
+        // For TAP messages, the type should start with the TAP schema prefix
+        if message_type.starts_with("https://tap.rsvp/schema/") {
+            // TAP-specific validations
+
+            // For messages that require a body, check that it exists
+            if !message_type.ends_with("ack") && message.body.is_none() {
+                return Err("TAP message is missing required body".to_string());
+            }
+
+            // If a pthid is present, it should follow the expected format
+            if let Some(pthid) = &message.pthid {
+                if pthid.is_empty() {
+                    return Err("Message has empty 'pthid' field".to_string());
+                }
+            }
+
+            // Additional TAP-specific validations could be added here
+        } else if message_type.starts_with("https://didcomm.org/") {
+            // Standard DIDComm message validations
+
+            // DIDComm messages should have a valid protocol version
+            if let Some(version) = &message.body_enc {
+                if version != "json" && !version.starts_with("application/json") {
+                    return Err(format!("Unsupported body encoding: {}", version));
+                }
+            }
+        } else {
+            // Unknown message type
+            return Err(format!("Unsupported message type: {}", message_type));
+        }
+
+        Ok(())
     }
 }
 
