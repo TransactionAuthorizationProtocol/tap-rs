@@ -51,13 +51,10 @@ mod websocket_tests {
         // Test custom options
         let sender = WebSocketMessageSender::with_options(
             "https://example.com".to_string(),
-            5000, // 5 second timeout
-            2,    // 2 reconnect attempts
         );
 
         let sender_debug = format!("{:?}", sender);
-        assert!(sender_debug.contains("timeout_ms: 5000"));
-        assert!(sender_debug.contains("max_reconnect_attempts: 2"));
+        assert!(sender_debug.contains("base_url"));
     }
 }
 

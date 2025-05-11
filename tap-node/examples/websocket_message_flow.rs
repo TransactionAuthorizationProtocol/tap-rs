@@ -82,8 +82,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a WebSocket message sender with options
     let websocket_sender = WebSocketMessageSender::with_options(
         "https://api.example.com".to_string(), // Your actual WebSocket server URL
-        30000,                                 // 30-second timeout
-        3,                                     // 3 reconnection attempts
     );
 
     println!("Sending message via WebSocket...");

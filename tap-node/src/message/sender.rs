@@ -248,10 +248,6 @@ impl HttpMessageSender {
 pub struct WebSocketMessageSender {
     /// Base URL for WebSocket endpoints (ws:// or wss://)
     base_url: String,
-    /// Connection timeout in milliseconds
-    timeout_ms: u64,
-    /// Maximum number of reconnection attempts
-    max_reconnect_attempts: u32,
     /// Active connections (only in native environments)
     #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
     connections: std::sync::Mutex<HashMap<String, tokio::sync::mpsc::Sender<String>>>,
@@ -263,17 +259,15 @@ pub struct WebSocketMessageSender {
 impl WebSocketMessageSender {
     /// Create a new WebSocketMessageSender with the given base URL
     pub fn new(base_url: String) -> Self {
-        Self::with_options(base_url, 30000, 5) // Default 30 second timeout, 5 reconnect attempts
+        Self::with_options(base_url)
     }
 
     /// Create a new WebSocketMessageSender with custom options
-    pub fn with_options(base_url: String, timeout_ms: u64, max_reconnect_attempts: u32) -> Self {
+    pub fn with_options(base_url: String) -> Self {
         #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
         {
             Self {
                 base_url,
-                timeout_ms,
-                max_reconnect_attempts,
                 connections: std::sync::Mutex::new(HashMap::new()),
                 task_handles: std::sync::Mutex::new(HashMap::new()),
             }
@@ -283,8 +277,6 @@ impl WebSocketMessageSender {
         {
             Self {
                 base_url,
-                timeout_ms,
-                max_reconnect_attempts,
             }
         }
     }
@@ -349,9 +341,9 @@ impl WebSocketMessageSender {
         // Create a channel for sending messages to the WebSocket task
         let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(100);
 
-        // Connect to the WebSocket
+        // Connect to the WebSocket with default timeout (30 seconds)
         let (ws_stream, _) = match tokio::time::timeout(
-            std::time::Duration::from_millis(self.timeout_ms),
+            std::time::Duration::from_millis(30000),
             connect_async(&endpoint),
         )
         .await
@@ -380,8 +372,6 @@ impl WebSocketMessageSender {
         // 1. Listen for messages from the channel and send them to the WebSocket
         // 2. Listen for messages from the WebSocket and handle them
         let recipient_clone = recipient.to_string();
-        // Capture the reconnect attempts limit in case we implement reconnection logic in the future
-        let _max_reconnect_attempts = self.max_reconnect_attempts;
         let handle = tokio::spawn(async move {
             // Process messages from the channel to send over WebSocket
             loop {
@@ -569,7 +559,7 @@ impl MessageSender for WebSocketMessageSender {
                     window
                         .set_timeout_with_callback_and_timeout_and_arguments_0(
                             timeout_closure.as_ref().unchecked_ref(),
-                            self.timeout_ms as i32,
+                            30000, // Default 30 second timeout
                         )
                         .unwrap();
                 }),
