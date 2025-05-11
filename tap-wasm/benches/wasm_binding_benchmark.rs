@@ -19,14 +19,14 @@ fn create_transfer_body() -> Transfer {
         id: "did:example:alice".to_string(),
         role: Some("originator".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     let beneficiary = Participant {
         id: "did:example:bob".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
-        lei: None,
+        leiCode: None,
     };
 
     // Create a transfer body
@@ -40,13 +40,14 @@ fn create_transfer_body() -> Transfer {
         settlement_id: None,
         memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),
+        transaction_id: "test-transfer-id".to_string(),
     }
 }
 
 /// Create a message for testing
 fn create_test_message() -> DIDCommMessage {
     let transfer_body = create_transfer_body();
-    let message = transfer_body.to_didcomm().unwrap();
+    let message = transfer_body.to_didcomm(None).unwrap();
     message
 }
 
@@ -84,26 +85,19 @@ fn bench_message_conversion(c: &mut Criterion) {
 
     // Create messages of different types
     let transfer_body = create_transfer_body();
-    let transfer_message = transfer_body.to_didcomm().unwrap();
+    let transfer_message = transfer_body.to_didcomm(None).unwrap();
 
     let authorize_body = Authorize {
         transaction_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        settlement_address: None,
-        metadata: HashMap::new(),
     };
-    let authorize_message = authorize_body.to_didcomm().unwrap();
+    let authorize_message = authorize_body.to_didcomm(None).unwrap();
 
     let reject_body = Reject {
         transaction_id: "test-transfer-id".to_string(),
-        code: "COMPLIANCE_FAILURE".to_string(),
-        description: "Unable to comply with transfer requirements".to_string(),
-        note: Some("Transfer rejected for testing".to_string()),
-        timestamp: chrono::Utc::now().to_rfc3339(),
-        metadata: HashMap::new(),
+        reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Rejected for testing.".to_string(),
     };
-    let reject_message = reject_body.to_didcomm().unwrap();
+    let reject_message = reject_body.to_didcomm(None).unwrap();
 
     // Serialize messages
     let transfer_json = serde_json::to_string(&transfer_message).unwrap();

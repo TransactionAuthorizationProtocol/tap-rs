@@ -54,6 +54,8 @@ fn create_transfer_body() -> Transfer {
         agents: vec![],
         settlement_id: None,
         metadata: HashMap::new(),
+        memo: None,
+        transaction_id: "test-transfer-id".to_string(),
     }
 }
 
