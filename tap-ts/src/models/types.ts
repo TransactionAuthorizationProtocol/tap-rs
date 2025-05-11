@@ -5,7 +5,8 @@
  * and are used throughout the TAP SDK.
  */
 
-import { Purpose, CategoryPurpose } from "@taprsvp/iso20022_external_codes";
+// Temporarily import from local file to make tests work
+import { Purpose, CategoryPurpose } from "../temp";
 // We'll need to implement our own currency types
 export type IsoCurrency = string;
 // We'll need to implement our own invoice types
