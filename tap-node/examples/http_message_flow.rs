@@ -1,20 +1,20 @@
 use serde_json::json;
 use std::sync::Arc;
-use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver, DefaultMessagePacker};
+use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::MultiResolver;
 use tap_agent::{AgentConfig, DefaultAgent};
 use tap_node::{HttpMessageSender, NodeConfig, TapNode};
 
-// Create a simple message
-#[derive(serde::Serialize)]
-struct SimpleMessage {
-    id: String,
-    type_: String,
-    from: Option<String>,
-    to: Option<Vec<String>>,
-    body: serde_json::Value,
-    created_time: Option<u64>,
-}
+// Example message structure, left here for reference
+// #[derive(serde::Serialize)]
+// struct SimpleMessage {
+//     id: String,
+//     type_: String,
+//     from: Option<String>,
+//     to: Option<Vec<String>>,
+//     body: serde_json::Value,
+//     created_time: Option<u64>,
+// }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Message packed successfully: {}", packed_message);
 
     // Create an HTTP message sender for external dispatch
-    let sender = HttpMessageSender::with_options(
+    let _sender = HttpMessageSender::with_options(
         "https://recipient-node.example.com".to_string(),
         5000, // 5 second timeout
         2,    // 2 retries
