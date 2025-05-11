@@ -154,8 +154,19 @@ async fn test_didcomm_endpoint() {
         response.err()
     );
 
-    let status = response.unwrap().status();
-    assert_eq!(status, 500);
+    let response = response.unwrap();
+    let status = response.status();
+    // Our validation now returns a 400 Bad Request error for invalid message types
+    assert_eq!(status, 400);
+
+    // Read the response body to ensure it has the right error message
+    let body = response.text().await.unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+
+    // Verify this is an error response
+    assert_eq!(json["status"], "error");
+    // Verify the error type is related to validation
+    assert!(json["error"]["type"].as_str().unwrap().contains("validation"));
 
     // Stop the server
     server.stop().await.expect("Server should stop");

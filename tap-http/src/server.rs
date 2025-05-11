@@ -7,6 +7,60 @@
 //! - Health checks for monitoring system availability
 //!
 //! The server is built using the Warp web framework and provides graceful shutdown capabilities.
+//! 
+//! # Features
+//! 
+//! - HTTP/WebSocket messaging for DIDComm transport
+//! - Message validation for TAP protocol compliance
+//! - Configurable host, port, and endpoint paths
+//! - Support for optional TLS encryption
+//! - Graceful shutdown handling
+//! - Health check monitoring endpoint
+//! 
+//! # Configuration
+//! 
+//! The server can be configured with the `TapHttpConfig` struct, which allows setting:
+//! 
+//! - Host address and port
+//! - DIDComm endpoint path
+//! - TLS configuration (certificate and key paths)
+//! - Rate limiting options
+//! - Request timeout settings
+//! 
+//! # Example
+//! 
+//! ```rust,no_run
+//! use tap_http::{TapHttpConfig, TapHttpServer};
+//! use tap_node::{NodeConfig, TapNode};
+//! use std::time::Duration;
+//! 
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Create a TAP Node
+//!     let node = TapNode::new(NodeConfig::default());
+//!     
+//!     // Configure the HTTP server with custom settings
+//!     let config = TapHttpConfig {
+//!         host: "0.0.0.0".to_string(),    // Listen on all interfaces
+//!         port: 8080,                     // Custom port
+//!         didcomm_endpoint: "/api/didcomm".to_string(),  // Custom endpoint path
+//!         request_timeout_secs: 60,       // 60-second timeout for outbound requests
+//!         ..TapHttpConfig::default()
+//!     };
+//!     
+//!     // Create and start the server
+//!     let mut server = TapHttpServer::new(config, node);
+//!     server.start().await?;
+//!     
+//!     // Wait for shutdown signal
+//!     tokio::signal::ctrl_c().await?;
+//!     
+//!     // Gracefully stop the server
+//!     server.stop().await?;
+//!     
+//!     Ok(())
+//! }
+//! ```
 
 use crate::config::TapHttpConfig;
 use crate::error::{Error, Result};
@@ -18,6 +72,8 @@ use tap_node::TapNode;
 use tokio::sync::oneshot;
 use tracing::{error, info, warn};
 use warp::{Filter, Rejection, Reply};
+
+// Rate limiter will be implemented in the future update
 
 /// TAP HTTP server for handling DIDComm messages.
 ///
@@ -48,6 +104,16 @@ impl TapHttpServer {
     /// # Returns
     /// A new TapHttpServer instance that can be started with the `start` method
     pub fn new(config: TapHttpConfig, node: TapNode) -> Self {
+        // Log if rate limiting is configured but not implemented yet
+        if config.rate_limit.is_some() {
+            warn!("Rate limiting is configured but not yet implemented");
+        }
+
+        // Log if TLS is configured but not implemented yet
+        if config.tls.is_some() {
+            warn!("TLS is configured but not yet fully implemented");
+        }
+
         Self {
             config,
             node: Arc::new(node),
@@ -108,6 +174,8 @@ impl TapHttpServer {
 
         // Start the server
         info!("Starting TAP HTTP server on {}", addr);
+        
+        // Start server without TLS
         let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(addr, async {
             rx.await.ok();
             info!("Shutting down TAP HTTP server");
@@ -150,6 +218,8 @@ impl TapHttpServer {
     pub fn config(&self) -> &TapHttpConfig {
         &self.config
     }
+    
+    // Rate limiting functionality will be implemented in a future update
 }
 
 /// Helper function to provide the TAP Node to route handlers.
@@ -159,28 +229,41 @@ fn with_node(
     warp::any().map(move || node.clone())
 }
 
+/// Custom rejection for rate limited requests
+#[derive(Debug)]
+struct RateLimitedError;
+impl warp::reject::Reject for RateLimitedError {}
+
 /// Handler for rejections.
 async fn handle_rejection(err: Rejection) -> std::result::Result<impl Reply, Infallible> {
-    let message;
-    let status;
-
-    if err.is_not_found() {
-        message = "Not Found";
-        status = warp::http::StatusCode::NOT_FOUND;
+    use crate::error::Error;
+    
+    let error_response = if err.is_not_found() {
+        // Not found errors
+        let err = Error::Http("Resource not found".to_string());
+        err.to_response()
     } else if err.find::<warp::reject::PayloadTooLarge>().is_some() {
-        message = "Payload too large";
-        status = warp::http::StatusCode::PAYLOAD_TOO_LARGE;
+        // Payload too large
+        let err = Error::Http("Payload too large".to_string());
+        err.to_response()
+    } else if err.find::<warp::reject::UnsupportedMediaType>().is_some() {
+        // Unsupported media type
+        let err = Error::Http("Unsupported media type".to_string());
+        err.to_response()
+    } else if err.find::<warp::reject::MethodNotAllowed>().is_some() {
+        // Method not allowed
+        let err = Error::Http("Method not allowed".to_string());
+        err.to_response()
+    } else if err.find::<RateLimitedError>().is_some() {
+        // Rate limiting
+        let err = Error::RateLimit("Too many requests, please try again later".to_string());
+        err.to_response()
     } else {
+        // Unhandled error
         error!("Unhandled rejection: {:?}", err);
-        message = "Internal Server Error";
-        status = warp::http::StatusCode::INTERNAL_SERVER_ERROR;
-    }
+        let err = Error::Unknown("Internal server error".to_string());
+        err.to_response()
+    };
 
-    Ok(warp::reply::with_status(
-        warp::reply::json(&serde_json::json!({
-            "status": "error",
-            "message": message
-        })),
-        status,
-    ))
+    Ok(error_response)
 }

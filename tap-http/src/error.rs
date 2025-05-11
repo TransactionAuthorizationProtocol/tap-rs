@@ -1,6 +1,11 @@
 //! Error handling for the TAP HTTP server.
+//!
+//! This module provides a comprehensive error handling system for the TAP HTTP server.
+//! It defines error types for various failure scenarios and provides conversions
+//! from common error types to the tap-http error type.
 
 use thiserror::Error;
+use warp::Reply;
 
 /// Result type for tap-http operations.
 pub type Result<T> = std::result::Result<T, Error>;
@@ -11,6 +16,14 @@ pub enum Error {
     /// Invalid DIDComm message format.
     #[error("Invalid DIDComm message: {0}")]
     DIDComm(String),
+
+    /// Message validation error.
+    #[error("Message validation failed: {0}")]
+    Validation(String),
+
+    /// Message authentication error.
+    #[error("Message authentication failed: {0}")]
+    Authentication(String),
 
     /// JSON serialization/deserialization error.
     #[error("JSON error: {0}")]
@@ -32,9 +45,85 @@ pub enum Error {
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Rate limiting error.
+    #[error("Rate limit exceeded: {0}")]
+    RateLimit(String),
+
+    /// TLS error.
+    #[error("TLS error: {0}")]
+    Tls(String),
+
     /// Unknown error.
     #[error("Unknown error: {0}")]
     Unknown(String),
+}
+
+/// Error severity for logging and reporting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorSeverity {
+    /// Informational errors (e.g., validation failures)
+    Info,
+    /// Warning-level errors (e.g., rate limiting)
+    Warning,
+    /// Critical errors (e.g., server failures)
+    Critical,
+}
+
+impl Error {
+    /// Returns the HTTP status code that should be used for this error.
+    pub fn status_code(&self) -> warp::http::StatusCode {
+        use warp::http::StatusCode;
+
+        match self {
+            Error::DIDComm(_) | Error::Validation(_) | Error::Json(_) => StatusCode::BAD_REQUEST,
+            Error::Authentication(_) => StatusCode::UNAUTHORIZED,
+            Error::RateLimit(_) => StatusCode::TOO_MANY_REQUESTS,
+            Error::Node(_) | Error::Unknown(_) | Error::Io(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            Error::Config(_) => StatusCode::SERVICE_UNAVAILABLE,
+            Error::Http(_) => StatusCode::BAD_GATEWAY,
+            Error::Tls(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    /// Returns the severity level of this error.
+    pub fn severity(&self) -> ErrorSeverity {
+        match self {
+            Error::DIDComm(_) | Error::Validation(_) | Error::Json(_) => ErrorSeverity::Info,
+            Error::RateLimit(_) | Error::Authentication(_) => ErrorSeverity::Warning,
+            Error::Node(_) | Error::Http(_) | Error::Config(_) | Error::Tls(_) |
+            Error::Unknown(_) | Error::Io(_) => ErrorSeverity::Critical,
+        }
+    }
+
+    /// Creates an error response for this error.
+    pub fn to_response(&self) -> warp::reply::Response {
+        let status = self.status_code();
+        let message = self.to_string();
+        let error_type = match self {
+            Error::DIDComm(_) => "didcomm_error",
+            Error::Validation(_) => "validation_error",
+            Error::Authentication(_) => "authentication_error",
+            Error::Json(_) => "json_error",
+            Error::Http(_) => "http_error",
+            Error::Node(_) => "node_error",
+            Error::Config(_) => "configuration_error",
+            Error::Io(_) => "io_error",
+            Error::RateLimit(_) => "rate_limit_error",
+            Error::Tls(_) => "tls_error",
+            Error::Unknown(_) => "unknown_error",
+        };
+
+        warp::reply::with_status(
+            warp::reply::json(&serde_json::json!({
+                "status": "error",
+                "error": {
+                    "type": error_type,
+                    "message": message,
+                }
+            })),
+            status,
+        ).into_response()
+    }
 }
 
 impl From<serde_json::Error> for Error {

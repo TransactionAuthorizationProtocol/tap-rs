@@ -8,6 +8,7 @@
 
 use crate::error::{Error, Result};
 use bytes::Bytes;
+use chrono;
 use didcomm::Message;
 use serde::Serialize;
 use serde_json::json;
@@ -15,7 +16,7 @@ use std::convert::Infallible;
 use std::sync::Arc;
 use tap_msg::didcomm;
 use tap_node::TapNode;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use warp::{self, hyper::StatusCode, reply::json, Reply};
 
 /// Response structure for health checks.
@@ -87,20 +88,30 @@ pub async fn handle_didcomm(
             Ok(json_success_response())
         }
         Err(e) => {
-            error!("Error processing TAP message: {}", e);
-            Ok(json_error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Error processing message: {}", e),
-            ))
+            // Log error with appropriate severity
+            match e.severity() {
+                crate::error::ErrorSeverity::Info => debug!("Message processing error: {}", e),
+                crate::error::ErrorSeverity::Warning => warn!("Message processing warning: {}", e),
+                crate::error::ErrorSeverity::Critical => error!("Critical error processing message: {}", e),
+            }
+
+            // Return the structured error response
+            Ok(e.to_response())
         }
     }
 }
 
 /// Process a TAP message using the TAP Node.
 ///
-/// This function forwards the DIDComm message to the TAP Node for processing.
-/// The TapNode.receive_message method will:
-/// 1. Validate and verify the message
+/// This function performs pre-processing validation on DIDComm messages before
+/// forwarding them to the TAP Node for processing. The validation includes:
+///
+/// 1. Checking for required fields (id, type)
+/// 2. Validating the message type conforms to the TAP protocol
+///    - Must contain "tap.rsvp" or "https://tap.rsvp" in the type
+///
+/// After validation, the TapNode.receive_message method will:
+/// 1. Further validate and verify the message
 /// 2. Route the message to the appropriate agent
 /// 3. Process the message according to the TAP protocol
 ///
@@ -110,13 +121,67 @@ pub async fn handle_didcomm(
 ///
 /// # Returns
 /// * `Ok(())` if processing succeeded
-/// * `Err(Error)` if message processing failed
+/// * `Err(Error)` if validation fails or message processing failed
+///
+/// # Error Conditions
+/// The function will return an error if:
+/// * The message is missing required fields
+/// * The message type is not a valid TAP protocol message
+/// * The TAP Node encounters an error during processing
 async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()> {
+    // Basic validation for the message
+    // Ensure message has required fields
+    if message.typ.is_empty() || message.id.is_empty() {
+        return Err(Error::Validation("Missing required message fields: type or id".to_string()));
+    }
+
+    // Check for missing from/to fields if required
+    if message.from.is_none() || message.to.is_none() || message.to.as_ref().unwrap().is_empty() {
+        return Err(Error::Validation("Message missing sender or recipient information".to_string()));
+    }
+
+    // Validate the message conforms to TAP protocol
+    // The test message uses "https://didcomm.org/basicmessage/2.0/message" which should be rejected
+    // as it's not a valid TAP protocol message type
+    let valid_types = ["tap.rsvp", "https://tap.rsvp"];
+    let is_valid_type = valid_types.iter().any(|valid_type| message.typ.contains(valid_type));
+
+    if !is_valid_type {
+        return Err(Error::Validation(format!(
+            "Unsupported message type: {}, expected TAP protocol message",
+            message.typ
+        )));
+    }
+
+    // Validate that message has valid timestamps
+    if let Some(created_time) = message.created_time {
+        let current_time = chrono::Utc::now().timestamp() as u64;
+
+        // Check for future timestamps (within a small margin)
+        if created_time > current_time + 300 { // 5 minute margin
+            return Err(Error::Validation(format!(
+                "Message has future timestamp: {} (current time: {})",
+                created_time, current_time
+            )));
+        }
+    }
+
     // Process the message through the TAP Node using the receive_message method
-    node.receive_message(message)
-        .await
-        .map_err(|e| Error::Node(e.to_string()))?;
-    Ok(())
+    match node.receive_message(message).await {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            let error_str = e.to_string();
+
+            // Categorize TapNode errors
+            if error_str.contains("authentication") || error_str.contains("unauthorized") {
+                Err(Error::Authentication(format!("Authentication failed: {}", error_str)))
+            } else if error_str.contains("validation") || error_str.contains("invalid") {
+                Err(Error::Validation(format!("Node validation failed: {}", error_str)))
+            } else {
+                Err(Error::Node(error_str))
+            }
+        }
+    }
 }
 
 /// Create a JSON success response.
