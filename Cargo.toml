@@ -2,7 +2,6 @@
 members = [
     "tap-msg",
     "tap-agent", "tap-caip", "tap-node", "tap-http", "tap-wasm",
-    "tap-ts/src/wasm",
 ]
 resolver = "2"
 

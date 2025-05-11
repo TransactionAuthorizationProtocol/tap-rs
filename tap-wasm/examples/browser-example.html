@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>TAP WASM Example</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      line-height: 1.6;
+    }
+    
+    h1, h2 {
+      color: #333;
+    }
+    
+    pre {
+      background-color: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    
+    button {
+      background-color: #4CAF50;
+      border: none;
+      color: white;
+      padding: 10px 20px;
+      text-align: center;
+      text-decoration: none;
+      display: inline-block;
+      font-size: 16px;
+      margin: 10px 2px;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+    
+    .output {
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+      min-height: 200px;
+    }
+  </style>
+</head>
+<body>
+  <h1>TAP WASM Example</h1>
+  <p>This example demonstrates how to use the TAP WebAssembly package.</p>
+  
+  <div class="actions">
+    <button id="createMessage">Create Transfer Message</button>
+    <button id="createAgent">Create Agent</button>
+    <button id="signMessage">Sign Message (requires creating both first)</button>
+  </div>
+  
+  <h2>Output:</h2>
+  <div id="output" class="output"></div>
+  
+  <script type="module">
+    import init, { 
+      init_tap_wasm, 
+      Message, 
+      TapAgent, 
+      MessageType, 
+      generate_uuid_v4,
+      create_did_key
+    } from '../pkg/tap_wasm.js';
+
+    let message = null;
+    let agent = null;
+    
+    // Initialize the WASM module
+    await init();
+    init_tap_wasm();
+    
+    const output = document.getElementById('output');
+    
+    // Helper function to log to the output div
+    function log(text) {
+      output.innerHTML += text + '<br>';
+      console.log(text);
+    }
+    
+    // Helper function to pretty print objects
+    function prettyPrint(obj) {
+      return `<pre>${JSON.stringify(obj, null, 2)}</pre>`;
+    }
+    
+    // Create a transfer message
+    document.getElementById('createMessage').addEventListener('click', () => {
+      output.innerHTML = '';
+      
+      try {
+        // Create a new message
+        message = new Message('msg_' + generate_uuid_v4(), 'Transfer', '1.0');
+        
+        // Set the transfer message body
+        message.set_transfer_body({
+          asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+          originator: {
+            id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            role: "originator"
+          },
+          beneficiary: {
+            id: "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+            role: "beneficiary"
+          },
+          amount: "100.0",
+          agents: [],
+          memo: "Test transfer"
+        });
+        
+        log('Created transfer message:');
+        log(prettyPrint({
+          id: message.id(),
+          type: message.message_type(),
+          version: message.version(),
+          transfer: message.get_transfer_body()
+        }));
+      } catch (error) {
+        log('Error creating message: ' + error);
+      }
+    });
+    
+    // Create an agent
+    document.getElementById('createAgent').addEventListener('click', () => {
+      output.innerHTML = '';
+      
+      try {
+        // Create a new agent
+        agent = new TapAgent({
+          nickname: "Test Agent",
+          debug: true
+        });
+        
+        log('Created agent:');
+        log(prettyPrint({
+          did: agent.get_did(),
+          nickname: agent.nickname()
+        }));
+      } catch (error) {
+        log('Error creating agent: ' + error);
+      }
+    });
+    
+    // Sign a message
+    document.getElementById('signMessage').addEventListener('click', () => {
+      output.innerHTML = '';
+      
+      if (!message || !agent) {
+        log('Please create both a message and an agent first.');
+        return;
+      }
+      
+      try {
+        // Set the message source
+        agent.set_from(message);
+        
+        // Sign the message
+        agent.sign_message(message);
+        
+        log('Signed message:');
+        log(prettyPrint({
+          id: message.id(),
+          type: message.message_type(),
+          version: message.version(),
+          from: message.from_did(),
+          transfer: message.get_transfer_body()
+        }));
+      } catch (error) {
+        log('Error signing message: ' + error);
+      }
+    });
+  </script>
+</body>
+</html>
