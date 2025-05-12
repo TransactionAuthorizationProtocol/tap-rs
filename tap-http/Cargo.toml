@@ -9,8 +9,8 @@ description = "HTTP server for the Transaction Authorization Protocol (TAP)"
 readme = "README.md"
 
 [dependencies]
-tap-msg = { path = "../tap-msg" }
-tap-node = { path = "../tap-node" }
+tap-msg = { version = "0.1.0", path = "../tap-msg" }
+tap-node = { version = "0.1.0", path = "../tap-node" }
 warp = "0.3"
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }

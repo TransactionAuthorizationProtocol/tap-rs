@@ -14,7 +14,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 # Chain Agnostic Identifiers
-tap-caip = { path = "../tap-caip" }
+tap-caip = { version = "0.1.0", path = "../tap-caip" }
 
 # DIDComm
 didcomm = { workspace = true }

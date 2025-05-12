@@ -9,8 +9,8 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-tap-msg = { path = "../tap-msg" }
-tap-caip = { path = "../tap-caip" }
+tap-msg = { version = "0.1.0", path = "../tap-msg" }
+tap-caip = { version = "0.1.0", path = "../tap-caip" }
 async-trait = { workspace = true }
 thiserror = "1.0"
 serde = { workspace = true }
