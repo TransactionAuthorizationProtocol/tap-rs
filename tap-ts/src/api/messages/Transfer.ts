@@ -4,8 +4,8 @@
  */
 
 import { DIDCommMessageBase, MessageOptions } from './base';
-import { 
-  Transfer as TransferBody, 
+import type {
+  Transfer as TransferBody,
   TransferMessage,
   Participant,
   Asset,
@@ -16,8 +16,12 @@ import {
   Reject,
   Settle,
   Cancel,
-  Revert
-} from '../../models/types';
+  Revert,
+  ISO8601DateTime,
+  ISO20022PurposeCode,
+  ISO20022CategoryPurposeCode
+} from '@taprsvp/types';
+import { Purpose, CategoryPurpose } from '@taprsvp/iso20022_external_codes';
 import { ValidationError } from '../../utils/errors';
 
 /**
@@ -47,49 +51,61 @@ export interface TransferMessageOptions extends MessageOptions {
   memo?: string;
   
   /** Optional purpose code */
-  purpose?: string;
-  
+  purpose?: Purpose;
+
   /** Optional category purpose code */
-  categoryPurpose?: string;
-  
+  categoryPurpose?: CategoryPurpose;
+
   /** Optional expiry timestamp */
-  expiry?: string;
+  expiry?: ISO8601DateTime;
 }
 
 /**
  * Transfer message implementation
  * Represents a Transfer message in the TAP protocol
  */
-export class Transfer extends DIDCommMessageBase<TransferBody> implements TransferMessage {
+export class Transfer extends DIDCommMessageBase<any> implements TransferMessage {
   /** The message type URI for Transfer messages */
   readonly type: "https://tap.rsvp/schema/1.0#Transfer" = "https://tap.rsvp/schema/1.0#Transfer";
-  
+
+  // Required Transfer interface properties
+  readonly "@context": "https://tap.rsvp/schema/1.0" = "https://tap.rsvp/schema/1.0";
+  readonly "@type": "Transfer" = "Transfer";
+  asset: Asset;
+  amount: Amount;
+  originator: Participant<"Party">;
+  agents: Participant<"Agent">[] = [];
+
+  // Optional Transfer interface properties
+  beneficiary?: Participant<"Party">;
+  settlementId?: CAIP220;
+  memo?: string;
+  purpose?: ISO20022PurposeCode;
+  categoryPurpose?: ISO20022CategoryPurposeCode;
+  expiry?: ISO8601DateTime;
+
   /**
    * Create a new Transfer message
-   * 
+   *
    * @param options Transfer message options
    */
   constructor(options: TransferMessageOptions) {
-    // Create the message body
-    const body: TransferBody = {
-      "@context": "https://tap.rsvp/schema/1.0",
-      "@type": "Transfer",
-      asset: options.asset,
-      amount: options.amount,
-      originator: options.originator,
-      agents: options.agents
-    };
-    
-    // Add optional fields if provided
-    if (options.beneficiary) body.beneficiary = options.beneficiary;
-    if (options.settlementId) body.settlementId = options.settlementId;
-    if (options.memo) body.memo = options.memo;
-    if (options.purpose) body.purpose = options.purpose;
-    if (options.categoryPurpose) body.categoryPurpose = options.categoryPurpose;
-    if (options.expiry) body.expiry = options.expiry;
-    
-    // Call the parent constructor
-    super("https://tap.rsvp/schema/1.0#Transfer", body, options);
+    // Initialize required properties
+    super("https://tap.rsvp/schema/1.0#Transfer", {}, options);
+
+    // Set required properties
+    this.asset = options.asset;
+    this.amount = options.amount;
+    this.originator = options.originator;
+    this.agents = options.agents;
+
+    // Set optional properties
+    if (options.beneficiary) this.beneficiary = options.beneficiary;
+    if (options.settlementId) this.settlementId = options.settlementId;
+    if (options.memo) this.memo = options.memo;
+    if (options.purpose) this.purpose = options.purpose as ISO20022PurposeCode;
+    if (options.categoryPurpose) this.categoryPurpose = options.categoryPurpose as ISO20022CategoryPurposeCode;
+    if (options.expiry) this.expiry = options.expiry;
   }
   
   /**
@@ -101,26 +117,26 @@ export class Transfer extends DIDCommMessageBase<TransferBody> implements Transf
   _validate(): void {
     // Call parent validation
     super._validate();
-    
+
     // Validate transfer-specific fields
-    if (!this.body.asset) {
+    if (!this.asset) {
       throw new ValidationError('Missing required field: asset', 'asset');
     }
-    
-    if (!this.body.amount) {
+
+    if (!this.amount) {
       throw new ValidationError('Missing required field: amount', 'amount');
     }
-    
-    if (!this.body.originator) {
+
+    if (!this.originator) {
       throw new ValidationError('Missing required field: originator', 'originator');
     }
-    
-    if (!this.body.agents || !this.body.agents.length) {
+
+    if (!this.agents || !this.agents.length) {
       throw new ValidationError('Missing required field: agents', 'agents');
     }
-    
+
     // Validate amount format
-    if (!/^(\d+|\d+\.\d+)$/.test(this.body.amount)) {
+    if (!/^(\d+|\d+\.\d+)$/.test(this.amount)) {
       throw new ValidationError('Invalid amount format', 'amount');
     }
   }

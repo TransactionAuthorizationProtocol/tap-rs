@@ -3,7 +3,7 @@
  * Provides the foundation for all TAP message classes
  */
 
-import { DIDCommMessage, DID, TAPType } from '../../models/types';
+import type { DIDCommMessage, DID, TAPType } from '../../models/types';
 import { getCurrentUnixTimestamp, createExpirationTimestamp } from '../../utils/date';
 import { generateMessageId } from '../../utils/uuid';
 import { ValidationError } from '../../utils/errors';

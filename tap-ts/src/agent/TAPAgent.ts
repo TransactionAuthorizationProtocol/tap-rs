@@ -3,7 +3,8 @@
  * A class for managing identities and signing/verifying messages in TAP
  */
 
-import { DID, DIDCommMessage } from '../models/types';
+import { DID } from '../models/types';
+import { DIDCommMessageBase } from '../api/messages/base';
 import { 
   DIDResolver, 
   DIDResolutionResult, 
@@ -143,7 +144,7 @@ export class TAPAgent {
    * @throws ValidationError if the message is invalid
    * @throws CryptoError if signing fails
    */
-  async sign<T = any>(message: DIDCommMessage<T>): Promise<DIDCommMessage<T>> {
+  async sign<T = any>(message: DIDCommMessageBase<T>): Promise<DIDCommMessageBase<T>> {
     // Prepare the envelope
     message._prepareEnvelope(this.did);
     
@@ -179,7 +180,7 @@ export class TAPAgent {
    * @throws DIDResolutionError if the sender's DID cannot be resolved
    * @throws VerificationError if verification fails
    */
-  async verify<T = any>(message: DIDCommMessage<T>): Promise<boolean> {
+  async verify<T = any>(message: DIDCommMessageBase<T>): Promise<boolean> {
     // Check if message has the required fields
     if (!message.from) {
       throw new ValidationError('Message has no sender (from field)');
