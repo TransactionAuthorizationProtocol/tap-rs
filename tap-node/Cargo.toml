@@ -5,6 +5,7 @@ edition.workspace = true
 authors.workspace = true
 repository.workspace = true
 license.workspace = true
+description = "Transaction Authorization Protocol (TAP) node implementation for routing and processing messages"
 readme = "README.md"
 
 [dependencies]
