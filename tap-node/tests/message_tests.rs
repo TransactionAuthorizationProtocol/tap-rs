@@ -7,13 +7,11 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use tap_agent::crypto::DebugSecretsResolver;
 use tap_agent::did::SyncDIDResolver;
-use tap_agent::error::Result as AgentResult;
+use tap_agent::error::Result;
 use tap_agent::{AgentConfig, DefaultAgent};
 use tap_msg::didcomm::Message;
-use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::ErrorBody;
-use tap_node::{NodeConfig, TapNode};
-use uuid;
+use tap_msg::message::{ErrorBody, TapMessageBody};
+use tap_node::NodeConfig;
 
 /// Test DID Resolver for testing
 #[derive(Debug)]
@@ -27,7 +25,7 @@ impl TestDIDResolver {
 
 #[async_trait]
 impl SyncDIDResolver for TestDIDResolver {
-    async fn resolve(&self, _did: &str) -> AgentResult<Option<DIDDoc>> {
+    async fn resolve(&self, _did: &str) -> Result<Option<DIDDoc>> {
         // Create a basic DIDDoc
         let did_doc = DIDDoc {
             id: "did:example:123".to_string(),
@@ -134,7 +132,7 @@ fn create_test_message(from_did: &str, to_did: &str) -> Message {
 async fn test_message_routing() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = TapNode::new(config);
+    let _node = tap_node::TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -159,7 +157,7 @@ async fn test_message_routing() {
 async fn test_message_with_unregistered_agent() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = TapNode::new(config);
+    let _node = tap_node::TapNode::new(config);
 
     // Create a test agent
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -183,7 +181,7 @@ async fn test_message_with_unregistered_agent() {
 async fn test_invalid_message() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = TapNode::new(config);
+    let _node = tap_node::TapNode::new(config);
 
     // Create a test agent
     let agent_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -196,7 +194,7 @@ async fn test_invalid_message() {
     let message = Message {
         id: uuid::Uuid::new_v4().to_string(),
         typ: "application/didcomm-plain+json".to_string(),
-        body: serde_json::to_value(&create_test_error_body(agent_did, "did:example:invalid"))
+        body: serde_json::to_value(create_test_error_body(agent_did, "did:example:invalid"))
             .unwrap(),
         from: Some(agent_did.to_string()),
         to: None, // Missing to field
@@ -219,7 +217,7 @@ async fn test_invalid_message() {
 async fn test_custom_node_middleware() {
     // Create a node with custom middleware
     let config = NodeConfig::default();
-    let _node = TapNode::new(config);
+    let _node = tap_node::TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -244,7 +242,7 @@ async fn test_custom_node_middleware() {
 async fn test_node_agent_communication() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = TapNode::new(config);
+    let _node = tap_node::TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -273,7 +271,7 @@ async fn test_node_agent_communication() {
 async fn test_error_message() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = TapNode::new(config);
+    let _node = tap_node::TapNode::new(config);
 
     // Create an error message
     let error_body = ErrorBody {

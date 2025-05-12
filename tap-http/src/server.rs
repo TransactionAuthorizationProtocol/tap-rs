@@ -7,33 +7,33 @@
 //! - Health checks for monitoring system availability
 //!
 //! The server is built using the Warp web framework and provides graceful shutdown capabilities.
-//! 
+//!
 //! # Features
-//! 
+//!
 //! - HTTP/WebSocket messaging for DIDComm transport
 //! - Message validation for TAP protocol compliance
 //! - Configurable host, port, and endpoint paths
 //! - Support for optional TLS encryption
 //! - Graceful shutdown handling
 //! - Health check monitoring endpoint
-//! 
+//!
 //! # Configuration
-//! 
+//!
 //! The server can be configured with the `TapHttpConfig` struct, which allows setting:
-//! 
+//!
 //! - Host address and port
 //! - DIDComm endpoint path
 //! - TLS configuration (certificate and key paths)
 //! - Rate limiting options
 //! - Request timeout settings
-//! 
+//!
 //! # Example
-//! 
+//!
 //! ```rust,no_run
 //! use tap_http::{TapHttpConfig, TapHttpServer};
 //! use tap_node::{NodeConfig, TapNode};
 //! use std::time::Duration;
-//! 
+//!
 //! #[tokio::main]
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Create a TAP Node
@@ -174,7 +174,7 @@ impl TapHttpServer {
 
         // Start the server
         info!("Starting TAP HTTP server on {}", addr);
-        
+
         // Start server without TLS
         let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(addr, async {
             rx.await.ok();
@@ -218,7 +218,7 @@ impl TapHttpServer {
     pub fn config(&self) -> &TapHttpConfig {
         &self.config
     }
-    
+
     // Rate limiting functionality will be implemented in a future update
 }
 
@@ -237,7 +237,7 @@ impl warp::reject::Reject for RateLimitedError {}
 /// Handler for rejections.
 async fn handle_rejection(err: Rejection) -> std::result::Result<impl Reply, Infallible> {
     use crate::error::Error;
-    
+
     let error_response = if err.is_not_found() {
         // Not found errors
         let err = Error::Http("Resource not found".to_string());

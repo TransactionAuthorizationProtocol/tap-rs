@@ -6,6 +6,7 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 description = "HTTP server for the Transaction Authorization Protocol (TAP)"
+readme = "README.md"
 
 [dependencies]
 tap-msg = { path = "../tap-msg" }

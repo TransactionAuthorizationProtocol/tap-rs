@@ -92,7 +92,9 @@ pub async fn handle_didcomm(
             match e.severity() {
                 crate::error::ErrorSeverity::Info => debug!("Message processing error: {}", e),
                 crate::error::ErrorSeverity::Warning => warn!("Message processing warning: {}", e),
-                crate::error::ErrorSeverity::Critical => error!("Critical error processing message: {}", e),
+                crate::error::ErrorSeverity::Critical => {
+                    error!("Critical error processing message: {}", e)
+                }
             }
 
             // Return the structured error response
@@ -132,19 +134,25 @@ async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()>
     // Basic validation for the message
     // Ensure message has required fields
     if message.typ.is_empty() || message.id.is_empty() {
-        return Err(Error::Validation("Missing required message fields: type or id".to_string()));
+        return Err(Error::Validation(
+            "Missing required message fields: type or id".to_string(),
+        ));
     }
 
     // Check for missing from/to fields if required
     if message.from.is_none() || message.to.is_none() || message.to.as_ref().unwrap().is_empty() {
-        return Err(Error::Validation("Message missing sender or recipient information".to_string()));
+        return Err(Error::Validation(
+            "Message missing sender or recipient information".to_string(),
+        ));
     }
 
     // Validate the message conforms to TAP protocol
     // The test message uses "https://didcomm.org/basicmessage/2.0/message" which should be rejected
     // as it's not a valid TAP protocol message type
     let valid_types = ["tap.rsvp", "https://tap.rsvp"];
-    let is_valid_type = valid_types.iter().any(|valid_type| message.typ.contains(valid_type));
+    let is_valid_type = valid_types
+        .iter()
+        .any(|valid_type| message.typ.contains(valid_type));
 
     if !is_valid_type {
         return Err(Error::Validation(format!(
@@ -158,7 +166,8 @@ async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()>
         let current_time = chrono::Utc::now().timestamp() as u64;
 
         // Check for future timestamps (within a small margin)
-        if created_time > current_time + 300 { // 5 minute margin
+        if created_time > current_time + 300 {
+            // 5 minute margin
             return Err(Error::Validation(format!(
                 "Message has future timestamp: {} (current time: {})",
                 created_time, current_time
@@ -174,9 +183,15 @@ async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()>
 
             // Categorize TapNode errors
             if error_str.contains("authentication") || error_str.contains("unauthorized") {
-                Err(Error::Authentication(format!("Authentication failed: {}", error_str)))
+                Err(Error::Authentication(format!(
+                    "Authentication failed: {}",
+                    error_str
+                )))
             } else if error_str.contains("validation") || error_str.contains("invalid") {
-                Err(Error::Validation(format!("Node validation failed: {}", error_str)))
+                Err(Error::Validation(format!(
+                    "Node validation failed: {}",
+                    error_str
+                )))
             } else {
                 Err(Error::Node(error_str))
             }

@@ -47,8 +47,7 @@ fn create_transfer_body() -> Transfer {
 /// Create a message for testing
 fn create_test_message() -> DIDCommMessage {
     let transfer_body = create_transfer_body();
-    let message = transfer_body.to_didcomm(None).unwrap();
-    message
+    transfer_body.to_didcomm(None).unwrap()
 }
 
 /// Benchmark JSON serialization and deserialization performance
@@ -95,7 +94,9 @@ fn bench_message_conversion(c: &mut Criterion) {
 
     let reject_body = Reject {
         transaction_id: "test-transfer-id".to_string(),
-        reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Rejected for testing.".to_string(),
+        reason:
+            "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Rejected for testing."
+                .to_string(),
     };
     let reject_message = reject_body.to_didcomm(None).unwrap();
 

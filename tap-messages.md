@@ -8,20 +8,36 @@ Each message type is documented with its corresponding TAIP specification refere
 
 | Message Type | TAIP Reference | Rust Implementation<br>`tap-msg` | WASM Implementation<br>`tap-wasm` | TypeScript Implementation<br>`tap-ts` |
 |--------------|----------------|----------------------------------|-----------------------------------|--------------------------------------|
-| Transfer | [TAIP-3](prds/taips/TAIPs/taip-3.md) | - [x] | - [x] | - [x] |
-| Authorize | [TAIP-4](prds/taips/TAIPs/taip-4.md) | - [x] | - [x] | - [x] |
-| Reject | [TAIP-4](prds/taips/TAIPs/taip-4.md) | - [x] | - [x] | - [x] |
-| Settle | [TAIP-4](prds/taips/TAIPs/taip-4.md) | - [x] | - [x] | - [x] |
-| Presentation | [TAIP-8](prds/taips/TAIPs/taip-8.md) | - [x] | - [x] | - [x] |
-| AddAgents | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
-| ReplaceAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
-| RemoveAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | - [x] | - [x] | - [x] |
-| UpdateParty | [TAIP-6](prds/taips/TAIPs/taip-6.md) | - [x] | - [ ] | - [ ] |
-| UpdatePolicies | [TAIP-7](prds/taips/TAIPs/taip-7.md) | - [x] | - [x] | - [x] |
-| ConfirmRelationship | [TAIP-9](prds/taips/TAIPs/taip-9.md) | - [x] | - [x] | - [x] |
-| Error | - | - [x] | - [x] | - [x] |
+| Transfer | [TAIP-3](prds/taips/TAIPs/taip-3.md) | ✅ | ✅ | ✅ |
+| Authorize | [TAIP-4](prds/taips/TAIPs/taip-4.md) | ✅ | ✅ | ✅ |
+| Reject | [TAIP-4](prds/taips/TAIPs/taip-4.md) | ✅ | ✅ | ✅ |
+| Settle | [TAIP-4](prds/taips/TAIPs/taip-4.md) | ✅ | ✅ | ✅ |
+| Cancel | [TAIP-4](prds/taips/TAIPs/taip-4.md) | ✅ | ✅ | ✅ |
+| Presentation | [TAIP-8](prds/taips/TAIPs/taip-8.md) | ✅ | ✅ | ✅ |
+| PaymentRequest | [TAIP-14](prds/taips/TAIPs/taip-14.md) | ✅ | ✅ | ✅ |
+| Invoice | [TAIP-16](prds/taips/TAIPs/taip-16.md) | ✅ | ✅ | ✅ |
+| Connect | [TAIP-11](prds/taips/TAIPs/taip-11.md) | ✅ | ✅ | ✅ |
+| Revert | [TAIP-12](prds/taips/TAIPs/taip-12.md) | ✅ | ✅ | ✅ |
+| AddAgents | [TAIP-5](prds/taips/TAIPs/taip-5.md) | ✅ | ✅ | ✅ |
+| ReplaceAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | ✅ | ✅ | ✅ |
+| RemoveAgent | [TAIP-5](prds/taips/TAIPs/taip-5.md) | ✅ | ✅ | ✅ |
+| UpdateParty | [TAIP-6](prds/taips/TAIPs/taip-6.md) | ✅ | ❌ | ❌ |
+| UpdatePolicies | [TAIP-7](prds/taips/TAIPs/taip-7.md) | ✅ | ✅ | ✅ |
+| ConfirmRelationship | [TAIP-9](prds/taips/TAIPs/taip-9.md) | ✅ | ✅ | ✅ |
+| Error | - | ✅ | ✅ | ✅ |
 
-## Message Type Details
+## Message Flow
+
+TAP messages typically flow in the following sequence:
+
+1. **Initiation**: Transfer or PaymentRequest initiates a new transaction flow
+2. **Response**: Authorize, Reject, or Cancel responds to the initiation
+3. **Completion**: Settle confirms on-chain settlement
+4. **Exception**: Revert can be used after Settle if needed to reverse a transaction
+
+Additional messages like AddAgents, ReplaceAgent, UpdatePolicies, etc. can be sent during the transaction flow to modify the transaction parameters.
+
+## Core Message Types
 
 ### Transfer (TAIP-3)
 
@@ -42,9 +58,8 @@ The primary message type for initiating a virtual asset transfer between parties
 Message for authorizing a transfer.
 
 **Structure:**
-- `transfer_id`: ID of the transfer being authorized
+- `transaction_id`: ID of the transfer being authorized
 - `note`: (Optional) Additional note
-- `timestamp`: ISO 8601 timestamp
 - `metadata`: Additional metadata
 
 ### Reject (TAIP-4)
@@ -52,11 +67,8 @@ Message for authorizing a transfer.
 Message for rejecting a transfer.
 
 **Structure:**
-- `transfer_id`: ID of the transfer being rejected
-- `code`: Rejection code
-- `description`: Detailed description of the rejection
-- `note`: (Optional) Additional note
-- `timestamp`: ISO 8601 timestamp
+- `transaction_id`: ID of the transfer being rejected
+- `reason`: Detailed description of the rejection
 - `metadata`: Additional metadata
 
 ### Settle (TAIP-4)
@@ -64,29 +76,58 @@ Message for rejecting a transfer.
 Message indicating that a transfer has been settled on a blockchain.
 
 **Structure:**
-- `transfer_id`: ID of the transfer being settled
-- `transaction_id`: Blockchain transaction ID
-- `transaction_hash`: (Optional) Transaction hash
-- `block_height`: (Optional) Block height
-- `note`: (Optional) Additional note
-- `timestamp`: ISO 8601 timestamp
+- `transaction_id`: ID of the transfer being settled
+- `settlement_id`: Blockchain transaction ID or reference
+- `amount`: (Optional) Final settled amount
 - `metadata`: Additional metadata
 
-### Presentation (TAIP-8)
+### Cancel (TAIP-4)
 
-Message providing requested credentials or information.
+Message for cancelling an in-progress transaction.
 
 **Structure:**
-- `transfer_id`: ID of the related transfer
-- `attributes`: Provided attributes
+- `transaction_id`: ID of the transfer being cancelled
+- `reason`: (Optional) Reason for cancellation
+- `note`: (Optional) Additional note
 - `metadata`: Additional metadata
+
+## Payment-Related Messages
+
+### PaymentRequest (TAIP-14)
+
+Message for requesting a payment with specific details.
+
+**Structure:**
+- `currency_code`: Currency code (e.g., "USD")
+- `amount`: Amount as a decimal string
+- `merchant`: Merchant participant information
+- `payment_options`: (Optional) Available payment options
+- `invoice`: (Optional) Detailed invoice information
+- `metadata`: Additional metadata
+
+### Invoice (TAIP-16)
+
+Detailed invoice structure that can be included in payment requests.
+
+**Structure:**
+- `id`: Invoice identifier
+- `issue_date`: ISO 8601 date
+- `currency_code`: Currency code
+- `line_items`: Array of line items
+- `tax_total`: (Optional) Total tax amount
+- `total`: Total invoice amount
+- `sub_total`: (Optional) Subtotal before tax
+- `due_date`: (Optional) ISO 8601 date for payment due
+- `metadata`: Additional metadata
+
+## Agent Management Messages
 
 ### AddAgents (TAIP-5)
 
 Message for adding additional agents to a transaction.
 
 **Structure:**
-- `transfer_id`: ID of the related transfer
+- `transaction_id`: ID of the related transfer
 - `agents`: Array of agents to add
 - `metadata`: Additional metadata
 
@@ -95,7 +136,7 @@ Message for adding additional agents to a transaction.
 Message for replacing an agent with another in a transaction.
 
 **Structure:**
-- `transfer_id`: ID of the related transfer
+- `transaction_id`: ID of the related transfer
 - `original`: ID of the agent to replace
 - `replacement`: New agent information
 - `metadata`: Additional metadata
@@ -105,8 +146,38 @@ Message for replacing an agent with another in a transaction.
 Message for removing an agent from a transaction.
 
 **Structure:**
-- `transfer_id`: ID of the related transfer
+- `transaction_id`: ID of the related transfer
 - `agent`: ID of the agent to remove
+- `metadata`: Additional metadata
+
+## Other Protocol Messages
+
+### Connect (TAIP-11)
+
+Message to establish a connection between parties.
+
+**Structure:**
+- `for`: DID of the entity the connection is for
+- `constraints`: Connection constraints
+- `metadata`: Additional metadata
+
+### Presentation (TAIP-8)
+
+Message providing requested credentials or information.
+
+**Structure:**
+- `transaction_id`: ID of the related transfer
+- `attributes`: Provided attributes
+- `metadata`: Additional metadata
+
+### Revert (TAIP-12)
+
+Message for indicating a transaction should be reversed after settlement.
+
+**Structure:**
+- `transaction_id`: ID of the related transfer
+- `settlement_id`: ID of the settlement being reverted
+- `reason`: Reason for reversion
 - `metadata`: Additional metadata
 
 ### UpdatePolicies (TAIP-7)
@@ -114,7 +185,7 @@ Message for removing an agent from a transaction.
 Message for updating policies for a transaction.
 
 **Structure:**
-- `transfer_id`: ID of the related transfer
+- `transaction_id`: ID of the related transfer
 - `policies`: Array of policies
 - `metadata`: Additional metadata
 
@@ -123,7 +194,7 @@ Message for updating policies for a transaction.
 Message for updating party information in a transaction.
 
 **Structure:**
-- `transfer_id`: ID of the related transfer
+- `transaction_id`: ID of the related transfer
 - `partyType`: Type of party being updated (e.g., "originator", "beneficiary")
 - `party`: Party object with updated information
 - `metadata`: Additional metadata
@@ -133,7 +204,7 @@ Message for updating party information in a transaction.
 Message for confirming a relationship between agents.
 
 **Structure:**
-- `transfer_id`: ID of the related transfer
+- `transaction_id`: ID of the related transfer
 - `agent_id`: DID of the agent
 - `for`: DID of the entity the agent acts on behalf of
 - `role`: (Optional) Role of the agent in the transaction

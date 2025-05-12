@@ -34,22 +34,32 @@ impl Args {
         }
 
         let result = Args {
-            host: args.opt_value_from_str(["-h", "--host"])?.unwrap_or_else(||
-                env::var("TAP_HTTP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string())
-            ),
-            port: args.opt_value_from_str(["-p", "--port"])?.unwrap_or_else(||
-                env::var("TAP_HTTP_PORT").ok()
-                    .and_then(|p| p.parse::<u16>().ok())
-                    .unwrap_or(8000)
-            ),
-            endpoint: args.opt_value_from_str(["-e", "--endpoint"])?.unwrap_or_else(||
-                env::var("TAP_HTTP_DIDCOMM_ENDPOINT").unwrap_or_else(|_| "/didcomm".to_string())
-            ),
-            timeout: args.opt_value_from_str(["-t", "--timeout"])?.unwrap_or_else(||
-                env::var("TAP_HTTP_TIMEOUT").ok()
-                    .and_then(|t| t.parse::<u64>().ok())
-                    .unwrap_or(30)
-            ),
+            host: args
+                .opt_value_from_str(["-h", "--host"])?
+                .unwrap_or_else(|| {
+                    env::var("TAP_HTTP_HOST").unwrap_or_else(|_| "127.0.0.1".to_string())
+                }),
+            port: args
+                .opt_value_from_str(["-p", "--port"])?
+                .unwrap_or_else(|| {
+                    env::var("TAP_HTTP_PORT")
+                        .ok()
+                        .and_then(|p| p.parse::<u16>().ok())
+                        .unwrap_or(8000)
+                }),
+            endpoint: args
+                .opt_value_from_str(["-e", "--endpoint"])?
+                .unwrap_or_else(|| {
+                    env::var("TAP_HTTP_DIDCOMM_ENDPOINT").unwrap_or_else(|_| "/didcomm".to_string())
+                }),
+            timeout: args
+                .opt_value_from_str(["-t", "--timeout"])?
+                .unwrap_or_else(|| {
+                    env::var("TAP_HTTP_TIMEOUT")
+                        .ok()
+                        .and_then(|t| t.parse::<u64>().ok())
+                        .unwrap_or(30)
+                }),
             verbose: args.contains(["-v", "--verbose"]),
         };
 

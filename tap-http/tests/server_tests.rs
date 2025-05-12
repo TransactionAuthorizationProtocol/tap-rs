@@ -69,7 +69,7 @@ async fn test_health_endpoint() {
     // Make request to health endpoint
     let client = reqwest::Client::new();
     let response = client
-        .get(&format!("http://127.0.0.1:{}/health", port))
+        .get(format!("http://127.0.0.1:{}/health", port))
         .timeout(Duration::from_secs(5))
         .send()
         .await;
@@ -140,7 +140,7 @@ async fn test_didcomm_endpoint() {
     // Make request to DIDComm endpoint
     let client = reqwest::Client::new();
     let response = client
-        .post(&format!("http://127.0.0.1:{}/didcomm", port))
+        .post(format!("http://127.0.0.1:{}/didcomm", port))
         .header("Content-Type", "application/didcomm-encrypted+json")
         .json(&didcomm_msg)
         .timeout(Duration::from_secs(5))
@@ -166,7 +166,10 @@ async fn test_didcomm_endpoint() {
     // Verify this is an error response
     assert_eq!(json["status"], "error");
     // Verify the error type is related to validation
-    assert!(json["error"]["type"].as_str().unwrap().contains("validation"));
+    assert!(json["error"]["type"]
+        .as_str()
+        .unwrap()
+        .contains("validation"));
 
     // Stop the server
     server.stop().await.expect("Server should stop");

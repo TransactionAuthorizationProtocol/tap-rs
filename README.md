@@ -1,6 +1,6 @@
 # TAP-RS: Transaction Authorization Protocol in Rust
 
-This repository contains a Rust implementation of the Transaction Authorization Protocol (TAP), targeting payment-related use cases and Travel Rule messaging.
+This repository contains a Rust implementation of the Transaction Authorization Protocol (TAP), a decentralized protocol for securely authorizing blockchain transactions before they are submitted on-chain. TAP-RS targets payment-related use cases, Travel Rule compliance, and secure transaction coordination.
 
 ## Project Structure
 
@@ -14,15 +14,32 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 - **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
 - **[tap-ts](./tap-ts/README.md)**: TypeScript/WASM wrapper for browser and Node.js environments
 
+## Overview
+
+The Transaction Authorization Protocol (TAP) adds a secure authorization layer to blockchain transactions, enabling participants to:
+
+- Verify transaction details before settlement
+- Exchange required compliance information privately
+- Prevent sending to wrong addresses or incorrect amounts
+- Implement multi-party authorization workflows
+- Conduct Travel Rule compliance checks off-chain
+
+TAP-RS implements this protocol with a focus on:
+
+- **Security**: End-to-end encrypted messaging via DIDComm v2
+- **Interoperability**: Support for multiple blockchains through CAIP standards
+- **Extensibility**: Modular design allowing custom integrations
+- **Cross-Platform**: Native support and WebAssembly for browser environments
+
 ## Development Status
 
-This project has successfully implemented all items from the [PRD](./prds/v1.md). The codebase is feature-complete as per the initial requirements.
+This project has successfully implemented all core TAP message types and flows as specified in the TAIPs (Transaction Authorization Protocol Improvement Proposals). The codebase is feature-complete for standard TAP use cases.
 
 ## Development Guide
 
 ### Dependencies
 
-This project has some specific dependency version requirements:
+This project has specific dependency version requirements:
 
 - **UUID v0.8.2**: Required for compatibility with the didcomm crate. Do not upgrade! See [DEPENDENCIES.md](./DEPENDENCIES.md) for details.
 - **WASM Support**: Several dependencies require special features for WebAssembly compatibility.
@@ -50,17 +67,18 @@ cargo build
 cargo test
 ```
 
-## Features
+## Key Features
 
-- Direct DIDComm v2 integration in TAP message types for secure, encrypted messaging
-- Support for all TAP message types with proper validation
-- Implementation of Chain Agnostic Standards (CAIP-2, CAIP-10, CAIP-19)
-- Multiple DID method support (did:key, did:web, did:pkh)
-- Participant-based message flows (replacing Agent terminology in some contexts)
-- WASM compatibility for browser environments
-- Secure key management with DIDComm SecretsResolver implementation
-- Message signing and verification with Ed25519 and other key types
-- Proper Ed25519 to X25519 key conversion for encryption
+- **Complete TAP Implementation**: Support for all TAP message types (Transfer, Authorize, Reject, Settle, etc.)
+- **DIDComm v2 Integration**: Secure, encrypted messaging with authenticated signatures
+- **Chain Agnostic Identifiers**: Implementation of CAIP-2 (ChainID), CAIP-10 (AccountID), and CAIP-19 (AssetID)
+- **Multiple DID Methods**: Support for did:key, did:web, did:pkh, and more
+- **Modular Agent Architecture**: Flexible identity and cryptography primitives
+- **High-Performance Message Routing**: Efficient node implementation for high-throughput environments
+- **HTTP and WebSocket Transport**: Multiple communication options with robust error handling
+- **WASM Compatibility**: Run in browsers and Node.js via WebAssembly
+- **TypeScript API**: Developer-friendly TypeScript wrapper for web integrations
+- **Comprehensive Validation**: All messages validated against TAP specifications
 
 ## Getting Started with tap-msg
 
@@ -97,7 +115,7 @@ let transfer = Transfer {
 
 // Create a DIDComm message from the transfer
 let message = transfer.to_didcomm_with_route(
-    Some("did:example:sender"), 
+    Some("did:example:sender"),
     ["did:example:receiver"].iter().copied()
 )?;
 ```
@@ -127,6 +145,14 @@ let agent = DefaultAgent::new(config, message_packer);
 
 See the [tap-agent README](./tap-agent/README.md) for more detailed examples.
 
+## Common Use Cases
+
+- **VASP-to-VASP Transfers**: Exchanges and custodians can coordinate transfers with Travel Rule compliance
+- **Self-Custody Verification**: Wallets can verify transaction details before settlement
+- **Multi-Party Authorization**: Complex transfers requiring approval from multiple entities
+- **Cross-Chain Coordination**: Consistent messaging across different blockchain networks
+- **Compliance Automation**: Streamline compliance workflows with secure messaging
+
 ## Documentation
 
 Comprehensive documentation for TAP-RS is available in the [docs](./docs) directory:
@@ -140,9 +166,33 @@ Comprehensive documentation for TAP-RS is available in the [docs](./docs) direct
 ### Examples
 - [Complete Transfer Flow](./docs/examples/complete_transfer_flow.md) - End-to-end example integrating multiple TAP-RS components
 
+## Build Commands
+
+The following commands are available for working with the codebase:
+
+```bash
+# Build all crates
+cargo build
+
+# Run tests for all crates
+cargo test
+
+# Run tests for a specific crate
+cargo test --package tap-msg
+
+# Run benchmarks
+cargo bench
+
+# Format code
+cargo fmt
+
+# Lint code
+cargo clippy
+```
+
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE-MIT](./LICENSE-MIT) file for details.
 
 ## References
 

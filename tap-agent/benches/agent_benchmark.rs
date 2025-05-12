@@ -89,7 +89,10 @@ async fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
 
 /// Benchmark message sending
 fn bench_send_message(c: &mut Criterion) {
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
     let mut group = c.benchmark_group("agent_send_message");
 
@@ -114,7 +117,10 @@ fn bench_send_message(c: &mut Criterion) {
 
 /// Benchmark message packing
 fn bench_message_packing(c: &mut Criterion) {
-    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
 
     let mut group = c.benchmark_group("agent_message_packing");
 

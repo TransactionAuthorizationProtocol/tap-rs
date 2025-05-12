@@ -1,3 +1,17 @@
+//! # TAP WASM Bindings
+//!
+//! This crate provides WebAssembly (WASM) bindings for the Transaction Authorization Protocol (TAP)
+//! core libraries, including `tap-msg` and `tap-agent`. It allows TAP functionality
+//! to be used in JavaScript environments such as web browsers and Node.js.
+//!
+//! ## Features
+//!
+//! - Exposes TAP message creation, parsing, and validation to JavaScript.
+//! - Provides access to TAP agent functionalities for DIDComm message packing/unpacking.
+//! - Enables key management and cryptographic operations in a WASM environment.
+//!
+//! See the `README.md` for usage examples.
+
 use base64::Engine;
 use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use didcomm::Message as DIDCommMessage;
@@ -1429,7 +1443,6 @@ impl TapAgent {
         let message_subscribers = self.message_subscribers.clone();
         let message_clone = message.clone();
         let metadata_clone = metadata.clone();
-        let _agent = self.clone(); // Clone the current agent for use in the async block (currently unused)
 
         future_to_promise(async move {
             let message_type =
@@ -1770,7 +1783,6 @@ impl TapNode {
     pub fn process_message(&self, message: JsValue, metadata: JsValue) -> Promise {
         // Clone data that needs to be moved into the async block
         let debug = self.debug;
-        let _agents = self.agents.clone(); // Currently unused
         let message_handlers = self.message_handlers.clone();
         let message_subscribers = self.message_subscribers.clone();
         let message_clone = message.clone();

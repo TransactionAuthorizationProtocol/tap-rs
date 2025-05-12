@@ -49,9 +49,7 @@ mod websocket_tests {
     #[tokio::test]
     async fn test_websocket_message_sender_options() {
         // Test custom options
-        let sender = WebSocketMessageSender::with_options(
-            "https://example.com".to_string(),
-        );
+        let sender = WebSocketMessageSender::with_options("https://example.com".to_string());
 
         let sender_debug = format!("{:?}", sender);
         assert!(sender_debug.contains("base_url"));

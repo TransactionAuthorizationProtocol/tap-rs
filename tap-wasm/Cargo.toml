@@ -6,6 +6,7 @@ authors.workspace = true
 repository.workspace = true
 license.workspace = true
 description = "WebAssembly bindings for the Transaction Authorization Protocol"
+readme = "README.md"
 
 [lib]
 crate-type = ["cdylib", "rlib"]

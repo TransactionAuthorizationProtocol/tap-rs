@@ -101,7 +101,7 @@ fn main() -> Result<()> {
                     )));
                 }
             };
-        let transfer_id = uuid::Uuid::new_v4().to_string();
+        let transfer_id = uuid::Uuid::new_v4();
 
         // Create originator and beneficiary parties (different from the agents)
         let originator_party = "did:pkh:eip155:1:0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045"; // Example customer DID
@@ -205,7 +205,7 @@ fn main() -> Result<()> {
 
         // Create AddAgents message to add the beneficiary wallet and wallet API
         let add_agents = AddAgents {
-            transaction_id: transfer_id.clone(),
+            transaction_id: transfer_id.to_string(),
             agents: vec![
                 Participant {
                     id: beneficiary_wallet_did.clone(),
@@ -265,7 +265,7 @@ fn main() -> Result<()> {
         );
 
         let reject = Reject {
-        transaction_id: transfer_id.clone(),
+        transaction_id: transfer_id.to_string(),
         reason: "compliance.policy: Additional beneficiary information required. Please provide additional beneficiary information to comply with regulations".to_string(),
     };
 
@@ -287,7 +287,7 @@ fn main() -> Result<()> {
 
         let _settlement_address = "eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
         let authorize = Authorize {
-            transaction_id: transfer_id.clone(),
+            transaction_id: transfer_id.to_string(),
             note: Some("Transfer authorized after compliance review".to_string()),
         };
 
@@ -309,7 +309,7 @@ fn main() -> Result<()> {
         println!("Step 8: Beneficiary wallet also authorizes the transfer");
 
         let authorize_wallet = Authorize {
-            transaction_id: transfer_id.clone(),
+            transaction_id: transfer_id.to_string(),
             note: Some("Wallet ready to receive funds".to_string()),
         };
 
@@ -337,11 +337,11 @@ fn main() -> Result<()> {
         let api_note = format!(
             "API technical details: callback_url=https://api.wallet.example/callbacks/{}, nonce={}",
             transfer_id,
-            uuid::Uuid::new_v4().to_string()
+            uuid::Uuid::new_v4()
         );
 
         let api_authorize = Authorize {
-            transaction_id: transfer_id.clone(),
+            transaction_id: transfer_id.to_string(),
             note: Some(api_note.clone()),
         };
 
@@ -368,7 +368,7 @@ fn main() -> Result<()> {
             "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
 
         let settle = Settle {
-            transaction_id: transfer_id.clone(),
+            transaction_id: transfer_id.to_string(),
             settlement_id: settlement_id.to_string(),
             amount: Some(transfer.amount.clone()),
         };
@@ -391,7 +391,7 @@ fn main() -> Result<()> {
         let api_settlement_id =
             "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
         let api_settle = Settle {
-            transaction_id: transfer_id.clone(),
+            transaction_id: transfer_id.to_string(),
             settlement_id: api_settlement_id.to_string(),
             amount: Some(transfer.amount.clone()),
         };

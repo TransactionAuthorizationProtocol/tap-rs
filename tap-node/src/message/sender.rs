@@ -275,9 +275,7 @@ impl WebSocketMessageSender {
 
         #[cfg(not(all(not(target_arch = "wasm32"), feature = "websocket")))]
         {
-            Self {
-                base_url,
-            }
+            Self { base_url }
         }
     }
 

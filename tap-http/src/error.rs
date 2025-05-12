@@ -90,8 +90,12 @@ impl Error {
         match self {
             Error::DIDComm(_) | Error::Validation(_) | Error::Json(_) => ErrorSeverity::Info,
             Error::RateLimit(_) | Error::Authentication(_) => ErrorSeverity::Warning,
-            Error::Node(_) | Error::Http(_) | Error::Config(_) | Error::Tls(_) |
-            Error::Unknown(_) | Error::Io(_) => ErrorSeverity::Critical,
+            Error::Node(_)
+            | Error::Http(_)
+            | Error::Config(_)
+            | Error::Tls(_)
+            | Error::Unknown(_)
+            | Error::Io(_) => ErrorSeverity::Critical,
         }
     }
 
@@ -122,7 +126,8 @@ impl Error {
                 }
             })),
             status,
-        ).into_response()
+        )
+        .into_response()
     }
 }
 

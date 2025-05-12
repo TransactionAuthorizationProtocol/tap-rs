@@ -14,6 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for Ed25519 keys in JsonWebKey2020 format
 - New utility functions for conversion between Uint8Array and Vec<u8>
 - README.md for tap-wasm describing WebAssembly bindings and usage
+- Comprehensive documentation updates with clearer use cases and examples
+- Support for additional message types (PaymentRequest, Invoice, Connect, Revert)
+- MIT License file added
 
 ### Changed
 - Updated Agent struct in tap-wasm to use the DIDComm SecretsResolver trait
@@ -22,10 +25,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced README files with more documentation and examples
 - Fixed type implementations for MessageType enum
 - Added proper Display trait implementation for MessageType instead of ToString
+- Restructured tap-messages.md with improved documentation and message flow description
+- Added keywords and categories to Cargo.toml files
+- Updated README.md with more detailed project description and use cases
 
 ### Security
 - Implemented proper key management with SecretMaterial::JWK format
 - Added methods for secure message signing and verification
+- Documented security best practices for TAP implementations
 
 ## [0.1.0] - 2025-03-01
 
