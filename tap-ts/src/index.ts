@@ -6,32 +6,24 @@
  */
 
 // Export all types from @taprsvp/types
-// Only import the types and export them, don't re-export from models/types
 import * as TapTypes from '@taprsvp/types';
 export { TapTypes };
 
-// Export message implementation classes with different names to avoid conflicts
-import { Transfer as TransferImpl } from './api/messages/Transfer';
-import { Payment as PaymentImpl } from './api/messages/Payment';
-import { Authorize as AuthorizeImpl } from './api/messages/Authorize';
-import { Complete as CompleteImpl } from './api/messages/Complete';
-import { Settle as SettleImpl } from './api/messages/Settle';
-import { Reject as RejectImpl } from './api/messages/Reject';
-import { Cancel as CancelImpl } from './api/messages/Cancel';
-import { Revert as RevertImpl } from './api/messages/Revert';
-import { Connect as ConnectImpl } from './api/messages/Connect';
+// Export message wrapper classes
+import {
+  MessageWrapper,
+  MessageWrapperOptions,
+  TransferWrapper,
+  PaymentRequestWrapper,
+  ReplyFactory
+} from './agent/MessageWrapper';
 
-// Re-export implementation classes with different names
 export {
-  TransferImpl,
-  PaymentImpl,
-  AuthorizeImpl,
-  CompleteImpl,
-  SettleImpl,
-  RejectImpl,
-  CancelImpl,
-  RevertImpl,
-  ConnectImpl
+  MessageWrapper,
+  MessageWrapperOptions,
+  TransferWrapper,
+  PaymentRequestWrapper,
+  ReplyFactory
 };
 
 // Export agent
