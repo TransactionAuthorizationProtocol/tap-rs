@@ -73,6 +73,7 @@ cargo test
 - **DIDComm v2 Integration**: Secure, encrypted messaging with authenticated signatures
 - **Chain Agnostic Identifiers**: Implementation of CAIP-2 (ChainID), CAIP-10 (AccountID), and CAIP-19 (AssetID)
 - **Multiple DID Methods**: Support for did:key, did:web, did:pkh, and more
+- **Command-line Tools**: Utilities for DID generation and key management
 - **Modular Agent Architecture**: Flexible identity and cryptography primitives
 - **High-Performance Message Routing**: Efficient node implementation for high-throughput environments
 - **HTTP and WebSocket Transport**: Multiple communication options with robust error handling
@@ -144,6 +145,42 @@ let agent = DefaultAgent::new(config, message_packer);
 ```
 
 See the [tap-agent README](./tap-agent/README.md) for more detailed examples.
+
+## DID Generation and Key Management
+
+TAP-RS provides comprehensive tools for DID generation and key management:
+
+### Using the Command-line CLI
+
+```bash
+# Generate a did:key with Ed25519 key type
+cargo run --bin tap-agent-cli -- generate --method key --key-type ed25519 --output did-document.json --key-output private-key.json
+
+# Generate a did:web for a specific domain
+cargo run --bin tap-agent-cli -- generate --method web --domain example.com --output web-did.json
+```
+
+### Using the TypeScript API
+
+```typescript
+import { TAPAgent, DIDKeyType } from '@taprsvp/tap-agent';
+
+// Create a new agent with auto-generated did:key
+const agent = new TAPAgent({
+  nickname: "My Agent",
+  debug: true
+});
+
+// Generate a did:key with specific key type
+const edDID = await agent.generateDID(DIDKeyType.Ed25519);
+console.log(`Generated DID: ${edDID.did}`);
+
+// Generate a did:web
+const webDID = await agent.generateWebDID('example.com', DIDKeyType.P256);
+console.log(`Web DID: ${webDID.did}`);
+```
+
+For more details, see the [DID Generation Documentation](./tap-ts/DID-GENERATION.md).
 
 ## Common Use Cases
 
