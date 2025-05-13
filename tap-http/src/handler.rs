@@ -7,6 +7,7 @@
 //! verification, and routing through the appropriate agent.
 
 use crate::error::{Error, Result};
+use crate::event::EventBus;
 use bytes::Bytes;
 use chrono;
 use didcomm::Message;
@@ -14,6 +15,7 @@ use serde::Serialize;
 use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
+use std::time::Instant;
 use tap_msg::didcomm;
 use tap_node::TapNode;
 use tracing::{debug, error, info, warn};
@@ -32,16 +34,44 @@ struct HealthResponse {
 ///
 /// Returns a simple response with the status "ok" and the current version number.
 /// This endpoint allows monitoring systems to verify that the TAP HTTP server is operational.
-pub async fn handle_health_check() -> std::result::Result<impl Reply, Infallible> {
+pub async fn handle_health_check(
+    event_bus: Arc<EventBus>,
+) -> std::result::Result<impl Reply, Infallible> {
     info!("Health check request received");
+    
+    // Start timing the request
+    let start_time = Instant::now();
+
+    // Log request received event
+    event_bus.publish_request_received(
+        "GET".to_string(),
+        "/health".to_string(),
+        None, // We don't have client IP in this simplified example
+    ).await;
 
     // Build response
     let response = HealthResponse {
         status: "ok".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     };
+    
+    // Convert response to JSON
+    let json_response = json(&response);
+    
+    // Calculate response size (approximate)
+    let response_size = serde_json::to_string(&response).map(|s| s.len()).unwrap_or(0);
+    
+    // Calculate request duration
+    let duration_ms = start_time.elapsed().as_millis() as u64;
+    
+    // Log response sent event
+    event_bus.publish_response_sent(
+        StatusCode::OK,
+        response_size,
+        duration_ms
+    ).await;
 
-    Ok(json(&response))
+    Ok(json_response)
 }
 
 /// Handler for DIDComm messages.
@@ -55,16 +85,44 @@ pub async fn handle_health_check() -> std::result::Result<impl Reply, Infallible
 pub async fn handle_didcomm(
     body: Bytes,
     node: Arc<TapNode>,
+    event_bus: Arc<EventBus>,
 ) -> std::result::Result<impl Reply, Infallible> {
+    // Start timing the request
+    let start_time = Instant::now();
+    
+    // Log request received event
+    event_bus.publish_request_received(
+        "POST".to_string(),
+        "/didcomm".to_string(),
+        None, // Client IP not available in this context
+    ).await;
+    
     // Convert bytes to string
     let message_str = match std::str::from_utf8(&body) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to parse request body as UTF-8: {}", e);
-            return Ok(json_error_response(
+            
+            // Log message error event
+            event_bus.publish_message_error(
+                "parse_error".to_string(),
+                format!("Failed to parse request body as UTF-8: {}", e),
+                None,
+            ).await;
+            
+            // Calculate response size and duration
+            let response = json_error_response(StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body");
+            let response_size = 200; // Approximate size
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            
+            // Log response sent event
+            event_bus.publish_response_sent(
                 StatusCode::BAD_REQUEST,
-                "Invalid UTF-8 in request body",
-            ));
+                response_size,
+                duration_ms
+            ).await;
+            
+            return Ok(response);
         }
     };
 
@@ -74,18 +132,56 @@ pub async fn handle_didcomm(
         Ok(msg) => msg,
         Err(e) => {
             error!("Failed to parse DIDComm message: {}", e);
-            return Ok(json_error_response(
+            
+            // Log message error event
+            event_bus.publish_message_error(
+                "parse_error".to_string(),
+                format!("Failed to parse DIDComm message: {}", e),
+                None,
+            ).await;
+            
+            // Calculate response size and duration
+            let response = json_error_response(StatusCode::BAD_REQUEST, "Invalid DIDComm message format");
+            let response_size = 200; // Approximate size
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            
+            // Log response sent event
+            event_bus.publish_response_sent(
                 StatusCode::BAD_REQUEST,
-                "Invalid DIDComm message format",
-            ));
+                response_size,
+                duration_ms
+            ).await;
+            
+            return Ok(response);
         }
     };
+    
+    // Log message received event
+    event_bus.publish_message_received(
+        didcomm_message.id.clone(),
+        didcomm_message.typ.clone(),
+        didcomm_message.from.clone(),
+        didcomm_message.to.clone().map(|to| to.join(", ")),
+    ).await;
 
     // Process the message using the TAP Node
     match process_tap_message(didcomm_message, node).await {
         Ok(_) => {
             info!("DIDComm message processed successfully");
-            Ok(json_success_response())
+            
+            // Calculate response size and duration
+            let response = json_success_response();
+            let response_size = 100; // Approximate size
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            
+            // Log response sent event
+            event_bus.publish_response_sent(
+                StatusCode::OK,
+                response_size,
+                duration_ms
+            ).await;
+            
+            Ok(response)
         }
         Err(e) => {
             // Log error with appropriate severity
@@ -96,9 +192,44 @@ pub async fn handle_didcomm(
                     error!("Critical error processing message: {}", e)
                 }
             }
+            
+            // Log message error event
+            let error_type = match &e {
+                Error::DIDComm(_) => "didcomm_error",
+                Error::Validation(_) => "validation_error",
+                Error::Authentication(_) => "authentication_error",
+                Error::Json(_) => "json_error",
+                Error::Http(_) => "http_error",
+                Error::Node(_) => "node_error",
+                Error::Config(_) => "configuration_error",
+                Error::Io(_) => "io_error",
+                Error::RateLimit(_) => "rate_limit_error",
+                Error::Tls(_) => "tls_error",
+                Error::Unknown(_) => "unknown_error",
+            };
+            
+            event_bus.publish_message_error(
+                error_type.to_string(),
+                e.to_string(),
+                None, // We don't have message ID in this context
+            ).await;
+
+            // Create error response
+            let response = e.to_response();
+            
+            // Calculate response size and duration (approximate)
+            let response_size = 200; // Approximate size
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+            
+            // Log response sent event
+            event_bus.publish_response_sent(
+                e.status_code(),
+                response_size,
+                duration_ms
+            ).await;
 
             // Return the structured error response
-            Ok(e.to_response())
+            Ok(response)
         }
     }
 }
@@ -240,8 +371,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_health_check() {
+        // Create a dummy event bus
+        let event_bus = Arc::new(crate::event::EventBus::new());
+        
         // Call the health check handler
-        let response = handle_health_check().await.unwrap();
+        let response = handle_health_check(event_bus).await.unwrap();
 
         // Convert the response to bytes and parse as JSON
         let response_bytes = to_bytes(response.into_response().into_body())
@@ -258,10 +392,13 @@ mod tests {
     async fn test_handle_invalid_didcomm() {
         // Create a TAP Node for testing
         let node = Arc::new(TapNode::new(NodeConfig::default()));
+        
+        // Create a dummy event bus
+        let event_bus = Arc::new(crate::event::EventBus::new());
 
         // Test with invalid UTF-8 data
         let invalid_bytes = Bytes::from(vec![0xFF, 0xFF]);
-        let response = handle_didcomm(invalid_bytes, node.clone()).await.unwrap();
+        let response = handle_didcomm(invalid_bytes, node.clone(), event_bus).await.unwrap();
 
         // Convert the response to bytes and parse as JSON
         let response_bytes = to_bytes(response.into_response().into_body())

@@ -119,6 +119,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         request_timeout_secs: args.timeout,
         rate_limit: None,
         tls: None,
+        event_logger: None,
     };
 
     // Log the configuration

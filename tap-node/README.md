@@ -126,12 +126,31 @@ async fn send_message(node: &TapNode, from_did: &str, to_did: &str, message: Mes
 }
 ```
 
-### Event Handling
+### Event Handling and Logging
+
+The TAP Node includes a powerful event system with configurable logging capabilities:
 
 ```rust
 use std::sync::Arc;
 use async_trait::async_trait;
 use tap_node::event::{EventBus, EventSubscriber, NodeEvent};
+use tap_node::event::logger::{EventLogger, EventLoggerConfig, LogDestination};
+use tap_node::{NodeConfig, TapNode};
+
+// Create a TAP Node with event logging enabled
+let mut config = NodeConfig::default();
+config.event_logger = Some(EventLoggerConfig {
+    destination: LogDestination::File {
+        path: "./logs/tap-node.log".to_string(),
+        max_size: Some(10 * 1024 * 1024), // 10 MB
+        rotate: true,
+    },
+    structured: true, // Use JSON format
+    log_level: log::Level::Info,
+});
+
+// Initialize node with event logging
+let node = TapNode::new(config);
 
 // Create a custom event subscriber
 struct MyEventHandler;
@@ -165,6 +184,43 @@ async fn subscribe_to_events(node: &TapNode) {
         }
     });
 }
+```
+
+#### Event Logger Configuration
+
+The event logger supports different destinations:
+
+```rust
+// Log to console
+let config = EventLoggerConfig {
+    destination: LogDestination::Console,
+    structured: false, // Plain text
+    log_level: log::Level::Info,
+};
+
+// Log to file with rotation
+let config = EventLoggerConfig {
+    destination: LogDestination::File {
+        path: "./logs/tap-node.log".to_string(),
+        max_size: Some(10 * 1024 * 1024), // 10 MB max file size
+        rotate: true, // Enable rotation when max size is reached
+    },
+    structured: true, // JSON format
+    log_level: log::Level::Info,
+};
+
+// Custom logging function
+let custom_logger = Arc::new(|msg: &str| {
+    // Custom handling of log messages
+    println!("CUSTOM LOG: {}", msg);
+    // Or send to a database, etc.
+});
+
+let config = EventLoggerConfig {
+    destination: LogDestination::Custom(custom_logger),
+    structured: true,
+    log_level: log::Level::Info,
+};
 ```
 
 ## Custom Message Processors

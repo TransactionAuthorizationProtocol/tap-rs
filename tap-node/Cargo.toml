@@ -57,6 +57,7 @@ tokio-test = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
 futures = { version = "0.3" }
 env_logger = "0.10"
+tempfile = "3.8"
 
 [[bench]]
 name = "stress_test"

@@ -9,6 +9,7 @@ HTTP DIDComm server implementation for the Transaction Authorization Protocol (T
 - **Message Validation**: Validates incoming DIDComm messages
 - **Response Handling**: Proper handling of responses and errors
 - **Outgoing Message Delivery**: HTTP client for sending outgoing DIDComm messages
+- **Event Logging System**: Comprehensive event tracking with configurable logging destinations
 - **Security**: Support for HTTPS/TLS and rate limiting (configurable)
 - **Comprehensive Error Handling**: Structured error responses with appropriate HTTP status codes
 
@@ -183,6 +184,56 @@ let config = TapHttpConfig {
 };
 ```
 
+### Event Logging
+
+Configure event logging to track server activity:
+
+```rust
+use tap_http::event::{EventLoggerConfig, LogDestination};
+
+let config = TapHttpConfig {
+    // ...other settings
+    event_logger: Some(EventLoggerConfig {
+        destination: LogDestination::File {
+            path: "./logs/tap-http.log".to_string(), // Default location
+            max_size: Some(10 * 1024 * 1024),        // 10 MB
+            rotate: true,                            // Enable rotation
+        },
+        structured: true,      // Use JSON format
+        log_level: log::Level::Info,
+    }),
+    // ...
+};
+```
+
+The event logging system captures:
+- Server startup and shutdown
+- HTTP request/response details
+- DIDComm message processing
+- Error events with detailed information
+
+Custom event subscribers can also be implemented:
+
+```rust
+use std::sync::Arc;
+use async_trait::async_trait;
+use tap_http::event::{EventSubscriber, HttpEvent};
+
+struct CustomEventHandler;
+
+#[async_trait]
+impl EventSubscriber for CustomEventHandler {
+    async fn handle_event(&self, event: HttpEvent) {
+        // Custom handling of events
+        println!("Event: {:?}", event);
+    }
+}
+
+// After creating the server
+let custom_handler = Arc::new(CustomEventHandler);
+server.event_bus().subscribe(custom_handler);
+```
+
 ### Rate Limiting
 
 Configure rate limiting to prevent abuse:
@@ -281,6 +332,7 @@ Check the examples directory for complete usage examples:
 
 - `http_message_flow.rs`: Basic HTTP message flow
 - `websocket_message_flow.rs`: WebSocket message flow example
+- `event_logger_demo.rs`: Demonstration of event logging configuration
 
 To run the examples:
 
@@ -290,4 +342,7 @@ cargo run --example http_message_flow
 
 # Run the WebSocket message flow example (with websocket feature)
 cargo run --example websocket_message_flow --features websocket
+
+# Run the event logger demo
+cargo run --example event_logger_demo
 ```

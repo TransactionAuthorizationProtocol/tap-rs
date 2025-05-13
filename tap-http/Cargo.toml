@@ -23,10 +23,15 @@ bytes = "1.0"
 reqwest = { version = "0.11", features = ["json"] }
 chrono = { workspace = true }
 pico-args = "0.5"
+log = "0.4"
+async-trait = { workspace = true }
+futures = "0.3"
 
 [dev-dependencies]
 mockito = "1.0"
 tokio-test = { workspace = true }
+tempfile = "3.8"
+async-trait = { workspace = true }
 
 [[bin]]
 name = "tap-http"

@@ -22,6 +22,12 @@
 //! 1. **Callback-based**: Implementing the `EventSubscriber` trait to receive events via callbacks
 //! 2. **Channel-based**: Using `tokio::sync::broadcast` channels to receive events asynchronously
 //!
+//! ## Built-in Event Handlers
+//!
+//! The event system includes several built-in event handlers:
+//!
+//! - **EventLogger**: Logs all events to a configurable destination (console, file, or custom handler)
+//!
 //! ## Usage Examples
 //!
 //! ### Callback-based Subscription
@@ -82,11 +88,41 @@
 //! }
 //! ```
 //!
+//! ### Using the Event Logger
+//!
+//! ```no_run
+//! use std::sync::Arc;
+//! use tap_node::{NodeConfig, TapNode};
+//! use tap_node::event::logger::{EventLogger, EventLoggerConfig, LogDestination};
+//!
+//! async fn example() {
+//!     // Create a new TAP node
+//!     let node = TapNode::new(NodeConfig::default());
+//!     
+//!     // Configure the event logger
+//!     let logger_config = EventLoggerConfig {
+//!         destination: LogDestination::File {
+//!             path: "/var/log/tap-node/events.log".to_string(),
+//!             max_size: Some(10 * 1024 * 1024), // 10 MB
+//!             rotate: true,
+//!         },
+//!         structured: true, // Use JSON format
+//!         log_level: log::Level::Info,
+//!     };
+//!     
+//!     // Create and subscribe the event logger
+//!     let event_logger = Arc::new(EventLogger::new(logger_config));
+//!     node.get_event_bus().subscribe(event_logger).await;
+//! }
+//! ```
+//!
 //! ## Thread Safety
 //!
 //! The event system is designed to be thread-safe, with all mutable state protected
 //! by appropriate synchronization primitives. The `EventBus` can be safely shared
 //! across threads using `Arc<EventBus>`.
+
+pub mod logger;
 
 use async_trait::async_trait;
 use serde_json::Value;

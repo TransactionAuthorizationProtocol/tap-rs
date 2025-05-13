@@ -1,5 +1,6 @@
 //! Configuration for the TAP HTTP server.
 
+use crate::event::EventLoggerConfig;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
@@ -23,6 +24,11 @@ pub struct TapHttpConfig {
 
     /// Default timeout for outbound HTTP requests in seconds.
     pub request_timeout_secs: u64,
+    
+    /// Optional event logger configuration.
+    /// If not provided, no event logging will be performed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event_logger: Option<EventLoggerConfig>,
 }
 
 /// Configuration for rate limiting.
@@ -54,6 +60,7 @@ impl Default for TapHttpConfig {
             rate_limit: None,
             tls: None,
             request_timeout_secs: 30,
+            event_logger: Some(EventLoggerConfig::default()),
         }
     }
 }

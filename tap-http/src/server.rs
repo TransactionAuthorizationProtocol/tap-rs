@@ -64,6 +64,7 @@
 
 use crate::config::TapHttpConfig;
 use crate::error::{Error, Result};
+use crate::event::{EventBus, EventLogger};
 use crate::handler::{handle_didcomm, handle_health_check};
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -92,6 +93,9 @@ pub struct TapHttpServer {
 
     /// Shutdown channel for graceful server termination.
     shutdown_tx: Option<oneshot::Sender<()>>,
+    
+    /// Event bus for tracking server events.
+    event_bus: Arc<EventBus>,
 }
 
 impl TapHttpServer {
@@ -113,11 +117,22 @@ impl TapHttpServer {
         if config.tls.is_some() {
             warn!("TLS is configured but not yet fully implemented");
         }
+        
+        // Create the event bus
+        let event_bus = Arc::new(EventBus::new());
+        
+        // Initialize event logger if configured
+        if let Some(logger_config) = &config.event_logger {
+            let event_logger = EventLogger::new(logger_config.clone());
+            event_bus.subscribe(event_logger);
+            info!("Event logging enabled");
+        }
 
         Self {
             config,
             node: Arc::new(node),
             shutdown_tx: None,
+            event_bus,
         }
     }
 
@@ -142,6 +157,9 @@ impl TapHttpServer {
 
         // Clone Arc<TapNode> for use in route handlers
         let node = self.node.clone();
+        
+        // Clone the event bus for use in route handlers
+        let event_bus = self.event_bus.clone();
 
         // Get the endpoint path from config
         let endpoint_path = self
@@ -155,11 +173,13 @@ impl TapHttpServer {
             .and(warp::post())
             .and(warp::body::bytes())
             .and(with_node(node.clone()))
+            .and(with_event_bus(event_bus.clone()))
             .and_then(handle_didcomm);
 
         // Health check endpoint
         let health_route = warp::path("health")
             .and(warp::get())
+            .and(with_event_bus(event_bus.clone()))
             .and_then(handle_health_check);
 
         // Combine all routes
@@ -174,11 +194,16 @@ impl TapHttpServer {
 
         // Start the server
         info!("Starting TAP HTTP server on {}", addr);
+        
+        // Publish server started event
+        self.event_bus.publish_server_started(addr.to_string()).await;
 
         // Start server without TLS
-        let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(addr, async {
+        let event_bus_clone = event_bus.clone();
+        let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(addr, async move {
             rx.await.ok();
             info!("Shutting down TAP HTTP server");
+            event_bus_clone.publish_server_stopped().await;
         });
 
         // Spawn the server task
@@ -218,6 +243,13 @@ impl TapHttpServer {
     pub fn config(&self) -> &TapHttpConfig {
         &self.config
     }
+    
+    /// Returns a reference to the event bus.
+    ///
+    /// The event bus is used to publish and subscribe to server events.
+    pub fn event_bus(&self) -> &Arc<EventBus> {
+        &self.event_bus
+    }
 
     // Rate limiting functionality will be implemented in a future update
 }
@@ -227,6 +259,13 @@ fn with_node(
     node: Arc<TapNode>,
 ) -> impl Filter<Extract = (Arc<TapNode>,), Error = Infallible> + Clone {
     warp::any().map(move || node.clone())
+}
+
+/// Helper function to provide the event bus to route handlers.
+fn with_event_bus(
+    event_bus: Arc<EventBus>,
+) -> impl Filter<Extract = (Arc<EventBus>,), Error = Infallible> + Clone {
+    warp::any().map(move || event_bus.clone())
 }
 
 /// Custom rejection for rate limited requests

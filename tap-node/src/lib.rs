@@ -205,6 +205,8 @@ impl DefaultAgentExt for DefaultAgent {
     }
 }
 
+use event::logger::{EventLogger, EventLoggerConfig};
+
 /// Configuration for a TAP Node
 #[derive(Debug, Clone, Default)]
 pub struct NodeConfig {
@@ -218,6 +220,8 @@ pub struct NodeConfig {
     pub log_message_content: bool,
     /// Configuration for the processor pool
     pub processor_pool: Option<ProcessorPoolConfig>,
+    /// Configuration for the event logger
+    pub event_logger: Option<EventLoggerConfig>,
 }
 
 /// # The TAP Node
@@ -300,7 +304,7 @@ impl TapNode {
         // Create the resolver
         let resolver = Arc::new(NodeResolver::default());
 
-        Self {
+        let node = Self {
             agents,
             event_bus,
             incoming_processor,
@@ -309,7 +313,23 @@ impl TapNode {
             resolver,
             processor_pool: None,
             config,
+        };
+
+        // Set up the event logger if configured
+        if let Some(logger_config) = &node.config.event_logger {
+            let event_logger = Arc::new(EventLogger::new(logger_config.clone()));
+            
+            // We need to handle the async subscribe in a blocking context
+            // This is safe because EventBus methods are designed to be called in this way
+            let event_bus = node.event_bus.clone();
+            tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(async {
+                    event_bus.subscribe(event_logger).await;
+                })
+            });
         }
+
+        node
     }
 
     /// Start the node
