@@ -351,5 +351,5 @@ export const MessageType = {
   Revert: 7  // Using RemoveAgent as a temporary substitute
 };
 
-// Re-export the entire module for ease of use
+// Re-export the entire module for ease of use, but avoid the deprecated methods
 export { tapWasm };

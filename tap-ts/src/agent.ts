@@ -86,12 +86,6 @@ class DefaultKeyManager {
     return this._didKey;
   }
   
-  /**
-   * @deprecated Use the `did` getter property instead
-   */
-  getDID(): DID {
-    return this._did;
-  }
 }
 
 /**
@@ -102,10 +96,6 @@ export interface KeyManager {
   verify(message: any): Promise<boolean>;
   get did(): DID;
   
-  /**
-   * @deprecated Use the `did` getter property instead
-   */
-  getDID?(): DID;
 }
 
 /**
@@ -178,13 +168,6 @@ export class TAPAgent {
     return this.wasmAgent.get_did() as DID;
   }
 
-  /**
-   * @deprecated Use the `did` getter property instead
-   * Get the agent's DID (backward compatibility method)
-   */
-  getDID(): DID {
-    return this.did;
-  }
 
   /**
    * Get the agent's nickname
