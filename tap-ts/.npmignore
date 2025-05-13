@@ -21,4 +21,4 @@ coverage/
 scripts/
 
 # Don't ignore the WASM files
-!node_modules/@tap-wasm/
+!node_modules/tap-wasm/

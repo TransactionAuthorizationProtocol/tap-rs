@@ -16,7 +16,7 @@ module.exports = {
   resolve: {
     extensions: ['.tsx', '.ts', '.js'],
     alias: {
-      '@tap-wasm': path.resolve(__dirname, 'node_modules/@tap-wasm'),
+      'tap-wasm': path.resolve(__dirname, 'node_modules/tap-wasm'),
     },
   },
   output: {
@@ -31,7 +31,7 @@ module.exports = {
   plugins: [
     new CopyPlugin({
       patterns: [
-        { from: 'node_modules/@tap-wasm/tap_wasm_bg.wasm', to: 'tap_wasm_bg.wasm' },
+        { from: 'node_modules/tap-wasm/tap_wasm_bg.wasm', to: 'tap_wasm_bg.wasm' },
       ],
     }),
   ],
