@@ -1,7 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
 import { StandardDIDResolver, createResolver, ResolverOptions } from '../did-resolver';
+import { setupWasmTests } from './wasm-test-helper';
 
 // Mock the did-resolver modules
+// We need to keep these mocks because we can't make actual network calls in tests
 vi.mock('did-resolver', () => ({
   Resolver: vi.fn().mockImplementation(() => ({
     resolve: vi.fn().mockImplementation(async (did) => {
@@ -43,6 +45,11 @@ vi.mock('web-did-resolver', () => ({
     web: async () => ({ id: 'did:web:resolved' })
   })
 }));
+
+// Initialize WASM before all tests
+beforeAll(async () => {
+  await setupWasmTests();
+});
 
 describe('DID Resolver', () => {
   describe('createResolver', () => {
