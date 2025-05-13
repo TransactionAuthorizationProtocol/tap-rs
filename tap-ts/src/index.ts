@@ -1,13 +1,20 @@
 // Initialize WASM module
 import { initWasm } from './wasm-loader';
+import { DIDKey, DIDKeyType, createDIDKey, createDIDWeb } from './wasm-loader';
 
 // Try to initialize the WASM module
 initWasm().catch(error => {
   console.error('Failed to initialize TAP-WASM module:', error);
 });
 
-// Export the TAPAgent class
-export { TAPAgent, TAPAgentOptions, MessageHandler, KeyManager, DIDResolver } from './agent';
+// Export the TAPAgent class and related interfaces
+export { 
+  TAPAgent, 
+  TAPAgentOptions, 
+  MessageHandler, 
+  KeyManager, 
+  DIDResolver
+} from './agent';
 
 // Export DID resolver
 export { 
@@ -37,6 +44,12 @@ export { CancelObject } from './message-objects/cancel';
 export { SettleObject } from './message-objects/settle';
 export { RevertObject } from './message-objects/revert';
 export { BaseMessageObject } from './message-objects/base-message';
+
+// Export DID generation functions
+export { DIDKey, DIDKeyType, createDIDKey, createDIDWeb };
+
+// Export CLI tools
+export * from './cli';
 
 // Re-export types from @taprsvp/types
 export * from '@taprsvp/types';

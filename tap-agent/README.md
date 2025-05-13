@@ -20,6 +20,7 @@ The `tap-agent` crate is designed with a modular architecture that separates con
 tap-agent
 ├── agent       - Core agent implementation and traits
 ├── config      - Agent configuration
+├── cli         - Command-line interface for DID generation
 ├── crypto      - Cryptographic operations and message packing
 ├── did         - DID resolution and management
 ├── error       - Error types and handling
@@ -74,9 +75,11 @@ The agent supports different security modes for messages:
 - **DID Resolution**: Resolve DIDs for message routing and key discovery
 - **Cryptographic Operations**: Sign, verify, encrypt, and decrypt messages
 - **Key Management**: Securely manage cryptographic keys
+- **DID Generation CLI**: Create DIDs and keys using a command-line interface
+- **Ephemeral DIDs**: Create temporary DIDs for testing or short-lived processes
 - **Asynchronous Processing**: Process messages concurrently using Tokio
 - **WASM Support**: Run in browser environments with WebAssembly
-- **Extensible DID Methods**: Support for did:key, with architecture for adding more methods
+- **Extensible DID Methods**: Support for did:key and did:web, with architecture for adding more methods
 - **Performance Optimized**: Benchmarked for high-throughput scenarios
 
 ## Usage Examples
@@ -238,6 +241,64 @@ Benchmarks can be run with:
 
 ```bash
 cargo bench --bench agent_benchmark
+```
+
+## DID Generation CLI
+
+The `tap-agent` crate includes a command-line interface (CLI) for generating and managing DIDs and keys. This makes it easy to create DIDs for testing, development, or production use.
+
+### Installation
+
+If you have the tap-rs repository cloned:
+
+```bash
+cargo install --path tap-agent
+```
+
+### Usage
+
+#### Generating a DID
+
+```bash
+# Generate a did:key with Ed25519
+tap-agent-cli generate --method key --key-type ed25519
+
+# Generate a did:key with P-256
+tap-agent-cli generate --method key --key-type p256
+
+# Generate a did:key with Secp256k1
+tap-agent-cli generate --method key --key-type secp256k1
+
+# Generate a did:web for a domain
+tap-agent-cli generate --method web --domain example.com
+```
+
+#### Saving Output to Files
+
+```bash
+# Save DID document to did.json and key to key.json
+tap-agent-cli generate --output did.json --key-output key.json
+
+# Save did:web document (to be placed at /.well-known/did.json on the domain)
+tap-agent-cli generate --method web --domain example.com --output did.json
+```
+
+### Using Generated DIDs
+
+For `did:web`, you'll need to:
+1. Generate the DID using the CLI
+2. Place the generated DID document at `https://yourdomain.com/.well-known/did.json`
+
+## Creating Ephemeral DIDs
+
+For testing or short-lived processes, the `DefaultAgent` can create ephemeral DIDs:
+
+```rust
+// Create an agent with an ephemeral did:key (Ed25519)
+let (agent, did) = DefaultAgent::new_ephemeral()?;
+
+// The agent is ready to use with the generated did:key
+println!("Agent DID: {}", did);
 ```
 
 ## Feature Flags

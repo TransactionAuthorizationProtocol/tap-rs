@@ -10,6 +10,9 @@ pub mod agent;
 /// Agent configuration
 pub mod config;
 
+/// Command-line interface for managing DIDs and keys
+pub mod cli;
+
 /// Cryptographic utilities
 pub mod crypto;
 
@@ -18,6 +21,9 @@ pub mod did;
 
 /// Error types
 pub mod error;
+
+/// Key management
+pub mod key_manager;
 
 /// Message types and utilities
 pub mod message;
@@ -38,9 +44,14 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 pub use agent::{Agent, DefaultAgent};
 pub use config::AgentConfig;
 pub use crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
-pub use did::{DIDMethodResolver, KeyResolver, MultiResolver, SyncDIDResolver};
+pub use did::{
+    DIDGenerationOptions, DIDKeyGenerator, DIDMethodResolver, GeneratedKey, KeyResolver, KeyType,
+    MultiResolver, SyncDIDResolver,
+};
 pub use didcomm::did::{DIDDoc, DIDResolver};
+pub use didcomm::secrets::Secret;
 pub use error::{Error, Result};
+pub use key_manager::{KeyManager, KeyManagerSecretResolver};
 pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
 
 /// Version of the TAP Agent

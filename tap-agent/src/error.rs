@@ -34,6 +34,10 @@ pub enum Error {
     #[error("Failed to acquire resolver read lock")]
     FailedToAcquireResolverReadLock,
 
+    /// Error when failed to acquire resolver write lock
+    #[error("Failed to acquire resolver write lock")]
+    FailedToAcquireResolverWriteLock,
+
     /// Error related to missing configuration
     #[error("Missing configuration: {0}")]
     MissingConfig(String),

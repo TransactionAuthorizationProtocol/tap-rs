@@ -13,7 +13,6 @@
 //! See the `README.md` for usage examples.
 
 use base64::Engine;
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use didcomm::Message as DIDCommMessage;
 use js_sys::{Array, Object, Promise, Reflect};
 use serde::{Deserialize, Serialize};
@@ -21,6 +20,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver};
+use tap_agent::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyType};
+use tap_agent::key_manager::KeyManager;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
@@ -1300,6 +1301,7 @@ pub struct TapAgent {
     message_handlers: HashMap<String, js_sys::Function>,
     message_subscribers: Vec<js_sys::Function>,
     secrets_resolver: Arc<BasicSecretResolver>,
+    key_manager: Arc<KeyManager>,
 }
 
 #[wasm_bindgen]
@@ -1307,16 +1309,6 @@ impl TapAgent {
     /// Creates a new agent with the specified configuration
     #[wasm_bindgen(constructor)]
     pub fn new(config: JsValue) -> Self {
-        let did = if let Ok(did_prop) = Reflect::get(&config, &JsValue::from_str("did")) {
-            if let Some(did_str) = did_prop.as_string() {
-                did_str
-            } else {
-                format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
-            }
-        } else {
-            format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
-        };
-
         let nickname =
             if let Ok(nickname_prop) = Reflect::get(&config, &JsValue::from_str("nickname")) {
                 nickname_prop.as_string()
@@ -1330,26 +1322,67 @@ impl TapAgent {
             false
         };
 
+        // Initialize the key manager
+        let key_manager = KeyManager::new();
+
         // Create a secret resolver
         let mut secrets_resolver = BasicSecretResolver::new();
 
-        // For now, we're just creating a mock secret with proper types from didcomm
-        let secret = Secret {
-            id: did.clone(),
-            type_: SecretType::JsonWebKey2020,
-            secret_material: SecretMaterial::JWK {
-                private_key_jwk: serde_json::json!({
-                    "kty": "OKP",
-                    "kid": did.clone(),
-                    "crv": "Ed25519",
-                    "x": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-                    "d": "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh"
-                }),
-            },
-        };
+        // Check if a DID was provided
+        let did = if let Ok(did_prop) = Reflect::get(&config, &JsValue::from_str("did")) {
+            if let Some(did_str) = did_prop.as_string() {
+                // Use the provided DID
+                did_str
+            } else {
+                // Generate a new Ed25519 key as default
+                match key_manager.generate_key(DIDGenerationOptions {
+                    key_type: KeyType::Ed25519,
+                }) {
+                    Ok(key) => {
+                        if debug {
+                            console::log_1(&JsValue::from_str(&format!(
+                                "Generated new Ed25519 DID: {}",
+                                key.did
+                            )));
+                        }
 
-        // Add the secret to the resolver
-        secrets_resolver.add_secret(&did, secret);
+                        // Create a secret from the key and add it to the basic resolver for backward compatibility
+                        let secret = key_manager.generator.create_secret_from_key(&key);
+                        secrets_resolver.add_secret(&key.did, secret);
+
+                        key.did
+                    }
+                    Err(_) => {
+                        // Fallback to a random DID if key generation fails
+                        format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
+                    }
+                }
+            }
+        } else {
+            // No DID provided, generate a new Ed25519 key as default
+            match key_manager.generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            }) {
+                Ok(key) => {
+                    if debug {
+                        console::log_1(&JsValue::from_str(&format!(
+                            "Generated new Ed25519 DID: {}",
+                            key.did
+                        )));
+                    }
+
+                    // Create a secret from the key and add it to the basic resolver for backward compatibility
+                    let secret = key_manager.generator.create_secret_from_key(&key);
+                    secrets_resolver.add_secret(&key.did, secret);
+
+                    key.did
+                }
+                Err(_) => {
+                    // Fallback to a random DID if key generation fails
+                    format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
+                }
+            }
+        };
 
         TapAgent {
             id: did,
@@ -1358,6 +1391,7 @@ impl TapAgent {
             message_handlers: HashMap::new(),
             message_subscribers: Vec::new(),
             secrets_resolver: Arc::new(secrets_resolver),
+            key_manager: Arc::new(key_manager),
         }
     }
 
@@ -1414,22 +1448,48 @@ impl TapAgent {
         }
 
         // For a complete implementation, we would use the didcomm library's signing capabilities
-        // through the secrets_resolver. Here's a placeholder that simulates the signing process.
+        // First, check if we have the key in the key manager
+        let has_key_in_manager = self.key_manager.has_key(&self.id).unwrap_or(false);
 
-        // Check if we have a secret for this DID
-        let secrets_map = self.secrets_resolver.get_secrets_map();
-        if !secrets_map.contains_key(&self.id) {
-            return Err(JsValue::from_str(&format!(
-                "No secret found for DID: {}",
-                self.id
-            )));
+        if has_key_in_manager {
+            // Use the key manager's secret resolver for signing
+            if self.debug {
+                console::log_1(&JsValue::from_str(&format!(
+                    "Message signed by {} using key manager",
+                    self.id
+                )));
+            }
+        } else {
+            // Fall back to the basic secrets resolver for backward compatibility
+            let secrets_map = self.secrets_resolver.get_secrets_map();
+            if !secrets_map.contains_key(&self.id) {
+                return Err(JsValue::from_str(&format!(
+                    "No secret found for DID: {}",
+                    self.id
+                )));
+            }
+
+            if self.debug {
+                console::log_1(&JsValue::from_str(&format!(
+                    "Message signed by {} using basic resolver",
+                    self.id
+                )));
+            }
         }
 
+        Ok(())
+    }
+
+    /// Use the key manager's secret resolver for DIDComm operations
+    pub fn use_key_manager_resolver(&mut self) -> Result<(), JsValue> {
+        // Create a combined resolver that uses both the basic resolver and the key manager
+        // For a real implementation, we would use the didcomm library's resolver capabilities
+
+        // Here we're simulating the process by logging if debug is enabled
         if self.debug {
-            console::log_1(&JsValue::from_str(&format!(
-                "Message signed by {}",
-                self.id
-            )));
+            console::log_1(&JsValue::from_str(
+                "Using the key manager's secret resolver for DIDComm operations",
+            ));
         }
 
         Ok(())
@@ -1508,20 +1568,184 @@ impl TapAgent {
 
     /// Gets the agent's secrets resolver for advanced use cases
     pub fn get_keys_info(&self) -> JsValue {
+        // Get all DIDs from the key manager
+        let key_manager_dids = self.key_manager.list_keys().unwrap_or_default();
+
+        // Get the secrets from the basic resolver (for backward compatibility)
         let secrets_map = self.secrets_resolver.get_secrets_map();
         let mut keys_info = Vec::new();
 
+        // Add keys from the basic resolver
         for (did, secret) in secrets_map.iter() {
             let key_info = serde_json::json!({
                 "did": did,
                 "type": secret.type_,
+                "source": "basic_resolver",
                 "has_private_key": true, // In a real implementation, we would check if we have a private key
                 "has_public_key": true,  // In a real implementation, we would check if we have a public key
             });
             keys_info.push(key_info);
         }
 
+        // Add keys from the key manager (if not already present)
+        for did in key_manager_dids {
+            // Check if the key is already in the list
+            if !keys_info.iter().any(|k| {
+                if let Some(did_val) = k.get("did") {
+                    if let Some(did_str) = did_val.as_str() {
+                        return did_str == did;
+                    }
+                }
+                false
+            }) {
+                let key_info = serde_json::json!({
+                    "did": did,
+                    "source": "key_manager",
+                    "has_private_key": true,
+                    "has_public_key": true,
+                });
+                keys_info.push(key_info);
+            }
+        }
+
         serde_wasm_bindgen::to_value(&keys_info).unwrap_or(JsValue::NULL)
+    }
+
+    /// Gets the agent's key manager for advanced cryptographic operations
+    pub fn get_key_manager_info(&self) -> JsValue {
+        // Get all DIDs from the key manager
+        let key_manager_dids = self.key_manager.list_keys().unwrap_or_default();
+
+        let info = serde_json::json!({
+            "dids": key_manager_dids,
+            "has_resolver": true,
+        });
+
+        serde_wasm_bindgen::to_value(&info).unwrap_or(JsValue::NULL)
+    }
+
+    /// Generates a new key DID with the specified key type
+    pub fn generate_did(&self, key_type: Option<DIDKeyType>) -> Result<DIDKey, JsValue> {
+        // Determine the key type to use
+        let key_type_val = key_type.unwrap_or(DIDKeyType::Ed25519);
+
+        // Create the generation options
+        let options = DIDGenerationOptions {
+            key_type: key_type_val.into(),
+        };
+
+        // Generate the DID using the key manager
+        let generated_key = self
+            .key_manager
+            .generate_key(options)
+            .map_err(|e| JsValue::from_str(&format!("Failed to generate DID: {}", e)))?;
+
+        // Create the secret before we move parts out of generated_key
+        let did = generated_key.did.clone();
+        let did_secret = self
+            .key_manager
+            .generator
+            .create_secret_from_key(&generated_key);
+
+        // Create a DIDKey instance
+        let did_document = serde_json::to_string(&generated_key.did_doc)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize DID document: {}", e)))?;
+
+        let did_key = DIDKey {
+            did: did.clone(),
+            did_document,
+            public_key: generated_key.public_key.clone(),
+            private_key: generated_key.private_key.clone(),
+            key_type: generated_key.key_type,
+        };
+
+        // Update the basic secrets resolver for backward compatibility
+        let mut secrets_resolver = BasicSecretResolver::new();
+
+        // Copy existing secrets
+        for (existing_did, existing_secret) in self.secrets_resolver.get_secrets_map().iter() {
+            secrets_resolver.add_secret(existing_did, existing_secret.clone());
+        }
+
+        // Add the new secret
+        secrets_resolver.add_secret(&did, did_secret);
+
+        if self.debug {
+            console::log_1(&JsValue::from_str(&format!(
+                "Generated new DID: {} with key type: {:?}",
+                did_key.did, did_key.key_type
+            )));
+        }
+
+        Ok(did_key)
+    }
+
+    /// Generates a new web DID with the specified domain and key type
+    pub fn generate_web_did(
+        &self,
+        domain: String,
+        key_type: Option<DIDKeyType>,
+    ) -> Result<DIDKey, JsValue> {
+        // Determine the key type to use
+        let key_type_val = key_type.unwrap_or(DIDKeyType::Ed25519);
+
+        // Create the generation options
+        let options = DIDGenerationOptions {
+            key_type: key_type_val.into(),
+        };
+
+        // Generate the DID using the key manager
+        let generated_key = self
+            .key_manager
+            .generate_web_did(&domain, options)
+            .map_err(|e| JsValue::from_str(&format!("Failed to generate web DID: {}", e)))?;
+
+        // Create a DIDKey instance
+        let did_document = serde_json::to_string(&generated_key.did_doc)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize DID document: {}", e)))?;
+
+        // Create the secret before moving values out of generated_key
+        let did_secret = self
+            .key_manager
+            .generator
+            .create_secret_from_key(&generated_key);
+
+        let did_key = DIDKey {
+            did: generated_key.did,
+            did_document,
+            public_key: generated_key.public_key,
+            private_key: generated_key.private_key,
+            key_type: generated_key.key_type,
+        };
+        let mut secrets_resolver = BasicSecretResolver::new();
+
+        // Copy existing secrets
+        for (existing_did, existing_secret) in self.secrets_resolver.get_secrets_map().iter() {
+            secrets_resolver.add_secret(existing_did, existing_secret.clone());
+        }
+
+        // Add the new secret
+        secrets_resolver.add_secret(&did_key.did, did_secret);
+
+        if self.debug {
+            console::log_1(&JsValue::from_str(&format!(
+                "Generated new web DID: {} with key type: {:?} for domain: {}",
+                did_key.did, did_key.key_type, domain
+            )));
+        }
+
+        Ok(did_key)
+    }
+
+    /// Lists all DIDs managed by this agent
+    pub fn list_dids(&self) -> Result<JsValue, JsValue> {
+        let dids = self
+            .key_manager
+            .list_keys()
+            .map_err(|e| JsValue::from_str(&format!("Failed to list DIDs: {}", e)))?;
+
+        serde_wasm_bindgen::to_value(&dids)
+            .map_err(|e| JsValue::from_str(&format!("Failed to serialize DIDs: {}", e)))
     }
 
     /// Verifies a message signature
@@ -1533,11 +1757,47 @@ impl TapAgent {
     pub fn add_key(
         &mut self,
         did: String,
-        _key_type: String,
+        key_type_str: String,
         private_key: Option<js_sys::Uint8Array>,
         public_key: Option<js_sys::Uint8Array>,
     ) -> Result<(), JsValue> {
-        // Create a copy of the secrets resolver
+        // Convert key type string to KeyType
+        let key_type = match key_type_str.as_str() {
+            "Ed25519" => KeyType::Ed25519,
+            "P256" => KeyType::P256,
+            "Secp256k1" => KeyType::Secp256k1,
+            _ => KeyType::Ed25519, // Default to Ed25519 if unknown
+        };
+
+        // Extract the key bytes
+        let private_key_bytes = private_key
+            .map(js_sys_to_vec_u8)
+            .unwrap_or_else(|| vec![0; 32]);
+        let public_key_bytes = public_key
+            .map(js_sys_to_vec_u8)
+            .unwrap_or_else(|| vec![0; 32]);
+
+        // Create a GeneratedKey instance
+        let generated_key = GeneratedKey {
+            key_type,
+            did: did.clone(),
+            public_key: public_key_bytes,
+            private_key: private_key_bytes,
+            did_doc: didcomm::did::DIDDoc {
+                id: did.clone(),
+                verification_method: vec![],
+                authentication: vec![],
+                key_agreement: vec![],
+                service: vec![],
+            },
+        };
+
+        // Add the key to the key manager
+        self.key_manager
+            .add_key(&generated_key)
+            .map_err(|e| JsValue::from_str(&format!("Failed to add key to key manager: {}", e)))?;
+
+        // Create a copy of the secrets resolver for backward compatibility
         let mut secrets_resolver = BasicSecretResolver::new();
 
         // Copy existing secrets
@@ -1545,37 +1805,23 @@ impl TapAgent {
             secrets_resolver.add_secret(existing_did, existing_secret.clone());
         }
 
-        // Add the new secret
-        let secret = Secret {
-            id: did.clone(),
-            type_: SecretType::JsonWebKey2020,
-            secret_material: SecretMaterial::JWK {
-                private_key_jwk: serde_json::json!({
-                    "kty": "OKP",
-                    "kid": did.clone(),
-                    "crv": "Ed25519",
-                    "x": match &public_key {
-                        Some(pk) => {
-                            let vec = js_sys_to_vec_u8(pk);
-                            base64::engine::general_purpose::STANDARD.encode(vec)
-                        },
-                        None => "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo".to_string()
-                    },
-                    "d": match &private_key {
-                        Some(sk) => {
-                            let vec = js_sys_to_vec_u8(sk);
-                            base64::engine::general_purpose::STANDARD.encode(vec)
-                        },
-                        None => "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh".to_string()
-                    }
-                }),
-            },
-        };
-
+        // Create and add the new secret - do this before adding to the KeyManager
+        // to avoid a partial move of generated_key
+        let secret = self
+            .key_manager
+            .generator
+            .create_secret_from_key(&generated_key);
         secrets_resolver.add_secret(&did, secret);
 
         // Update the agent's secrets resolver
         self.secrets_resolver = Arc::new(secrets_resolver);
+
+        if self.debug {
+            console::log_1(&JsValue::from_str(&format!(
+                "Added key for DID: {} with key type: {:?}",
+                did, key_type
+            )));
+        }
 
         Ok(())
     }
@@ -1840,9 +2086,171 @@ impl TapNode {
     }
 }
 
-/// Creates a new DID key pair
+/// Available key types for DID generation
 #[wasm_bindgen]
-pub fn create_did_key() -> Result<JsValue, JsValue> {
+pub enum DIDKeyType {
+    /// Ed25519 key type
+    Ed25519,
+    /// P-256 key type
+    P256,
+    /// Secp256k1 key type
+    Secp256k1,
+}
+
+impl From<DIDKeyType> for KeyType {
+    fn from(key_type: DIDKeyType) -> Self {
+        match key_type {
+            DIDKeyType::Ed25519 => KeyType::Ed25519,
+            DIDKeyType::P256 => KeyType::P256,
+            DIDKeyType::Secp256k1 => KeyType::Secp256k1,
+        }
+    }
+}
+
+/// Generated key information
+#[wasm_bindgen]
+pub struct DIDKey {
+    /// The DID string
+    #[wasm_bindgen(getter_with_clone)]
+    pub did: String,
+    /// The DID document as a JSON string
+    #[wasm_bindgen(getter_with_clone)]
+    pub did_document: String,
+    /// The public key
+    public_key: Vec<u8>,
+    /// The private key
+    private_key: Vec<u8>,
+    /// The key type
+    key_type: KeyType,
+}
+
+#[wasm_bindgen]
+impl DIDKey {
+    /// Create a new DIDKey instance
+    #[wasm_bindgen(constructor)]
+    pub fn new(
+        did: String,
+        did_document: String,
+        public_key: Vec<u8>,
+        private_key: Vec<u8>,
+        key_type: DIDKeyType,
+    ) -> Self {
+        Self {
+            did,
+            did_document,
+            public_key,
+            private_key,
+            key_type: key_type.into(),
+        }
+    }
+
+    /// Get the public key as a hex string
+    pub fn get_public_key_hex(&self) -> String {
+        let mut result = String::with_capacity(self.public_key.len() * 2);
+        for byte in &self.public_key {
+            use std::fmt::Write;
+            write!(result, "{:02x}", byte).unwrap();
+        }
+        result
+    }
+
+    /// Get the private key as a hex string
+    pub fn get_private_key_hex(&self) -> String {
+        let mut result = String::with_capacity(self.private_key.len() * 2);
+        for byte in &self.private_key {
+            use std::fmt::Write;
+            write!(result, "{:02x}", byte).unwrap();
+        }
+        result
+    }
+
+    /// Get the public key as a base64 string
+    pub fn get_public_key_base64(&self) -> String {
+        base64::engine::general_purpose::STANDARD.encode(&self.public_key)
+    }
+
+    /// Get the private key as a base64 string
+    pub fn get_private_key_base64(&self) -> String {
+        base64::engine::general_purpose::STANDARD.encode(&self.private_key)
+    }
+
+    /// Get the key type as a string
+    pub fn get_key_type(&self) -> String {
+        match self.key_type {
+            KeyType::Ed25519 => "Ed25519".to_string(),
+            KeyType::P256 => "P256".to_string(),
+            KeyType::Secp256k1 => "Secp256k1".to_string(),
+        }
+    }
+}
+
+/// Creates a new DID key pair with the specified key type
+#[wasm_bindgen]
+pub fn create_did_key(key_type: Option<DIDKeyType>) -> Result<DIDKey, JsValue> {
+    // Determine the key type to use
+    let key_type = key_type.unwrap_or(DIDKeyType::Ed25519);
+
+    // Create the key generator
+    let generator = DIDKeyGenerator::new();
+
+    // Create the generation options
+    let options = DIDGenerationOptions {
+        key_type: key_type.into(),
+    };
+
+    // Generate the DID
+    let key = generator
+        .generate_did(options)
+        .map_err(|e| JsValue::from_str(&format!("Failed to generate DID: {}", e)))?;
+
+    // Create a DIDKey instance
+    let did_document = serde_json::to_string(&key.did_doc)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize DID document: {}", e)))?;
+
+    Ok(DIDKey {
+        did: key.did,
+        did_document,
+        public_key: key.public_key,
+        private_key: key.private_key,
+        key_type: key.key_type,
+    })
+}
+
+/// Creates a new DID web identifier with the specified domain and key type
+#[wasm_bindgen]
+pub fn create_did_web(domain: String, key_type: Option<DIDKeyType>) -> Result<DIDKey, JsValue> {
+    // Determine the key type to use
+    let key_type = key_type.unwrap_or(DIDKeyType::Ed25519);
+
+    // Create the key generator
+    let generator = DIDKeyGenerator::new();
+
+    // Create the generation options
+    let options = DIDGenerationOptions {
+        key_type: key_type.into(),
+    };
+
+    // Generate the DID
+    let key = generator
+        .generate_web_did(&domain, options)
+        .map_err(|e| JsValue::from_str(&format!("Failed to generate DID: {}", e)))?;
+
+    // Create a DIDKey instance
+    let did_document = serde_json::to_string(&key.did_doc)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize DID document: {}", e)))?;
+
+    Ok(DIDKey {
+        did: key.did,
+        did_document,
+        public_key: key.public_key,
+        private_key: key.private_key,
+        key_type: key.key_type,
+    })
+}
+
+/// Legacy function that creates a new DID key pair with a mock value
+#[wasm_bindgen]
+pub fn create_did_key_legacy() -> Result<JsValue, JsValue> {
     let uuid_str = uuid::Uuid::new_v4().to_simple().to_string(); // This actually needs the to_string() as it's assigning to a String variable
 
     let mock_did = format!("did:key:z6Mk{}", uuid_str);
@@ -1864,7 +2272,7 @@ pub fn generate_uuid_v4() -> String {
 }
 
 /// Utility function to convert a JavaScript Uint8Array to a Rust Vec<u8>
-fn js_sys_to_vec_u8(arr: &js_sys::Uint8Array) -> Vec<u8> {
+fn js_sys_to_vec_u8(arr: js_sys::Uint8Array) -> Vec<u8> {
     let length = arr.length() as usize;
     let mut vec = vec![0; length];
     arr.copy_to(&mut vec);

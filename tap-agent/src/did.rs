@@ -1,11 +1,14 @@
-//! DID resolution functionality for the TAP Agent.
+//! DID resolution and generation functionality for the TAP Agent.
 //!
 //! This module provides a multi-resolver for Decentralized Identifiers (DIDs)
 //! that integrates with the didcomm library's DID resolution system. The multi-resolver
 //! currently supports the did:key method, with the architecture allowing for additional
 //! methods to be added in the future.
+//!
+//! It also provides functionality to generate new DIDs with different cryptographic curves.
 
 use async_trait::async_trait;
+use base64::Engine;
 use curve25519_dalek::edwards::CompressedEdwardsY;
 use didcomm::did::{
     DIDDoc, DIDResolver, VerificationMaterial, VerificationMethod, VerificationMethodType,
@@ -13,13 +16,59 @@ use didcomm::did::{
 use didcomm::error::{
     Error as DidcommError, ErrorKind as DidcommErrorKind, Result as DidcommResult,
 };
+use didcomm::secrets::{Secret, SecretMaterial, SecretType};
+use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
+use k256::ecdsa::SigningKey as Secp256k1SigningKey;
 use multibase::{decode, encode, Base};
+use p256::ecdsa::SigningKey as P256SigningKey;
+use rand::rngs::OsRng;
 
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
 use crate::error::{Error, Result};
+
+/// Key types supported for DID generation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyType {
+    /// Ed25519 key type (EdDSA)
+    Ed25519,
+    /// P-256 key type (ECDSA secp256r1)
+    P256,
+    /// Secp256k1 key type (ECDSA secp256k1)
+    Secp256k1,
+}
+
+/// Generated key information
+#[derive(Debug, Clone)]
+pub struct GeneratedKey {
+    /// The key type
+    pub key_type: KeyType,
+    /// The generated DID
+    pub did: String,
+    /// The public key in binary form
+    pub public_key: Vec<u8>,
+    /// The private key in binary form
+    pub private_key: Vec<u8>,
+    /// The DID document
+    pub did_doc: DIDDoc,
+}
+
+/// Options for generating a DID
+#[derive(Debug, Clone)]
+pub struct DIDGenerationOptions {
+    /// Key type to use
+    pub key_type: KeyType,
+}
+
+impl Default for DIDGenerationOptions {
+    fn default() -> Self {
+        Self {
+            key_type: KeyType::Ed25519,
+        }
+    }
+}
 
 /// A trait for resolving DIDs to DID documents that is Send+Sync.
 ///
@@ -241,6 +290,330 @@ impl Default for MultiResolver {
         resolver.register_method("key", KeyResolver::new());
         resolver
     }
+}
+
+/// DID Key Generator for creating DIDs with different key types
+#[derive(Debug, Default, Clone)]
+pub struct DIDKeyGenerator;
+
+impl DIDKeyGenerator {
+    /// Create a new DID key generator
+    pub fn new() -> Self {
+        Self
+    }
+
+    /// Create a Secret from a GeneratedKey for a DID
+    pub fn create_secret_from_key(&self, key: &GeneratedKey) -> Secret {
+        match key.key_type {
+            KeyType::Ed25519 => Secret {
+                id: key.did.clone(),
+                type_: SecretType::JsonWebKey2020,
+                secret_material: SecretMaterial::JWK {
+                    private_key_jwk: serde_json::json!({
+                        "kty": "OKP",
+                        "kid": key.did,
+                        "crv": "Ed25519",
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key),
+                        "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
+                    }),
+                },
+            },
+            KeyType::P256 => Secret {
+                id: key.did.clone(),
+                type_: SecretType::JsonWebKey2020,
+                secret_material: SecretMaterial::JWK {
+                    private_key_jwk: serde_json::json!({
+                        "kty": "EC",
+                        "kid": key.did,
+                        "crv": "P-256",
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
+                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),
+                        "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
+                    }),
+                },
+            },
+            KeyType::Secp256k1 => Secret {
+                id: key.did.clone(),
+                type_: SecretType::JsonWebKey2020,
+                secret_material: SecretMaterial::JWK {
+                    private_key_jwk: serde_json::json!({
+                        "kty": "EC",
+                        "kid": key.did,
+                        "crv": "secp256k1",
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
+                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),
+                        "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
+                    }),
+                },
+            },
+        }
+    }
+
+    /// Generate a did:key identifier with the specified key type
+    pub fn generate_did(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
+        match options.key_type {
+            KeyType::Ed25519 => self.generate_ed25519_did(),
+            KeyType::P256 => self.generate_p256_did(),
+            KeyType::Secp256k1 => self.generate_secp256k1_did(),
+        }
+    }
+
+    /// Generate a did:key identifier with an Ed25519 key
+    pub fn generate_ed25519_did(&self) -> Result<GeneratedKey> {
+        // Generate a new Ed25519 keypair
+        let mut csprng = OsRng;
+        let signing_key = Ed25519SigningKey::generate(&mut csprng);
+        let verifying_key = Ed25519VerifyingKey::from(&signing_key);
+
+        // Extract public and private keys
+        let public_key = verifying_key.to_bytes().to_vec();
+        let private_key = signing_key.to_bytes().to_vec();
+
+        // Create did:key identifier
+        // Multicodec prefix for Ed25519: 0xed01
+        let mut prefixed_key = vec![0xed, 0x01];
+        prefixed_key.extend_from_slice(&public_key);
+
+        // Encode the key with multibase (base58btc with 'z' prefix)
+        let multibase_encoded = encode(Base::Base58Btc, &prefixed_key);
+        let did = format!("did:key:{}", multibase_encoded);
+
+        // Create the DID document
+        let doc = self.create_did_doc(&did, &prefixed_key, KeyType::Ed25519)?;
+
+        // Return the generated key information
+        Ok(GeneratedKey {
+            key_type: KeyType::Ed25519,
+            did,
+            public_key,
+            private_key,
+            did_doc: doc,
+        })
+    }
+
+    /// Generate a did:key identifier with a P-256 key
+    pub fn generate_p256_did(&self) -> Result<GeneratedKey> {
+        // Generate a new P-256 keypair
+        let mut rng = OsRng;
+        let signing_key = P256SigningKey::random(&mut rng);
+
+        // Extract public and private keys
+        let private_key = signing_key.to_bytes().to_vec();
+        let public_key = signing_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .to_bytes()
+            .to_vec();
+
+        // Create did:key identifier
+        // Multicodec prefix for P-256: 0x1200
+        let mut prefixed_key = vec![0x12, 0x00];
+        prefixed_key.extend_from_slice(&public_key);
+
+        // Encode the key with multibase (base58btc with 'z' prefix)
+        let multibase_encoded = encode(Base::Base58Btc, &prefixed_key);
+        let did = format!("did:key:{}", multibase_encoded);
+
+        // Create the DID document
+        let doc = self.create_did_doc(&did, &prefixed_key, KeyType::P256)?;
+
+        // Return the generated key information
+        Ok(GeneratedKey {
+            key_type: KeyType::P256,
+            did,
+            public_key,
+            private_key,
+            did_doc: doc,
+        })
+    }
+
+    /// Generate a did:key identifier with a Secp256k1 key
+    pub fn generate_secp256k1_did(&self) -> Result<GeneratedKey> {
+        // Generate a new Secp256k1 keypair
+        let mut rng = OsRng;
+        let signing_key = Secp256k1SigningKey::random(&mut rng);
+
+        // Extract public and private keys
+        let private_key = signing_key.to_bytes().to_vec();
+        let public_key = signing_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .to_bytes()
+            .to_vec();
+
+        // Create did:key identifier
+        // Multicodec prefix for Secp256k1: 0xe701
+        let mut prefixed_key = vec![0xe7, 0x01];
+        prefixed_key.extend_from_slice(&public_key);
+
+        // Encode the key with multibase (base58btc with 'z' prefix)
+        let multibase_encoded = encode(Base::Base58Btc, &prefixed_key);
+        let did = format!("did:key:{}", multibase_encoded);
+
+        // Create the DID document
+        let doc = self.create_did_doc(&did, &prefixed_key, KeyType::Secp256k1)?;
+
+        // Return the generated key information
+        Ok(GeneratedKey {
+            key_type: KeyType::Secp256k1,
+            did,
+            public_key,
+            private_key,
+            did_doc: doc,
+        })
+    }
+
+    /// Generate a did:web identifier with the given domain and key type
+    pub fn generate_web_did(
+        &self,
+        domain: &str,
+        options: DIDGenerationOptions,
+    ) -> Result<GeneratedKey> {
+        // First, generate a key DID of the appropriate type
+        let key_did = self.generate_did(options)?;
+
+        // Format the did:web identifier
+        let did = format!("did:web:{}", domain);
+
+        // Create a new DID document based on the key DID document but with the web DID
+        let verification_methods: Vec<VerificationMethod> = key_did
+            .did_doc
+            .verification_method
+            .iter()
+            .map(|vm| {
+                let id = format!("{}#keys-1", did);
+                VerificationMethod {
+                    id: id.clone(),
+                    type_: vm.type_.clone(),
+                    controller: did.clone(),
+                    verification_material: vm.verification_material.clone(),
+                }
+            })
+            .collect();
+
+        let did_doc = DIDDoc {
+            id: did.clone(),
+            verification_method: verification_methods.clone(),
+            authentication: verification_methods
+                .iter()
+                .map(|vm| vm.id.clone())
+                .collect(),
+            key_agreement: key_did.did_doc.key_agreement,
+            service: vec![],
+        };
+
+        // Return the generated key information with the web DID
+        Ok(GeneratedKey {
+            key_type: key_did.key_type,
+            did,
+            public_key: key_did.public_key,
+            private_key: key_did.private_key,
+            did_doc,
+        })
+    }
+
+    /// Create a DID document for a did:key
+    fn create_did_doc(
+        &self,
+        did: &str,
+        prefixed_public_key: &[u8],
+        key_type: KeyType,
+    ) -> Result<DIDDoc> {
+        // Determine verification method type based on key type
+        let verification_method_type = match key_type {
+            KeyType::Ed25519 => VerificationMethodType::Ed25519VerificationKey2018,
+            KeyType::P256 => VerificationMethodType::EcdsaSecp256k1VerificationKey2019, // Using Secp256k1 type as P256 isn't available
+            KeyType::Secp256k1 => VerificationMethodType::EcdsaSecp256k1VerificationKey2019,
+        };
+
+        // Encode the prefixed public key with multibase
+        let multibase_encoded = encode(Base::Base58Btc, prefixed_public_key);
+
+        // Create the verification method ID
+        let vm_id = format!("{}#{}", did, multibase_encoded);
+
+        // Create the verification method
+        let verification_method = VerificationMethod {
+            id: vm_id.clone(),
+            type_: verification_method_type.clone(),
+            controller: did.to_string(),
+            verification_material: VerificationMaterial::Multibase {
+                public_key_multibase: multibase_encoded.clone(),
+            },
+        };
+
+        // For Ed25519, also generate an X25519 verification method for key agreement
+        let mut verification_methods = vec![verification_method.clone()];
+        let mut key_agreement = Vec::new();
+
+        if key_type == KeyType::Ed25519 {
+            // Only Ed25519 keys have an X25519 key agreement method
+            if let Some(x25519_bytes) = self.ed25519_to_x25519(&prefixed_public_key[2..]) {
+                // Prefix for X25519: 0xEC01
+                let mut x25519_prefixed = vec![0xEC, 0x01];
+                x25519_prefixed.extend_from_slice(&x25519_bytes);
+
+                // Encode the prefixed X25519 key with multibase
+                let x25519_multibase = encode(Base::Base58Btc, &x25519_prefixed);
+
+                // Create the X25519 verification method ID
+                let x25519_vm_id = format!("{}#{}", did, x25519_multibase);
+
+                // Create the X25519 verification method
+                let x25519_verification_method = VerificationMethod {
+                    id: x25519_vm_id.clone(),
+                    type_: VerificationMethodType::X25519KeyAgreementKey2019,
+                    controller: did.to_string(),
+                    verification_material: VerificationMaterial::Multibase {
+                        public_key_multibase: x25519_multibase,
+                    },
+                };
+
+                // Add the X25519 verification method and key agreement method
+                verification_methods.push(x25519_verification_method);
+                key_agreement.push(x25519_vm_id);
+            }
+        }
+
+        // Create the DID document
+        let did_doc = DIDDoc {
+            id: did.to_string(),
+            verification_method: verification_methods,
+            authentication: vec![vm_id.clone()],
+            key_agreement,
+            service: vec![],
+        };
+
+        Ok(did_doc)
+    }
+
+    /// Convert an Ed25519 public key to an X25519 public key
+    ///
+    /// This follows the conversion process described in RFC 7748
+    /// https://datatracker.ietf.org/doc/html/rfc7748#section-5
+    fn ed25519_to_x25519(&self, ed25519_pubkey: &[u8]) -> Option<[u8; 32]> {
+        // The Ed25519 public key should be 32 bytes
+        if ed25519_pubkey.len() != 32 {
+            return None;
+        }
+
+        // Try to create a CompressedEdwardsY from the bytes
+        let edwards_y = match CompressedEdwardsY::from_slice(ed25519_pubkey) {
+            Ok(point) => point,
+            Err(_) => return None,
+        };
+
+        // Try to decompress to get the Edwards point
+        let edwards_point = edwards_y.decompress()?;
+
+        // Convert to Montgomery form
+        let montgomery_point = edwards_point.to_montgomery();
+
+        // Get the raw bytes representation of the X25519 key
+        Some(montgomery_point.to_bytes())
+    }
+
+    // The create_secret_from_key method has been moved up
 }
 
 #[async_trait]
@@ -484,5 +857,178 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.to_string().contains("Unsupported DID method"));
+    }
+
+    #[test]
+    fn test_did_key_generator_ed25519() {
+        let generator = DIDKeyGenerator::new();
+
+        // Generate an Ed25519 DID
+        let options = DIDGenerationOptions {
+            key_type: KeyType::Ed25519,
+        };
+
+        let key_result = generator.generate_did(options);
+        assert!(key_result.is_ok());
+
+        let key = key_result.unwrap();
+
+        // Check the DID format
+        assert!(key.did.starts_with("did:key:z"));
+
+        // Check that public and private keys have the correct length
+        assert_eq!(key.public_key.len(), 32); // Ed25519 public key is 32 bytes
+        assert_eq!(key.private_key.len(), 32); // Ed25519 private key is 32 bytes
+
+        // Check the DID document
+        assert_eq!(key.did_doc.id, key.did);
+        assert_eq!(key.did_doc.verification_method.len(), 2); // Should have both Ed25519 and X25519
+
+        // Verify Ed25519 verification method is present
+        let ed25519_method = key
+            .did_doc
+            .verification_method
+            .iter()
+            .find(|vm| matches!(vm.type_, VerificationMethodType::Ed25519VerificationKey2018))
+            .expect("Should have an Ed25519 verification method");
+
+        // Verify X25519 verification method
+        let x25519_method = key
+            .did_doc
+            .verification_method
+            .iter()
+            .find(|vm| matches!(vm.type_, VerificationMethodType::X25519KeyAgreementKey2019))
+            .expect("Should have an X25519 key agreement method");
+
+        // Check that authentication uses the Ed25519 key
+        assert!(key.did_doc.authentication.contains(&ed25519_method.id));
+
+        // Check that key agreement uses the X25519 key
+        assert!(key.did_doc.key_agreement.contains(&x25519_method.id));
+
+        // Create a secret from the key
+        let secret = generator.create_secret_from_key(&key);
+        assert_eq!(secret.id, key.did);
+        assert!(matches!(secret.type_, SecretType::JsonWebKey2020));
+    }
+
+    #[test]
+    fn test_did_key_generator_p256() {
+        let generator = DIDKeyGenerator::new();
+
+        // Generate a P-256 DID
+        let options = DIDGenerationOptions {
+            key_type: KeyType::P256,
+        };
+
+        let key_result = generator.generate_did(options);
+        assert!(key_result.is_ok());
+
+        let key = key_result.unwrap();
+
+        // Check the DID format
+        assert!(key.did.starts_with("did:key:z"));
+
+        // Check the DID document
+        assert_eq!(key.did_doc.id, key.did);
+        assert_eq!(key.did_doc.verification_method.len(), 1); // P-256 has no key agreement
+
+        // Verify P-256 verification method is present
+        let p256_method = key
+            .did_doc
+            .verification_method
+            .iter()
+            .find(|vm| {
+                matches!(
+                    vm.type_,
+                    VerificationMethodType::EcdsaSecp256k1VerificationKey2019
+                )
+            }) // Use available type
+            .expect("Should have a P-256 verification method");
+
+        // Check that authentication uses the P-256 key
+        assert!(key.did_doc.authentication.contains(&p256_method.id));
+
+        // Create a secret from the key
+        let secret = generator.create_secret_from_key(&key);
+        assert_eq!(secret.id, key.did);
+        assert!(matches!(secret.type_, SecretType::JsonWebKey2020));
+    }
+
+    #[test]
+    fn test_did_key_generator_secp256k1() {
+        let generator = DIDKeyGenerator::new();
+
+        // Generate a Secp256k1 DID
+        let options = DIDGenerationOptions {
+            key_type: KeyType::Secp256k1,
+        };
+
+        let key_result = generator.generate_did(options);
+        assert!(key_result.is_ok());
+
+        let key = key_result.unwrap();
+
+        // Check the DID format
+        assert!(key.did.starts_with("did:key:z"));
+
+        // Check the DID document
+        assert_eq!(key.did_doc.id, key.did);
+        assert_eq!(key.did_doc.verification_method.len(), 1); // Secp256k1 has no key agreement
+
+        // Verify Secp256k1 verification method is present
+        let secp256k1_method = key
+            .did_doc
+            .verification_method
+            .iter()
+            .find(|vm| {
+                matches!(
+                    vm.type_,
+                    VerificationMethodType::EcdsaSecp256k1VerificationKey2019
+                )
+            })
+            .expect("Should have a Secp256k1 verification method");
+
+        // Check that authentication uses the Secp256k1 key
+        assert!(key.did_doc.authentication.contains(&secp256k1_method.id));
+
+        // Create a secret from the key
+        let secret = generator.create_secret_from_key(&key);
+        assert_eq!(secret.id, key.did);
+        assert!(matches!(secret.type_, SecretType::JsonWebKey2020));
+    }
+
+    #[test]
+    fn test_did_web_generator() {
+        let generator = DIDKeyGenerator::new();
+
+        // Generate a did:web
+        let domain = "example.com";
+        let options = DIDGenerationOptions {
+            key_type: KeyType::Ed25519,
+        };
+
+        let key_result = generator.generate_web_did(domain, options);
+        assert!(key_result.is_ok());
+
+        let key = key_result.unwrap();
+
+        // Check the DID format
+        assert_eq!(key.did, format!("did:web:{}", domain));
+
+        // Check the DID document
+        assert_eq!(key.did_doc.id, key.did);
+        assert!(key.did_doc.verification_method.len() >= 1);
+
+        // Verify that all verification methods have the correct controller
+        for vm in &key.did_doc.verification_method {
+            assert_eq!(vm.controller, key.did);
+            assert!(vm.id.starts_with(&key.did));
+        }
+
+        // Create a secret from the key
+        let secret = generator.create_secret_from_key(&key);
+        assert_eq!(secret.id, key.did);
+        assert!(matches!(secret.type_, SecretType::JsonWebKey2020));
     }
 }

@@ -41,6 +41,11 @@ vi.mock('tap-wasm', () => {
     init_tap_wasm: vi.fn(),
     init: vi.fn(),
     generate_uuid_v4: vi.fn().mockReturnValue('mock-uuid'),
+    DIDKeyType: {
+      Ed25519: 'Ed25519',
+      P256: 'P256',
+      Secp256k1: 'Secp256k1'
+    },
     MessageType: {
       Transfer: 0,
       PaymentRequest: 1,
@@ -103,8 +108,39 @@ vi.mock('tap-wasm', () => {
       process_message: vi.fn().mockResolvedValue({}),
       subscribe_to_messages: vi.fn()
     })),
-    create_did_key: vi.fn().mockReturnValue({
-      did: 'did:key:mockagent'
+    create_did_key: vi.fn().mockResolvedValue({
+      did: 'did:key:mockagent',
+      didDocument: JSON.stringify({
+        id: 'did:key:mockagent',
+        verificationMethod: [{
+          id: 'did:key:mockagent#key1',
+          type: 'Ed25519VerificationKey2020',
+          controller: 'did:key:mockagent',
+          publicKeyMultibase: 'z12345'
+        }]
+      }),
+      getPublicKeyHex: vi.fn().mockReturnValue('0x1234'),
+      getPrivateKeyHex: vi.fn().mockReturnValue('0x5678'),
+      getPublicKeyBase64: vi.fn().mockReturnValue('YWJjZA=='),
+      getPrivateKeyBase64: vi.fn().mockReturnValue('ZWZnaA=='),
+      getKeyType: vi.fn().mockReturnValue('Ed25519')
+    }),
+    create_did_web: vi.fn().mockResolvedValue({
+      did: 'did:web:example.com',
+      didDocument: JSON.stringify({
+        id: 'did:web:example.com',
+        verificationMethod: [{
+          id: 'did:web:example.com#key1',
+          type: 'Ed25519VerificationKey2020',
+          controller: 'did:web:example.com',
+          publicKeyMultibase: 'z12345'
+        }]
+      }),
+      getPublicKeyHex: vi.fn().mockReturnValue('0x1234'),
+      getPrivateKeyHex: vi.fn().mockReturnValue('0x5678'),
+      getPublicKeyBase64: vi.fn().mockReturnValue('YWJjZA=='),
+      getPrivateKeyBase64: vi.fn().mockReturnValue('ZWZnaA=='),
+      getKeyType: vi.fn().mockReturnValue('Ed25519')
     })
   };
   

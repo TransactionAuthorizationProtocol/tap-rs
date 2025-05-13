@@ -92,6 +92,51 @@ impl DefaultAgent {
         }
     }
 
+    /// Create a new DefaultAgent with ephemeral did:key and default message packer
+    ///
+    /// This creates an agent with an Ed25519 did:key that is not persisted.
+    /// Useful for testing or short-lived agents.
+    ///
+    /// # Returns
+    /// A tuple containing the new DefaultAgent instance and the generated DID
+    pub fn new_ephemeral() -> crate::error::Result<(Self, String)> {
+        // Create a key manager
+        let key_manager = crate::key_manager::KeyManager::new();
+
+        // Generate an Ed25519 key
+        let options = crate::did::DIDGenerationOptions {
+            key_type: crate::did::KeyType::Ed25519,
+        };
+
+        let key = key_manager.generate_key(options)?;
+
+        // Create a DID resolver
+        let did_resolver = Arc::new(crate::did::MultiResolver::default());
+
+        // Create a basic secret resolver for the key
+        let mut secret_resolver = crate::crypto::BasicSecretResolver::new();
+        let secret = key_manager.generator.create_secret_from_key(&key);
+        secret_resolver.add_secret(&key.did, secret);
+
+        // Create a message packer
+        let message_packer = Arc::new(crate::crypto::DefaultMessagePacker::new(
+            did_resolver,
+            Arc::new(secret_resolver),
+        ));
+
+        // Create agent configuration with empty parameters
+        let config = AgentConfig {
+            agent_did: key.did.clone(),
+            parameters: std::collections::HashMap::new(),
+            security_mode: Some("SIGNED".to_string()),
+        };
+
+        // Create the agent
+        let agent = Self::new(config, message_packer);
+
+        Ok((agent, key.did))
+    }
+
     /// Determine the appropriate security mode for a message type
     ///
     /// This method implements TAP protocol rules for which security modes

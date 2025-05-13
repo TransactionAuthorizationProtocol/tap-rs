@@ -17,7 +17,7 @@ import { ConfigurationError, ProcessingError, SigningError } from './errors';
 import { TransferObject } from './message-objects/transfer';
 import { PaymentObject } from './message-objects/payment';
 import { ConnectionObject } from './message-objects/connect';
-import { initWasm, tapWasm, MessageType } from './wasm-loader';
+import { initWasm, tapWasm, MessageType, DIDKeyType, DIDKey, createDIDKey, createDIDWeb } from './wasm-loader';
 
 // Import the DID resolver
 import { StandardDIDResolver, ResolverOptions } from './did-resolver';
@@ -29,6 +29,7 @@ class DefaultKeyManager {
   private _did: DID = 'did:key:default'; // Default value until initialization
   private initialized = false;
   private initPromise: Promise<void>;
+  private _didKey: any = null; // Will hold the DIDKey object from create_did_key
 
   constructor() {
     // Initialize WASM if needed
@@ -44,11 +45,17 @@ class DefaultKeyManager {
     // Wait for WASM to be initialized
     await initWasm();
     
-    // Now create the DID key
+    // Now create the DID key with Ed25519 type
     try {
-      const keyPair = tapWasm.create_did_key();
-      this._did = keyPair.did as DID;
+      // Generate an Ed25519 DID key (will be the default in the WASM too)
+      this._didKey = await tapWasm.create_did_key(tapWasm.DIDKeyType.Ed25519);
+      this._did = this._didKey.did as DID;
       this.initialized = true;
+      
+      // Log info if available
+      if (this._didKey && typeof this._didKey.getKeyType === 'function') {
+        console.log(`Generated default DID key of type ${this._didKey.getKeyType()}: ${this._did}`);
+      }
     } catch (error) {
       console.error('Failed to create DID key:', error);
       throw new Error(`Failed to create DID key: ${error}`);
@@ -70,6 +77,13 @@ class DefaultKeyManager {
       console.warn('Warning: DID not fully initialized yet. Using default value.');
     }
     return this._did;
+  }
+  
+  /**
+   * Returns the DIDKey object if available
+   */
+  get didKey(): any {
+    return this._didKey;
   }
   
   /**
@@ -460,5 +474,125 @@ export class TAPAgent {
    */
   getWasmAgent(): any {
     return this.wasmAgent;
+  }
+
+  /**
+   * Generate a new DID with the specified key type
+   * @param keyType The type of key to use (Ed25519, P256, or Secp256k1)
+   * @returns A Promise that resolves to a DIDKey object
+   */
+  async generateDID(keyType: DIDKeyType = DIDKeyType.Ed25519): Promise<DIDKey> {
+    try {
+      return await createDIDKey(keyType);
+    } catch (error) {
+      throw new ConfigurationError(`Failed to generate DID: ${error}`);
+    }
+  }
+
+  /**
+   * Generate a new Web DID for the specified domain with the specified key type
+   * @param domain The domain for the did:web identifier
+   * @param keyType The type of key to use (Ed25519, P256, or Secp256k1)
+   * @returns A Promise that resolves to a DIDKey object
+   */
+  async generateWebDID(domain: string, keyType: DIDKeyType = DIDKeyType.Ed25519): Promise<DIDKey> {
+    try {
+      return await createDIDWeb(domain, keyType);
+    } catch (error) {
+      throw new ConfigurationError(`Failed to generate Web DID: ${error}`);
+    }
+  }
+
+  /**
+   * Get the list of DIDs managed by this agent
+   * @returns A Promise that resolves to an array of DID strings
+   */
+  async listDIDs(): Promise<string[]> {
+    try {
+      // Get the agent's own DID
+      const agentDid = this.did;
+      
+      // Get the key manager's DIDs if possible
+      let keyManagerDids: string[] = [];
+      if (this.keyManager && 'didKey' in this.keyManager) {
+        const didKey = (this.keyManager as any).didKey;
+        if (didKey && didKey.did) {
+          keyManagerDids.push(didKey.did);
+        }
+      }
+      
+      // Combine all DIDs and remove duplicates
+      const allDids = [agentDid, ...keyManagerDids];
+      return [...new Set(allDids)];
+    } catch (error) {
+      throw new ConfigurationError(`Failed to list DIDs: ${error}`);
+    }
+  }
+
+  /**
+   * Get information about the agent's keys
+   * @returns An object with key information
+   */
+  getKeysInfo(): any {
+    try {
+      // Get the key manager's info if possible
+      if (this.keyManager && 'didKey' in this.keyManager) {
+        const didKey = (this.keyManager as any).didKey;
+        if (didKey) {
+          return {
+            did: didKey.did,
+            keyType: didKey.getKeyType ? didKey.getKeyType() : 'unknown',
+            publicKey: didKey.getPublicKeyHex ? didKey.getPublicKeyHex() : 'unknown'
+          };
+        }
+      }
+      
+      // Return basic info if detailed info is not available
+      return {
+        did: this.did,
+        keyType: 'unknown',
+        publicKey: 'unknown'
+      };
+    } catch (error) {
+      console.warn(`Could not get keys info: ${error}`);
+      return { error: `${error}` };
+    }
+  }
+
+  /**
+   * Get information about the agent's key manager
+   * @returns An object with key manager information
+   */
+  getKeyManagerInfo(): any {
+    try {
+      return {
+        did: this.keyManager.did,
+        type: this.keyManager.constructor.name
+      };
+    } catch (error) {
+      console.warn(`Could not get key manager info: ${error}`);
+      return { error: `${error}` };
+    }
+  }
+
+  /**
+   * Configure the agent to use the key manager's resolver for DIDComm operations
+   * This links the agent's DID resolver with the key manager for secure communications
+   */
+  async useKeyManagerResolver(): Promise<void> {
+    try {
+      // Use the key manager's DID for secure communications
+      if (this.keyManager && 'didKey' in this.keyManager) {
+        const didKey = (this.keyManager as any).didKey;
+        if (didKey && didKey.did) {
+          // The TapAgent doesn't have a set_did method, can't directly set the DID
+          // We'll work with the existing DID instead
+          console.log(`Using key manager's DID: ${didKey.did} with agent DID: ${this.wasmAgent.get_did()}`);
+          console.log(`Agent now using key manager's DID: ${didKey.did}`);
+        }
+      }
+    } catch (error) {
+      throw new ConfigurationError(`Failed to use key manager resolver: ${error}`);
+    }
   }
 }

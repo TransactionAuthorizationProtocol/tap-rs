@@ -27,6 +27,11 @@ base64 = "0.21"
 multibase = "0.9.1"
 ed25519-dalek = { version = "2.0", features = ["rand_core"] }
 curve25519-dalek = { version = "4.1", features = ["digest"] }
+p256 = { version = "0.13", features = ["ecdsa"] }
+k256 = { version = "0.13", features = ["ecdsa"] }
+rand = "0.8"
+bs58 = "0.5"
+clap = { version = "4.4", features = ["derive"] }
 
 # WASM support
 wasm-bindgen = { workspace = true, optional = true }
