@@ -1,5 +1,39 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { TAPAgent } from '../agent';
+import { StandardDIDResolver } from '../did-resolver';
+
+// Mock the did-resolver modules
+vi.mock('did-resolver', () => ({
+  Resolver: vi.fn().mockImplementation(() => ({
+    resolve: vi.fn().mockResolvedValue({
+      didDocument: { id: 'did:key:mockagent' }
+    })
+  }))
+}));
+
+vi.mock('key-did-resolver', () => ({
+  getResolver: vi.fn().mockReturnValue({
+    key: async () => ({ id: 'did:key:resolved' })
+  })
+}));
+
+vi.mock('ethr-did-resolver', () => ({
+  getResolver: vi.fn().mockReturnValue({
+    ethr: async () => ({ id: 'did:ethr:resolved' })
+  })
+}));
+
+vi.mock('pkh-did-resolver', () => ({
+  getResolver: vi.fn().mockReturnValue({
+    pkh: async () => ({ id: 'did:pkh:resolved' })
+  })
+}));
+
+vi.mock('web-did-resolver', () => ({
+  getResolver: vi.fn().mockReturnValue({
+    web: async () => ({ id: 'did:web:resolved' })
+  })
+}));
 
 // Mock the tap-wasm module
 vi.mock('tap-wasm', () => {

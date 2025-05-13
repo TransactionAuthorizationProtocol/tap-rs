@@ -17,6 +17,7 @@ npm install @taprsvp/tap-agent
 - **Message Verification**: Verify message signatures
 - **TAP Flows**: Helper methods for common message flows (transfer, payment, connection)
 - **Fluent Response API**: Chain message responses for natural conversation flow
+- **DID Resolution**: Integrated DID resolver support for various DID methods
 
 ## Usage
 
@@ -57,6 +58,40 @@ const authorization = transfer.authorize({
 // Send the authorization
 await authorization.send();
 ```
+
+## DID Resolver Support
+
+The TAP-TS package includes built-in support for resolving DIDs using various DID methods:
+
+```typescript
+import { TAPAgent, ResolverOptions } from '@taprsvp/tap-agent';
+
+// Configure DID resolver options
+const resolverOptions: ResolverOptions = {
+  resolvers: {
+    key: true,    // did:key method
+    ethr: true,   // did:ethr method
+    pkh: true,    // did:pkh method
+    web: true     // did:web method
+  },
+  ethrOptions: {
+    networks: [
+      {
+        name: 'mainnet',
+        rpcUrl: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY'
+      }
+    ]
+  }
+};
+
+// Create agent with custom resolver configuration
+const agent = new TAPAgent({
+  nickname: "My Agent",
+  resolverOptions
+});
+```
+
+For detailed information on DID resolver support, see [DID-RESOLVER.md](DID-RESOLVER.md).
 
 ## Development
 

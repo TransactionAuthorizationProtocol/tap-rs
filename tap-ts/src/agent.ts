@@ -19,14 +19,8 @@ import { PaymentObject } from './message-objects/payment';
 import { ConnectionObject } from './message-objects/connect';
 import { initWasm, tapWasm, MessageType } from './wasm-loader';
 
-/**
- * Default DID resolver that just returns the DID
- */
-class DefaultDIDResolver {
-  async resolve(did: DID): Promise<any> {
-    return { id: did };
-  }
-}
+// Import the DID resolver
+import { StandardDIDResolver, ResolverOptions } from './did-resolver';
 
 /**
  * Default key manager that uses the WASM implementation
@@ -115,6 +109,7 @@ export interface TAPAgentOptions {
   nickname?: string;
   keyManager?: KeyManager;
   didResolver?: DIDResolver;
+  resolverOptions?: ResolverOptions;
   debug?: boolean;
 }
 
@@ -143,7 +138,7 @@ export class TAPAgent {
     this.keyManager = options.keyManager || new DefaultKeyManager();
     
     // Setup DID resolver
-    this.didResolver = options.didResolver || new DefaultDIDResolver();
+    this.didResolver = options.didResolver || new StandardDIDResolver(options.resolverOptions);
 
     // Create the WASM agent
     try {

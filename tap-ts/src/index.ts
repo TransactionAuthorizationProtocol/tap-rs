@@ -9,6 +9,14 @@ initWasm().catch(error => {
 // Export the TAPAgent class
 export { TAPAgent, TAPAgentOptions, MessageHandler, KeyManager, DIDResolver } from './agent';
 
+// Export DID resolver
+export { 
+  StandardDIDResolver, 
+  ResolverOptions, 
+  createResolver, 
+  defaultResolver 
+} from './did-resolver';
+
 // Export error classes
 export {
   TAPError,
