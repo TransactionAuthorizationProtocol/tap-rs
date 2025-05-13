@@ -42,9 +42,7 @@ Cargo.lock
 Thumbs.db
 .windsurfrules
 CLAUDE.md
-tap-ts/package.json
 
 **/.claude/settings.local.json
 backup/
 script_tmp/
-
