@@ -1,0 +1,24 @@
+# Source files
+src/
+tests/
+
+# Build artifacts
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# Development files
+.git
+.github
+.gitignore
+.eslintrc.js
+.eslintignore
+tsconfig.json
+vitest.config.ts
+coverage/
+
+# Scripts
+scripts/
+
+# Don't ignore the WASM files
+!node_modules/@tap-wasm/
