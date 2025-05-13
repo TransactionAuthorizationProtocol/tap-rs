@@ -18,8 +18,8 @@ async function transferFlowExample() {
   });
   
   // Log the DIDs
-  console.log(`Originator DID: ${originatorAgent.getDID()}`);
-  console.log(`Beneficiary DID: ${beneficiaryAgent.getDID()}`);
+  console.log(`Originator DID: ${originatorAgent.did}`);
+  console.log(`Beneficiary DID: ${beneficiaryAgent.did}`);
   
   // Set up message handler for the beneficiary
   beneficiaryAgent.onMessage('Transfer', async (message) => {
@@ -39,14 +39,14 @@ async function transferFlowExample() {
   
   // Create the initiator and beneficiary
   const initiator = {
-    '@id': originatorAgent.getDID(),
+    '@id': originatorAgent.did,
     role: 'originator',
     name: 'Alice'
   };
   
   // Create the beneficiary 
   const beneficiary = {
-    '@id': beneficiaryAgent.getDID(),
+    '@id': beneficiaryAgent.did,
     role: 'beneficiary',
     name: 'Bob'
   };

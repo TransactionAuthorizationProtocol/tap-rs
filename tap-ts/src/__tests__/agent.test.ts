@@ -129,7 +129,7 @@ describe('TAPAgent', () => {
 
   it('should create an agent with default options', () => {
     expect(agent).toBeDefined();
-    expect(agent.getDID()).toEqual('did:key:mockagent');
+    expect(agent.did).toEqual('did:key:mockagent');
     expect(agent.getNickname()).toEqual('Mock Agent');
   });
 

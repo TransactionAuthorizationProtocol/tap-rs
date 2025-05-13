@@ -87,8 +87,8 @@
                     debug: true
                 });
                 
-                log(`Agent 1 DID: ${agent1.getDID()}`);
-                log(`Agent 2 DID: ${agent2.getDID()}`);
+                log(`Agent 1 DID: ${agent1.did}`);
+                log(`Agent 2 DID: ${agent2.did}`);
                 
                 document.getElementById('createTransferBtn').disabled = false;
                 log('Agents created successfully!');
@@ -106,7 +106,7 @@
                 // Create originator party
                 const originator = {
                     '@type': 'Party',
-                    '@id': agent1.getDID(),
+                    '@id': agent1.did,
                     role: 'originator',
                     name: 'Alice'
                 };
@@ -114,7 +114,7 @@
                 // Create beneficiary party
                 const beneficiary = {
                     '@type': 'Party',
-                    '@id': agent2.getDID(),
+                    '@id': agent2.did,
                     role: 'beneficiary',
                     name: 'Bob'
                 };

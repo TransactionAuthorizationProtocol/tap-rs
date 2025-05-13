@@ -32,7 +32,7 @@ class DefaultDIDResolver {
  * Default key manager that uses the WASM implementation
  */
 class DefaultKeyManager {
-  private did: DID = 'did:key:default'; // Default value until initialization
+  private _did: DID = 'did:key:default'; // Default value until initialization
   private initialized = false;
   private initPromise: Promise<void>;
 
@@ -53,7 +53,7 @@ class DefaultKeyManager {
     // Now create the DID key
     try {
       const keyPair = tapWasm.create_did_key();
-      this.did = keyPair.did as DID;
+      this._did = keyPair.did as DID;
       this.initialized = true;
     } catch (error) {
       console.error('Failed to create DID key:', error);
@@ -71,11 +71,18 @@ class DefaultKeyManager {
     return true;
   }
 
-  getDID(): DID {
+  get did(): DID {
     if (!this.initialized) {
       console.warn('Warning: DID not fully initialized yet. Using default value.');
     }
-    return this.did;
+    return this._did;
+  }
+  
+  /**
+   * @deprecated Use the `did` getter property instead
+   */
+  getDID(): DID {
+    return this._did;
   }
 }
 
@@ -85,7 +92,12 @@ class DefaultKeyManager {
 export interface KeyManager {
   sign(message: any): Promise<any>;
   verify(message: any): Promise<boolean>;
-  getDID(): DID;
+  get did(): DID;
+  
+  /**
+   * @deprecated Use the `did` getter property instead
+   */
+  getDID?(): DID;
 }
 
 /**
@@ -136,7 +148,7 @@ export class TAPAgent {
     // Create the WASM agent
     try {
       this.wasmAgent = new tapWasm.TapAgent({
-        did: options.did || this.keyManager.getDID(),
+        did: options.did || this.keyManager.did,
         nickname: options.nickname || 'TAP Agent',
         debug: this.debug
       });
@@ -153,8 +165,16 @@ export class TAPAgent {
   /**
    * Get the agent's DID
    */
-  getDID(): DID {
+  get did(): DID {
     return this.wasmAgent.get_did() as DID;
+  }
+
+  /**
+   * @deprecated Use the `did` getter property instead
+   * Get the agent's DID (backward compatibility method)
+   */
+  getDID(): DID {
+    return this.did;
   }
 
   /**

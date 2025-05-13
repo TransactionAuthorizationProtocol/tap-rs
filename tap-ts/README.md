@@ -34,7 +34,7 @@ const transfer = agent.transfer({
   asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
   amount: "100.0",
   originator: {
-    '@id': agent.getDID(),
+    '@id': agent.did,
     '@type': 'Party',
     role: "originator"
   },
