@@ -170,8 +170,9 @@ impl DefaultAgentExt for DefaultAgent {
             // Use the message's ID or generate a new one if needed
             "id": message.id.clone(),
 
-            // DIDComm envelope type indicating a signed message
-            "type": "application/didcomm-signed+json",
+            // CRITICAL: Use the message's exact type field for both fields
+            "typ": message.type_.clone(),   // Use the TAP message type for typ field
+            "type": message.type_.clone(), // Use the TAP message type for type field
 
             // Include the from field for proper sender identification
             "from": from_did,

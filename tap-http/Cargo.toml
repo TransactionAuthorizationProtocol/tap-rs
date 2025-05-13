@@ -11,6 +11,8 @@ readme = "README.md"
 [dependencies]
 tap-msg = { version = "0.1.0", path = "../tap-msg" }
 tap-node = { version = "0.1.0", path = "../tap-node" }
+tap-agent = { version = "0.1.0", path = "../tap-agent" }
+tap-caip = { version = "0.1.0", path = "../tap-caip" }
 warp = "0.3"
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }
@@ -26,6 +28,7 @@ pico-args = "0.5"
 log = "0.4"
 async-trait = { workspace = true }
 futures = "0.3"
+uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 mockito = "1.0"
@@ -36,3 +39,7 @@ async-trait = { workspace = true }
 [[bin]]
 name = "tap-http"
 path = "src/main.rs"
+
+[[bin]]
+name = "tap-payment-simulator"
+path = "src/bin/tap-payment-simulator.rs"

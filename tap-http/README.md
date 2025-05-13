@@ -6,12 +6,14 @@ HTTP DIDComm server implementation for the Transaction Authorization Protocol (T
 
 - **DIDComm HTTP Endpoint**: Exposes a secure HTTP endpoint for DIDComm messaging
 - **Integration with tap-node**: Seamlessly forwards messages to a tap-node instance
+- **Ephemeral Agent Support**: Creates an ephemeral agent with did:key by default
 - **Message Validation**: Validates incoming DIDComm messages
 - **Response Handling**: Proper handling of responses and errors
 - **Outgoing Message Delivery**: HTTP client for sending outgoing DIDComm messages
 - **Event Logging System**: Comprehensive event tracking with configurable logging destinations
 - **Security**: Support for HTTPS/TLS and rate limiting (configurable)
 - **Comprehensive Error Handling**: Structured error responses with appropriate HTTP status codes
+- **Payment Flow Simulator**: Included CLI tool for simulating TAP payment flows
 
 ## Usage
 
@@ -282,20 +284,28 @@ The server uses a comprehensive error handling system with appropriate HTTP stat
 
 ## Command Line Usage
 
-The tap-http package includes a binary executable that can be run from the command line:
+The tap-http package includes binary executables that can be run from the command line:
+
+### TAP HTTP Server
 
 ```bash
 # Install the package
 cargo install --path .
 
-# Run the HTTP server with default settings
+# Run the HTTP server with default settings (creates ephemeral agent)
 tap-http
 
 # Run with custom options
 tap-http --host 0.0.0.0 --port 8080 --endpoint /api/didcomm
+
+# Run with custom agent DID and key (when implemented)
+tap-http --agent-did did:key:z6Mk... --agent-key ed25519:...
+
+# Run with custom logging options
+tap-http --logs-dir /var/log/tap --structured-logs
 ```
 
-### Command Line Options
+### Command Line Options for tap-http
 
 ```
 USAGE:
@@ -306,12 +316,16 @@ OPTIONS:
     -p, --port <PORT>            Port to listen on [default: 8000]
     -e, --endpoint <ENDPOINT>    Path for the DIDComm endpoint [default: /didcomm]
     -t, --timeout <SECONDS>      Request timeout in seconds [default: 30]
+    --agent-did <DID>            DID for the TAP agent (optional, will create ephemeral if not provided)
+    --agent-key <KEY>            Private key for the TAP agent (required if agent-did is provided)
+    --logs-dir <DIR>             Directory for event logs [default: ./logs]
+    --structured-logs            Use structured JSON logging [default: true]
     -v, --verbose                Enable verbose logging
     --help                       Print help information
     --version                    Print version information
 ```
 
-### Environment Variables
+### Environment Variables for tap-http
 
 You can also configure the server using environment variables:
 
@@ -321,9 +335,43 @@ export TAP_HTTP_HOST=0.0.0.0
 export TAP_HTTP_PORT=8080
 export TAP_HTTP_DIDCOMM_ENDPOINT=/api/didcomm
 export TAP_HTTP_TIMEOUT=60
+export TAP_AGENT_DID=did:key:z6Mk...
+export TAP_AGENT_KEY=ed25519:...
+export TAP_LOGS_DIR=/var/log/tap
+export TAP_STRUCTURED_LOGS=true
 
 # Run the server (will use environment variables)
 tap-http
+```
+
+### TAP Payment Flow Simulator
+
+The package also includes a payment flow simulator that can be used to test the TAP HTTP server:
+
+```bash
+# Run the payment simulator
+tap-payment-simulator --url http://localhost:8000/didcomm --did did:key:z6Mk...
+
+# Run with custom amount and currency
+tap-payment-simulator --url http://localhost:8000/didcomm --did did:key:z6Mk... --amount 500 --currency EUR
+```
+
+### Command Line Options for tap-payment-simulator
+
+```
+USAGE:
+    tap-payment-simulator --url <server-url> --did <server-agent-did> [OPTIONS]
+
+REQUIRED ARGUMENTS:
+    --url <URL>                 URL of the TAP HTTP server's DIDComm endpoint
+    --did <DID>                 DID of the server's agent
+
+OPTIONS:
+    --amount <AMOUNT>           Amount to transfer [default: 100.00]
+    --currency <CURRENCY>       Currency code [default: USD]
+    -v, --verbose               Enable verbose logging
+    --help                      Print help information
+    --version                   Print version information
 ```
 
 ## Examples
@@ -346,3 +394,39 @@ cargo run --example websocket_message_flow --features websocket
 # Run the event logger demo
 cargo run --example event_logger_demo
 ```
+
+## Creating a TAP Payment Flow
+
+Using the tap-payment-simulator tool, you can easily test a complete TAP payment flow:
+
+1. Start the tap-http server with an ephemeral agent:
+   ```bash
+   tap-http --verbose
+   ```
+   The server will display the generated DID on startup:
+   ```
+   TAP HTTP Server started with agent DID: did:key:z6Mk...
+   ```
+
+2. In another terminal, run the payment simulator to send messages to the server:
+   ```bash
+   tap-payment-simulator --url http://localhost:8000/didcomm --did did:key:z6Mk...
+   ```
+   The payment simulator will also display its agent DID:
+   ```
+   Payment simulator using agent DID: did:key:z6Mk...
+   ```
+
+3. The simulator will:
+   - Create its own ephemeral agent
+   - Send a payment request message to the server
+   - Wait for 2 seconds
+   - Send a transfer message to the server
+   - Both messages will use the same transaction ID to create a complete payment flow
+
+4. Check the server logs to see the received messages and how they were processed:
+   ```
+   tail -f ./logs/tap-http.log
+   ```
+
+This simulates a complete payment flow between two agents, demonstrating how the TAP protocol works in practice.

@@ -3,10 +3,14 @@
 use env_logger::Env;
 use std::env;
 use std::error::Error;
+use std::path::PathBuf;
 use std::process;
+use std::sync::Arc;
+use tap_agent::DefaultAgent;
+use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 // For command line argument parsing
 struct Args {
@@ -15,6 +19,10 @@ struct Args {
     endpoint: String,
     timeout: u64,
     verbose: bool,
+    agent_did: Option<String>,
+    agent_key: Option<String>,
+    logs_dir: Option<String>,
+    structured_logs: bool,
 }
 
 impl Args {
@@ -60,6 +68,17 @@ impl Args {
                         .and_then(|t| t.parse::<u64>().ok())
                         .unwrap_or(30)
                 }),
+            agent_did: args
+                .opt_value_from_str("--agent-did")?
+                .or_else(|| env::var("TAP_AGENT_DID").ok()),
+            agent_key: args
+                .opt_value_from_str("--agent-key")?
+                .or_else(|| env::var("TAP_AGENT_KEY").ok()),
+            logs_dir: args
+                .opt_value_from_str("--logs-dir")?
+                .or_else(|| env::var("TAP_LOGS_DIR").ok()),
+            structured_logs: args.contains("--structured-logs") 
+                || env::var("TAP_STRUCTURED_LOGS").is_ok(),
             verbose: args.contains(["-v", "--verbose"]),
         };
 
@@ -86,6 +105,10 @@ fn print_help() {
     println!("    -p, --port <PORT>            Port to listen on [default: 8000]");
     println!("    -e, --endpoint <ENDPOINT>    Path for the DIDComm endpoint [default: /didcomm]");
     println!("    -t, --timeout <SECONDS>      Request timeout in seconds [default: 30]");
+    println!("    --agent-did <DID>            DID for the TAP agent (optional, will create ephemeral if not provided)");
+    println!("    --agent-key <KEY>            Private key for the TAP agent (required if agent-did is provided)");
+    println!("    --logs-dir <DIR>             Directory for event logs [default: ./logs]");
+    println!("    --structured-logs            Use structured JSON logging [default: true]");
     println!("    -v, --verbose                Enable verbose logging");
     println!("    --help                       Print help information");
     println!("    --version                    Print version information");
@@ -95,6 +118,43 @@ fn print_help() {
     println!("    TAP_HTTP_PORT                Port to listen on");
     println!("    TAP_HTTP_DIDCOMM_ENDPOINT    Path for the DIDComm endpoint");
     println!("    TAP_HTTP_TIMEOUT             Request timeout in seconds");
+    println!("    TAP_AGENT_DID                DID for the TAP agent");
+    println!("    TAP_AGENT_KEY                Private key for the TAP agent");
+    println!("    TAP_LOGS_DIR                 Directory for event logs");
+    println!("    TAP_STRUCTURED_LOGS          Use structured JSON logging");
+}
+
+/// Create an agent for the server
+///
+/// This will either:
+/// - Create an ephemeral agent with a new DID:key
+/// - Use the provided agent DID and key
+fn create_agent(
+    agent_did: Option<String>,
+    agent_key: Option<String>,
+) -> Result<(DefaultAgent, String), Box<dyn Error>> {
+    match (agent_did, agent_key) {
+        (Some(_), None) => {
+            return Err("Agent key must be provided when using a custom agent DID".into());
+        }
+        (None, Some(_)) => {
+            return Err("Agent DID must be provided when using a custom agent key".into());
+        }
+        (Some(_did), Some(_key)) => {
+            // TODO: Implement loading agent from DID and key
+            // We would need to implement this in tap-agent
+            // For now, just create an ephemeral agent as a placeholder
+            error!("Loading agent from DID and key not yet implemented, using ephemeral agent");
+            let (agent, did) = DefaultAgent::new_ephemeral()?;
+            Ok((agent, did))
+        }
+        (None, None) => {
+            // Create an ephemeral agent
+            info!("Creating ephemeral agent");
+            let (agent, did) = DefaultAgent::new_ephemeral()?;
+            Ok((agent, did))
+        }
+    }
 }
 
 #[tokio::main]
@@ -111,8 +171,32 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     info!("Starting TAP HTTP server");
 
+    // Verify random number generator by creating two agents and comparing DIDs
+    // Only in verbose mode to not spam normal output
+    if args.verbose {
+        let (_test_agent1, test_did1) = DefaultAgent::new_ephemeral()?;
+        let (_test_agent2, test_did2) = DefaultAgent::new_ephemeral()?;
+        info!("Test DID 1: {}", test_did1);
+        info!("Test DID 2: {}", test_did2);
+        if test_did1 == test_did2 {
+            // This should never happen with proper randomness
+            error!("WARNING: Generated identical DIDs! This indicates an issue with the random number generator.");
+        } else {
+            info!("Verified that agent DIDs are unique");
+        }
+    }
+    
+    // Create the actual agent
+    let (agent, agent_did) = create_agent(args.agent_did.clone(), args.agent_key.clone())?;
+    
+    let agent_arc = Arc::new(agent);
+    info!("Using agent with DID: {}", agent_did);
+    
+    // Print the DID to stdout for easy copying
+    println!("TAP HTTP Server started with agent DID: {}", agent_did);
+
     // Create config from parsed arguments
-    let config = TapHttpConfig {
+    let mut config = TapHttpConfig {
         host: args.host,
         port: args.port,
         didcomm_endpoint: args.endpoint,
@@ -122,16 +206,42 @@ async fn main() -> Result<(), Box<dyn Error>> {
         event_logger: None,
     };
 
+    // Configure event logging
+    let logs_dir = args.logs_dir.unwrap_or_else(|| "./logs".to_string());
+    let log_path = PathBuf::from(&logs_dir).join("tap-http.log");
+    
+    config.event_logger = Some(EventLoggerConfig {
+        destination: LogDestination::File {
+            path: log_path.to_string_lossy().to_string(),
+            max_size: Some(10 * 1024 * 1024), // 10 MB
+            rotate: true,
+        },
+        structured: args.structured_logs,
+        log_level: tracing::Level::INFO,
+    });
+
     // Log the configuration
     info!("Server configuration:");
     info!("  Host: {}", config.host);
     info!("  Port: {}", config.port);
     info!("  DIDComm endpoint: {}", config.didcomm_endpoint);
     info!("  Request timeout: {} seconds", config.request_timeout_secs);
+    info!("  Agent DID: {}", agent_did);
+    debug!("  Event logging: {}", log_path.to_string_lossy());
+    debug!("  Structured logs: {}", args.structured_logs);
 
-    // Create TAP Node
+    // Create node configuration with the agent
     let node_config = NodeConfig::default();
+    // Register the agent after creating the node
+    
+    // Create TAP Node
     let node = TapNode::new(node_config);
+    
+    // Register the agent with the node
+    if let Err(e) = node.register_agent(agent_arc.clone()).await {
+        error!("Failed to register agent: {}", e);
+        return Err(e.into());
+    }
 
     // Create and start HTTP server
     let mut server = TapHttpServer::new(config, node);
@@ -152,5 +262,3 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Server shutdown complete");
     Ok(())
 }
-
-// Parse configuration is now handled by the Args struct

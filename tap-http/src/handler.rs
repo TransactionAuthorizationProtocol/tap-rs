@@ -277,15 +277,38 @@ async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()>
         ));
     }
 
+    // Log the complete message for debugging (always log this for now)
+    error!("RECEIVED DIDCOMM MESSAGE BEFORE PROCESSING:\n- id: {}\n- typ: {}\n- type_: {}\n- from: {:?}\n- to: {:?}\n- body: {}\n", 
+           message.id, message.typ, message.type_, message.from, message.to, 
+           serde_json::to_string_pretty(&message.body).unwrap_or_default());
+    
     // Validate the message conforms to TAP protocol
-    // The test message uses "https://didcomm.org/basicmessage/2.0/message" which should be rejected
-    // as it's not a valid TAP protocol message type
+    // Check both type_ and typ fields for TAP protocol identifiers
     let valid_types = ["tap.rsvp", "https://tap.rsvp"];
+    
+    // Check if type_ field contains TAP protocol identifier
     let is_valid_type = valid_types
         .iter()
-        .any(|valid_type| message.typ.contains(valid_type));
-
+        .any(|valid_type| message.type_.contains(valid_type));
+        
     if !is_valid_type {
+        error!("TYPE FIELD VALIDATION FAILED: message.type_ = '{}'", message.type_);
+    }
+    
+    // Also check if typ field contains TAP protocol identifier 
+    let is_valid_typ = valid_types
+        .iter()
+        .any(|valid_type| message.typ.contains(valid_type));
+        
+    if !is_valid_typ {
+        error!("TYP FIELD VALIDATION FAILED: message.typ = '{}'", message.typ);
+    }
+    
+    // If either field is valid, allow the message through
+    let is_valid = is_valid_type || is_valid_typ;
+
+    if !is_valid {
+        error!("MESSAGE TYPE VALIDATION FAILED: typ={}, type_={}", message.typ, message.type_);
         return Err(Error::Validation(format!(
             "Unsupported message type: {}, expected TAP protocol message",
             message.typ
