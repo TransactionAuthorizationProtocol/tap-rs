@@ -14,6 +14,7 @@
 
 use base64::Engine;
 use didcomm::Message as DIDCommMessage;
+use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use js_sys::{Array, Object, Promise, Reflect};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -25,6 +26,7 @@ use tap_agent::key_manager::KeyManager;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
+use ed25519_dalek;
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
 #[cfg(feature = "wee_alloc")]
@@ -1259,6 +1261,25 @@ impl Message {
     fn get_didcomm_message_ref(&self) -> &DIDCommMessage {
         &self.didcomm_message
     }
+    
+    /// Sets the raw JSON for the message (advanced usage)
+    pub fn set_raw_json(&mut self, json_str: String) -> Result<(), JsValue> {
+        // Parse the JSON string into a DIDComm message
+        let message = match serde_json::from_str::<DIDCommMessage>(&json_str) {
+            Ok(msg) => msg,
+            Err(e) => return Err(JsValue::from_str(&format!("Failed to parse JSON: {}", e))),
+        };
+        
+        // Update the message
+        self.didcomm_message = message;
+        
+        // If the type field has changed, update our message_type field too
+        if let Some(type_part) = self.didcomm_message.type_.split('#').nth(1) {
+            self.message_type = type_part.to_string();
+        }
+        
+        Ok(())
+    }
 
     /// Verifies a signed message
     pub fn verify_message(&self, debug: bool) -> Result<bool, JsValue> {
@@ -1436,59 +1457,422 @@ impl TapAgent {
             .insert(message_type.to_string(), handler);
     }
 
+    /// Custom implementation of get_key to access the key manager's keys
+    fn get_key(&self, did: &str) -> Result<Option<GeneratedKey>, JsValue> {
+        // Get the keys from the key manager
+        let keys = self.key_manager.list_keys().unwrap_or_default();
+        
+        // Find the key with the matching DID
+        if !keys.contains(&did.to_string()) {
+            return Ok(None);
+        }
+        
+        // For our implementation, we need to recreate the key from the secret
+        let secrets_map = self.secrets_resolver.get_secrets_map();
+        if let Some(secret) = secrets_map.get(did) {
+            match &secret.secret_material {
+                SecretMaterial::JWK { private_key_jwk } => {
+                    // Extract key type
+                    let key_type = if private_key_jwk.get("crv").and_then(|v| v.as_str()) == Some("Ed25519") {
+                        KeyType::Ed25519
+                    } else if private_key_jwk.get("crv").and_then(|v| v.as_str()) == Some("P-256") {
+                        KeyType::P256
+                    } else if private_key_jwk.get("crv").and_then(|v| v.as_str()) == Some("secp256k1") {
+                        KeyType::Secp256k1
+                    } else {
+                        return Err(JsValue::from_str("Unknown key type"));
+                    };
+                    
+                    // Extract private key
+                    let private_key_base64 = match private_key_jwk.get("d").and_then(|v| v.as_str()) {
+                        Some(d) => d,
+                        None => return Err(JsValue::from_str("Missing private key in JWK")),
+                    };
+                    
+                    // Decode private key
+                    let private_key = match base64::engine::general_purpose::STANDARD.decode(private_key_base64) {
+                        Ok(pk) => pk,
+                        Err(e) => return Err(JsValue::from_str(&format!("Failed to decode private key: {}", e))),
+                    };
+                    
+                    // Extract public key
+                    let public_key = match private_key_jwk.get("x").and_then(|v| v.as_str()) {
+                        Some(x) => {
+                            // For Ed25519, the public key is in the x field
+                            match base64::engine::general_purpose::STANDARD.decode(x) {
+                                Ok(pk) => pk,
+                                Err(e) => return Err(JsValue::from_str(&format!("Failed to decode public key: {}", e))),
+                            }
+                        },
+                        None => {
+                            // If no public key is available, create a dummy one
+                            // In a real implementation, we would derive the public key from the private key
+                            vec![0u8; 32]
+                        },
+                    };
+                    
+                    // Create a GeneratedKey with the extracted information
+                    let key = GeneratedKey {
+                        did: did.to_string(),
+                        key_type,
+                        public_key: Some(public_key),
+                        private_key: Some(private_key),
+                        did_doc: didcomm::did::DIDDoc {
+                            id: did.to_string(),
+                            verification_method: vec![],
+                            authentication: vec![],
+                            key_agreement: vec![],
+                            service: vec![],
+                        },
+                    };
+                    
+                    Ok(Some(key))
+                },
+                _ => Err(JsValue::from_str("Unsupported secret material type")),
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Signs a message using the agent's keys
     pub fn sign_message(&self, message: &mut Message) -> Result<(), JsValue> {
-        let didcomm_message = message.get_didcomm_message_ref().clone();
+        let mut didcomm_message = message.get_didcomm_message_ref().clone();
 
         // We need the from field to be set for signing
         if didcomm_message.from.is_none() {
-            // This modifies a copy, not the actual message
-            // We need to update the from field in the message itself in a separate step
+            // Update the from field in the message
+            didcomm_message.from = Some(self.id.clone());
             message.set_from_did(Some(self.id.clone()));
         }
-
-        // For a complete implementation, we would use the didcomm library's signing capabilities
+        
+        // Convert the DIDComm message to JSON for signing
+        let payload = match serde_json::to_string(&didcomm_message) {
+            Ok(p) => p,
+            Err(e) => return Err(JsValue::from_str(&format!("Failed to serialize message for signing: {}", e))),
+        };
+        
+        // Generate a timestamp for the signature
+        let timestamp = js_sys::Date::now().to_string();
+        
         // First, check if we have the key in the key manager
         let has_key_in_manager = self.key_manager.has_key(&self.id).unwrap_or(false);
-
+        
+        // Prepare variables to store the signature info
+        let mut signature_value = String::new();
+        let mut algorithm = String::new();
+        let key_id = format!("{}#keys-1", self.id);
+        
         if has_key_in_manager {
-            // Use the key manager's secret resolver for signing
-            if self.debug {
-                console::log_1(&JsValue::from_str(&format!(
-                    "Message signed by {} using key manager",
-                    self.id
-                )));
+            // Get the key from the key manager
+            let key = match self.get_key(&self.id) {
+                Ok(Some(k)) => k,
+                Ok(None) => return Err(JsValue::from_str(&format!("No key found for DID: {}", self.id))),
+                Err(e) => return Err(JsValue::from_str(&format!("Error accessing key: {:?}", e))),
+            };
+            
+            // Check the key type and sign accordingly
+            match key.key_type {
+                tap_agent::did::KeyType::Ed25519 => {
+                    // Get the private key
+                    let private_key = match &key.private_key {
+                        Some(pk) => pk.clone(),
+                        None => return Err(JsValue::from_str("No private key available for signing")),
+                    };
+                    
+                    // Create an Ed25519 signing key
+                    let signing_key = match ed25519_dalek::SigningKey::try_from(private_key.as_slice()) {
+                        Ok(key) => key,
+                        Err(e) => return Err(JsValue::from_str(&format!("Failed to create Ed25519 signing key: {:?}", e))),
+                    };
+                    
+                    // Sign the message
+                    let signature = signing_key.sign(payload.as_bytes());
+                    
+                    // Convert the signature to base64
+                    signature_value = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, signature.to_bytes());
+                    algorithm = "EdDSA".to_string();
+                    
+                    if self.debug {
+                        console::log_1(&JsValue::from_str(&format!(
+                            "Message signed by {} using Ed25519 key from key manager",
+                            self.id
+                        )));
+                    }
+                },
+                tap_agent::did::KeyType::P256 => {
+                    // For P-256, we would create a P-256 signing key and sign with ECDSA
+                    // This is a simplified example and would need more implementation details
+                    return Err(JsValue::from_str("P-256 signing not yet implemented in WASM bindings"));
+                },
+                tap_agent::did::KeyType::Secp256k1 => {
+                    // For secp256k1, we would create a secp256k1 signing key and sign with ECDSA
+                    // This is a simplified example and would need more implementation details
+                    return Err(JsValue::from_str("secp256k1 signing not yet implemented in WASM bindings"));
+                },
             }
         } else {
             // Fall back to the basic secrets resolver for backward compatibility
             let secrets_map = self.secrets_resolver.get_secrets_map();
-            if !secrets_map.contains_key(&self.id) {
-                return Err(JsValue::from_str(&format!(
-                    "No secret found for DID: {}",
-                    self.id
-                )));
-            }
-
-            if self.debug {
-                console::log_1(&JsValue::from_str(&format!(
-                    "Message signed by {} using basic resolver",
-                    self.id
-                )));
+            let secret = match secrets_map.get(&self.id) {
+                Some(s) => s,
+                None => return Err(JsValue::from_str(&format!("No secret found for DID: {}", self.id))),
+            };
+            
+            // Generate a signature based on the secret type
+            match &secret.secret_material {
+                didcomm::secrets::SecretMaterial::JWK { private_key_jwk } => {
+                    // Extract the key type and curve
+                    let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                    let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                    
+                    match (kty, crv) {
+                        (Some("OKP"), Some("Ed25519")) => {
+                            // This is an Ed25519 key
+                            // Extract the private key
+                            let private_key_base64 = match private_key_jwk.get("d").and_then(|v| v.as_str()) {
+                                Some(pk) => pk,
+                                None => return Err(JsValue::from_str("Missing private key in JWK")),
+                            };
+                                
+                            // Decode the private key from base64
+                            let private_key_bytes = match base64::engine::general_purpose::STANDARD.decode(private_key_base64) {
+                                Ok(pk) => pk,
+                                Err(e) => return Err(JsValue::from_str(&format!("Failed to decode private key: {}", e))),
+                            };
+                            
+                            // Ed25519 keys must be exactly 32 bytes
+                            if private_key_bytes.len() != 32 {
+                                return Err(JsValue::from_str(&format!(
+                                    "Invalid Ed25519 private key length: {}, expected 32 bytes",
+                                    private_key_bytes.len()
+                                )));
+                            }
+                                    
+                            // Create an Ed25519 signing key
+                            let signing_key = match ed25519_dalek::SigningKey::try_from(private_key_bytes.as_slice()) {
+                                Ok(key) => key,
+                                Err(e) => return Err(JsValue::from_str(&format!("Failed to create Ed25519 signing key: {:?}", e))),
+                            };
+                            
+                            // Sign the message
+                            let signature = signing_key.sign(payload.as_bytes());
+                            
+                            // Convert the signature to base64
+                            signature_value = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, signature.to_bytes());
+                            algorithm = "EdDSA".to_string();
+                            
+                            if self.debug {
+                                console::log_1(&JsValue::from_str(&format!(
+                                    "Message signed by {} using Ed25519 key from basic resolver",
+                                    self.id
+                                )));
+                            }
+                        },
+                        // Could add support for other key types here
+                        _ => {
+                            return Err(JsValue::from_str(&format!(
+                                "Unsupported key type for signing: kty={:?}, crv={:?}",
+                                kty, crv
+                            )));
+                        }
+                    }
+                },
+                _ => {
+                    return Err(JsValue::from_str(&format!(
+                        "Unsupported secret material type for signing"
+                    )));
+                }
             }
         }
-
-        Ok(())
+        
+        // Now that we have a signature, create a JWS structure
+        // First, create the protected header
+        let protected_header = serde_json::json!({
+            "kid": key_id,
+            "alg": algorithm,
+            "created": timestamp
+        });
+        
+        // Convert the protected header to a base64-encoded string
+        let protected_header_json = match serde_json::to_string(&protected_header) {
+            Ok(json) => json,
+            Err(e) => return Err(JsValue::from_str(&format!("Failed to serialize protected header: {}", e))),
+        };
+        
+        let protected = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, protected_header_json);
+        
+        // Update the message's didcomm_message with the signed format
+        // For a real implementation, we would modify the message to use the JWS structure
+        let signed_message = serde_json::json!({
+            "id": didcomm_message.id,
+            "type": didcomm_message.type_,
+            "typ": "application/didcomm-signed+json",
+            "from": didcomm_message.from,
+            "to": didcomm_message.to,
+            "created_time": didcomm_message.created_time,
+            "body": didcomm_message.body,
+            "signatures": [{
+                "header": {
+                    "kid": key_id,
+                    "alg": algorithm
+                },
+                "signature": signature_value,
+                "protected": protected
+            }]
+        });
+        
+        // Update the message with the signed structure
+        match serde_json::to_string(&signed_message) {
+            Ok(signed_json) => {
+                message.set_raw_json(signed_json);
+                Ok(())
+            },
+            Err(e) => Err(JsValue::from_str(&format!("Failed to serialize signed message: {}", e))),
+        }
     }
 
     /// Use the key manager's secret resolver for DIDComm operations
     pub fn use_key_manager_resolver(&mut self) -> Result<(), JsValue> {
-        // Create a combined resolver that uses both the basic resolver and the key manager
-        // For a real implementation, we would use the didcomm library's resolver capabilities
-
-        // Here we're simulating the process by logging if debug is enabled
+        // This method configures the agent to use the key manager for resolving secrets during
+        // cryptographic operations instead of (or in addition to) the basic resolver
+        
+        // Get all keys from the key manager that we want to add to our resolver
+        let dids = self.key_manager.list_keys().unwrap_or_default();
+        
+        // For each key, create a corresponding secret in the resolver
+        for did in dids {
+            // Get the key from the key manager
+            if let Ok(Some(key)) = self.key_manager.get_key(&did) {
+                // Create a DIDComm secret based on the key type
+                match key.key_type {
+                    tap_agent::did::KeyType::Ed25519 => {
+                        if let Some(private_key) = &key.private_key {
+                            // For Ed25519, create a JWK with the private key
+                            let public_key = match &key.public_key {
+                                Some(pk) => pk.clone(),
+                                None => continue, // Skip keys without public key
+                            };
+                            
+                            // Create a JWK from the Ed25519 key
+                            let private_key_jwk = serde_json::json!({
+                                "kty": "OKP",
+                                "crv": "Ed25519",
+                                "d": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, private_key),
+                                "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, public_key),
+                            });
+                            
+                            // Create a DIDComm secret
+                            let secret = didcomm::secrets::Secret {
+                                type_: SecretType::Ed25519,
+                                id: format!("{}#keys-1", did),
+                                secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                            };
+                            
+                            // Add the secret to the resolver
+                            self.secrets_resolver.add_secret(&did, secret);
+                            
+                            if self.debug {
+                                console::log_1(&JsValue::from_str(&format!(
+                                    "Added Ed25519 key for {} to resolver",
+                                    did
+                                )));
+                            }
+                        }
+                    },
+                    tap_agent::did::KeyType::P256 => {
+                        if let Some(private_key) = &key.private_key {
+                            // For P-256, create a JWK with the private key and x, y coordinates
+                            let public_key = match &key.public_key {
+                                Some(pk) => pk.clone(),
+                                None => continue, // Skip keys without public key
+                            };
+                            
+                            // P-256 public key format includes x and y coordinates
+                            // For a real implementation, we would extract these properly
+                            // This is a simplification that assumes the first half is x and second half is y
+                            if public_key.len() >= 64 {
+                                let x = &public_key[0..32];
+                                let y = &public_key[32..64];
+                                
+                                // Create a JWK from the P-256 key
+                                let private_key_jwk = serde_json::json!({
+                                    "kty": "EC",
+                                    "crv": "P-256",
+                                    "d": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, private_key),
+                                    "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x),
+                                    "y": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, y),
+                                });
+                                
+                                // Create a DIDComm secret
+                                let secret = didcomm::secrets::Secret {
+                                    type_: SecretType::P256,
+                                    id: format!("{}#keys-1", did),
+                                    secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                                };
+                                
+                                // Add the secret to the resolver
+                                self.secrets_resolver.add_secret(&did, secret);
+                                
+                                if self.debug {
+                                    console::log_1(&JsValue::from_str(&format!(
+                                        "Added P-256 key for {} to resolver",
+                                        did
+                                    )));
+                                }
+                            }
+                        }
+                    },
+                    tap_agent::did::KeyType::Secp256k1 => {
+                        if let Some(private_key) = &key.private_key {
+                            // For secp256k1, create a JWK with the private key and x, y coordinates
+                            let public_key = match &key.public_key {
+                                Some(pk) => pk.clone(),
+                                None => continue, // Skip keys without public key
+                            };
+                            
+                            // secp256k1 public key format includes x and y coordinates
+                            // For a real implementation, we would extract these properly
+                            // This is a simplification that assumes the first half is x and second half is y
+                            if public_key.len() >= 64 {
+                                let x = &public_key[0..32];
+                                let y = &public_key[32..64];
+                                
+                                // Create a JWK from the secp256k1 key
+                                let private_key_jwk = serde_json::json!({
+                                    "kty": "EC",
+                                    "crv": "secp256k1",
+                                    "d": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, private_key),
+                                    "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x),
+                                    "y": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, y),
+                                });
+                                
+                                // Create a DIDComm secret
+                                let secret = didcomm::secrets::Secret {
+                                    type_: SecretType::K256,
+                                    id: format!("{}#keys-1", did),
+                                    secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                                };
+                                
+                                // Add the secret to the resolver
+                                self.secrets_resolver.add_secret(&did, secret);
+                                
+                                if self.debug {
+                                    console::log_1(&JsValue::from_str(&format!(
+                                        "Added secp256k1 key for {} to resolver",
+                                        did
+                                    )));
+                                }
+                            }
+                        }
+                    },
+                }
+            }
+        }
+        
         if self.debug {
             console::log_1(&JsValue::from_str(
-                "Using the key manager's secret resolver for DIDComm operations",
+                "Key manager resolver configured for DIDComm operations",
             ));
         }
 

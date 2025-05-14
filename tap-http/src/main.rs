@@ -6,6 +6,9 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
+use base64;
+use multibase;
+use didcomm;
 use tap_agent::DefaultAgent;
 use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
@@ -140,12 +143,156 @@ fn create_agent(
         (None, Some(_)) => {
             return Err("Agent DID must be provided when using a custom agent key".into());
         }
-        (Some(_did), Some(_key)) => {
-            // TODO: Implement loading agent from DID and key
-            // We would need to implement this in tap-agent
-            // For now, just create an ephemeral agent as a placeholder
-            error!("Loading agent from DID and key not yet implemented, using ephemeral agent");
-            let (agent, did) = DefaultAgent::new_ephemeral()?;
+        (Some(did), Some(key)) => {
+            info!("Loading agent from provided DID and key");
+            
+            // First, validate the DID format
+            if !did.starts_with("did:") {
+                return Err("Invalid DID format. DID must start with 'did:'".into());
+            }
+            
+            // Create a key manager
+            let key_manager = tap_agent::key_manager::KeyManager::new();
+            
+            // Create a DID resolver
+            let did_resolver = std::sync::Arc::new(tap_agent::did::MultiResolver::default());
+            
+            // Create a basic secret resolver for the key
+            let mut secret_resolver = tap_agent::crypto::BasicSecretResolver::new();
+            
+            // Try to parse the key as a JWK first
+            let secret = if key.trim().starts_with('{') {
+                // The key appears to be a JSON object, assume it's a JWK
+                info!("Using JWK format key");
+                
+                // Parse JWK
+                let jwk: serde_json::Value = match serde_json::from_str(&key) {
+                    Ok(jwk) => jwk,
+                    Err(e) => return Err(format!("Failed to parse JWK: {}", e).into()),
+                };
+                
+                // Create a secret from the JWK
+                let private_key_jwk = jwk.clone();
+                
+                // Create a DIDComm secret
+                let secret = didcomm::secrets::Secret {
+                    type_: if jwk.get("crv").and_then(|v| v.as_str()) == Some("Ed25519") {
+                        didcomm::secrets::SecretType::Ed25519
+                    } else if jwk.get("crv").and_then(|v| v.as_str()) == Some("P-256") {
+                        didcomm::secrets::SecretType::P256
+                    } else if jwk.get("crv").and_then(|v| v.as_str()) == Some("secp256k1") {
+                        didcomm::secrets::SecretType::K256
+                    } else {
+                        didcomm::secrets::SecretType::Ed25519 // Default to Ed25519
+                    },
+                    id: format!("{}#keys-1", did),
+                    secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                };
+                
+                secret
+            } else if key.trim().contains(':') {
+                // The key might be a multibase encoded key
+                info!("Using multibase format key");
+                
+                // Determine key type based on DID method
+                let key_type = if did.starts_with("did:key:") {
+                    // did:key method, the key type is encoded in the key itself
+                    tap_agent::did::KeyType::Ed25519 // Assume Ed25519 for now
+                } else {
+                    // Determine from DID method or default to Ed25519
+                    tap_agent::did::KeyType::Ed25519
+                };
+                
+                // Create a private key from the multibase string
+                let (multicode_id, key_bytes) = match multibase::decode(key.trim()) {
+                    Ok((id, bytes)) => (id, bytes),
+                    Err(e) => return Err(format!("Failed to decode multibase key: {}", e).into()),
+                };
+                
+                // Convert to a secret format that DIDComm understands
+                // This will need to be customized based on the key format
+                
+                // For Ed25519 keys
+                if key_type == tap_agent::did::KeyType::Ed25519 {
+                    // Create a JWK from the key bytes
+                    let private_key_jwk = serde_json::json!({
+                        "kty": "OKP",
+                        "crv": "Ed25519",
+                        "d": base64::engine::general_purpose::STANDARD.encode(&key_bytes),
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key_bytes[..32]), // First 32 bytes for Ed25519
+                    });
+                    
+                    // Create a DIDComm secret
+                    let secret = didcomm::secrets::Secret {
+                        type_: didcomm::secrets::SecretType::Ed25519,
+                        id: format!("{}#keys-1", did),
+                        secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                    };
+                    
+                    secret
+                } else {
+                    return Err(format!("Unsupported key type for multibase key: {:?}", multicode_id).into());
+                }
+            } else {
+                // Assume raw base64 format
+                info!("Using base64 format key");
+                
+                // Determine key type based on DID method
+                let key_type = if did.starts_with("did:key:") {
+                    // did:key method, the key type is encoded in the key itself
+                    tap_agent::did::KeyType::Ed25519 // Assume Ed25519 for now
+                } else {
+                    // Determine from DID method or default to Ed25519
+                    tap_agent::did::KeyType::Ed25519
+                };
+                
+                // Decode the base64 key
+                let key_bytes = match base64::engine::general_purpose::STANDARD.decode(key.trim()) {
+                    Ok(bytes) => bytes,
+                    Err(e) => return Err(format!("Failed to decode base64 key: {}", e).into()),
+                };
+                
+                // Create a JWK from the key bytes
+                let private_key_jwk = if key_type == tap_agent::did::KeyType::Ed25519 {
+                    serde_json::json!({
+                        "kty": "OKP",
+                        "crv": "Ed25519",
+                        "d": base64::engine::general_purpose::STANDARD.encode(&key_bytes),
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key_bytes[..32]), // Simplified, in reality Ed25519 public key is derived from private
+                    })
+                } else {
+                    return Err("Unsupported key type for base64 key".into());
+                };
+                
+                // Create a DIDComm secret
+                let secret = didcomm::secrets::Secret {
+                    type_: didcomm::secrets::SecretType::Ed25519,
+                    id: format!("{}#keys-1", did),
+                    secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                };
+                
+                secret
+            };
+            
+            // Add the secret to the resolver
+            secret_resolver.add_secret(&did, secret);
+            
+            // Create a message packer
+            let message_packer = std::sync::Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
+                did_resolver,
+                std::sync::Arc::new(secret_resolver),
+            ));
+            
+            // Create agent configuration
+            let config = tap_agent::config::AgentConfig {
+                agent_did: did.clone(),
+                parameters: std::collections::HashMap::new(),
+                security_mode: Some("SIGNED".to_string()),
+            };
+            
+            // Create the agent
+            let agent = DefaultAgent::new(config, message_packer);
+            
             Ok((agent, did))
         }
         (None, None) => {

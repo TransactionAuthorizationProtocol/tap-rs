@@ -54,6 +54,10 @@ console_error_panic_hook = { version = "0.1" }
 web-sys = { version = "0.3", features = ["console", "Headers", "Request", "RequestInit", "RequestMode", "Response", "Window", "Blob"] }
 getrandom = { version = "0.2", features = ["js"] }
 
+# Cryptography and encoding
+base64 = "0.21"
+multibase = "0.9"
+
 # Testing
 tokio-test = "0.4.3"
 assert_matches = "1.5.0"
