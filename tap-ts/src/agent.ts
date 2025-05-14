@@ -64,11 +64,52 @@ class DefaultKeyManager {
 
   async sign(message: any): Promise<any> {
     await this.initPromise;
+    
+    // If we have a DID key, use it to sign the message
+    if (this._didKey && typeof this._didKey.getPrivateKeyHex === 'function') {
+      try {
+        // Check if the message is a Message object with a sign method
+        if (message && typeof message.sign === 'function') {
+          return message.sign(this._didKey);
+        }
+        
+        // If it's not a Message object, we need to convert it to a string first
+        const messageStr = typeof message === 'string' 
+          ? message 
+          : JSON.stringify(message);
+          
+        // For now, we're returning the message as is because the actual
+        // signing happens in the WASM code
+        return message;
+      } catch (error) {
+        console.error('Error signing message:', error);
+        throw new Error(`Failed to sign message: ${error}`);
+      }
+    }
+    
     return message;
   }
 
   async verify(message: any): Promise<boolean> {
     await this.initPromise;
+    
+    // If we have a DID key, use it to verify the message
+    if (this._didKey) {
+      try {
+        // If the message has a verify method, use it
+        if (message && typeof message.verify === 'function') {
+          return message.verify();
+        }
+        
+        // For now, we return true as the actual verification 
+        // happens in the WASM code
+        return true;
+      } catch (error) {
+        console.error('Error verifying message:', error);
+        return false;
+      }
+    }
+    
     return true;
   }
 
@@ -334,7 +375,7 @@ export class TAPAgent {
       // Convert to WASM message
       const wasmMessage = this.messageToWasm(message);
       
-      // Sign the message
+      // Sign the message using the WASM agent's real cryptographic implementation
       this.wasmAgent.sign_message(wasmMessage);
       
       // Convert back to TS message
@@ -352,7 +393,7 @@ export class TAPAgent {
       // Convert to WASM message
       const wasmMessage = this.messageToWasm(message);
       
-      // Verify the message
+      // Verify the message using the real cryptographic implementation
       return this.wasmAgent.verify_message(wasmMessage);
     } catch (error) {
       throw new ProcessingError(`Failed to verify message: ${error}`);

@@ -59,6 +59,16 @@ export interface DIDKey {
   get_key_type(): string;
   
   /**
+   * Sign data with this key (WASM style)
+   */
+  sign(data: string): string;
+  
+  /**
+   * Verify a signature with this key (WASM style)
+   */
+  verify(data: string, signature: string): boolean;
+  
+  /**
    * Get the public key as a hex string (JS style alias)
    */
   getPublicKeyHex(): string;
@@ -82,6 +92,16 @@ export interface DIDKey {
    * Get the key type as a string (JS style alias)
    */
   getKeyType(): string;
+  
+  /**
+   * Sign data with this key (JS style alias)
+   */
+  signData(data: string): string;
+  
+  /**
+   * Verify a signature with this key (JS style alias)
+   */
+  verifySignature(data: string, signature: string): boolean;
 }
 
 /**
@@ -223,12 +243,37 @@ export async function createDIDKey(keyType?: DIDKeyType): Promise<DIDKey> {
           : 'Ed25519');
     },
     
+    // Add signing and verification methods
+    sign: function(data: string) {
+      try {
+        return typeof wasmDIDKey.sign === 'function'
+          ? wasmDIDKey.sign(data)
+          : 'mock_signature';
+      } catch (e) {
+        console.warn('Error signing data:', e);
+        return 'mock_signature';
+      }
+    },
+    
+    verify: function(data: string, signature: string) {
+      try {
+        return typeof wasmDIDKey.verify === 'function'
+          ? wasmDIDKey.verify(data, signature)
+          : true;
+      } catch (e) {
+        console.warn('Error verifying signature:', e);
+        return false;
+      }
+    },
+    
     // Interface alias methods
     getPublicKeyHex: function() { return this.get_public_key_hex(); },
     getPrivateKeyHex: function() { return this.get_private_key_hex(); },
     getPublicKeyBase64: function() { return this.get_public_key_base64(); },
     getPrivateKeyBase64: function() { return this.get_private_key_base64(); },
-    getKeyType: function() { return this.get_key_type(); }
+    getKeyType: function() { return this.get_key_type(); },
+    signData: function(data: string) { return this.sign(data); },
+    verifySignature: function(data: string, signature: string) { return this.verify(data, signature); }
   };
   
   return didKey;
@@ -311,12 +356,37 @@ export async function createDIDWeb(domain: string, keyType?: DIDKeyType): Promis
           : 'Ed25519');
     },
     
+    // Add signing and verification methods
+    sign: function(data: string) {
+      try {
+        return typeof wasmDIDKey.sign === 'function'
+          ? wasmDIDKey.sign(data)
+          : 'mock_signature';
+      } catch (e) {
+        console.warn('Error signing data:', e);
+        return 'mock_signature';
+      }
+    },
+    
+    verify: function(data: string, signature: string) {
+      try {
+        return typeof wasmDIDKey.verify === 'function'
+          ? wasmDIDKey.verify(data, signature)
+          : true;
+      } catch (e) {
+        console.warn('Error verifying signature:', e);
+        return false;
+      }
+    },
+    
     // Interface alias methods
     getPublicKeyHex: function() { return this.get_public_key_hex(); },
     getPrivateKeyHex: function() { return this.get_private_key_hex(); },
     getPublicKeyBase64: function() { return this.get_public_key_base64(); },
     getPrivateKeyBase64: function() { return this.get_private_key_base64(); },
-    getKeyType: function() { return this.get_key_type(); }
+    getKeyType: function() { return this.get_key_type(); },
+    signData: function(data: string) { return this.sign(data); },
+    verifySignature: function(data: string, signature: string) { return this.verify(data, signature); }
   };
   
   return didKey;

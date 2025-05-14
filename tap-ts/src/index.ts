@@ -51,5 +51,9 @@ export { DIDKey, DIDKeyType, createDIDKey, createDIDWeb };
 // Export CLI tools
 export * from './cli';
 
+// Export examples
+export { transferFlowExample } from './examples/transfer-flow';
+export { cryptoExample } from './examples/crypto-example';
+
 // Re-export types from @taprsvp/types
 export * from '@taprsvp/types';
