@@ -56,3 +56,8 @@ pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
 
 /// Version of the TAP Agent
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Utility function to detect if we're running in test mode
+pub fn is_running_tests() -> bool {
+    cfg!(test) || option_env!("RUNNING_TESTS").is_some() || std::env::var("RUST_TEST").is_ok()
+}

@@ -10,7 +10,7 @@
 /// - `Signed`: Message is signed but not encrypted (integrity protected)
 /// - `AuthCrypt`: Message is authenticated and encrypted (confidentiality + integrity)
 /// - `Any`: Accept any security mode when unpacking (only used for receiving)
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecurityMode {
     /// Plaintext - no encryption or signatures
     Plain,

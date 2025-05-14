@@ -45,6 +45,10 @@ pub enum Error {
     /// Error related to cryptographic operations
     #[error("Crypto error: {0}")]
     Crypto(String),
+    
+    /// Error related to cryptographic operations during signing/encryption
+    #[error("Cryptography error: {0}")]
+    Cryptography(String),
 
     /// Error related to message processing
     #[error("Message error: {0}")]

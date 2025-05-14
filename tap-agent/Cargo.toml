@@ -27,7 +27,7 @@ base64 = "0.21"
 multibase = "0.9.1"
 ed25519-dalek = { version = "2.0", features = ["rand_core"] }
 curve25519-dalek = { version = "4.1", features = ["digest"] }
-p256 = { version = "0.13", features = ["ecdsa"] }
+p256 = { version = "0.13", features = ["ecdh", "ecdsa"] }
 k256 = { version = "0.13", features = ["ecdsa"] }
 rand = "0.8"
 bs58 = "0.5"
@@ -39,6 +39,7 @@ js-sys = { workspace = true, optional = true }
 wasm-bindgen-futures = { workspace = true, optional = true }
 getrandom = { workspace = true, features = ["js"], optional = true }
 web-sys = { workspace = true, optional = true }
+aes-gcm = "0.10.3"
 
 [dev-dependencies]
 tokio-test = { workspace = true }
