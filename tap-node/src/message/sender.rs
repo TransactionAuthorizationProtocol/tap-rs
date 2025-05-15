@@ -148,6 +148,7 @@ pub struct HttpMessageSender {
     #[cfg(feature = "reqwest")]
     client: reqwest::Client,
     /// Timeout for HTTP requests in milliseconds
+    #[allow(dead_code)] // Used for future timeout configuration
     timeout_ms: u64,
     /// Maximum number of retries
     max_retries: u32,

@@ -158,6 +158,7 @@ impl DefaultMessagePacker {
     ///
     /// # Returns
     /// The DID document as a JSON string
+    #[allow(dead_code)] // Kept for future DID resolution needs
     async fn resolve_did(&self, did: &str) -> Result<String> {
         // Our SyncDIDResolver returns our own error type, so we don't need to convert it
         let doc_option = self.did_resolver.resolve(did).await?;

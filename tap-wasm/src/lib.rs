@@ -1735,9 +1735,9 @@ impl TapAgent {
                     }
                 }
                 _ => {
-                    return Err(JsValue::from_str(&format!(
-                        "Unsupported secret material type for signing"
-                    )));
+                    return Err(JsValue::from_str(
+                        "Unsupported secret material type for signing",
+                    ));
                 }
             }
         }
@@ -2676,12 +2676,10 @@ pub fn create_did_key(key_type_str: Option<String>) -> Result<JsValue, JsValue> 
     // Add convenience method to get the private key as hex
     let get_private_key_hex_fn = js_sys::Function::new_with_args(
         "",
-        &format!(
-            "
+        "
         if (!this.privateKey) return null;
         return Array.from(this.privateKey).map(b => b.toString(16).padStart(2, '0')).join('');
-        "
-        ),
+        ",
     );
     js_sys::Reflect::set(
         &prototype,
@@ -2692,12 +2690,10 @@ pub fn create_did_key(key_type_str: Option<String>) -> Result<JsValue, JsValue> 
     // Add convenience method to get the public key as hex
     let get_public_key_hex_fn = js_sys::Function::new_with_args(
         "",
-        &format!(
-            "
+        "
         if (!this.publicKey) return null;
         return Array.from(this.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
-        "
-        ),
+        ",
     );
     js_sys::Reflect::set(
         &prototype,
