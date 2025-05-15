@@ -678,7 +678,6 @@ extern "C" {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct JsDIDResolver {
-    #[allow(dead_code)]
     method: String,
     resolve_fn: Function,
 }

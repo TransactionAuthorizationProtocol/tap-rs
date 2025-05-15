@@ -285,7 +285,7 @@ async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()>
 
     // Log the complete message for debugging (always log this for now)
     error!("RECEIVED DIDCOMM MESSAGE BEFORE PROCESSING:\n- id: {}\n- typ: {}\n- type_: {}\n- from: {:?}\n- to: {:?}\n- body: {}\n", 
-           message.id, message.typ, message.type_, message.from, message.to, 
+           message.id, message.typ, message.type_, message.from, message.to,
            serde_json::to_string_pretty(&message.body).unwrap_or_default());
 
     // Validate the message conforms to TAP protocol

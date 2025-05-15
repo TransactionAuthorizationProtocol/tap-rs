@@ -130,10 +130,8 @@ impl DebugSecretsResolver for BasicSecretResolver {
 #[derive(Debug)]
 pub struct DefaultMessagePacker {
     /// DID resolver
-    #[allow(dead_code)]
     did_resolver: Arc<dyn SyncDIDResolver>,
     /// Secrets resolver
-    #[allow(dead_code)]
     secrets_resolver: Arc<dyn DebugSecretsResolver>,
 }
 
@@ -160,7 +158,6 @@ impl DefaultMessagePacker {
     ///
     /// # Returns
     /// The DID document as a JSON string
-    #[allow(dead_code)]
     async fn resolve_did(&self, did: &str) -> Result<String> {
         // Our SyncDIDResolver returns our own error type, so we don't need to convert it
         let doc_option = self.did_resolver.resolve(did).await?;
@@ -242,41 +239,8 @@ impl MessagePacker for DefaultMessagePacker {
         from: Option<&str>,
         mode: SecurityMode,
     ) -> Result<String> {
-        // Special handling for tests (just to maintain compatibility)
         let message_value =
             serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
-        if mode == SecurityMode::AuthCrypt {
-            // Check if this is a presentation message for tests
-            if let Some(msg_type) = message_value.get("type").and_then(|v| v.as_str()) {
-                if msg_type == "https://tap.rsvp/schema/1.0#Presentation" && is_running_tests() {
-                    // In tests, just create a serialized test message with the presentation fields
-                    let presentation_id = message_value
-                        .get("presentation_id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("test123");
-                    let data = message_value
-                        .get("data")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("secure-data");
-
-                    let test_message = serde_json::json!({
-                        "id": Uuid::new_v4().to_string(),
-                        "type": "https://tap.rsvp/schema/1.0#Presentation",
-                        "presentation_id": presentation_id,
-                        "data": data,
-                        "from": from,
-                        "to": [to]
-                    });
-
-                    return serde_json::to_string(&test_message).map_err(|e| {
-                        Error::Serialization(format!(
-                            "Failed to serialize test presentation: {}",
-                            e
-                        ))
-                    });
-                }
-            }
-        }
 
         // Ensure the value is an object
         let message_obj = message_value
@@ -302,8 +266,7 @@ impl MessagePacker for DefaultMessagePacker {
         let actual_mode = self.select_security_mode(mode, from.is_some())?;
 
         // Create a DIDComm message structure
-        let mut to_dids = Vec::new();
-        to_dids.push(to.to_string());
+        let to_dids = vec![to.to_string()];
 
         let didcomm_message = didcomm::Message {
             id: id_str.to_string(),
@@ -372,7 +335,7 @@ impl MessagePacker for DefaultMessagePacker {
                                         })?;
 
                                     // Decode the private key from base64
-                                    let mut private_key_bytes =
+                                    let private_key_bytes =
                                         base64::engine::general_purpose::STANDARD
                                             .decode(private_key_base64)
                                             .map_err(|e| {
@@ -382,20 +345,12 @@ impl MessagePacker for DefaultMessagePacker {
                                                 ))
                                             })?;
 
-                                    // Ed25519 keys must be exactly 32 bytes. Test keys might not match this spec.
-                                    // For test environments, pad or truncate the key to 32 bytes
-                                    if is_running_tests() {
-                                        if private_key_bytes.len() < 32 {
-                                            // If key is too short, pad with zeros
-                                            let mut padded = vec![0u8; 32];
-                                            for (i, byte) in private_key_bytes.iter().enumerate() {
-                                                padded[i] = *byte;
-                                            }
-                                            private_key_bytes = padded;
-                                        } else if private_key_bytes.len() > 32 {
-                                            // If key is too long, truncate
-                                            private_key_bytes.truncate(32);
-                                        }
+                                    // Ed25519 keys must be exactly 32 bytes
+                                    if private_key_bytes.len() != 32 {
+                                        return Err(Error::Cryptography(format!(
+                                            "Invalid Ed25519 private key length: {}, expected 32 bytes",
+                                            private_key_bytes.len()
+                                        )));
                                     }
 
                                     // Create an Ed25519 signing key
@@ -621,14 +576,9 @@ impl MessagePacker for DefaultMessagePacker {
                     // Extract the recipient's public key
                     let _recipient_public_key = match &recipient_vm.verification_material {
                         didcomm::did::VerificationMaterial::Base58 { public_key_base58 } => {
-                            let decoded =
-                                bs58::decode(public_key_base58).into_vec().map_err(|e| {
-                                    Error::Cryptography(format!(
-                                        "Failed to decode Base58 key: {}",
-                                        e
-                                    ))
-                                })?;
-                            decoded
+                            bs58::decode(public_key_base58).into_vec().map_err(|e| {
+                                Error::Cryptography(format!("Failed to decode Base58 key: {}", e))
+                            })?
                         }
                         didcomm::did::VerificationMaterial::Multibase {
                             public_key_multibase,
@@ -782,7 +732,7 @@ impl MessagePacker for DefaultMessagePacker {
                                     // Use the shared secret to wrap (encrypt) the CEK
                                     // In a real implementation, we would use a KDF and AES-KW
                                     // For simplicity, we'll use the first 32 bytes of the shared secret to encrypt the CEK
-                                    let mut encrypted_cek = cek.clone();
+                                    let mut encrypted_cek = cek;
                                     for i in 0..cek.len() {
                                         encrypted_cek[i] ^= shared_bytes[i % shared_bytes.len()];
                                     }
@@ -827,7 +777,7 @@ impl MessagePacker for DefaultMessagePacker {
                             }
                         ],
                         "tag": auth_tag,
-                        "iv": base64::engine::general_purpose::STANDARD.encode(&iv_bytes)
+                        "iv": base64::engine::general_purpose::STANDARD.encode(iv_bytes)
                     });
 
                     // Return the serialized encrypted message
@@ -913,310 +863,294 @@ impl MessagePacker for DefaultMessagePacker {
                         // Now verify the signature(s)
                         let mut verification_result = false;
 
-                        // In test mode, we'll be more lenient with verification
-                        if is_running_tests() {
-                            // For tests, we'll assume the signature is valid
-                            verification_result = true;
-                        } else {
-                            // Process all signatures - finding at least one valid signature is sufficient
-                            for signature_obj in signatures_array {
-                                // Extract signature information
-                                let protected =
-                                    signature_obj.get("protected").and_then(|v| v.as_str());
-                                let signature_b64 =
-                                    signature_obj.get("signature").and_then(|v| v.as_str());
-                                let header = signature_obj.get("header");
+                        // Process all signatures - finding at least one valid signature is sufficient
+                        for signature_obj in signatures_array {
+                            // Extract signature information
+                            let protected = signature_obj.get("protected").and_then(|v| v.as_str());
+                            let signature_b64 =
+                                signature_obj.get("signature").and_then(|v| v.as_str());
+                            let header = signature_obj.get("header");
 
-                                if let (Some(protected_b64), Some(signature_b64), Some(header)) =
-                                    (protected, signature_b64, header)
-                                {
-                                    // Decode the protected header to get the algorithm and key info
-                                    let protected_bytes =
-                                        match base64::engine::general_purpose::STANDARD
-                                            .decode(protected_b64)
+                            if let (Some(protected_b64), Some(signature_b64), Some(header)) =
+                                (protected, signature_b64, header)
+                            {
+                                // Decode the protected header to get the algorithm and key info
+                                let protected_bytes =
+                                    match base64::engine::general_purpose::STANDARD
+                                        .decode(protected_b64)
+                                    {
+                                        Ok(bytes) => bytes,
+                                        Err(_) => continue, // Skip invalid protected header
+                                    };
+
+                                let protected_header: serde_json::Value =
+                                    match serde_json::from_slice(&protected_bytes) {
+                                        Ok(value) => value,
+                                        Err(_) => continue, // Skip invalid protected header
+                                    };
+
+                                // Extract the algorithm and key id
+                                let alg = protected_header.get("alg").and_then(|v| v.as_str());
+                                let kid =
+                                    header.get("kid").and_then(|v| v.as_str()).or_else(|| {
+                                        protected_header.get("kid").and_then(|v| v.as_str())
+                                    });
+
+                                if let (Some(alg), Some(kid)) = (alg, kid) {
+                                    // Lookup the public key from the did document
+                                    if let Ok(Some(doc)) = self.did_resolver.resolve(from_did).await
+                                    {
+                                        // Find the verification method by id
+                                        if let Some(vm) =
+                                            doc.verification_method.iter().find(|vm| vm.id == kid)
                                         {
-                                            Ok(bytes) => bytes,
-                                            Err(_) => continue, // Skip invalid protected header
-                                        };
+                                            // Decode the signature
+                                            let signature_bytes =
+                                                match base64::engine::general_purpose::STANDARD
+                                                    .decode(signature_b64)
+                                                {
+                                                    Ok(bytes) => bytes,
+                                                    Err(_) => continue, // Skip invalid signature
+                                                };
 
-                                    let protected_header: serde_json::Value =
-                                        match serde_json::from_slice(&protected_bytes) {
-                                            Ok(value) => value,
-                                            Err(_) => continue, // Skip invalid protected header
-                                        };
-
-                                    // Extract the algorithm and key id
-                                    let alg = protected_header.get("alg").and_then(|v| v.as_str());
-                                    let kid =
-                                        header.get("kid").and_then(|v| v.as_str()).or_else(|| {
-                                            protected_header.get("kid").and_then(|v| v.as_str())
-                                        });
-
-                                    if let (Some(alg), Some(kid)) = (alg, kid) {
-                                        // Lookup the public key from the did document
-                                        if let Ok(Some(doc)) =
-                                            self.did_resolver.resolve(from_did).await
-                                        {
-                                            // Find the verification method by id
-                                            if let Some(vm) = doc
-                                                .verification_method
-                                                .iter()
-                                                .find(|vm| vm.id == kid)
-                                            {
-                                                // Decode the signature
-                                                let signature_bytes =
-                                                    match base64::engine::general_purpose::STANDARD
-                                                        .decode(signature_b64)
-                                                    {
-                                                        Ok(bytes) => bytes,
-                                                        Err(_) => continue, // Skip invalid signature
+                                            // Verify according to algorithm type
+                                            match alg {
+                                                "EdDSA" => {
+                                                    // Extract the public key based on verification material type
+                                                    let public_key_bytes = match &vm.verification_material {
+                                                        didcomm::did::VerificationMaterial::Base58 { public_key_base58 } => {
+                                                            match bs58::decode(public_key_base58).into_vec() {
+                                                                Ok(bytes) => bytes,
+                                                                Err(_) => continue, // Skip invalid key
+                                                            }
+                                                        },
+                                                        didcomm::did::VerificationMaterial::Multibase { public_key_multibase } => {
+                                                            match multibase::decode(public_key_multibase) {
+                                                                Ok((_, bytes)) => {
+                                                                    // Strip multicodec prefix for Ed25519
+                                                                    if bytes.len() >= 2 && (bytes[0] == 0xed && bytes[1] == 0x01) {
+                                                                        bytes[2..].to_vec()
+                                                                    } else {
+                                                                        bytes
+                                                                    }
+                                                                },
+                                                                Err(_) => continue, // Skip invalid key
+                                                            }
+                                                        },
+                                                        didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
+                                                            // For JWK, extract the Ed25519 public key from the x coordinate
+                                                            let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
+                                                                Some(x) => x,
+                                                                None => continue, // Skip if no x coordinate
+                                                            };
+                                                            match base64::engine::general_purpose::STANDARD.decode(x) {
+                                                                Ok(bytes) => bytes,
+                                                                Err(_) => continue, // Skip invalid key
+                                                            }
+                                                        },
                                                     };
 
-                                                // Verify according to algorithm type
-                                                match alg {
-                                                    "EdDSA" => {
-                                                        // Extract the public key based on verification material type
-                                                        let public_key_bytes = match &vm.verification_material {
-                                                            didcomm::did::VerificationMaterial::Base58 { public_key_base58 } => {
-                                                                match bs58::decode(public_key_base58).into_vec() {
-                                                                    Ok(bytes) => bytes,
-                                                                    Err(_) => continue, // Skip invalid key
-                                                                }
-                                                            },
-                                                            didcomm::did::VerificationMaterial::Multibase { public_key_multibase } => {
-                                                                match multibase::decode(public_key_multibase) {
-                                                                    Ok((_, bytes)) => {
-                                                                        // Strip multicodec prefix for Ed25519
-                                                                        if bytes.len() >= 2 && (bytes[0] == 0xed && bytes[1] == 0x01) {
-                                                                            bytes[2..].to_vec()
-                                                                        } else {
-                                                                            bytes
-                                                                        }
-                                                                    },
-                                                                    Err(_) => continue, // Skip invalid key
-                                                                }
-                                                            },
-                                                            didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
-                                                                // For JWK, extract the Ed25519 public key from the x coordinate
-                                                                let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
-                                                                    Some(x) => x,
-                                                                    None => continue, // Skip if no x coordinate
-                                                                };
-                                                                
-                                                                match base64::engine::general_purpose::STANDARD.decode(x) {
-                                                                    Ok(bytes) => bytes,
-                                                                    Err(_) => continue, // Skip invalid key
-                                                                }
-                                                            },
-                                                        };
+                                                    // Create Ed25519 verifying key
+                                                    if public_key_bytes.len() != 32 {
+                                                        continue; // Ed25519 public keys must be 32 bytes
+                                                    }
 
-                                                        // Create Ed25519 verifying key
-                                                        if public_key_bytes.len() != 32 {
-                                                            continue; // Ed25519 public keys must be 32 bytes
+                                                    let verifying_key = match VerifyingKey::try_from(
+                                                        public_key_bytes.as_slice(),
+                                                    ) {
+                                                        Ok(key) => key,
+                                                        Err(_) => continue, // Skip invalid key
+                                                    };
+
+                                                    // Verify the signature
+                                                    // For Ed25519, the signature should be 64 bytes
+                                                    if signature_bytes.len() != 64 {
+                                                        continue;
+                                                    }
+
+                                                    // Create a fixed-size array for the signature
+                                                    let mut sig_bytes = [0u8; 64];
+                                                    sig_bytes.copy_from_slice(&signature_bytes);
+                                                    let signature =
+                                                        ed25519_dalek::Signature::from_bytes(
+                                                            &sig_bytes,
+                                                        );
+
+                                                    // Attempt verification
+                                                    match verifying_key.verify(
+                                                        serialized_verify_message.as_bytes(),
+                                                        &signature,
+                                                    ) {
+                                                        Ok(()) => {
+                                                            verification_result = true;
+                                                            break; // Found a valid signature
                                                         }
+                                                        Err(_) => {
+                                                            // Signature verification failed, continue to next signature
+                                                            continue;
+                                                        }
+                                                    }
+                                                }
+                                                "ES256" => {
+                                                    // P-256 ECDSA verification
+                                                    // Extract the public key based on verification material type
+                                                    let public_key_coords = match &vm.verification_material {
+                                                        didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
+                                                            // For JWK, extract the P-256 public key from the x and y coordinates
+                                                            let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
+                                                                Some(x) => x,
+                                                                None => continue, // Skip if no x coordinate
+                                                            };
 
-                                                        let verifying_key =
-                                                            match VerifyingKey::try_from(
-                                                                public_key_bytes.as_slice(),
-                                                            ) {
-                                                                Ok(key) => key,
+                                                            let y = match public_key_jwk.get("y").and_then(|v| v.as_str()) {
+                                                                Some(y) => y,
+                                                                None => continue, // Skip if no y coordinate
+                                                            };
+
+                                                            // Decode the coordinates
+                                                            let x_bytes = match base64::engine::general_purpose::STANDARD.decode(x) {
+                                                                Ok(bytes) => bytes,
                                                                 Err(_) => continue, // Skip invalid key
                                                             };
 
-                                                        // Verify the signature
-                                                        // For Ed25519, the signature should be 64 bytes
-                                                        if signature_bytes.len() != 64 {
+                                                            let y_bytes = match base64::engine::general_purpose::STANDARD.decode(y) {
+                                                                Ok(bytes) => bytes,
+                                                                Err(_) => continue, // Skip invalid key
+                                                            };
+
+                                                            (x_bytes, y_bytes)
+                                                        },
+                                                        // Include other verification material types
+                                                        didcomm::did::VerificationMaterial::Base58 { .. } => continue,
+                                                        didcomm::did::VerificationMaterial::Multibase { .. } => continue,
+                                                    };
+
+                                                    // Create a P-256 encoded point from the coordinates
+                                                    let (x_bytes, y_bytes) = public_key_coords;
+                                                    let mut point_bytes = vec![0x04]; // Uncompressed point format
+                                                    point_bytes.extend_from_slice(&x_bytes);
+                                                    point_bytes.extend_from_slice(&y_bytes);
+
+                                                    // Create a P-256 encoded point
+                                                    let encoded_point =
+                                                        match P256EncodedPoint::from_bytes(
+                                                            &point_bytes,
+                                                        ) {
+                                                            Ok(point) => point,
+                                                            Err(_) => continue, // Skip invalid point
+                                                        };
+
+                                                    // Create a P-256 public key
+                                                    let verifying_key_choice =
+                                                        P256PublicKey::from_encoded_point(
+                                                            &encoded_point,
+                                                        );
+                                                    if !bool::from(verifying_key_choice.is_some()) {
+                                                        continue; // Skip invalid key
+                                                    }
+                                                    let verifying_key =
+                                                        verifying_key_choice.unwrap();
+
+                                                    // Parse the signature from DER format
+                                                    let signature = match P256Signature::from_der(
+                                                        &signature_bytes,
+                                                    ) {
+                                                        Ok(sig) => sig,
+                                                        Err(_) => continue, // Skip invalid signature
+                                                    };
+
+                                                    // Verify the signature using P-256 ECDSA
+                                                    let verifier = p256::ecdsa::VerifyingKey::from(
+                                                        verifying_key,
+                                                    );
+                                                    match verifier.verify(
+                                                        serialized_verify_message.as_bytes(),
+                                                        &signature,
+                                                    ) {
+                                                        Ok(()) => {
+                                                            verification_result = true;
+                                                            break; // Found a valid signature
+                                                        }
+                                                        Err(_) => {
+                                                            // Signature verification failed, continue to next signature
                                                             continue;
                                                         }
-
-                                                        // Create a fixed-size array for the signature
-                                                        let mut sig_bytes = [0u8; 64];
-                                                        sig_bytes.copy_from_slice(&signature_bytes);
-                                                        let signature =
-                                                            ed25519_dalek::Signature::from_bytes(
-                                                                &sig_bytes,
-                                                            );
-
-                                                        // Attempt verification
-                                                        match verifying_key.verify(
-                                                            serialized_verify_message.as_bytes(),
-                                                            &signature,
-                                                        ) {
-                                                            Ok(()) => {
-                                                                verification_result = true;
-                                                                break; // Found a valid signature
-                                                            }
-                                                            Err(_) => {
-                                                                // Signature verification failed, continue to next signature
-                                                                continue;
-                                                            }
-                                                        }
                                                     }
-                                                    "ES256" => {
-                                                        // P-256 ECDSA verification
-                                                        // Extract the public key based on verification material type
-                                                        let public_key_coords = match &vm.verification_material {
-                                                            didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
-                                                                // For JWK, extract the P-256 public key from the x and y coordinates
-                                                                let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
-                                                                    Some(x) => x,
-                                                                    None => continue, // Skip if no x coordinate
-                                                                };
-                                                                
-                                                                let y = match public_key_jwk.get("y").and_then(|v| v.as_str()) {
-                                                                    Some(y) => y,
-                                                                    None => continue, // Skip if no y coordinate
-                                                                };
-                                                                
-                                                                // Decode the coordinates
-                                                                let x_bytes = match base64::engine::general_purpose::STANDARD.decode(x) {
-                                                                    Ok(bytes) => bytes,
-                                                                    Err(_) => continue, // Skip invalid key
-                                                                };
-                                                                
-                                                                let y_bytes = match base64::engine::general_purpose::STANDARD.decode(y) {
-                                                                    Ok(bytes) => bytes,
-                                                                    Err(_) => continue, // Skip invalid key
-                                                                };
-                                                                
-                                                                (x_bytes, y_bytes)
-                                                            },
-                                                            // Include other verification material types
-                                                            didcomm::did::VerificationMaterial::Base58 { .. } => continue,
-                                                            didcomm::did::VerificationMaterial::Multibase { .. } => continue,
-                                                        };
-
-                                                        // Create a P-256 encoded point from the coordinates
-                                                        let (x_bytes, y_bytes) = public_key_coords;
-                                                        let mut point_bytes = vec![0x04]; // Uncompressed point format
-                                                        point_bytes.extend_from_slice(&x_bytes);
-                                                        point_bytes.extend_from_slice(&y_bytes);
-
-                                                        // Create a P-256 encoded point
-                                                        let encoded_point =
-                                                            match P256EncodedPoint::from_bytes(
-                                                                &point_bytes,
-                                                            ) {
-                                                                Ok(point) => point,
-                                                                Err(_) => continue, // Skip invalid point
-                                                            };
-
-                                                        // Create a P-256 public key
-                                                        let verifying_key_choice =
-                                                            P256PublicKey::from_encoded_point(
-                                                                &encoded_point,
-                                                            );
-                                                        if !bool::from(
-                                                            verifying_key_choice.is_some(),
-                                                        ) {
-                                                            continue; // Skip invalid key
-                                                        }
-                                                        let verifying_key =
-                                                            verifying_key_choice.unwrap();
-
-                                                        // Parse the signature from DER format
-                                                        let signature =
-                                                            match P256Signature::from_der(
-                                                                &signature_bytes,
-                                                            ) {
-                                                                Ok(sig) => sig,
-                                                                Err(_) => continue, // Skip invalid signature
-                                                            };
-
-                                                        // Verify the signature using P-256 ECDSA
-                                                        let verifier =
-                                                            p256::ecdsa::VerifyingKey::from(
-                                                                verifying_key,
-                                                            );
-                                                        match verifier.verify(
-                                                            serialized_verify_message.as_bytes(),
-                                                            &signature,
-                                                        ) {
-                                                            Ok(()) => {
-                                                                verification_result = true;
-                                                                break; // Found a valid signature
-                                                            }
-                                                            Err(_) => {
-                                                                // Signature verification failed, continue to next signature
-                                                                continue;
-                                                            }
-                                                        }
-                                                    }
-                                                    "ES256K" => {
-                                                        // Secp256k1 ECDSA verification
-                                                        // Extract the public key based on verification material type
-                                                        let public_key_coords = match &vm.verification_material {
-                                                            didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
-                                                                // For JWK, extract the secp256k1 public key from the x and y coordinates
-                                                                let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
-                                                                    Some(x) => x,
-                                                                    None => continue, // Skip if no x coordinate
-                                                                };
-                                                                
-                                                                let y = match public_key_jwk.get("y").and_then(|v| v.as_str()) {
-                                                                    Some(y) => y,
-                                                                    None => continue, // Skip if no y coordinate
-                                                                };
-                                                                
-                                                                // Decode the coordinates
-                                                                let x_bytes = match base64::engine::general_purpose::STANDARD.decode(x) {
-                                                                    Ok(bytes) => bytes,
-                                                                    Err(_) => continue, // Skip invalid key
-                                                                };
-                                                                
-                                                                let y_bytes = match base64::engine::general_purpose::STANDARD.decode(y) {
-                                                                    Ok(bytes) => bytes,
-                                                                    Err(_) => continue, // Skip invalid key
-                                                                };
-                                                                
-                                                                (x_bytes, y_bytes)
-                                                            },
-                                                            // Include other verification material types
-                                                            didcomm::did::VerificationMaterial::Base58 { .. } => continue,
-                                                            didcomm::did::VerificationMaterial::Multibase { .. } => continue,
-                                                        };
-
-                                                        // Create a secp256k1 public key from the coordinates
-                                                        let (x_bytes, y_bytes) = public_key_coords;
-
-                                                        // Create a secp256k1 encoded point format
-                                                        let mut point_bytes = vec![0x04]; // Uncompressed point format
-                                                        point_bytes.extend_from_slice(&x_bytes);
-                                                        point_bytes.extend_from_slice(&y_bytes);
-
-                                                        // Parse the affine coordinates to create a public key
-                                                        let verifier = match k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes) {
-                                                            Ok(key) => key,
-                                                            Err(_) => continue, // Skip invalid key
-                                                        };
-
-                                                        // Parse the signature from DER format
-                                                        let signature =
-                                                            match Secp256k1Signature::from_der(
-                                                                &signature_bytes,
-                                                            ) {
-                                                                Ok(sig) => sig,
-                                                                Err(_) => continue, // Skip invalid signature
-                                                            };
-
-                                                        // Verify the signature using secp256k1 ECDSA
-                                                        match verifier.verify(
-                                                            serialized_verify_message.as_bytes(),
-                                                            &signature,
-                                                        ) {
-                                                            Ok(()) => {
-                                                                verification_result = true;
-                                                                break; // Found a valid signature
-                                                            }
-                                                            Err(_) => {
-                                                                // Signature verification failed, continue to next signature
-                                                                continue;
-                                                            }
-                                                        }
-                                                    }
-                                                    // Skip unsupported algorithms
-                                                    _ => continue,
                                                 }
+                                                "ES256K" => {
+                                                    // Secp256k1 ECDSA verification
+                                                    // Extract the public key based on verification material type
+                                                    let public_key_coords = match &vm.verification_material {
+                                                        didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
+                                                            // For JWK, extract the secp256k1 public key from the x and y coordinates
+                                                            let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
+                                                                Some(x) => x,
+                                                                None => continue, // Skip if no x coordinate
+                                                            };
+
+                                                            let y = match public_key_jwk.get("y").and_then(|v| v.as_str()) {
+                                                                Some(y) => y,
+                                                                None => continue, // Skip if no y coordinate
+                                                            };
+
+                                                            // Decode the coordinates
+                                                            let x_bytes = match base64::engine::general_purpose::STANDARD.decode(x) {
+                                                                Ok(bytes) => bytes,
+                                                                Err(_) => continue, // Skip invalid key
+                                                            };
+
+                                                            let y_bytes = match base64::engine::general_purpose::STANDARD.decode(y) {
+                                                                Ok(bytes) => bytes,
+                                                                Err(_) => continue, // Skip invalid key
+                                                            };
+
+                                                            (x_bytes, y_bytes)
+                                                        },
+                                                        // Include other verification material types
+                                                        didcomm::did::VerificationMaterial::Base58 { .. } => continue,
+                                                        didcomm::did::VerificationMaterial::Multibase { .. } => continue,
+                                                    };
+
+                                                    // Create a secp256k1 public key from the coordinates
+                                                    let (x_bytes, y_bytes) = public_key_coords;
+
+                                                    // Create a secp256k1 encoded point format
+                                                    let mut point_bytes = vec![0x04]; // Uncompressed point format
+                                                    point_bytes.extend_from_slice(&x_bytes);
+                                                    point_bytes.extend_from_slice(&y_bytes);
+
+                                                    // Parse the affine coordinates to create a public key
+                                                    let verifier = match k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes) {
+                                                        Ok(key) => key,
+                                                        Err(_) => continue, // Skip invalid key
+                                                    };
+
+                                                    // Parse the signature from DER format
+                                                    let signature =
+                                                        match Secp256k1Signature::from_der(
+                                                            &signature_bytes,
+                                                        ) {
+                                                            Ok(sig) => sig,
+                                                            Err(_) => continue, // Skip invalid signature
+                                                        };
+
+                                                    // Verify the signature using secp256k1 ECDSA
+                                                    match verifier.verify(
+                                                        serialized_verify_message.as_bytes(),
+                                                        &signature,
+                                                    ) {
+                                                        Ok(()) => {
+                                                            verification_result = true;
+                                                            break; // Found a valid signature
+                                                        }
+                                                        Err(_) => {
+                                                            // Signature verification failed, continue to next signature
+                                                            continue;
+                                                        }
+                                                    }
+                                                }
+                                                // Skip unsupported algorithms
+                                                _ => continue,
                                             }
                                         }
                                     }
@@ -1236,63 +1170,16 @@ impl MessagePacker for DefaultMessagePacker {
                 }
             }
 
-            // Case 3: Special handling for Presentation messages in tests
+            // Case 3: Special handling for Presentation messages
             if value.get("type").and_then(|v| v.as_str())
                 == Some("https://tap.rsvp/schema/1.0#Presentation")
             {
-                // Special handling for Presentation messages in tests
-                if is_running_tests() {
-                    // Check for test presentation ID and data
-                    if value.get("presentation_id").is_some() && value.get("data").is_some() {
-                        return Ok(value); // Return the message for tests
-                    }
-                }
-                return Ok(value); // Just return the value as-is
+                return Ok(value); // Return Presentation messages as-is
             }
 
             // Case 4: Encrypted DIDComm message with ciphertext field
             if value.get("ciphertext").is_some() && value.get("protected").is_some() {
                 // This is an encrypted message that we should decrypt
-                // For tests, we'll check if this is a mock encrypted message we created
-                if let Some(ciphertext) = value.get("ciphertext").and_then(|v| v.as_str()) {
-                    if ciphertext.contains("ENCRYPTED_PAYLOAD_FOR_") {
-                        // This is one of our mock encrypted messages
-                        // For tests, handle the AuthCrypt mode for presentations specially
-                        if is_running_tests() {
-                            if packed.contains("Presentation") {
-                                return Ok(serde_json::json!({
-                                    "type": "https://tap.rsvp/schema/1.0#Presentation",
-                                    "presentation_id": "test123",  // Match what we expect in the test
-                                    "data": "secure-data"          // Match what we expect in the test
-                                }));
-                            }
-                        } else if packed.contains("Presentation") {
-                            // If not in test, but it looks like a Presentation message, return a similar response
-                            return Ok(serde_json::json!({
-                                "type": "https://tap.rsvp/schema/1.0#Presentation",
-                                "presentation_id": "placeholder",
-                                "data": "placeholder"
-                            }));
-                        }
-                    }
-                }
-
-                // In test mode, we want to handle encrypted messages more gracefully
-                if is_running_tests() {
-                    // If this is a test, return a placeholder message based on the content type
-                    if packed.contains("Presentation") {
-                        return Ok(serde_json::json!({
-                            "type": "https://tap.rsvp/schema/1.0#Presentation",
-                            "presentation_id": "test123",
-                            "data": "secure-data"
-                        }));
-                    } else if packed.contains("TAP_TEST") {
-                        return Ok(serde_json::json!({
-                            "type": "TAP_TEST",
-                            "content": "value"
-                        }));
-                    }
-                }
 
                 // Decrypt the JWE format encrypted message
                 // The JWE structure contains:
@@ -1444,58 +1331,9 @@ impl MessagePacker for DefaultMessagePacker {
                             None => continue,
                         };
 
-                    // Special case for simulated keys
-                    if encrypted_key_b64.contains("SIMULATED_ENCRYPTED_KEY_FOR_")
-                        && is_running_tests()
-                    {
-                        // For tests, we'll just assume the key is valid and use a test key
-                        let test_key = [0u8; 32]; // Use a zeroed key for tests
-                        let cipher = match Aes256Gcm::new_from_slice(&test_key) {
-                            Ok(c) => c,
-                            Err(e) => {
-                                return Err(Error::Cryptography(format!(
-                                    "Failed to create AES-GCM cipher with test key: {}",
-                                    e
-                                )));
-                            }
-                        };
-
-                        let nonce = match Nonce::from_slice(&iv_bytes) {
-                            nonce => nonce,
-                            #[allow(unreachable_patterns)]
-                            _ => {
-                                return Err(Error::Cryptography(
-                                    "Failed to create nonce from IV".to_string(),
-                                ));
-                            }
-                        };
-
-                        // Decrypt the ciphertext
-                        // We need to convert the tag to a proper GenericArray for AES-GCM
-                        use aes_gcm::Tag;
-
-                        // Create a padded tag array
-                        let mut padded_tag = [0u8; 16];
-                        let copy_len = std::cmp::min(tag_bytes.len(), 16);
-                        padded_tag[..copy_len].copy_from_slice(&tag_bytes[..copy_len]);
-
-                        // Create the Tag instance
-                        let tag = Tag::from_slice(&padded_tag);
-
-                        // Decrypt the ciphertext
-                        match cipher.decrypt_in_place_detached(
-                            nonce,
-                            b"",
-                            &mut ciphertext_bytes,
-                            tag,
-                        ) {
-                            Ok(()) => {
-                                plaintext = ciphertext_bytes;
-                                decryption_succeeded = true;
-                                break;
-                            }
-                            Err(_) => continue, // Try next recipient
-                        }
+                    // Skip simulated keys
+                    if encrypted_key_b64.contains("SIMULATED_ENCRYPTED_KEY_FOR_") {
+                        continue; // Skip to the next recipient
                     }
 
                     // Decode the encrypted key
@@ -1528,17 +1366,14 @@ impl MessagePacker for DefaultMessagePacker {
                                             };
 
                                         // Decode the private key
-                                        let private_key_bytes =
-                                            base64::engine::general_purpose::STANDARD
-                                                .decode(d_b64)
-                                                .map_err(|e| {
-                                                    Error::Cryptography(format!(
-                                                        "Failed to decode private key: {}",
-                                                        e
-                                                    ))
-                                                })?;
-
-                                        private_key_bytes
+                                        base64::engine::general_purpose::STANDARD
+                                            .decode(d_b64)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to decode private key: {}",
+                                                    e
+                                                ))
+                                            })?
                                     }
                                     // Add support for other key types as needed
                                     _ => continue, // Unsupported key type, try next recipient
@@ -1641,15 +1476,7 @@ impl MessagePacker for DefaultMessagePacker {
                         };
 
                         // Create a nonce from the IV
-                        let nonce = match Nonce::from_slice(&iv_bytes) {
-                            nonce => nonce,
-                            #[allow(unreachable_patterns)]
-                            _ => {
-                                return Err(Error::Cryptography(
-                                    "Failed to create nonce from IV".to_string(),
-                                ));
-                            }
-                        };
+                        let nonce = Nonce::from_slice(&iv_bytes);
 
                         // Decrypt the ciphertext
                         // We need to convert the tag to a proper GenericArray for AES-GCM
