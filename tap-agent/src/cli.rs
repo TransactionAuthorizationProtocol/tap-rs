@@ -268,9 +268,9 @@ fn lookup_did(did: &str, output: Option<PathBuf>) -> Result<()> {
             
             if !doc.service.is_empty() {
                 println!("Services:");
-                for svc in &doc.service {
-                    println!("  ID: {}", svc.id);
-                    println!("  Service Endpoint: {:?}", svc.service_endpoint);
+                for (i, svc) in doc.service.iter().enumerate() {
+                    println!("  [{}] ID: {}", i+1, svc.id);
+                    println!("      Endpoint: {:?}", svc.service_endpoint);
                     println!();
                 }
             }
@@ -297,6 +297,15 @@ fn lookup_did(did: &str, output: Option<PathBuf>) -> Result<()> {
                 println!("DID method '{}' may not be supported by the default resolver.", method);
                 println!("Currently, only the following methods are supported:");
                 println!("  - did:key");
+                println!("  - did:web");
+                
+                if method == "web" {
+                    println!("\nFor did:web, ensure:");
+                    println!("  - The domain is correctly formatted");
+                    println!("  - The DID document is hosted at the expected location:");
+                    println!("    - https://example.com/.well-known/did.json for did:web:example.com");
+                    println!("    - https://example.com/path/to/resource/did.json for did:web:example.com:path:to:resource");
+                }
             }
             
             Err(Error::DIDResolution(format!("DID not found: {}", did)))

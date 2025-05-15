@@ -17,6 +17,7 @@ serde = { workspace = true }
 serde_json = "1.0"
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 url = { workspace = true, optional = true }
+reqwest = { version = "0.11", features = ["json"], optional = true }
 chrono = { workspace = true }
 didcomm = "0.4"
 anyhow = { workspace = true }
@@ -53,7 +54,7 @@ harness = false
 
 [features]
 default = ["native"]
-native = ["url"]
+native = ["url", "reqwest"]
 wasm = [
   "tap-msg/wasm",
   "wasm-bindgen",

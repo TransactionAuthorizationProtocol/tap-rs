@@ -284,10 +284,211 @@ impl MultiResolver {
     }
 }
 
+/// DID Web Resolver for resolving did:web identifiers
+#[derive(Debug, Default)]
+pub struct WebResolver;
+
+impl WebResolver {
+    /// Create a new WebResolver
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+#[async_trait]
+impl DIDMethodResolver for WebResolver {
+    fn method(&self) -> &str {
+        "web"
+    }
+
+    async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
+        // Extract domain from did:web format
+        let parts: Vec<&str> = did.split(':').collect();
+        if parts.len() < 3 || parts[0] != "did" || parts[1] != "web" {
+            return Err(Error::InvalidDID);
+        }
+        
+        // Extract the domain (and path if present)
+        let domain_path = parts[2..].join(":");
+        let domain_path = domain_path.replace("%3A", ":");
+        
+        // Construct the URL to fetch the DID document
+        // did:web:example.com -> https://example.com/.well-known/did.json
+        // did:web:example.com:path:to:resource -> https://example.com/path/to/resource/did.json
+        
+        let url = if domain_path.contains(":") {
+            // Convert additional colons to slashes for path components
+            let path_segments: Vec<&str> = domain_path.split(':').collect();
+            let domain = path_segments[0];
+            let path = path_segments[1..].join("/");
+            format!("https://{}/{}/did.json", domain, path)
+        } else {
+            // Standard case: did:web:example.com
+            format!("https://{}/.well-known/did.json", domain_path)
+        };
+        
+        // Attempt to fetch and parse the DID document
+        #[cfg(feature = "native")]
+        {
+            use reqwest::Client;
+            
+            let client = Client::new();
+            match client.get(&url).send().await {
+                Ok(response) => {
+                    if response.status().is_success() {
+                        match response.text().await {
+                            Ok(text) => {
+                                // First try normal parsing
+                                let parse_result = serde_json::from_str::<DIDDoc>(&text);
+                                match parse_result {
+                                    Ok(doc) => {
+                                        // Validate that the document ID matches the requested DID
+                                        if doc.id != did {
+                                            return Err(Error::DIDResolution(format!(
+                                                "DID Document ID ({}) does not match requested DID ({})",
+                                                doc.id, did
+                                            )));
+                                        }
+                                        Ok(Some(doc))
+                                    }
+                                    Err(parse_error) => {
+                                        // If normal parsing fails, try to parse as a generic JSON Value
+                                        // and manually construct a DIDDoc with the essential fields
+                                        match serde_json::from_str::<serde_json::Value>(&text) {
+                                            Ok(json_value) => {
+                                                let doc_id = match json_value.get("id") {
+                                                    Some(id) => match id.as_str() {
+                                                        Some(id_str) => id_str.to_string(),
+                                                        None => return Err(Error::DIDResolution(
+                                                            "DID Document has invalid 'id' field".to_string()
+                                                        ))
+                                                    },
+                                                    None => return Err(Error::DIDResolution(
+                                                        "DID Document missing 'id' field".to_string()
+                                                    ))
+                                                };
+                                                
+                                                // Validate ID
+                                                if doc_id != did {
+                                                    return Err(Error::DIDResolution(format!(
+                                                        "DID Document ID ({}) does not match requested DID ({})",
+                                                        doc_id, did
+                                                    )));
+                                                }
+                                                
+                                                // Try to extract verification methods and other fields
+                                                println!("WARNING: Using partial DID document parsing due to format issues");
+                                                println!("Original parse error: {}", parse_error);
+                                                
+                                                // Extract verification methods if present
+                                                // Create a longer-lived empty vec to handle the None case
+                                                let empty_vec = Vec::new();
+                                                let vm_array = json_value.get("verificationMethod")
+                                                    .and_then(|v| v.as_array())
+                                                    .unwrap_or(&empty_vec);
+                                                
+                                                // Attempt to parse each verification method
+                                                let mut verification_methods = Vec::new();
+                                                for vm_value in vm_array {
+                                                    if let Ok(vm) = serde_json::from_value::<VerificationMethod>(vm_value.clone()) {
+                                                        verification_methods.push(vm);
+                                                    }
+                                                }
+                                                
+                                                // Extract authentication references
+                                                let authentication = json_value.get("authentication")
+                                                    .and_then(|v| v.as_array())
+                                                    .unwrap_or(&empty_vec)
+                                                    .iter()
+                                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                                    .collect();
+                                                
+                                                // Extract key agreement references
+                                                let key_agreement = json_value.get("keyAgreement")
+                                                    .and_then(|v| v.as_array())
+                                                    .unwrap_or(&empty_vec)
+                                                    .iter()
+                                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                                    .collect();
+                                                
+                                                // We'll create an empty services list for the DIDDoc
+                                                // But save service information separately for display purposes
+                                                let services = Vec::new();
+                                                
+                                                // Extract raw service information for display
+                                                if let Some(svc_array) = json_value.get("service").and_then(|v| v.as_array()) {
+                                                    println!("\nService endpoints (extracted from JSON):");
+                                                    for (i, svc_value) in svc_array.iter().enumerate() {
+                                                        if let (Some(id), Some(endpoint)) = (
+                                                            svc_value.get("id").and_then(|v| v.as_str()),
+                                                            svc_value.get("serviceEndpoint").and_then(|v| v.as_str())
+                                                        ) {
+                                                            let type_value = svc_value.get("type")
+                                                                .and_then(|v| v.as_str())
+                                                                .unwrap_or("Unknown");
+                                                            
+                                                            println!("  [{}] ID: {}", i+1, id);
+                                                            println!("      Type: {}", type_value);
+                                                            println!("      Endpoint: {}", endpoint);
+                                                        }
+                                                    }
+                                                }
+                                                
+                                                // Create a simplified DID document with whatever we could extract
+                                                let simplified_doc = DIDDoc {
+                                                    id: doc_id,
+                                                    verification_method: verification_methods,
+                                                    authentication,
+                                                    key_agreement,
+                                                    service: services,
+                                                };
+                                                
+                                                Ok(Some(simplified_doc))
+                                            },
+                                            Err(_) => Err(Error::DIDResolution(format!(
+                                                "Failed to parse DID document from {}: {}",
+                                                url, parse_error
+                                            )))
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => Err(Error::DIDResolution(format!(
+                                "Failed to read response body from {}: {}",
+                                url, e
+                            )))
+                        }
+                    } else if response.status().as_u16() == 404 {
+                        // Not found is a valid response, just return None
+                        Ok(None)
+                    } else {
+                        Err(Error::DIDResolution(format!(
+                            "HTTP error fetching DID document from {}: {}",
+                            url, response.status()
+                        )))
+                    }
+                }
+                Err(e) => Err(Error::DIDResolution(format!(
+                    "Failed to fetch DID document from {}: {}",
+                    url, e
+                )))
+            }
+        }
+        
+        #[cfg(not(feature = "native"))]
+        {
+            Err(Error::DIDResolution(
+                "Web DID resolution requires the 'native' feature".to_string(),
+            ))
+        }
+    }
+}
+
 impl Default for MultiResolver {
     fn default() -> Self {
         let mut resolver = Self::new();
         resolver.register_method("key", KeyResolver::new());
+        resolver.register_method("web", WebResolver::new());
         resolver
     }
 }

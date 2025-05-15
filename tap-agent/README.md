@@ -174,7 +174,31 @@ let transfer: Transfer = agent.receive_message(packed_message).await?;
 println!("Received transfer of {} {}", transfer.amount, transfer.asset);
 ```
 
+### Using the Built-in Resolvers
+
+```rust
+use tap_agent::did::MultiResolver;
+use std::sync::Arc;
+
+// Create a default resolver with built-in support for did:key and did:web
+let resolver = MultiResolver::default();
+let resolver = Arc::new(resolver);
+
+// Use the resolver to resolve DIDs
+let rt = tokio::runtime::Runtime::new()?;
+let did_doc = rt.block_on(async {
+    resolver.resolve("did:web:example.com").await
+})?;
+
+if let Some(doc) = did_doc {
+    println!("Resolved DID: {}", doc.id);
+    // Process the DID document...
+}
+```
+
 ### Custom DID Method Resolver
+
+You can also implement and add your own DID method resolver:
 
 ```rust
 use tap_agent::did::{DIDMethodResolver, MultiResolver};
@@ -182,23 +206,25 @@ use didcomm::did::DIDDoc;
 use async_trait::async_trait;
 
 #[derive(Debug)]
-struct WebResolver;
+struct CustomResolver;
 
 #[async_trait]
-impl DIDMethodResolver for WebResolver {
+impl DIDMethodResolver for CustomResolver {
     fn method(&self) -> &str {
-        "web"
+        "example" // For did:example:123
     }
 
     async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
-        // Implementation for resolving did:web identifiers
+        // Implementation for resolving custom DID method
         // ...
     }
 }
 
-// Register the custom resolver with the MultiResolver
+// Create a resolver with the default resolvers
 let mut resolver = MultiResolver::default();
-resolver.register_method("web", WebResolver);
+
+// Register the custom resolver
+resolver.register_method("example", CustomResolver::new());
 ```
 
 ## Security Considerations
@@ -299,13 +325,30 @@ The `lookup` command resolves a DID to its DID document and displays detailed in
 - Key agreement methods
 - Services (if present)
 
-Currently, the resolver supports the `did:key` method by default. Other DID methods can be added by implementing custom resolvers.
+The resolver supports the following DID methods by default:
+- `did:key` - Resolves DIDs based on Ed25519 public keys 
+- `did:web` - Resolves DIDs from web domains according to the [DID Web Method Specification](https://w3c-ccg.github.io/did-method-web/)
+
+Additional DID methods can be added by implementing custom resolvers.
 
 ### Using Generated DIDs
 
 For `did:web`, you'll need to:
-1. Generate the DID using the CLI
-2. Place the generated DID document at `https://yourdomain.com/.well-known/did.json`
+1. Generate the DID using the CLI: `tap-agent-cli generate --method web --domain yourdomain.com --output did.json`
+2. Place the generated DID document at one of these locations based on your DID format:
+   - For `did:web:example.com`: Place at `https://example.com/.well-known/did.json`
+   - For `did:web:example.com:path:to:resource`: Place at `https://example.com/path/to/resource/did.json`
+
+#### Looking up WebDIDs
+```bash
+# Look up a simple WebDID
+tap-agent-cli lookup did:web:example.com
+
+# Look up a WebDID with a path
+tap-agent-cli lookup did:web:example.com:path:to:resource
+```
+
+The resolver will automatically fetch the DID document from the appropriate URL based on the DID format.
 
 ## Creating Ephemeral DIDs
 
@@ -323,8 +366,10 @@ println!("Agent DID: {}", did);
 
 The crate provides several feature flags to customize functionality:
 
-- **native** (default): Enables native platform features using Tokio
+- **native** (default): Enables native platform features using Tokio and HTTP support for did:web resolution
 - **wasm**: Enables WebAssembly support for browser environments
+
+Note that did:web resolution requires the **native** feature to be enabled, as it depends on HTTP requests to fetch DID documents.
 
 ## License
 
