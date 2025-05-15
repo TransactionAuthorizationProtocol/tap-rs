@@ -73,7 +73,7 @@ cargo test
 - **DIDComm v2 Integration**: Secure, encrypted messaging with authenticated signatures
 - **Chain Agnostic Identifiers**: Implementation of CAIP-2 (ChainID), CAIP-10 (AccountID), and CAIP-19 (AssetID)
 - **Multiple DID Methods**: Support for did:key, did:web, did:pkh, and more
-- **Command-line Tools**: Utilities for DID generation and key management
+- **Command-line Tools**: Utilities for DID generation, resolution, and key management
 - **Modular Agent Architecture**: Flexible identity and cryptography primitives
 - **High-Performance Message Routing**: Efficient node implementation for high-throughput environments
 - **HTTP and WebSocket Transport**: Multiple communication options with robust error handling
@@ -158,6 +158,12 @@ cargo run --bin tap-agent-cli -- generate --method key --key-type ed25519 --outp
 
 # Generate a did:web for a specific domain
 cargo run --bin tap-agent-cli -- generate --method web --domain example.com --output web-did.json
+
+# Look up and resolve a DID to its DID Document
+cargo run --bin tap-agent-cli -- lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Look up a DID and save the result to a file
+cargo run --bin tap-agent-cli -- lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --output did-document.json
 ```
 
 ### Using the TypeScript API

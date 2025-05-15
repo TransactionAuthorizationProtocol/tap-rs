@@ -283,6 +283,24 @@ tap-agent-cli generate --output did.json --key-output key.json
 tap-agent-cli generate --method web --domain example.com --output did.json
 ```
 
+#### Looking up a DID Document
+
+```bash
+# Look up a DID and display its DID Document
+tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Look up a DID and save the DID Document to a file
+tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --output did-document.json
+```
+
+The `lookup` command resolves a DID to its DID document and displays detailed information about:
+- Verification methods (with key material)
+- Authentication methods
+- Key agreement methods
+- Services (if present)
+
+Currently, the resolver supports the `did:key` method by default. Other DID methods can be added by implementing custom resolvers.
+
 ### Using Generated DIDs
 
 For `did:web`, you'll need to:
