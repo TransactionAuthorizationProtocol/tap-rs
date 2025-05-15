@@ -59,19 +59,19 @@ use crate::event::{EventSubscriber, NodeEvent};
 pub enum LogDestination {
     /// Log to the console via the standard logging framework
     Console,
-    
+
     /// Log to a file with optional rotation
     File {
         /// Path to the log file
         path: String,
-        
+
         /// Maximum file size before rotation (in bytes)
         max_size: Option<usize>,
-        
+
         /// Whether to rotate log files when they reach max_size
         rotate: bool,
     },
-    
+
     /// Custom logging function
     Custom(Arc<dyn Fn(&str) + Send + Sync>),
 }
@@ -81,7 +81,11 @@ impl fmt::Debug for LogDestination {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LogDestination::Console => write!(f, "LogDestination::Console"),
-            LogDestination::File { path, max_size, rotate } => f
+            LogDestination::File {
+                path,
+                max_size,
+                rotate,
+            } => f
                 .debug_struct("LogDestination::File")
                 .field("path", path)
                 .field("max_size", max_size)
@@ -97,10 +101,10 @@ impl fmt::Debug for LogDestination {
 pub struct EventLoggerConfig {
     /// Where to send the log output
     pub destination: LogDestination,
-    
+
     /// Whether to use structured (JSON) logging
     pub structured: bool,
-    
+
     /// The log level to use
     pub log_level: log::Level,
 }
@@ -123,7 +127,7 @@ impl Default for EventLoggerConfig {
 pub struct EventLogger {
     /// Configuration for the logger
     config: EventLoggerConfig,
-    
+
     /// File handle if using file destination
     file: Option<Arc<Mutex<File>>>,
 }
@@ -132,35 +136,30 @@ impl EventLogger {
     /// Create a new event logger with the given configuration
     pub fn new(config: EventLoggerConfig) -> Self {
         let file = match &config.destination {
-            LogDestination::File { path, .. } => {
-                match Self::open_log_file(path) {
-                    Ok(file) => Some(Arc::new(Mutex::new(file))),
-                    Err(err) => {
-                        error!("Failed to open log file {}: {}", path, err);
-                        None
-                    }
+            LogDestination::File { path, .. } => match Self::open_log_file(path) {
+                Ok(file) => Some(Arc::new(Mutex::new(file))),
+                Err(err) => {
+                    error!("Failed to open log file {}: {}", path, err);
+                    None
                 }
-            }
+            },
             _ => None,
         };
-        
+
         Self { config, file }
     }
-    
+
     /// Open or create a log file
     fn open_log_file(path: &str) -> io::Result<File> {
         // Ensure directory exists
         if let Some(parent) = Path::new(path).parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         // Open or create the file
-        OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
+        OpenOptions::new().create(true).append(true).open(path)
     }
-    
+
     /// Log an event to the configured destination
     fn log_event(&self, event: &NodeEvent) -> Result<()> {
         let log_message = if self.config.structured {
@@ -168,7 +167,7 @@ impl EventLogger {
         } else {
             self.format_plain_log(event)
         };
-        
+
         match &self.config.destination {
             LogDestination::Console => {
                 // Use the standard logging framework
@@ -186,17 +185,17 @@ impl EventLogger {
                     let mut file_guard = file.lock().map_err(|_| {
                         Error::Configuration("Failed to acquire log file lock".to_string())
                     })?;
-                    
+
                     // Write to the file with newline
                     writeln!(file_guard, "{}", log_message).map_err(|err| {
                         Error::Configuration(format!("Failed to write to log file: {}", err))
                     })?;
-                    
+
                     // Ensure the log is flushed
                     file_guard.flush().map_err(|err| {
                         Error::Configuration(format!("Failed to flush log file: {}", err))
                     })?;
-                    
+
                     Ok(())
                 } else {
                     // Fall back to console logging if file isn't available
@@ -211,13 +210,11 @@ impl EventLogger {
             }
         }
     }
-    
+
     /// Format an event as a plain text log message
     fn format_plain_log(&self, event: &NodeEvent) -> String {
-        let timestamp = DateTime::<Utc>::from(
-            SystemTime::now()
-        ).format("%Y-%m-%dT%H:%M:%S%.3fZ");
-        
+        let timestamp = DateTime::<Utc>::from(SystemTime::now()).format("%Y-%m-%dT%H:%M:%S%.3fZ");
+
         match event {
             NodeEvent::MessageReceived { message } => {
                 format!("[{}] MESSAGE RECEIVED: {}", timestamp, message)
@@ -243,19 +240,19 @@ impl EventLogger {
             NodeEvent::AgentMessage { did, message } => {
                 format!(
                     "[{}] AGENT MESSAGE: did={}, message_length={}",
-                    timestamp, did, message.len()
+                    timestamp,
+                    did,
+                    message.len()
                 )
             }
         }
     }
-    
+
     /// Format an event as a structured (JSON) log message
     fn format_structured_log(&self, event: &NodeEvent) -> Result<String> {
         // Create common fields for all event types
-        let timestamp = DateTime::<Utc>::from(
-            SystemTime::now()
-        ).to_rfc3339();
-        
+        let timestamp = DateTime::<Utc>::from(SystemTime::now()).to_rfc3339();
+
         // Create event-specific fields
         let (event_type, event_data) = match event {
             NodeEvent::MessageReceived { message } => (
@@ -299,18 +296,16 @@ impl EventLogger {
                 }),
             ),
         };
-        
+
         // Combine into a single JSON object
         let log_entry = json!({
             "timestamp": timestamp,
             "event_type": event_type,
             "data": event_data,
         });
-        
+
         // Serialize to a string
-        serde_json::to_string(&log_entry).map_err(|err| {
-            Error::Serialization(err)
-        })
+        serde_json::to_string(&log_entry).map_err(|err| Error::Serialization(err))
     }
 }
 

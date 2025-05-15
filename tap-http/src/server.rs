@@ -93,7 +93,7 @@ pub struct TapHttpServer {
 
     /// Shutdown channel for graceful server termination.
     shutdown_tx: Option<oneshot::Sender<()>>,
-    
+
     /// Event bus for tracking server events.
     event_bus: Arc<EventBus>,
 }
@@ -117,10 +117,10 @@ impl TapHttpServer {
         if config.tls.is_some() {
             warn!("TLS is configured but not yet fully implemented");
         }
-        
+
         // Create the event bus
         let event_bus = Arc::new(EventBus::new());
-        
+
         // Initialize event logger if configured
         if let Some(logger_config) = &config.event_logger {
             let event_logger = EventLogger::new(logger_config.clone());
@@ -157,7 +157,7 @@ impl TapHttpServer {
 
         // Clone Arc<TapNode> for use in route handlers
         let node = self.node.clone();
-        
+
         // Clone the event bus for use in route handlers
         let event_bus = self.event_bus.clone();
 
@@ -194,9 +194,11 @@ impl TapHttpServer {
 
         // Start the server
         info!("Starting TAP HTTP server on {}", addr);
-        
+
         // Publish server started event
-        self.event_bus.publish_server_started(addr.to_string()).await;
+        self.event_bus
+            .publish_server_started(addr.to_string())
+            .await;
 
         // Start server without TLS
         let event_bus_clone = event_bus.clone();
@@ -243,7 +245,7 @@ impl TapHttpServer {
     pub fn config(&self) -> &TapHttpConfig {
         &self.config
     }
-    
+
     /// Returns a reference to the event bus.
     ///
     /// The event bus is used to publish and subscribe to server events.

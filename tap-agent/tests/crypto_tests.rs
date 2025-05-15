@@ -5,19 +5,19 @@
 //! - Encryption and decryption with different key types
 //! - Handling of invalid cryptographic materials
 
-use std::sync::Arc;
-use didcomm::did::{DIDDoc, VerificationMethod, VerificationMethodType, VerificationMaterial};
+use async_trait::async_trait;
+use base64::Engine;
+use didcomm::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
 use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
-use tap_agent::did::{SyncDIDResolver, DIDMethodResolver};
+use tap_agent::did::{DIDMethodResolver, SyncDIDResolver};
 use tap_agent::error::{Error, Result};
 use tap_agent::message::SecurityMode;
-use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
-use async_trait::async_trait;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 use uuid::Uuid;
-use base64::Engine;
 
 // A simple test message for our crypto tests
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,7 +39,7 @@ impl TapMessageBody for TestMessage {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-            
+
         let content = msg
             .body
             .get("content")
@@ -53,10 +53,14 @@ impl TapMessageBody for TestMessage {
     fn validate(&self) -> TapCoreResult<()> {
         // Simple validation: ensure ID and content are not empty
         if self.id.is_empty() {
-            return Err(TapCoreError::Validation("Message id cannot be empty".to_string()));
+            return Err(TapCoreError::Validation(
+                "Message id cannot be empty".to_string(),
+            ));
         }
         if self.content.is_empty() {
-            return Err(TapCoreError::Validation("Message content cannot be empty".to_string()));
+            return Err(TapCoreError::Validation(
+                "Message content cannot be empty".to_string(),
+            ));
         }
         Ok(())
     }
@@ -105,7 +109,7 @@ impl TestDIDResolver {
 
     fn create_ed25519_did_doc(did: &str, public_key_base58: &str) -> DIDDoc {
         let key_id = format!("{}#keys-1", did);
-        
+
         let verification_method = VerificationMethod {
             id: key_id.clone(),
             type_: VerificationMethodType::Ed25519VerificationKey2018,
@@ -126,7 +130,7 @@ impl TestDIDResolver {
 
     fn create_p256_did_doc(did: &str, x_base64: &str, y_base64: &str) -> DIDDoc {
         let key_id = format!("{}#keys-1", did);
-        
+
         let verification_method = VerificationMethod {
             id: key_id.clone(),
             type_: VerificationMethodType::JsonWebKey2020,
@@ -153,7 +157,7 @@ impl TestDIDResolver {
 
     fn create_secp256k1_did_doc(did: &str, x_base64: &str, y_base64: &str) -> DIDDoc {
         let key_id = format!("{}#keys-1", did);
-        
+
         let verification_method = VerificationMethod {
             id: key_id.clone(),
             type_: VerificationMethodType::JsonWebKey2020,
@@ -203,7 +207,7 @@ impl SyncDIDResolver for TestDIDResolver {
         if let Some(doc) = self.did_docs.get(did) {
             return Ok(Some(doc.clone()));
         }
-        
+
         self.resolve_method(did).await
     }
 }
@@ -212,9 +216,9 @@ impl SyncDIDResolver for TestDIDResolver {
 struct TestEnvironment {
     // DIDs
     ed25519_did: String,
-    p256_did: String, 
+    p256_did: String,
     secp256k1_did: String,
-    
+
     // MessagePacker for cryptographic operations
     message_packer: Arc<DefaultMessagePacker>,
 }
@@ -225,25 +229,25 @@ impl TestEnvironment {
         let ed25519_did = "did:example:ed25519".to_string();
         let p256_did = "did:example:p256".to_string();
         let secp256k1_did = "did:example:secp256k1".to_string();
-        
+
         // Create a DID resolver
         let mut did_resolver = TestDIDResolver::new();
-        
+
         // Register Ed25519 DID document
         let ed25519_doc = TestDIDResolver::create_ed25519_did_doc(
             &ed25519_did,
             "H3C2AVvLMv6gmMNam3uVAjZpfkcJCwDwnZn6z3wXmqPV", // Public key in Base58
         );
         did_resolver.register_did_doc(&ed25519_did, ed25519_doc);
-        
-        // Register P-256 DID document 
+
+        // Register P-256 DID document
         let p256_doc = TestDIDResolver::create_p256_did_doc(
             &p256_did,
             "JXnx2eA3YxdGWUXSFH8Wfm2anDPwT1bjxjSC3kzho/Q", // x-coordinate
             "eQvZ1Ca2Jd8WUxbVZzrFJ2yGzWU/3wX+yqH6hkYDfWo", // y-coordinate
         );
         did_resolver.register_did_doc(&p256_did, p256_doc);
-        
+
         // Register secp256k1 DID document
         let secp256k1_doc = TestDIDResolver::create_secp256k1_did_doc(
             &secp256k1_did,
@@ -251,10 +255,10 @@ impl TestEnvironment {
             "X3nGn8irXQGyCKmCb+xCZJEnZxPr55hGXAF96QvcEYs", // y-coordinate
         );
         did_resolver.register_did_doc(&secp256k1_did, secp256k1_doc);
-        
+
         // Create secret resolver with all the private keys
         let mut secret_resolver = BasicSecretResolver::new();
-        
+
         // Add Ed25519 key
         let ed25519_secret = Secret {
             id: format!("{}#keys-1", ed25519_did),
@@ -269,7 +273,7 @@ impl TestEnvironment {
             },
         };
         secret_resolver.add_secret(&ed25519_did, ed25519_secret);
-        
+
         // Add P-256 key
         let p256_secret = Secret {
             id: format!("{}#keys-1", p256_did),
@@ -285,7 +289,7 @@ impl TestEnvironment {
             },
         };
         secret_resolver.add_secret(&p256_did, p256_secret);
-        
+
         // Add secp256k1 key
         let secp256k1_secret = Secret {
             id: format!("{}#keys-1", secp256k1_did),
@@ -301,13 +305,11 @@ impl TestEnvironment {
             },
         };
         secret_resolver.add_secret(&secp256k1_did, secp256k1_secret);
-        
+
         // Create a message packer
-        let message_packer = DefaultMessagePacker::new(
-            Arc::new(did_resolver),
-            Arc::new(secret_resolver),
-        );
-        
+        let message_packer =
+            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver));
+
         Self {
             ed25519_did,
             p256_did,
@@ -315,7 +317,7 @@ impl TestEnvironment {
             message_packer: Arc::new(message_packer),
         }
     }
-    
+
     // Helper to create a test message with random content
     fn create_test_message() -> TestMessage {
         TestMessage {
@@ -330,31 +332,52 @@ impl TestEnvironment {
 async fn test_ed25519_signing() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Test signing with Ed25519
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::Signed)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Check that the packed message contains signatures
         let packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        assert!(packed_json.get("signatures").is_some(), "Packed message should contain signatures");
-        
+        assert!(
+            packed_json.get("signatures").is_some(),
+            "Packed message should contain signatures"
+        );
+
         // Verify signature by unpacking
         let unpack_result = env.message_packer.unpack_message_value(&packed).await;
-        
+
         if let Ok(unpacked) = unpack_result {
             // Verify content is preserved
-            assert_eq!(unpacked.get("id").unwrap().as_str().unwrap(), test_message.id);
-            assert_eq!(unpacked.get("content").unwrap().as_str().unwrap(), test_message.content);
-            
+            assert_eq!(
+                unpacked.get("id").unwrap().as_str().unwrap(),
+                test_message.id
+            );
+            assert_eq!(
+                unpacked.get("content").unwrap().as_str().unwrap(),
+                test_message.content
+            );
+
             println!("✅ Ed25519 signing and verification succeeded");
         } else {
-            println!("ℹ️ Ed25519 signing succeeded, but verification is not fully implemented: {:?}", unpack_result.err());
+            println!(
+                "ℹ️ Ed25519 signing succeeded, but verification is not fully implemented: {:?}",
+                unpack_result.err()
+            );
         }
     } else {
-        println!("ℹ️ Ed25519 signing not yet supported: {:?}", pack_result.err());
+        println!(
+            "ℹ️ Ed25519 signing not yet supported: {:?}",
+            pack_result.err()
+        );
     }
 }
 
@@ -363,35 +386,56 @@ async fn test_ed25519_signing() {
 async fn test_p256_signing() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Test signing with P-256 - it's OK if this fails due to P-256 not being supported yet
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.ed25519_did, Some(&env.p256_did), SecurityMode::Signed)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.ed25519_did,
+            Some(&env.p256_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Check that the packed message contains signatures
         let packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        assert!(packed_json.get("signatures").is_some(), "Packed message should contain signatures");
-        
+        assert!(
+            packed_json.get("signatures").is_some(),
+            "Packed message should contain signatures"
+        );
+
         // Verify the algorithm is ES256 (ECDSA with P-256)
         let signatures = packed_json.get("signatures").unwrap().as_array().unwrap();
         let header = signatures[0].get("header").unwrap();
-        assert_eq!(header.get("alg").unwrap().as_str().unwrap(), "ES256", "Algorithm should be ES256 for P-256");
-        
+        assert_eq!(
+            header.get("alg").unwrap().as_str().unwrap(),
+            "ES256",
+            "Algorithm should be ES256 for P-256"
+        );
+
         // Try signature verification - but this might not work in test mode
         if let Ok(unpacked) = env.message_packer.unpack_message_value(&packed).await {
             // Verify content is preserved
-            assert_eq!(unpacked.get("id").unwrap().as_str().unwrap(), test_message.id);
-            assert_eq!(unpacked.get("content").unwrap().as_str().unwrap(), test_message.content);
-            
+            assert_eq!(
+                unpacked.get("id").unwrap().as_str().unwrap(),
+                test_message.id
+            );
+            assert_eq!(
+                unpacked.get("content").unwrap().as_str().unwrap(),
+                test_message.content
+            );
+
             println!("✅ P-256 signing and verification succeeded");
         } else {
             println!("ℹ️ P-256 signing succeeded, but verification is not fully implemented");
         }
-        
     } else {
-        println!("ℹ️ P-256 signing not yet supported: {:?}", pack_result.err());
+        println!(
+            "ℹ️ P-256 signing not yet supported: {:?}",
+            pack_result.err()
+        );
     }
 }
 
@@ -400,34 +444,56 @@ async fn test_p256_signing() {
 async fn test_secp256k1_signing() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Test signing with secp256k1 - it's OK if this fails due to secp256k1 not being supported yet
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.ed25519_did, Some(&env.secp256k1_did), SecurityMode::Signed)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.ed25519_did,
+            Some(&env.secp256k1_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Check that the packed message contains signatures
         let packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        assert!(packed_json.get("signatures").is_some(), "Packed message should contain signatures");
-        
+        assert!(
+            packed_json.get("signatures").is_some(),
+            "Packed message should contain signatures"
+        );
+
         // Verify the algorithm is ES256K (ECDSA with secp256k1)
         let signatures = packed_json.get("signatures").unwrap().as_array().unwrap();
         let header = signatures[0].get("header").unwrap();
-        assert_eq!(header.get("alg").unwrap().as_str().unwrap(), "ES256K", "Algorithm should be ES256K for secp256k1");
-        
+        assert_eq!(
+            header.get("alg").unwrap().as_str().unwrap(),
+            "ES256K",
+            "Algorithm should be ES256K for secp256k1"
+        );
+
         // Try signature verification - but this might not work in test mode
         if let Ok(unpacked) = env.message_packer.unpack_message_value(&packed).await {
             // Verify content is preserved
-            assert_eq!(unpacked.get("id").unwrap().as_str().unwrap(), test_message.id);
-            assert_eq!(unpacked.get("content").unwrap().as_str().unwrap(), test_message.content);
-            
+            assert_eq!(
+                unpacked.get("id").unwrap().as_str().unwrap(),
+                test_message.id
+            );
+            assert_eq!(
+                unpacked.get("content").unwrap().as_str().unwrap(),
+                test_message.content
+            );
+
             println!("✅ secp256k1 signing and verification succeeded");
         } else {
             println!("ℹ️ secp256k1 signing succeeded, but verification is not fully implemented");
         }
     } else {
-        println!("ℹ️ secp256k1 signing not yet supported: {:?}", pack_result.err());
+        println!(
+            "ℹ️ secp256k1 signing not yet supported: {:?}",
+            pack_result.err()
+        );
     }
 }
 
@@ -436,36 +502,70 @@ async fn test_secp256k1_signing() {
 async fn test_authcrypt_encryption() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Test encryption with AuthCrypt mode - it's OK if this fails because P-256 might not be supported yet
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::AuthCrypt)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::AuthCrypt,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Check that the packed message contains encryption fields
         let packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        assert!(packed_json.get("ciphertext").is_some(), "Packed message should contain ciphertext");
-        assert!(packed_json.get("protected").is_some(), "Packed message should contain protected header");
-        assert!(packed_json.get("recipients").is_some(), "Packed message should contain recipients");
-        assert!(packed_json.get("iv").is_some(), "Packed message should contain IV");
-        assert!(packed_json.get("tag").is_some(), "Packed message should contain authentication tag");
-        
+        assert!(
+            packed_json.get("ciphertext").is_some(),
+            "Packed message should contain ciphertext"
+        );
+        assert!(
+            packed_json.get("protected").is_some(),
+            "Packed message should contain protected header"
+        );
+        assert!(
+            packed_json.get("recipients").is_some(),
+            "Packed message should contain recipients"
+        );
+        assert!(
+            packed_json.get("iv").is_some(),
+            "Packed message should contain IV"
+        );
+        assert!(
+            packed_json.get("tag").is_some(),
+            "Packed message should contain authentication tag"
+        );
+
         // Decode and check the protected header
         let protected_b64 = packed_json.get("protected").unwrap().as_str().unwrap();
-        let protected_bytes = base64::engine::general_purpose::STANDARD.decode(protected_b64).unwrap();
+        let protected_bytes = base64::engine::general_purpose::STANDARD
+            .decode(protected_b64)
+            .unwrap();
         let protected_header: serde_json::Value = serde_json::from_slice(&protected_bytes).unwrap();
-        
+
         // Verify the encryption algorithm is set correctly
-        assert_eq!(protected_header.get("alg").unwrap().as_str().unwrap(), "ECDH-ES+A256KW", "Algorithm should be ECDH-ES+A256KW");
-        assert_eq!(protected_header.get("enc").unwrap().as_str().unwrap(), "A256GCM", "Encryption should be A256GCM");
-        
+        assert_eq!(
+            protected_header.get("alg").unwrap().as_str().unwrap(),
+            "ECDH-ES+A256KW",
+            "Algorithm should be ECDH-ES+A256KW"
+        );
+        assert_eq!(
+            protected_header.get("enc").unwrap().as_str().unwrap(),
+            "A256GCM",
+            "Encryption should be A256GCM"
+        );
+
         // Try to decrypt - but this might not work in test mode
         let _ = env.message_packer.unpack_message_value(&packed).await;
-        
+
         println!("✅ AuthCrypt encryption steps completed");
     } else {
-        println!("ℹ️ AuthCrypt encryption not yet supported: {:?}", pack_result.err());
+        println!(
+            "ℹ️ AuthCrypt encryption not yet supported: {:?}",
+            pack_result.err()
+        );
     }
 }
 
@@ -474,31 +574,45 @@ async fn test_authcrypt_encryption() {
 async fn test_invalid_signature() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Sign a message with Ed25519
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::Signed)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Corrupt the signature by modifying it
         let mut packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        let signatures = packed_json.get_mut("signatures").unwrap().as_array_mut().unwrap();
+        let signatures = packed_json
+            .get_mut("signatures")
+            .unwrap()
+            .as_array_mut()
+            .unwrap();
         let signature = signatures[0].get_mut("signature").unwrap();
-        
+
         // Get the original signature and corrupt the last few bytes
         let original_signature = signature.as_str().unwrap();
-        let corrupted_signature = format!("{}ABC", &original_signature[..original_signature.len()-3]);
+        let corrupted_signature =
+            format!("{}ABC", &original_signature[..original_signature.len() - 3]);
         *signature = serde_json::Value::String(corrupted_signature);
-        
+
         // Try to verify the corrupted signature
         let corrupted_packed = serde_json::to_string(&packed_json).unwrap();
-        
+
         // This should fail verification in non-test mode, but our test environment might have special handling
-        let result = env.message_packer.unpack_message_value(&corrupted_packed).await;
-        
+        let result = env
+            .message_packer
+            .unpack_message_value(&corrupted_packed)
+            .await;
+
         println!("Corrupted signature verification result: {:?}", result);
-        
+
         if result.is_err() {
             println!("✅ Invalid signature correctly rejected");
         } else {
@@ -507,7 +621,7 @@ async fn test_invalid_signature() {
     } else {
         println!("ℹ️ Signing not yet supported: {:?}", pack_result.err());
     }
-    
+
     println!("✅ Invalid signature test completed");
 }
 
@@ -516,29 +630,42 @@ async fn test_invalid_signature() {
 async fn test_wrong_key_signature() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Sign a message with Ed25519
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::Signed)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Modify the key ID to point to a different key
         let mut packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        let signatures = packed_json.get_mut("signatures").unwrap().as_array_mut().unwrap();
+        let signatures = packed_json
+            .get_mut("signatures")
+            .unwrap()
+            .as_array_mut()
+            .unwrap();
         let header = signatures[0].get_mut("header").unwrap();
-        
+
         // Change the kid to a different one
         header["kid"] = serde_json::Value::String(format!("{}#keys-1", env.p256_did));
-        
+
         // Try to verify the signature with the wrong key
         let wrong_key_packed = serde_json::to_string(&packed_json).unwrap();
-        
+
         // This should fail verification in non-test mode
-        let result = env.message_packer.unpack_message_value(&wrong_key_packed).await;
-        
+        let result = env
+            .message_packer
+            .unpack_message_value(&wrong_key_packed)
+            .await;
+
         println!("Wrong key verification result: {:?}", result);
-        
+
         if result.is_err() {
             println!("✅ Wrong key signature correctly rejected");
         } else {
@@ -547,7 +674,7 @@ async fn test_wrong_key_signature() {
     } else {
         println!("ℹ️ Signing not yet supported: {:?}", pack_result.err());
     }
-    
+
     println!("✅ Wrong key signature test completed");
 }
 
@@ -556,38 +683,54 @@ async fn test_wrong_key_signature() {
 async fn test_authcrypt_wrong_key() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Attempt to encrypt with AuthCrypt mode
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::AuthCrypt)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::AuthCrypt,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Modify the recipient key ID to point to a non-existent key
         let mut packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
-        let recipients = packed_json.get_mut("recipients").unwrap().as_array_mut().unwrap();
+        let recipients = packed_json
+            .get_mut("recipients")
+            .unwrap()
+            .as_array_mut()
+            .unwrap();
         let header = recipients[0].get_mut("header").unwrap();
-        
+
         // Change the kid to a non-existent one
         header["kid"] = serde_json::Value::String("did:example:nonexistent#keys-1".to_string());
-        
+
         // Try to decrypt with the wrong key
         let wrong_key_packed = serde_json::to_string(&packed_json).unwrap();
-        
+
         // This should fail decryption in non-test mode
-        let result = env.message_packer.unpack_message_value(&wrong_key_packed).await;
-        
+        let result = env
+            .message_packer
+            .unpack_message_value(&wrong_key_packed)
+            .await;
+
         println!("Wrong key decryption result: {:?}", result);
-        
+
         if result.is_err() {
             println!("✅ Wrong key decryption correctly rejected");
         } else {
             println!("ℹ️ Wrong key decryption accepted (might be expected in test mode)");
         }
     } else {
-        println!("ℹ️ AuthCrypt encryption not yet supported: {:?}", pack_result.err());
+        println!(
+            "ℹ️ AuthCrypt encryption not yet supported: {:?}",
+            pack_result.err()
+        );
     }
-    
+
     println!("✅ Wrong key decryption test completed");
 }
 
@@ -596,47 +739,61 @@ async fn test_authcrypt_wrong_key() {
 async fn test_authcrypt_corrupted_content() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Encrypt with AuthCrypt mode - it's OK if this fails because P-256 might not be supported yet
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::AuthCrypt)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::AuthCrypt,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Corrupt the ciphertext by modifying it
         let mut packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
         let ciphertext = packed_json.get_mut("ciphertext").unwrap();
-        
+
         // Get the original ciphertext and corrupt the middle portion
         let original_ciphertext = ciphertext.as_str().unwrap();
         let corrupted_ciphertext = if original_ciphertext.len() > 10 {
             let mid_point = original_ciphertext.len() / 2;
-            format!("{}XYZ{}", 
-                    &original_ciphertext[..mid_point], 
-                    &original_ciphertext[mid_point+3..])
+            format!(
+                "{}XYZ{}",
+                &original_ciphertext[..mid_point],
+                &original_ciphertext[mid_point + 3..]
+            )
         } else {
             "corrupted".to_string()
         };
-        
+
         *ciphertext = serde_json::Value::String(corrupted_ciphertext);
-        
+
         // Try to decrypt the corrupted ciphertext
         let corrupted_packed = serde_json::to_string(&packed_json).unwrap();
-        
+
         // This should fail decryption in non-test mode
-        let result = env.message_packer.unpack_message_value(&corrupted_packed).await;
-        
+        let result = env
+            .message_packer
+            .unpack_message_value(&corrupted_packed)
+            .await;
+
         println!("Corrupted ciphertext decryption result: {:?}", result);
-        
+
         if result.is_err() {
             println!("✅ Corrupted ciphertext correctly rejected");
         } else {
             println!("ℹ️ Corrupted ciphertext accepted (might be expected in test mode)");
         }
     } else {
-        println!("ℹ️ AuthCrypt encryption not yet supported: {:?}", pack_result.err());
+        println!(
+            "ℹ️ AuthCrypt encryption not yet supported: {:?}",
+            pack_result.err()
+        );
     }
-    
+
     println!("✅ Corrupted ciphertext decryption test completed");
 }
 
@@ -645,44 +802,56 @@ async fn test_authcrypt_corrupted_content() {
 async fn test_authcrypt_corrupted_tag() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // Encrypt with AuthCrypt mode - it's OK if this fails because P-256 might not be supported yet
-    let pack_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::AuthCrypt)
+    let pack_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::AuthCrypt,
+        )
         .await;
-    
+
     if let Ok(packed) = pack_result {
         // Corrupt the authentication tag by modifying it
         let mut packed_json: serde_json::Value = serde_json::from_str(&packed).unwrap();
         let tag = packed_json.get_mut("tag").unwrap();
-        
+
         // Get the original tag and corrupt it
         let original_tag = tag.as_str().unwrap();
         let corrupted_tag = if original_tag.len() > 5 {
-            format!("{}ABC", &original_tag[..original_tag.len()-3])
+            format!("{}ABC", &original_tag[..original_tag.len() - 3])
         } else {
             "corrupted".to_string()
         };
-        
+
         *tag = serde_json::Value::String(corrupted_tag);
-        
+
         // Try to decrypt with the corrupted tag
         let corrupted_packed = serde_json::to_string(&packed_json).unwrap();
-        
+
         // This should fail authentication in non-test mode
-        let result = env.message_packer.unpack_message_value(&corrupted_packed).await;
-        
+        let result = env
+            .message_packer
+            .unpack_message_value(&corrupted_packed)
+            .await;
+
         println!("Corrupted authentication tag result: {:?}", result);
-        
+
         if result.is_err() {
             println!("✅ Corrupted authentication tag correctly rejected");
         } else {
             println!("ℹ️ Corrupted authentication tag accepted (might be expected in test mode)");
         }
     } else {
-        println!("ℹ️ AuthCrypt encryption not yet supported: {:?}", pack_result.err());
+        println!(
+            "ℹ️ AuthCrypt encryption not yet supported: {:?}",
+            pack_result.err()
+        );
     }
-    
+
     println!("✅ Corrupted authentication tag test completed");
 }
 
@@ -690,13 +859,13 @@ async fn test_authcrypt_corrupted_tag() {
 #[tokio::test]
 async fn test_message_sizes() {
     let env = TestEnvironment::new();
-    
+
     // Test a small message
     let small_message = TestMessage {
         id: Uuid::new_v4().to_string(),
         content: "Small message".to_string(),
     };
-    
+
     // Test a medium-sized message
     let mut medium_content = String::with_capacity(1000);
     for _ in 0..100 {
@@ -706,7 +875,7 @@ async fn test_message_sizes() {
         id: Uuid::new_v4().to_string(),
         content: medium_content,
     };
-    
+
     // Test a large message
     let mut large_content = String::with_capacity(10000);
     for _ in 0..1000 {
@@ -716,47 +885,84 @@ async fn test_message_sizes() {
         id: Uuid::new_v4().to_string(),
         content: large_content,
     };
-    
+
     // Test signing with different message sizes
     // We'll only test Ed25519 since we know it works
     println!("Testing signing with Ed25519 for different message sizes");
-    
+
     // Small message
-    let small_signed_result = env.message_packer
-        .pack_message(&small_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::Signed)
+    let small_signed_result = env
+        .message_packer
+        .pack_message(
+            &small_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     // Medium message
-    let medium_signed_result = env.message_packer
-        .pack_message(&medium_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::Signed)
+    let medium_signed_result = env
+        .message_packer
+        .pack_message(
+            &medium_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     // Large message
-    let large_signed_result = env.message_packer
-        .pack_message(&large_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::Signed)
+    let large_signed_result = env
+        .message_packer
+        .pack_message(
+            &large_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::Signed,
+        )
         .await;
-    
+
     // Test if we can sign messages of different sizes
-    if let (Ok(small_signed), Ok(medium_signed), Ok(large_signed)) = (&small_signed_result, &medium_signed_result, &large_signed_result) {
-        
+    if let (Ok(small_signed), Ok(medium_signed), Ok(large_signed)) = (
+        &small_signed_result,
+        &medium_signed_result,
+        &large_signed_result,
+    ) {
         println!("Successfully signed messages of all sizes");
-        
+
         // Verify we can unpack all message sizes (but don't fail the test if we can't)
-        if let Ok(small_unpacked_signed) = env.message_packer.unpack_message_value(&small_signed).await {
-            assert_eq!(small_unpacked_signed.get("id").unwrap().as_str().unwrap(), small_message.id);
+        if let Ok(small_unpacked_signed) =
+            env.message_packer.unpack_message_value(&small_signed).await
+        {
+            assert_eq!(
+                small_unpacked_signed.get("id").unwrap().as_str().unwrap(),
+                small_message.id
+            );
             println!("Small message verified");
         }
-        
-        if let Ok(medium_unpacked_signed) = env.message_packer.unpack_message_value(&medium_signed).await {
-            assert_eq!(medium_unpacked_signed.get("id").unwrap().as_str().unwrap(), medium_message.id);
+
+        if let Ok(medium_unpacked_signed) = env
+            .message_packer
+            .unpack_message_value(&medium_signed)
+            .await
+        {
+            assert_eq!(
+                medium_unpacked_signed.get("id").unwrap().as_str().unwrap(),
+                medium_message.id
+            );
             println!("Medium message verified");
         }
-        
-        if let Ok(large_unpacked_signed) = env.message_packer.unpack_message_value(&large_signed).await {
-            assert_eq!(large_unpacked_signed.get("id").unwrap().as_str().unwrap(), large_message.id);
+
+        if let Ok(large_unpacked_signed) =
+            env.message_packer.unpack_message_value(&large_signed).await
+        {
+            assert_eq!(
+                large_unpacked_signed.get("id").unwrap().as_str().unwrap(),
+                large_message.id
+            );
             println!("Large message verified");
         }
-        
     } else {
         if let Err(e) = &small_signed_result {
             println!("Small message signing failed: {:?}", e);
@@ -768,7 +974,7 @@ async fn test_message_sizes() {
             println!("Large message signing failed: {:?}", e);
         }
     }
-    
+
     println!("✅ Message size test completed");
 }
 
@@ -777,39 +983,51 @@ async fn test_message_sizes() {
 async fn test_mixed_security_mode() {
     let env = TestEnvironment::new();
     let test_message = TestEnvironment::create_test_message();
-    
+
     // First sign a message with Ed25519 (which should work)
-    let sign_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::Signed)
+    let sign_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::Signed,
+        )
         .await;
-        
+
     // Then try to encrypt a message - it might not work yet
-    let encrypt_result = env.message_packer
-        .pack_message(&test_message, &env.p256_did, Some(&env.ed25519_did), SecurityMode::AuthCrypt)
+    let encrypt_result = env
+        .message_packer
+        .pack_message(
+            &test_message,
+            &env.p256_did,
+            Some(&env.ed25519_did),
+            SecurityMode::AuthCrypt,
+        )
         .await;
-    
+
     // Only run this test if both operations succeed
     if let (Ok(signed_packed), Ok(encrypted_packed)) = (&sign_result, &encrypt_result) {
         // Parse the signed message
         let mut signed_json: serde_json::Value = serde_json::from_str(&signed_packed).unwrap();
-        
+
         // Parse the encrypted message
         let encrypted_json: serde_json::Value = serde_json::from_str(&encrypted_packed).unwrap();
-        
+
         // Combine elements from both to create a malformed message with mixed security modes
         // Add JWE elements to the JWS message
         signed_json["ciphertext"] = encrypted_json.get("ciphertext").unwrap().clone();
         signed_json["iv"] = encrypted_json.get("iv").unwrap().clone();
         signed_json["tag"] = encrypted_json.get("tag").unwrap().clone();
         signed_json["recipients"] = encrypted_json.get("recipients").unwrap().clone();
-        
+
         // Try to unpack the mixed-mode message
         let mixed_packed = serde_json::to_string(&signed_json).unwrap();
         let result = env.message_packer.unpack_message_value(&mixed_packed).await;
-        
+
         // This should fail as it's ambiguous which security mode to use
         println!("Mixed security mode result: {:?}", result);
-        
+
         if result.is_err() {
             println!("✅ Mixed security mode correctly rejected");
         } else {
@@ -820,10 +1038,10 @@ async fn test_mixed_security_mode() {
             println!("ℹ️ Signing not working: {:?}", e);
         }
         if let Err(e) = &encrypt_result {
-            println!("ℹ️ Encryption not working: {:?}", e);  
+            println!("ℹ️ Encryption not working: {:?}", e);
         }
     }
-    
+
     println!("✅ Mixed security mode test completed");
 }
 
@@ -831,22 +1049,23 @@ async fn test_mixed_security_mode() {
 #[tokio::test]
 async fn test_invalid_jws_format() {
     let env = TestEnvironment::new();
-    
+
     // Create a completely invalid JWS structure (not even proper JSON)
-    let invalid_jws = r#"{"payload":"abc","invalid": structure,"signatures":[{"protected":"xyz"}]}"#;
-    
+    let invalid_jws =
+        r#"{"payload":"abc","invalid": structure,"signatures":[{"protected":"xyz"}]}"#;
+
     // Try to unpack the invalid message
     let result = env.message_packer.unpack_message_value(invalid_jws).await;
-    
+
     // This should fail with a parsing error
     println!("Invalid JWS format result: {:?}", result);
-    
+
     if result.is_err() {
         println!("✅ Invalid JWS format correctly rejected");
     } else {
         println!("ℹ️ Invalid JWS format accepted (unexpected)");
     }
-    
+
     println!("✅ Invalid JWS format test completed");
 }
 
@@ -854,22 +1073,22 @@ async fn test_invalid_jws_format() {
 #[tokio::test]
 async fn test_invalid_jwe_format() {
     let env = TestEnvironment::new();
-    
+
     // Create a completely invalid JWE structure (not even proper JSON)
     let invalid_jwe = r#"{"protected":"abc","invalid": structure,"ciphertext":"xyz"}"#;
-    
+
     // Try to unpack the invalid message
     let result = env.message_packer.unpack_message_value(invalid_jwe).await;
-    
+
     // This should fail with a parsing error
     println!("Invalid JWE format result: {:?}", result);
-    
+
     if result.is_err() {
         println!("✅ Invalid JWE format correctly rejected");
     } else {
         println!("ℹ️ Invalid JWE format accepted (unexpected)");
     }
-    
+
     println!("✅ Invalid JWE format test completed");
 }
 
@@ -878,7 +1097,7 @@ async fn test_invalid_jwe_format() {
 async fn test_invalid_metadata() {
     let env = TestEnvironment::new();
     let _test_message = TestEnvironment::create_test_message();
-    
+
     // Create a totally custom message with invalid Base64 payload
     let invalid_message = r#"{
         "payload": "!@#$%^&*()_+",
@@ -892,18 +1111,21 @@ async fn test_invalid_metadata() {
             }
         ]
     }"#;
-    
+
     // Try to unpack the message with invalid Base64 payload
-    let result = env.message_packer.unpack_message_value(invalid_message).await;
-    
+    let result = env
+        .message_packer
+        .unpack_message_value(invalid_message)
+        .await;
+
     // This should fail with a Base64 decoding error
     println!("Invalid metadata result: {:?}", result);
-    
+
     if result.is_err() {
         println!("✅ Invalid metadata correctly rejected");
     } else {
         println!("ℹ️ Invalid metadata accepted (unexpected)");
     }
-    
+
     println!("✅ Invalid metadata test completed");
 }

@@ -7,25 +7,25 @@
 
 use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
-use crate::message::SecurityMode;
 use crate::is_running_tests;
+use crate::message::SecurityMode;
+use aes_gcm::{AeadInPlace, Aes256Gcm, KeyInit, Nonce};
 use async_trait::async_trait;
+use base64::Engine;
+use ed25519_dalek::{Signer as Ed25519Signer, Verifier, VerifyingKey};
+use k256::{ecdsa::Signature as Secp256k1Signature, ecdsa::SigningKey as Secp256k1SigningKey};
+use p256::ecdh::EphemeralSecret as P256EphemeralSecret;
+use p256::elliptic_curve::sec1::FromEncodedPoint;
+use p256::EncodedPoint as P256EncodedPoint;
+use p256::PublicKey as P256PublicKey;
+use p256::{ecdsa::Signature as P256Signature, ecdsa::SigningKey as P256SigningKey};
+use rand::{rngs::OsRng, RngCore};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::sync::Arc;
 use uuid::Uuid;
-use base64::Engine;
-use ed25519_dalek::{Signer as Ed25519Signer, Verifier, VerifyingKey};
-use rand::{rngs::OsRng, RngCore};
-use p256::ecdh::EphemeralSecret as P256EphemeralSecret;
-use p256::PublicKey as P256PublicKey;
-use p256::elliptic_curve::sec1::FromEncodedPoint;
-use p256::EncodedPoint as P256EncodedPoint;
-use p256::{ecdsa::SigningKey as P256SigningKey, ecdsa::Signature as P256Signature};
-use k256::{ecdsa::SigningKey as Secp256k1SigningKey, ecdsa::Signature as Secp256k1Signature};
-use aes_gcm::{Aes256Gcm, KeyInit, AeadInPlace, Nonce};
-use std::convert::TryFrom;
 
 /// A trait for packing and unpacking messages with DIDComm.
 ///
@@ -243,15 +243,22 @@ impl MessagePacker for DefaultMessagePacker {
         mode: SecurityMode,
     ) -> Result<String> {
         // Special handling for tests (just to maintain compatibility)
-        let message_value = serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
+        let message_value =
+            serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
         if mode == SecurityMode::AuthCrypt {
             // Check if this is a presentation message for tests
             if let Some(msg_type) = message_value.get("type").and_then(|v| v.as_str()) {
                 if msg_type == "https://tap.rsvp/schema/1.0#Presentation" && is_running_tests() {
                     // In tests, just create a serialized test message with the presentation fields
-                    let presentation_id = message_value.get("presentation_id").and_then(|v| v.as_str()).unwrap_or("test123");
-                    let data = message_value.get("data").and_then(|v| v.as_str()).unwrap_or("secure-data");
-                    
+                    let presentation_id = message_value
+                        .get("presentation_id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("test123");
+                    let data = message_value
+                        .get("data")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("secure-data");
+
                     let test_message = serde_json::json!({
                         "id": Uuid::new_v4().to_string(),
                         "type": "https://tap.rsvp/schema/1.0#Presentation",
@@ -260,13 +267,17 @@ impl MessagePacker for DefaultMessagePacker {
                         "from": from,
                         "to": [to]
                     });
-                    
-                    return serde_json::to_string(&test_message)
-                        .map_err(|e| Error::Serialization(format!("Failed to serialize test presentation: {}", e)));
+
+                    return serde_json::to_string(&test_message).map_err(|e| {
+                        Error::Serialization(format!(
+                            "Failed to serialize test presentation: {}",
+                            e
+                        ))
+                    });
                 }
             }
         }
-        
+
         // Ensure the value is an object
         let message_obj = message_value
             .as_object()
@@ -314,45 +325,63 @@ impl MessagePacker for DefaultMessagePacker {
         match actual_mode {
             SecurityMode::Plain => {
                 // For Plain mode, just serialize the DIDComm message
-                serde_json::to_string(&didcomm_message)
-                    .map_err(|e| Error::Serialization(format!("Failed to serialize message: {}", e)))
-            },
+                serde_json::to_string(&didcomm_message).map_err(|e| {
+                    Error::Serialization(format!("Failed to serialize message: {}", e))
+                })
+            }
             SecurityMode::Signed => {
                 if let Some(from_did) = from {
                     // This is where we'll implement real cryptographic signing
-                    
+
                     // Look up the signing key from the secrets resolver
                     let secret_map = self.secrets_resolver.get_secrets_map();
                     let key_id = format!("{}#keys-1", from_did);
-                    
+
                     // Find the from_did in the secrets map
                     let secret = secret_map.get(from_did).ok_or_else(|| {
                         Error::Cryptography(format!("No secret found for DID: {}", from_did))
                     })?;
-                    
+
                     // Prepare the message payload to sign
                     // We need to create a canonical representation of the message
-                    let payload = serde_json::to_string(&didcomm_message)
-                        .map_err(|e| Error::Serialization(format!("Failed to serialize message for signing: {}", e)))?;
-                    
+                    let payload = serde_json::to_string(&didcomm_message).map_err(|e| {
+                        Error::Serialization(format!(
+                            "Failed to serialize message for signing: {}",
+                            e
+                        ))
+                    })?;
+
                     // Generate a signature based on the secret type
                     let (signature, algorithm) = match &secret.secret_material {
                         didcomm::secrets::SecretMaterial::JWK { private_key_jwk } => {
                             // Extract the key type and curve
                             let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                             let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
-                            
+
                             match (kty, crv) {
                                 (Some("OKP"), Some("Ed25519")) => {
                                     // This is an Ed25519 key
                                     // Extract the private key
-                                    let private_key_base64 = private_key_jwk.get("d").and_then(|v| v.as_str())
-                                        .ok_or_else(|| Error::Cryptography("Missing private key in JWK".to_string()))?;
-                                        
+                                    let private_key_base64 = private_key_jwk
+                                        .get("d")
+                                        .and_then(|v| v.as_str())
+                                        .ok_or_else(|| {
+                                            Error::Cryptography(
+                                                "Missing private key in JWK".to_string(),
+                                            )
+                                        })?;
+
                                     // Decode the private key from base64
-                                    let mut private_key_bytes = base64::engine::general_purpose::STANDARD.decode(private_key_base64)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to decode private key: {}", e)))?;
-                                    
+                                    let mut private_key_bytes =
+                                        base64::engine::general_purpose::STANDARD
+                                            .decode(private_key_base64)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to decode private key: {}",
+                                                    e
+                                                ))
+                                            })?;
+
                                     // Ed25519 keys must be exactly 32 bytes. Test keys might not match this spec.
                                     // For test environments, pad or truncate the key to 32 bytes
                                     if is_running_tests() {
@@ -368,103 +397,158 @@ impl MessagePacker for DefaultMessagePacker {
                                             private_key_bytes.truncate(32);
                                         }
                                     }
-                                        
+
                                     // Create an Ed25519 signing key
-                                    let signing_key = match ed25519_dalek::SigningKey::try_from(private_key_bytes.as_slice()) {
+                                    let signing_key = match ed25519_dalek::SigningKey::try_from(
+                                        private_key_bytes.as_slice(),
+                                    ) {
                                         Ok(key) => key,
-                                        Err(e) => return Err(Error::Cryptography(format!("Failed to create Ed25519 signing key: {:?}", e))),
+                                        Err(e) => {
+                                            return Err(Error::Cryptography(format!(
+                                                "Failed to create Ed25519 signing key: {:?}",
+                                                e
+                                            )))
+                                        }
                                     };
-                                    
+
                                     // Sign the message
                                     let signature = signing_key.sign(payload.as_bytes());
-                                    
+
                                     // Return the signature bytes and algorithm
                                     (signature.to_vec(), "EdDSA")
-                                },
+                                }
                                 (Some("EC"), Some("P-256")) => {
                                     // This is a P-256 key
                                     // Extract the private key (d parameter in JWK)
-                                    let private_key_base64 = private_key_jwk.get("d").and_then(|v| v.as_str())
-                                        .ok_or_else(|| Error::Cryptography("Missing private key (d) in JWK".to_string()))?;
-                                    
+                                    let private_key_base64 = private_key_jwk
+                                        .get("d")
+                                        .and_then(|v| v.as_str())
+                                        .ok_or_else(|| {
+                                            Error::Cryptography(
+                                                "Missing private key (d) in JWK".to_string(),
+                                            )
+                                        })?;
+
                                     // Decode the private key from base64
-                                    let private_key_bytes = base64::engine::general_purpose::STANDARD.decode(private_key_base64)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to decode P-256 private key: {}", e)))?;
-                                    
+                                    let private_key_bytes =
+                                        base64::engine::general_purpose::STANDARD
+                                            .decode(private_key_base64)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to decode P-256 private key: {}",
+                                                    e
+                                                ))
+                                            })?;
+
                                     // Create a P-256 signing key
                                     // Convert to a scalar value for P-256
-                                    let signing_key = P256SigningKey::from_slice(&private_key_bytes)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to create P-256 signing key: {:?}", e)))?;
-                                    
+                                    let signing_key = P256SigningKey::from_slice(
+                                        &private_key_bytes,
+                                    )
+                                    .map_err(|e| {
+                                        Error::Cryptography(format!(
+                                            "Failed to create P-256 signing key: {:?}",
+                                            e
+                                        ))
+                                    })?;
+
                                     // Sign the message using ECDSA
-                                    let signature: P256Signature = signing_key.sign(payload.as_bytes());
-                                    
+                                    let signature: P256Signature =
+                                        signing_key.sign(payload.as_bytes());
+
                                     // Convert to bytes for JWS
                                     let signature_bytes_der = signature.to_der();
                                     let signature_bytes = signature_bytes_der.as_bytes().to_vec();
-                                    
+
                                     // Return the signature bytes and algorithm
                                     (signature_bytes, "ES256")
-                                },
+                                }
                                 (Some("EC"), Some("secp256k1")) => {
                                     // This is a secp256k1 key
                                     // Extract the private key (d parameter in JWK)
-                                    let private_key_base64 = private_key_jwk.get("d").and_then(|v| v.as_str())
-                                        .ok_or_else(|| Error::Cryptography("Missing private key (d) in JWK".to_string()))?;
-                                    
+                                    let private_key_base64 = private_key_jwk
+                                        .get("d")
+                                        .and_then(|v| v.as_str())
+                                        .ok_or_else(|| {
+                                            Error::Cryptography(
+                                                "Missing private key (d) in JWK".to_string(),
+                                            )
+                                        })?;
+
                                     // Decode the private key from base64
-                                    let private_key_bytes = base64::engine::general_purpose::STANDARD.decode(private_key_base64)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to decode secp256k1 private key: {}", e)))?;
-                                    
+                                    let private_key_bytes =
+                                        base64::engine::general_purpose::STANDARD
+                                            .decode(private_key_base64)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to decode secp256k1 private key: {}",
+                                                    e
+                                                ))
+                                            })?;
+
                                     // Create a secp256k1 signing key
-                                    let signing_key = Secp256k1SigningKey::from_slice(&private_key_bytes)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to create secp256k1 signing key: {:?}", e)))?;
-                                    
+                                    let signing_key =
+                                        Secp256k1SigningKey::from_slice(&private_key_bytes)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to create secp256k1 signing key: {:?}",
+                                                    e
+                                                ))
+                                            })?;
+
                                     // Sign the message using ECDSA
-                                    let signature: Secp256k1Signature = signing_key.sign(payload.as_bytes());
-                                    
+                                    let signature: Secp256k1Signature =
+                                        signing_key.sign(payload.as_bytes());
+
                                     // Convert to bytes for JWS
                                     let signature_bytes_der = signature.to_der();
                                     let signature_bytes = signature_bytes_der.as_bytes().to_vec();
-                                    
+
                                     // Return the signature bytes and algorithm
                                     (signature_bytes, "ES256K")
-                                },
+                                }
                                 // Handle unsupported key types
                                 _ => {
                                     return Err(Error::Cryptography(format!(
-                                        "Unsupported key type: kty={:?}, crv={:?}", kty, crv
+                                        "Unsupported key type: kty={:?}, crv={:?}",
+                                        kty, crv
                                     )));
                                 }
                             }
-                        },
+                        }
                         // Handle other secret material types as needed
                         _ => {
                             return Err(Error::Cryptography(format!(
-                                "Unsupported secret material type: {:?}", secret.type_
+                                "Unsupported secret material type: {:?}",
+                                secret.type_
                             )));
                         }
                     };
-                    
+
                     // Encode the signature to base64
-                    let signature_value = base64::engine::general_purpose::STANDARD.encode(&signature);
-                    
+                    let signature_value =
+                        base64::engine::general_purpose::STANDARD.encode(&signature);
+
                     // Create a timestamp for the signature
                     let timestamp = chrono::Utc::now().timestamp().to_string();
-                    
+
                     // Create the protected header for the signature
                     let protected_header = serde_json::json!({
                         "kid": key_id,
                         "alg": algorithm,
                         "created": timestamp
                     });
-                    
+
                     // Encode the protected header to base64
                     let protected = base64::engine::general_purpose::STANDARD.encode(
-                        serde_json::to_string(&protected_header)
-                            .map_err(|e| Error::Serialization(format!("Failed to serialize protected header: {}", e)))?
+                        serde_json::to_string(&protected_header).map_err(|e| {
+                            Error::Serialization(format!(
+                                "Failed to serialize protected header: {}",
+                                e
+                            ))
+                        })?,
                     );
-                    
+
                     // Create a signed DIDComm message structure
                     let signed_message = serde_json::json!({
                         "id": didcomm_message.id,
@@ -483,54 +567,79 @@ impl MessagePacker for DefaultMessagePacker {
                             "protected": protected
                         }]
                     });
-                    
+
                     // Return the serialized signed message
-                    serde_json::to_string(&signed_message)
-                        .map_err(|e| Error::Serialization(format!("Failed to serialize signed message: {}", e)))
+                    serde_json::to_string(&signed_message).map_err(|e| {
+                        Error::Serialization(format!("Failed to serialize signed message: {}", e))
+                    })
                 } else {
-                    Err(Error::Validation("Signed mode requires a from field".to_string()))
+                    Err(Error::Validation(
+                        "Signed mode requires a from field".to_string(),
+                    ))
                 }
-            },
+            }
             SecurityMode::AuthCrypt => {
                 if let Some(from_did) = from {
                     // For authenticated encryption, we need to implement ECDH key agreement
                     // followed by symmetric encryption
-                    
+
                     // Get the sender's secret
                     let secret_map = self.secrets_resolver.get_secrets_map();
                     let from_secret = secret_map.get(from_did).ok_or_else(|| {
                         Error::Cryptography(format!("No secret found for sender DID: {}", from_did))
                     })?;
-                    
+
                     // Resolve the recipient's DID to get their public key
-                    let to_doc = self.did_resolver.resolve(to).await?
-                        .ok_or_else(|| Error::Cryptography(format!("Failed to resolve recipient DID: {}", to)))?;
-                    
+                    let to_doc = self.did_resolver.resolve(to).await?.ok_or_else(|| {
+                        Error::Cryptography(format!("Failed to resolve recipient DID: {}", to))
+                    })?;
+
                     // Find the recipient's key agreement key
                     let recipient_key_id = if !to_doc.key_agreement.is_empty() {
                         to_doc.key_agreement[0].clone()
                     } else if !to_doc.verification_method.is_empty() {
                         to_doc.verification_method[0].id.clone()
                     } else {
-                        return Err(Error::Cryptography(format!("No key found for recipient: {}", to)));
+                        return Err(Error::Cryptography(format!(
+                            "No key found for recipient: {}",
+                            to
+                        )));
                     };
-                    
+
                     // Find the corresponding verification method
-                    let recipient_vm = to_doc.verification_method.iter()
+                    let recipient_vm = to_doc
+                        .verification_method
+                        .iter()
                         .find(|vm| vm.id == recipient_key_id)
-                        .ok_or_else(|| Error::Cryptography(format!("No verification method found for key ID: {}", recipient_key_id)))?;
-                    
+                        .ok_or_else(|| {
+                            Error::Cryptography(format!(
+                                "No verification method found for key ID: {}",
+                                recipient_key_id
+                            ))
+                        })?;
+
                     // Extract the recipient's public key
                     let _recipient_public_key = match &recipient_vm.verification_material {
                         didcomm::did::VerificationMaterial::Base58 { public_key_base58 } => {
-                            let decoded = bs58::decode(public_key_base58)
-                                .into_vec()
-                                .map_err(|e| Error::Cryptography(format!("Failed to decode Base58 key: {}", e)))?;
+                            let decoded =
+                                bs58::decode(public_key_base58).into_vec().map_err(|e| {
+                                    Error::Cryptography(format!(
+                                        "Failed to decode Base58 key: {}",
+                                        e
+                                    ))
+                                })?;
                             decoded
-                        },
-                        didcomm::did::VerificationMaterial::Multibase { public_key_multibase } => {
-                            let (_, decoded) = multibase::decode(public_key_multibase)
-                                .map_err(|e| Error::Cryptography(format!("Failed to decode Multibase key: {}", e)))?;
+                        }
+                        didcomm::did::VerificationMaterial::Multibase {
+                            public_key_multibase,
+                        } => {
+                            let (_, decoded) =
+                                multibase::decode(public_key_multibase).map_err(|e| {
+                                    Error::Cryptography(format!(
+                                        "Failed to decode Multibase key: {}",
+                                        e
+                                    ))
+                                })?;
                             // If this is a did:key multibase, we need to strip the multicodec prefix
                             if decoded.len() >= 2 && (decoded[0] == 0xed && decoded[1] == 0x01) {
                                 // Ed25519 key, strip prefix
@@ -538,90 +647,138 @@ impl MessagePacker for DefaultMessagePacker {
                             } else {
                                 decoded
                             }
-                        },
+                        }
                         // Add other verification material types as needed
-                        _ => return Err(Error::Cryptography(format!(
-                            "Unsupported verification material type: {:?}", recipient_vm.verification_material
-                        ))),
+                        _ => {
+                            return Err(Error::Cryptography(format!(
+                                "Unsupported verification material type: {:?}",
+                                recipient_vm.verification_material
+                            )))
+                        }
                     };
-                    
+
                     // Create a JWE structure
                     // For demonstration purposes, we'll create a simplified but real JWE structure
                     // In a full implementation, we'd perform actual ECDH and authenticated encryption
-                    
+
                     // 1. Generate a random content encryption key (CEK) and IV
                     let mut cek = [0u8; 32]; // 256-bit key for AES-GCM
                     OsRng.fill_bytes(&mut cek);
-                    
+
                     // Also generate IV now since we'll need it for encryption
                     let mut iv_bytes = [0u8; 12]; // 96-bit IV for AES-GCM
                     OsRng.fill_bytes(&mut iv_bytes);
-                    
+
                     // 2. Encrypt the payload with the CEK
                     // Serialize the message to JSON
-                    let payload_json = serde_json::to_string(&didcomm_message)
-                        .map_err(|e| Error::Serialization(format!("Failed to serialize message for encryption: {}", e)))?;
-                    
+                    let payload_json = serde_json::to_string(&didcomm_message).map_err(|e| {
+                        Error::Serialization(format!(
+                            "Failed to serialize message for encryption: {}",
+                            e
+                        ))
+                    })?;
+
                     // Create an AES-GCM cipher with the CEK
-                    let cipher = Aes256Gcm::new_from_slice(&cek)
-                        .map_err(|e| Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e)))?;
-                    
+                    let cipher = Aes256Gcm::new_from_slice(&cek).map_err(|e| {
+                        Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e))
+                    })?;
+
                     // Encrypt the payload
                     let nonce = Nonce::from_slice(&iv_bytes);
                     let mut buffer = payload_json.into_bytes();
-                    let tag = cipher.encrypt_in_place_detached(nonce, b"", &mut buffer)
-                        .map_err(|e| Error::Cryptography(format!("AES-GCM encryption failed: {}", e)))?;
-                    
+                    let tag = cipher
+                        .encrypt_in_place_detached(nonce, b"", &mut buffer)
+                        .map_err(|e| {
+                            Error::Cryptography(format!("AES-GCM encryption failed: {}", e))
+                        })?;
+
                     // Base64 encode the encrypted payload
                     let cipher_text = base64::engine::general_purpose::STANDARD.encode(&buffer);
-                    
+
                     // IV already generated above before encryption
-                    
+
                     // 4. Use the real authentication tag from AES-GCM
                     let auth_tag = base64::engine::general_purpose::STANDARD.encode(tag.as_slice());
-                    
+
                     // 5. Perform ECDH key agreement and key wrapping
-                    let encrypted_key = match (&from_secret.secret_material, &recipient_vm.verification_material) {
-                        (didcomm::secrets::SecretMaterial::JWK { private_key_jwk }, didcomm::did::VerificationMaterial::JWK { public_key_jwk }) => {
+                    let encrypted_key = match (
+                        &from_secret.secret_material,
+                        &recipient_vm.verification_material,
+                    ) {
+                        (
+                            didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                            didcomm::did::VerificationMaterial::JWK { public_key_jwk },
+                        ) => {
                             // Check if we have P-256 keys
                             let sender_kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                             let sender_crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
                             let recipient_kty = public_key_jwk.get("kty").and_then(|v| v.as_str());
                             let recipient_crv = public_key_jwk.get("crv").and_then(|v| v.as_str());
-                            
+
                             match (sender_kty, sender_crv, recipient_kty, recipient_crv) {
                                 (Some("EC"), Some("P-256"), Some("EC"), Some("P-256")) => {
                                     // Extract the recipient's public key
-                                    let x_b64 = public_key_jwk.get("x").and_then(|v| v.as_str())
-                                        .ok_or_else(|| Error::Cryptography("Missing x coordinate in recipient JWK".to_string()))?;
-                                    let y_b64 = public_key_jwk.get("y").and_then(|v| v.as_str())
-                                        .ok_or_else(|| Error::Cryptography("Missing y coordinate in recipient JWK".to_string()))?;
-                                    
-                                    let x_bytes = base64::engine::general_purpose::STANDARD.decode(x_b64)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to decode x coordinate: {}", e)))?;
-                                    let y_bytes = base64::engine::general_purpose::STANDARD.decode(y_b64)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to decode y coordinate: {}", e)))?;
-                                    
+                                    let x_b64 = public_key_jwk
+                                        .get("x")
+                                        .and_then(|v| v.as_str())
+                                        .ok_or_else(|| {
+                                            Error::Cryptography(
+                                                "Missing x coordinate in recipient JWK".to_string(),
+                                            )
+                                        })?;
+                                    let y_b64 = public_key_jwk
+                                        .get("y")
+                                        .and_then(|v| v.as_str())
+                                        .ok_or_else(|| {
+                                            Error::Cryptography(
+                                                "Missing y coordinate in recipient JWK".to_string(),
+                                            )
+                                        })?;
+
+                                    let x_bytes = base64::engine::general_purpose::STANDARD
+                                        .decode(x_b64)
+                                        .map_err(|e| {
+                                            Error::Cryptography(format!(
+                                                "Failed to decode x coordinate: {}",
+                                                e
+                                            ))
+                                        })?;
+                                    let y_bytes = base64::engine::general_purpose::STANDARD
+                                        .decode(y_b64)
+                                        .map_err(|e| {
+                                            Error::Cryptography(format!(
+                                                "Failed to decode y coordinate: {}",
+                                                e
+                                            ))
+                                        })?;
+
                                     // Create a P-256 encoded point from the coordinates
                                     let mut point_bytes = vec![0x04]; // Uncompressed point format
                                     point_bytes.extend_from_slice(&x_bytes);
                                     point_bytes.extend_from_slice(&y_bytes);
-                                    
+
                                     let encoded_point = P256EncodedPoint::from_bytes(&point_bytes)
-                                        .map_err(|e| Error::Cryptography(format!("Failed to create P-256 encoded point: {}", e)))?;
-                                    
+                                        .map_err(|e| {
+                                            Error::Cryptography(format!(
+                                                "Failed to create P-256 encoded point: {}",
+                                                e
+                                            ))
+                                        })?;
+
                                     // This checks if the point is on the curve and returns the public key
-                                    let recipient_pk = P256PublicKey::from_encoded_point(&encoded_point)
-                                        .expect("Invalid P-256 public key");
-                                    
+                                    let recipient_pk =
+                                        P256PublicKey::from_encoded_point(&encoded_point)
+                                            .expect("Invalid P-256 public key");
+
                                     // Generate an ephemeral key pair for ECDH
                                     let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
                                     let _ephemeral_public = ephemeral_secret.public_key();
-                                    
+
                                     // Perform ECDH to derive a shared secret
-                                    let shared_secret = ephemeral_secret.diffie_hellman(&recipient_pk);
+                                    let shared_secret =
+                                        ephemeral_secret.diffie_hellman(&recipient_pk);
                                     let shared_bytes = shared_secret.raw_secret_bytes();
-                                    
+
                                     // Use the shared secret to wrap (encrypt) the CEK
                                     // In a real implementation, we would use a KDF and AES-KW
                                     // For simplicity, we'll use the first 32 bytes of the shared secret to encrypt the CEK
@@ -629,25 +786,27 @@ impl MessagePacker for DefaultMessagePacker {
                                     for i in 0..cek.len() {
                                         encrypted_cek[i] ^= shared_bytes[i % shared_bytes.len()];
                                     }
-                                    
+
                                     base64::engine::general_purpose::STANDARD.encode(encrypted_cek)
-                                },
+                                }
                                 // Handle other key types or fallback to a simpler approach
                                 _ => {
                                     // For unsupported key types, use a simulated encrypted key
                                     // This is just for development/demonstration - in production, you'd want to support all key types or fail
-                                    base64::engine::general_purpose::STANDARD.encode(
-                                        format!("SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}", from_did, to))
+                                    base64::engine::general_purpose::STANDARD.encode(format!(
+                                        "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}",
+                                        from_did, to
+                                    ))
                                 }
                             }
-                        },
-                        // Fallback for other key material types
-                        _ => {
-                            base64::engine::general_purpose::STANDARD.encode(
-                                format!("SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}", from_did, to))
                         }
+                        // Fallback for other key material types
+                        _ => base64::engine::general_purpose::STANDARD.encode(format!(
+                            "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}",
+                            from_did, to
+                        )),
                     };
-                    
+
                     // Create the JWE structure
                     let encrypted_message = serde_json::json!({
                         "ciphertext": cipher_text,
@@ -670,17 +829,23 @@ impl MessagePacker for DefaultMessagePacker {
                         "tag": auth_tag,
                         "iv": base64::engine::general_purpose::STANDARD.encode(&iv_bytes)
                     });
-                    
+
                     // Return the serialized encrypted message
-                    serde_json::to_string(&encrypted_message)
-                        .map_err(|e| Error::Serialization(format!("Failed to serialize encrypted message: {}", e)))
+                    serde_json::to_string(&encrypted_message).map_err(|e| {
+                        Error::Serialization(format!(
+                            "Failed to serialize encrypted message: {}",
+                            e
+                        ))
+                    })
                 } else {
-                    Err(Error::Validation("AuthCrypt mode requires a from field".to_string()))
+                    Err(Error::Validation(
+                        "AuthCrypt mode requires a from field".to_string(),
+                    ))
                 }
-            },
-            SecurityMode::Any => {
-                Err(Error::Validation("Cannot use Any mode for packing".to_string()))
             }
+            SecurityMode::Any => Err(Error::Validation(
+                "Cannot use Any mode for packing".to_string(),
+            )),
         }
     }
 
@@ -698,26 +863,27 @@ impl MessagePacker for DefaultMessagePacker {
         // Try to parse as JSON first
         if let Ok(value) = serde_json::from_str::<Value>(packed) {
             // Handle different message formats based on structure
-            
+
             // Case 1: Plain DIDComm message with body field
             if let Some(body) = value.get("body") {
                 return Ok(body.clone());
             }
-            
+
             // Case 2: Signed DIDComm message with signatures array
             if let Some(signatures) = value.get("signatures") {
                 if let Some(signatures_array) = signatures.as_array() {
                     if !signatures_array.is_empty() {
                         // Extract key information from the message
-                        let from_did = value.get("from").and_then(|v| v.as_str()).ok_or_else(|| {
-                            Error::Validation("No 'from' field in signed message".to_string())
-                        })?;
-                        
+                        let from_did =
+                            value.get("from").and_then(|v| v.as_str()).ok_or_else(|| {
+                                Error::Validation("No 'from' field in signed message".to_string())
+                            })?;
+
                         // Get body content to verify
                         let body = value.get("body").ok_or_else(|| {
                             Error::Validation("No 'body' field in signed message".to_string())
                         })?;
-                        
+
                         // Create a temporary message to serialize for verification
                         // We need to recreate the original serialized message that was signed
                         let verify_message = serde_json::json!({
@@ -735,13 +901,18 @@ impl MessagePacker for DefaultMessagePacker {
                             "attachments": value.get("attachments").unwrap_or(&serde_json::Value::Null),
                             "extra_headers": serde_json::json!({})
                         });
-                        
+
                         let serialized_verify_message = serde_json::to_string(&verify_message)
-                            .map_err(|e| Error::Serialization(format!("Failed to serialize message for verification: {}", e)))?;
-                        
+                            .map_err(|e| {
+                                Error::Serialization(format!(
+                                    "Failed to serialize message for verification: {}",
+                                    e
+                                ))
+                            })?;
+
                         // Now verify the signature(s)
                         let mut verification_result = false;
-                        
+
                         // In test mode, we'll be more lenient with verification
                         if is_running_tests() {
                             // For tests, we'll assume the signature is valid
@@ -750,38 +921,57 @@ impl MessagePacker for DefaultMessagePacker {
                             // Process all signatures - finding at least one valid signature is sufficient
                             for signature_obj in signatures_array {
                                 // Extract signature information
-                                let protected = signature_obj.get("protected").and_then(|v| v.as_str());
-                                let signature_b64 = signature_obj.get("signature").and_then(|v| v.as_str());
+                                let protected =
+                                    signature_obj.get("protected").and_then(|v| v.as_str());
+                                let signature_b64 =
+                                    signature_obj.get("signature").and_then(|v| v.as_str());
                                 let header = signature_obj.get("header");
-                                
-                                if let (Some(protected_b64), Some(signature_b64), Some(header)) = (protected, signature_b64, header) {
+
+                                if let (Some(protected_b64), Some(signature_b64), Some(header)) =
+                                    (protected, signature_b64, header)
+                                {
                                     // Decode the protected header to get the algorithm and key info
-                                    let protected_bytes = match base64::engine::general_purpose::STANDARD.decode(protected_b64) {
-                                        Ok(bytes) => bytes,
-                                        Err(_) => continue, // Skip invalid protected header
-                                    };
-                                    
-                                    let protected_header: serde_json::Value = match serde_json::from_slice(&protected_bytes) {
-                                        Ok(value) => value,
-                                        Err(_) => continue, // Skip invalid protected header
-                                    };
-                                    
+                                    let protected_bytes =
+                                        match base64::engine::general_purpose::STANDARD
+                                            .decode(protected_b64)
+                                        {
+                                            Ok(bytes) => bytes,
+                                            Err(_) => continue, // Skip invalid protected header
+                                        };
+
+                                    let protected_header: serde_json::Value =
+                                        match serde_json::from_slice(&protected_bytes) {
+                                            Ok(value) => value,
+                                            Err(_) => continue, // Skip invalid protected header
+                                        };
+
                                     // Extract the algorithm and key id
                                     let alg = protected_header.get("alg").and_then(|v| v.as_str());
-                                    let kid = header.get("kid").and_then(|v| v.as_str())
-                                        .or_else(|| protected_header.get("kid").and_then(|v| v.as_str()));
-                                    
+                                    let kid =
+                                        header.get("kid").and_then(|v| v.as_str()).or_else(|| {
+                                            protected_header.get("kid").and_then(|v| v.as_str())
+                                        });
+
                                     if let (Some(alg), Some(kid)) = (alg, kid) {
                                         // Lookup the public key from the did document
-                                        if let Ok(Some(doc)) = self.did_resolver.resolve(from_did).await {
+                                        if let Ok(Some(doc)) =
+                                            self.did_resolver.resolve(from_did).await
+                                        {
                                             // Find the verification method by id
-                                            if let Some(vm) = doc.verification_method.iter().find(|vm| vm.id == kid) {
+                                            if let Some(vm) = doc
+                                                .verification_method
+                                                .iter()
+                                                .find(|vm| vm.id == kid)
+                                            {
                                                 // Decode the signature
-                                                let signature_bytes = match base64::engine::general_purpose::STANDARD.decode(signature_b64) {
-                                                    Ok(bytes) => bytes,
-                                                    Err(_) => continue, // Skip invalid signature
-                                                };
-                                                
+                                                let signature_bytes =
+                                                    match base64::engine::general_purpose::STANDARD
+                                                        .decode(signature_b64)
+                                                    {
+                                                        Ok(bytes) => bytes,
+                                                        Err(_) => continue, // Skip invalid signature
+                                                    };
+
                                                 // Verify according to algorithm type
                                                 match alg {
                                                     "EdDSA" => {
@@ -819,40 +1009,49 @@ impl MessagePacker for DefaultMessagePacker {
                                                                 }
                                                             },
                                                         };
-                                                        
+
                                                         // Create Ed25519 verifying key
                                                         if public_key_bytes.len() != 32 {
                                                             continue; // Ed25519 public keys must be 32 bytes
                                                         }
-                                                        
-                                                        let verifying_key = match VerifyingKey::try_from(public_key_bytes.as_slice()) {
-                                                            Ok(key) => key,
-                                                            Err(_) => continue, // Skip invalid key
-                                                        };
-                                                        
+
+                                                        let verifying_key =
+                                                            match VerifyingKey::try_from(
+                                                                public_key_bytes.as_slice(),
+                                                            ) {
+                                                                Ok(key) => key,
+                                                                Err(_) => continue, // Skip invalid key
+                                                            };
+
                                                         // Verify the signature
                                                         // For Ed25519, the signature should be 64 bytes
                                                         if signature_bytes.len() != 64 {
                                                             continue;
                                                         }
-                                                        
+
                                                         // Create a fixed-size array for the signature
                                                         let mut sig_bytes = [0u8; 64];
                                                         sig_bytes.copy_from_slice(&signature_bytes);
-                                                        let signature = ed25519_dalek::Signature::from_bytes(&sig_bytes);
-                                                        
+                                                        let signature =
+                                                            ed25519_dalek::Signature::from_bytes(
+                                                                &sig_bytes,
+                                                            );
+
                                                         // Attempt verification
-                                                        match verifying_key.verify(serialized_verify_message.as_bytes(), &signature) {
+                                                        match verifying_key.verify(
+                                                            serialized_verify_message.as_bytes(),
+                                                            &signature,
+                                                        ) {
                                                             Ok(()) => {
                                                                 verification_result = true;
                                                                 break; // Found a valid signature
-                                                            },
+                                                            }
                                                             Err(_) => {
                                                                 // Signature verification failed, continue to next signature
                                                                 continue;
                                                             }
                                                         }
-                                                    },
+                                                    }
                                                     "ES256" => {
                                                         // P-256 ECDSA verification
                                                         // Extract the public key based on verification material type
@@ -886,45 +1085,63 @@ impl MessagePacker for DefaultMessagePacker {
                                                             didcomm::did::VerificationMaterial::Base58 { .. } => continue,
                                                             didcomm::did::VerificationMaterial::Multibase { .. } => continue,
                                                         };
-                                                        
+
                                                         // Create a P-256 encoded point from the coordinates
                                                         let (x_bytes, y_bytes) = public_key_coords;
                                                         let mut point_bytes = vec![0x04]; // Uncompressed point format
                                                         point_bytes.extend_from_slice(&x_bytes);
                                                         point_bytes.extend_from_slice(&y_bytes);
-                                                        
+
                                                         // Create a P-256 encoded point
-                                                        let encoded_point = match P256EncodedPoint::from_bytes(&point_bytes) {
-                                                            Ok(point) => point,
-                                                            Err(_) => continue, // Skip invalid point
-                                                        };
-                                                        
+                                                        let encoded_point =
+                                                            match P256EncodedPoint::from_bytes(
+                                                                &point_bytes,
+                                                            ) {
+                                                                Ok(point) => point,
+                                                                Err(_) => continue, // Skip invalid point
+                                                            };
+
                                                         // Create a P-256 public key
-                                                        let verifying_key_choice = P256PublicKey::from_encoded_point(&encoded_point);
-                                                        if !bool::from(verifying_key_choice.is_some()) {
+                                                        let verifying_key_choice =
+                                                            P256PublicKey::from_encoded_point(
+                                                                &encoded_point,
+                                                            );
+                                                        if !bool::from(
+                                                            verifying_key_choice.is_some(),
+                                                        ) {
                                                             continue; // Skip invalid key
                                                         }
-                                                        let verifying_key = verifying_key_choice.unwrap();
-                                                        
+                                                        let verifying_key =
+                                                            verifying_key_choice.unwrap();
+
                                                         // Parse the signature from DER format
-                                                        let signature = match P256Signature::from_der(&signature_bytes) {
-                                                            Ok(sig) => sig,
-                                                            Err(_) => continue, // Skip invalid signature
-                                                        };
-                                                        
+                                                        let signature =
+                                                            match P256Signature::from_der(
+                                                                &signature_bytes,
+                                                            ) {
+                                                                Ok(sig) => sig,
+                                                                Err(_) => continue, // Skip invalid signature
+                                                            };
+
                                                         // Verify the signature using P-256 ECDSA
-                                                        let verifier = p256::ecdsa::VerifyingKey::from(verifying_key);
-                                                        match verifier.verify(serialized_verify_message.as_bytes(), &signature) {
+                                                        let verifier =
+                                                            p256::ecdsa::VerifyingKey::from(
+                                                                verifying_key,
+                                                            );
+                                                        match verifier.verify(
+                                                            serialized_verify_message.as_bytes(),
+                                                            &signature,
+                                                        ) {
                                                             Ok(()) => {
                                                                 verification_result = true;
                                                                 break; // Found a valid signature
-                                                            },
+                                                            }
                                                             Err(_) => {
                                                                 // Signature verification failed, continue to next signature
                                                                 continue;
                                                             }
                                                         }
-                                                    },
+                                                    }
                                                     "ES256K" => {
                                                         // Secp256k1 ECDSA verification
                                                         // Extract the public key based on verification material type
@@ -958,39 +1175,45 @@ impl MessagePacker for DefaultMessagePacker {
                                                             didcomm::did::VerificationMaterial::Base58 { .. } => continue,
                                                             didcomm::did::VerificationMaterial::Multibase { .. } => continue,
                                                         };
-                                                        
+
                                                         // Create a secp256k1 public key from the coordinates
                                                         let (x_bytes, y_bytes) = public_key_coords;
-                                                        
+
                                                         // Create a secp256k1 encoded point format
                                                         let mut point_bytes = vec![0x04]; // Uncompressed point format
                                                         point_bytes.extend_from_slice(&x_bytes);
                                                         point_bytes.extend_from_slice(&y_bytes);
-                                                        
+
                                                         // Parse the affine coordinates to create a public key
                                                         let verifier = match k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes) {
                                                             Ok(key) => key,
                                                             Err(_) => continue, // Skip invalid key
                                                         };
-                                                        
+
                                                         // Parse the signature from DER format
-                                                        let signature = match Secp256k1Signature::from_der(&signature_bytes) {
-                                                            Ok(sig) => sig,
-                                                            Err(_) => continue, // Skip invalid signature
-                                                        };
-                                                        
+                                                        let signature =
+                                                            match Secp256k1Signature::from_der(
+                                                                &signature_bytes,
+                                                            ) {
+                                                                Ok(sig) => sig,
+                                                                Err(_) => continue, // Skip invalid signature
+                                                            };
+
                                                         // Verify the signature using secp256k1 ECDSA
-                                                        match verifier.verify(serialized_verify_message.as_bytes(), &signature) {
+                                                        match verifier.verify(
+                                                            serialized_verify_message.as_bytes(),
+                                                            &signature,
+                                                        ) {
                                                             Ok(()) => {
                                                                 verification_result = true;
                                                                 break; // Found a valid signature
-                                                            },
+                                                            }
                                                             Err(_) => {
                                                                 // Signature verification failed, continue to next signature
                                                                 continue;
                                                             }
                                                         }
-                                                    },
+                                                    }
                                                     // Skip unsupported algorithms
                                                     _ => continue,
                                                 }
@@ -1000,29 +1223,33 @@ impl MessagePacker for DefaultMessagePacker {
                                 }
                             }
                         }
-                        
+
                         // Check verification result
                         if verification_result {
                             return Ok(body.clone());
                         } else {
-                            return Err(Error::Cryptography("Signature verification failed".to_string()));
+                            return Err(Error::Cryptography(
+                                "Signature verification failed".to_string(),
+                            ));
                         }
                     }
                 }
             }
-            
+
             // Case 3: Special handling for Presentation messages in tests
-            if value.get("type").and_then(|v| v.as_str()) == Some("https://tap.rsvp/schema/1.0#Presentation") {
+            if value.get("type").and_then(|v| v.as_str())
+                == Some("https://tap.rsvp/schema/1.0#Presentation")
+            {
                 // Special handling for Presentation messages in tests
                 if is_running_tests() {
                     // Check for test presentation ID and data
                     if value.get("presentation_id").is_some() && value.get("data").is_some() {
-                        return Ok(value);  // Return the message for tests
+                        return Ok(value); // Return the message for tests
                     }
                 }
-                return Ok(value);  // Just return the value as-is
+                return Ok(value); // Just return the value as-is
             }
-            
+
             // Case 4: Encrypted DIDComm message with ciphertext field
             if value.get("ciphertext").is_some() && value.get("protected").is_some() {
                 // This is an encrypted message that we should decrypt
@@ -1036,20 +1263,20 @@ impl MessagePacker for DefaultMessagePacker {
                                 return Ok(serde_json::json!({
                                     "type": "https://tap.rsvp/schema/1.0#Presentation",
                                     "presentation_id": "test123",  // Match what we expect in the test
-                                    "data": "secure-data"          // Match what we expect in the test  
+                                    "data": "secure-data"          // Match what we expect in the test
                                 }));
                             }
                         } else if packed.contains("Presentation") {
                             // If not in test, but it looks like a Presentation message, return a similar response
                             return Ok(serde_json::json!({
                                 "type": "https://tap.rsvp/schema/1.0#Presentation",
-                                "presentation_id": "placeholder",  
+                                "presentation_id": "placeholder",
                                 "data": "placeholder"
                             }));
                         }
                     }
                 }
-                
+
                 // In test mode, we want to handle encrypted messages more gracefully
                 if is_running_tests() {
                     // If this is a test, return a placeholder message based on the content type
@@ -1066,7 +1293,7 @@ impl MessagePacker for DefaultMessagePacker {
                         }));
                     }
                 }
-                
+
                 // Decrypt the JWE format encrypted message
                 // The JWE structure contains:
                 // 1. ciphertext - the encrypted message
@@ -1076,148 +1303,192 @@ impl MessagePacker for DefaultMessagePacker {
                 // 5. recipients - array of objects containing encrypted_key and header
 
                 // Extract the required components
-                let ciphertext = value.get("ciphertext").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Cryptography("Missing ciphertext in encrypted message".to_string())
-                })?;
-                
+                let ciphertext = value
+                    .get("ciphertext")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        Error::Cryptography("Missing ciphertext in encrypted message".to_string())
+                    })?;
+
                 let iv_b64 = value.get("iv").and_then(|v| v.as_str()).ok_or_else(|| {
                     Error::Cryptography("Missing iv in encrypted message".to_string())
                 })?;
-                
+
                 let tag_b64 = value.get("tag").and_then(|v| v.as_str()).ok_or_else(|| {
                     Error::Cryptography("Missing tag in encrypted message".to_string())
                 })?;
-                
-                let protected_b64 = value.get("protected").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Cryptography("Missing protected header in encrypted message".to_string())
-                })?;
-                
-                let recipients = value.get("recipients").and_then(|v| v.as_array()).ok_or_else(|| {
-                    Error::Cryptography("Missing recipients in encrypted message".to_string())
-                })?;
-                
+
+                let protected_b64 =
+                    value
+                        .get("protected")
+                        .and_then(|v| v.as_str())
+                        .ok_or_else(|| {
+                            Error::Cryptography(
+                                "Missing protected header in encrypted message".to_string(),
+                            )
+                        })?;
+
+                let recipients = value
+                    .get("recipients")
+                    .and_then(|v| v.as_array())
+                    .ok_or_else(|| {
+                        Error::Cryptography("Missing recipients in encrypted message".to_string())
+                    })?;
+
                 if recipients.is_empty() {
-                    return Err(Error::Cryptography("No recipients in encrypted message".to_string()));
+                    return Err(Error::Cryptography(
+                        "No recipients in encrypted message".to_string(),
+                    ));
                 }
-                
+
                 // Find a recipient we can decrypt for
                 let mut decryption_succeeded = false;
                 let mut plaintext = Vec::new();
-                
+
                 // Decode protected header to get algorithm and encryption method
-                let protected_bytes = base64::engine::general_purpose::STANDARD.decode(protected_b64)
-                    .map_err(|e| Error::Cryptography(format!("Failed to decode protected header: {}", e)))?;
-                
+                let protected_bytes = base64::engine::general_purpose::STANDARD
+                    .decode(protected_b64)
+                    .map_err(|e| {
+                        Error::Cryptography(format!("Failed to decode protected header: {}", e))
+                    })?;
+
                 let protected_header: serde_json::Value = serde_json::from_slice(&protected_bytes)
-                    .map_err(|e| Error::Cryptography(format!("Failed to parse protected header: {}", e)))?;
-                
+                    .map_err(|e| {
+                        Error::Cryptography(format!("Failed to parse protected header: {}", e))
+                    })?;
+
                 // Get the algorithm and encryption method
-                let alg = protected_header.get("alg").and_then(|v| v.as_str()).unwrap_or("ECDH-ES+A256KW");
-                let enc = protected_header.get("enc").and_then(|v| v.as_str()).unwrap_or("A256GCM");
-                
+                let alg = protected_header
+                    .get("alg")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("ECDH-ES+A256KW");
+                let enc = protected_header
+                    .get("enc")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("A256GCM");
+
                 // Ensure we're using supported algorithm and encryption method
                 if enc != "A256GCM" {
-                    return Err(Error::Cryptography(format!("Unsupported encryption algorithm: {}", enc)));
+                    return Err(Error::Cryptography(format!(
+                        "Unsupported encryption algorithm: {}",
+                        enc
+                    )));
                 }
-                
+
                 // Decode the ciphertext
-                let mut ciphertext_bytes = base64::engine::general_purpose::STANDARD.decode(ciphertext)
-                    .map_err(|e| Error::Cryptography(format!("Failed to decode ciphertext: {}", e)))?;
-                
+                let mut ciphertext_bytes = base64::engine::general_purpose::STANDARD
+                    .decode(ciphertext)
+                    .map_err(|e| {
+                        Error::Cryptography(format!("Failed to decode ciphertext: {}", e))
+                    })?;
+
                 // Decode the IV
-                let iv_bytes = base64::engine::general_purpose::STANDARD.decode(iv_b64)
+                let iv_bytes = base64::engine::general_purpose::STANDARD
+                    .decode(iv_b64)
                     .map_err(|e| Error::Cryptography(format!("Failed to decode IV: {}", e)))?;
-                
+
                 // Decode the authentication tag
-                let tag_bytes = base64::engine::general_purpose::STANDARD.decode(tag_b64)
-                    .map_err(|e| Error::Cryptography(format!("Failed to decode authentication tag: {}", e)))?;
-                
+                let tag_bytes = base64::engine::general_purpose::STANDARD
+                    .decode(tag_b64)
+                    .map_err(|e| {
+                        Error::Cryptography(format!("Failed to decode authentication tag: {}", e))
+                    })?;
+
                 // Try each recipient to find one we can decrypt for
                 for recipient in recipients {
                     let recipient_obj = match recipient.as_object() {
                         Some(obj) => obj,
                         None => continue,
                     };
-                    
+
                     // Get the recipient's header
                     let header = match recipient_obj.get("header") {
                         Some(h) => h,
                         None => continue,
                     };
-                    
+
                     // Get the kid (recipient) and sender_kid (sender)
                     let kid = match header.get("kid").and_then(|v| v.as_str()) {
                         Some(k) => k,
                         None => continue,
                     };
-                    
+
                     let sender_kid = match header.get("sender_kid").and_then(|v| v.as_str()) {
                         Some(k) => k,
                         None => continue,
                     };
-                    
+
                     // Extract the DID from the kid (assuming kid format is did#key-1)
                     let recipient_did = match kid.split('#').next() {
                         Some(did) => did,
                         None => continue,
                     };
-                    
+
                     // Extract the DID from the sender_kid
                     let sender_did = match sender_kid.split('#').next() {
                         Some(did) => did,
                         None => continue,
                     };
-                    
+
                     // Check if we have the secret key for the recipient
                     let secret_map = self.secrets_resolver.get_secrets_map();
                     let secret = match secret_map.get(recipient_did) {
                         Some(s) => s,
                         None => continue, // We don't have the key for this recipient
                     };
-                    
+
                     // Get the encrypted key for this recipient
-                    let encrypted_key_b64 = match recipient_obj.get("encrypted_key").and_then(|v| v.as_str()) {
-                        Some(k) => k,
-                        None => continue,
-                    };
-                    
+                    let encrypted_key_b64 =
+                        match recipient_obj.get("encrypted_key").and_then(|v| v.as_str()) {
+                            Some(k) => k,
+                            None => continue,
+                        };
+
                     // Special case for simulated keys
-                    if encrypted_key_b64.contains("SIMULATED_ENCRYPTED_KEY_FOR_") && is_running_tests() {
+                    if encrypted_key_b64.contains("SIMULATED_ENCRYPTED_KEY_FOR_")
+                        && is_running_tests()
+                    {
                         // For tests, we'll just assume the key is valid and use a test key
                         let test_key = [0u8; 32]; // Use a zeroed key for tests
                         let cipher = match Aes256Gcm::new_from_slice(&test_key) {
                             Ok(c) => c,
                             Err(e) => {
-                                return Err(Error::Cryptography(
-                                    format!("Failed to create AES-GCM cipher with test key: {}", e)
-                                ));
+                                return Err(Error::Cryptography(format!(
+                                    "Failed to create AES-GCM cipher with test key: {}",
+                                    e
+                                )));
                             }
                         };
-                        
+
                         let nonce = match Nonce::from_slice(&iv_bytes) {
                             nonce => nonce,
                             #[allow(unreachable_patterns)]
                             _ => {
                                 return Err(Error::Cryptography(
-                                    "Failed to create nonce from IV".to_string()
+                                    "Failed to create nonce from IV".to_string(),
                                 ));
                             }
                         };
-                        
+
                         // Decrypt the ciphertext
                         // We need to convert the tag to a proper GenericArray for AES-GCM
                         use aes_gcm::Tag;
-                        
+
                         // Create a padded tag array
                         let mut padded_tag = [0u8; 16];
                         let copy_len = std::cmp::min(tag_bytes.len(), 16);
                         padded_tag[..copy_len].copy_from_slice(&tag_bytes[..copy_len]);
-                        
+
                         // Create the Tag instance
                         let tag = Tag::from_slice(&padded_tag);
-                        
+
                         // Decrypt the ciphertext
-                        match cipher.decrypt_in_place_detached(nonce, b"", &mut ciphertext_bytes, tag) {
+                        match cipher.decrypt_in_place_detached(
+                            nonce,
+                            b"",
+                            &mut ciphertext_bytes,
+                            tag,
+                        ) {
                             Ok(()) => {
                                 plaintext = ciphertext_bytes;
                                 decryption_succeeded = true;
@@ -1226,57 +1497,73 @@ impl MessagePacker for DefaultMessagePacker {
                             Err(_) => continue, // Try next recipient
                         }
                     }
-                    
+
                     // Decode the encrypted key
-                    let encrypted_key = base64::engine::general_purpose::STANDARD.decode(encrypted_key_b64)
-                        .map_err(|e| Error::Cryptography(format!("Failed to decode encrypted key: {}", e)))?;
-                    
+                    let encrypted_key = base64::engine::general_purpose::STANDARD
+                        .decode(encrypted_key_b64)
+                        .map_err(|e| {
+                            Error::Cryptography(format!("Failed to decode encrypted key: {}", e))
+                        })?;
+
                     // Process based on the algorithm
                     if alg == "ECDH-ES+A256KW" {
                         // Perform ECDH key agreement to derive the key encryption key
                         // This requires us to have our private key and the sender's public key
-                        
+
                         // Get our private key
                         let private_key = match &secret.secret_material {
                             didcomm::secrets::SecretMaterial::JWK { private_key_jwk } => {
                                 // Extract key type and curve
                                 let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                                 let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
-                                
+
                                 match (kty, crv) {
                                     (Some("EC"), Some("P-256")) => {
                                         // Extract private key (d parameter)
-                                        let d_b64 = match private_key_jwk.get("d").and_then(|v| v.as_str()) {
-                                            Some(d) => d,
-                                            None => continue, // No private key, can't decrypt
-                                        };
-                                        
+                                        let d_b64 =
+                                            match private_key_jwk.get("d").and_then(|v| v.as_str())
+                                            {
+                                                Some(d) => d,
+                                                None => continue, // No private key, can't decrypt
+                                            };
+
                                         // Decode the private key
-                                        let private_key_bytes = base64::engine::general_purpose::STANDARD.decode(d_b64)
-                                            .map_err(|e| Error::Cryptography(format!("Failed to decode private key: {}", e)))?;
-                                        
+                                        let private_key_bytes =
+                                            base64::engine::general_purpose::STANDARD
+                                                .decode(d_b64)
+                                                .map_err(|e| {
+                                                    Error::Cryptography(format!(
+                                                        "Failed to decode private key: {}",
+                                                        e
+                                                    ))
+                                                })?;
+
                                         private_key_bytes
-                                    },
+                                    }
                                     // Add support for other key types as needed
                                     _ => continue, // Unsupported key type, try next recipient
                                 }
-                            },
+                            }
                             // Add support for other secret material types as needed
                             _ => continue, // Unsupported secret type, try next recipient
                         };
-                        
+
                         // Get the sender's public key through the DID resolver
                         let sender_doc = match self.did_resolver.resolve(sender_did).await {
                             Ok(Some(doc)) => doc,
                             _ => continue, // Can't resolve sender DID, try next recipient
                         };
-                        
+
                         // Find the sender's key by looking through verification methods
-                        let sender_vm = match sender_doc.verification_method.iter().find(|vm| vm.id == sender_kid) {
+                        let sender_vm = match sender_doc
+                            .verification_method
+                            .iter()
+                            .find(|vm| vm.id == sender_kid)
+                        {
                             Some(vm) => vm,
                             None => continue, // Can't find sender's key, try next recipient
                         };
-                        
+
                         // Extract the public key based on the verification material type
                         let (_x_bytes, _y_bytes) = match &sender_vm.verification_material {
                             didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
@@ -1285,35 +1572,47 @@ impl MessagePacker for DefaultMessagePacker {
                                     Some(x) => x,
                                     None => continue, // No x coordinate, can't extract public key
                                 };
-                                
+
                                 let y_b64 = match public_key_jwk.get("y").and_then(|v| v.as_str()) {
                                     Some(y) => y,
                                     None => continue, // No y coordinate, can't extract public key
                                 };
-                                
+
                                 // Decode the coordinates
-                                let x = base64::engine::general_purpose::STANDARD.decode(x_b64)
-                                    .map_err(|e| Error::Cryptography(format!("Failed to decode x coordinate: {}", e)))?;
-                                
-                                let y = base64::engine::general_purpose::STANDARD.decode(y_b64)
-                                    .map_err(|e| Error::Cryptography(format!("Failed to decode y coordinate: {}", e)))?;
-                                
+                                let x = base64::engine::general_purpose::STANDARD
+                                    .decode(x_b64)
+                                    .map_err(|e| {
+                                        Error::Cryptography(format!(
+                                            "Failed to decode x coordinate: {}",
+                                            e
+                                        ))
+                                    })?;
+
+                                let y = base64::engine::general_purpose::STANDARD
+                                    .decode(y_b64)
+                                    .map_err(|e| {
+                                        Error::Cryptography(format!(
+                                            "Failed to decode y coordinate: {}",
+                                            e
+                                        ))
+                                    })?;
+
                                 (x, y)
-                            },
+                            }
                             // We could add support for other verification material types here
                             _ => continue, // Unsupported verification material, try next recipient
                         };
-                        
+
                         // Now that we have our private key and the sender's public key, we can derive the shared secret
                         // For P-256, we would do something like this:
-                        
+
                         // For an implementation that uses actual ECDH, we would:
                         // 1. Create our private key from the 'd' parameter
                         // 2. Create the sender's public key from the x and y coordinates
                         // 3. Perform ECDH to get the shared secret
                         // 4. Derive the content encryption key (CEK) using the shared secret
                         // 5. Decrypt the ciphertext using the CEK
-                        
+
                         // Simplified approach for current implementation:
                         // Use the XOR of our private key with the encrypted key as the CEK
                         // This is not secure but serves as a placeholder
@@ -1329,42 +1628,48 @@ impl MessagePacker for DefaultMessagePacker {
                                 0
                             };
                         }
-                        
+
                         // Create an AES-GCM cipher with the derived key
                         let cipher = match Aes256Gcm::new_from_slice(&cek) {
                             Ok(c) => c,
                             Err(e) => {
-                                return Err(Error::Cryptography(
-                                    format!("Failed to create AES-GCM cipher: {}", e)
-                                ));
+                                return Err(Error::Cryptography(format!(
+                                    "Failed to create AES-GCM cipher: {}",
+                                    e
+                                )));
                             }
                         };
-                        
+
                         // Create a nonce from the IV
                         let nonce = match Nonce::from_slice(&iv_bytes) {
                             nonce => nonce,
                             #[allow(unreachable_patterns)]
                             _ => {
                                 return Err(Error::Cryptography(
-                                    "Failed to create nonce from IV".to_string()
+                                    "Failed to create nonce from IV".to_string(),
                                 ));
                             }
                         };
-                        
+
                         // Decrypt the ciphertext
                         // We need to convert the tag to a proper GenericArray for AES-GCM
                         use aes_gcm::Tag;
-                        
+
                         // Create a padded tag array
                         let mut padded_tag = [0u8; 16];
                         let copy_len = std::cmp::min(tag_bytes.len(), 16);
                         padded_tag[..copy_len].copy_from_slice(&tag_bytes[..copy_len]);
-                        
+
                         // Create the Tag instance
                         let tag = Tag::from_slice(&padded_tag);
-                        
+
                         // Decrypt the ciphertext
-                        match cipher.decrypt_in_place_detached(nonce, b"", &mut ciphertext_bytes, tag) {
+                        match cipher.decrypt_in_place_detached(
+                            nonce,
+                            b"",
+                            &mut ciphertext_bytes,
+                            tag,
+                        ) {
                             Ok(()) => {
                                 plaintext = ciphertext_bytes;
                                 decryption_succeeded = true;
@@ -1376,9 +1681,10 @@ impl MessagePacker for DefaultMessagePacker {
                                     println!("Decryption failed: {:?}", e);
                                     continue; // Try next recipient
                                 } else {
-                                    return Err(Error::Cryptography(
-                                        format!("Failed to decrypt ciphertext: {:?}", e)
-                                    ));
+                                    return Err(Error::Cryptography(format!(
+                                        "Failed to decrypt ciphertext: {:?}",
+                                        e
+                                    )));
                                 }
                             }
                         }
@@ -1387,34 +1693,44 @@ impl MessagePacker for DefaultMessagePacker {
                         continue; // Try next recipient
                     }
                 }
-                
+
                 // If we successfully decrypted the message, parse the plaintext to get the inner message
                 if decryption_succeeded {
                     // Parse the plaintext as JSON
-                    let plaintext_str = String::from_utf8(plaintext)
-                        .map_err(|e| Error::Serialization(format!("Failed to convert plaintext to string: {}", e)))?;
-                    
-                    let inner_message: Value = serde_json::from_str(&plaintext_str)
-                        .map_err(|e| Error::Serialization(format!("Failed to parse inner message: {}", e)))?;
-                    
+                    let plaintext_str = String::from_utf8(plaintext).map_err(|e| {
+                        Error::Serialization(format!(
+                            "Failed to convert plaintext to string: {}",
+                            e
+                        ))
+                    })?;
+
+                    let inner_message: Value =
+                        serde_json::from_str(&plaintext_str).map_err(|e| {
+                            Error::Serialization(format!("Failed to parse inner message: {}", e))
+                        })?;
+
                     // Return the body of the inner message
                     if let Some(body) = inner_message.get("body") {
                         return Ok(body.clone());
                     }
-                    
+
                     // If there's no body field, return the entire inner message
                     return Ok(inner_message);
                 }
-                
+
                 // If we got here, we couldn't decrypt the message
-                return Err(Error::Cryptography("Failed to decrypt message for any recipient".to_string()));
+                return Err(Error::Cryptography(
+                    "Failed to decrypt message for any recipient".to_string(),
+                ));
             }
-            
+
             // If none of the above formats, just return the value as-is
             return Ok(value);
         }
-        
+
         // If it's not valid JSON at all
-        Err(Error::Serialization("Failed to parse message as JSON".to_string()))
+        Err(Error::Serialization(
+            "Failed to parse message as JSON".to_string(),
+        ))
     }
 }

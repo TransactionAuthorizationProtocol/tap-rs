@@ -38,38 +38,40 @@ pub async fn handle_health_check(
     event_bus: Arc<EventBus>,
 ) -> std::result::Result<impl Reply, Infallible> {
     info!("Health check request received");
-    
+
     // Start timing the request
     let start_time = Instant::now();
 
     // Log request received event
-    event_bus.publish_request_received(
-        "GET".to_string(),
-        "/health".to_string(),
-        None, // We don't have client IP in this simplified example
-    ).await;
+    event_bus
+        .publish_request_received(
+            "GET".to_string(),
+            "/health".to_string(),
+            None, // We don't have client IP in this simplified example
+        )
+        .await;
 
     // Build response
     let response = HealthResponse {
         status: "ok".to_string(),
         version: env!("CARGO_PKG_VERSION").to_string(),
     };
-    
+
     // Convert response to JSON
     let json_response = json(&response);
-    
+
     // Calculate response size (approximate)
-    let response_size = serde_json::to_string(&response).map(|s| s.len()).unwrap_or(0);
-    
+    let response_size = serde_json::to_string(&response)
+        .map(|s| s.len())
+        .unwrap_or(0);
+
     // Calculate request duration
     let duration_ms = start_time.elapsed().as_millis() as u64;
-    
+
     // Log response sent event
-    event_bus.publish_response_sent(
-        StatusCode::OK,
-        response_size,
-        duration_ms
-    ).await;
+    event_bus
+        .publish_response_sent(StatusCode::OK, response_size, duration_ms)
+        .await;
 
     Ok(json_response)
 }
@@ -89,39 +91,42 @@ pub async fn handle_didcomm(
 ) -> std::result::Result<impl Reply, Infallible> {
     // Start timing the request
     let start_time = Instant::now();
-    
+
     // Log request received event
-    event_bus.publish_request_received(
-        "POST".to_string(),
-        "/didcomm".to_string(),
-        None, // Client IP not available in this context
-    ).await;
-    
+    event_bus
+        .publish_request_received(
+            "POST".to_string(),
+            "/didcomm".to_string(),
+            None, // Client IP not available in this context
+        )
+        .await;
+
     // Convert bytes to string
     let message_str = match std::str::from_utf8(&body) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to parse request body as UTF-8: {}", e);
-            
+
             // Log message error event
-            event_bus.publish_message_error(
-                "parse_error".to_string(),
-                format!("Failed to parse request body as UTF-8: {}", e),
-                None,
-            ).await;
-            
+            event_bus
+                .publish_message_error(
+                    "parse_error".to_string(),
+                    format!("Failed to parse request body as UTF-8: {}", e),
+                    None,
+                )
+                .await;
+
             // Calculate response size and duration
-            let response = json_error_response(StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body");
+            let response =
+                json_error_response(StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body");
             let response_size = 200; // Approximate size
             let duration_ms = start_time.elapsed().as_millis() as u64;
-            
+
             // Log response sent event
-            event_bus.publish_response_sent(
-                StatusCode::BAD_REQUEST,
-                response_size,
-                duration_ms
-            ).await;
-            
+            event_bus
+                .publish_response_sent(StatusCode::BAD_REQUEST, response_size, duration_ms)
+                .await;
+
             return Ok(response);
         }
     };
@@ -132,55 +137,56 @@ pub async fn handle_didcomm(
         Ok(msg) => msg,
         Err(e) => {
             error!("Failed to parse DIDComm message: {}", e);
-            
+
             // Log message error event
-            event_bus.publish_message_error(
-                "parse_error".to_string(),
-                format!("Failed to parse DIDComm message: {}", e),
-                None,
-            ).await;
-            
+            event_bus
+                .publish_message_error(
+                    "parse_error".to_string(),
+                    format!("Failed to parse DIDComm message: {}", e),
+                    None,
+                )
+                .await;
+
             // Calculate response size and duration
-            let response = json_error_response(StatusCode::BAD_REQUEST, "Invalid DIDComm message format");
+            let response =
+                json_error_response(StatusCode::BAD_REQUEST, "Invalid DIDComm message format");
             let response_size = 200; // Approximate size
             let duration_ms = start_time.elapsed().as_millis() as u64;
-            
+
             // Log response sent event
-            event_bus.publish_response_sent(
-                StatusCode::BAD_REQUEST,
-                response_size,
-                duration_ms
-            ).await;
-            
+            event_bus
+                .publish_response_sent(StatusCode::BAD_REQUEST, response_size, duration_ms)
+                .await;
+
             return Ok(response);
         }
     };
-    
+
     // Log message received event
-    event_bus.publish_message_received(
-        didcomm_message.id.clone(),
-        didcomm_message.typ.clone(),
-        didcomm_message.from.clone(),
-        didcomm_message.to.clone().map(|to| to.join(", ")),
-    ).await;
+    event_bus
+        .publish_message_received(
+            didcomm_message.id.clone(),
+            didcomm_message.typ.clone(),
+            didcomm_message.from.clone(),
+            didcomm_message.to.clone().map(|to| to.join(", ")),
+        )
+        .await;
 
     // Process the message using the TAP Node
     match process_tap_message(didcomm_message, node).await {
         Ok(_) => {
             info!("DIDComm message processed successfully");
-            
+
             // Calculate response size and duration
             let response = json_success_response();
             let response_size = 100; // Approximate size
             let duration_ms = start_time.elapsed().as_millis() as u64;
-            
+
             // Log response sent event
-            event_bus.publish_response_sent(
-                StatusCode::OK,
-                response_size,
-                duration_ms
-            ).await;
-            
+            event_bus
+                .publish_response_sent(StatusCode::OK, response_size, duration_ms)
+                .await;
+
             Ok(response)
         }
         Err(e) => {
@@ -192,7 +198,7 @@ pub async fn handle_didcomm(
                     error!("Critical error processing message: {}", e)
                 }
             }
-            
+
             // Log message error event
             let error_type = match &e {
                 Error::DIDComm(_) => "didcomm_error",
@@ -207,26 +213,26 @@ pub async fn handle_didcomm(
                 Error::Tls(_) => "tls_error",
                 Error::Unknown(_) => "unknown_error",
             };
-            
-            event_bus.publish_message_error(
-                error_type.to_string(),
-                e.to_string(),
-                None, // We don't have message ID in this context
-            ).await;
+
+            event_bus
+                .publish_message_error(
+                    error_type.to_string(),
+                    e.to_string(),
+                    None, // We don't have message ID in this context
+                )
+                .await;
 
             // Create error response
             let response = e.to_response();
-            
+
             // Calculate response size and duration (approximate)
             let response_size = 200; // Approximate size
             let duration_ms = start_time.elapsed().as_millis() as u64;
-            
+
             // Log response sent event
-            event_bus.publish_response_sent(
-                e.status_code(),
-                response_size,
-                duration_ms
-            ).await;
+            event_bus
+                .publish_response_sent(e.status_code(), response_size, duration_ms)
+                .await;
 
             // Return the structured error response
             Ok(response)
@@ -281,34 +287,43 @@ async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()>
     error!("RECEIVED DIDCOMM MESSAGE BEFORE PROCESSING:\n- id: {}\n- typ: {}\n- type_: {}\n- from: {:?}\n- to: {:?}\n- body: {}\n", 
            message.id, message.typ, message.type_, message.from, message.to, 
            serde_json::to_string_pretty(&message.body).unwrap_or_default());
-    
+
     // Validate the message conforms to TAP protocol
     // Check both type_ and typ fields for TAP protocol identifiers
     let valid_types = ["tap.rsvp", "https://tap.rsvp"];
-    
+
     // Check if type_ field contains TAP protocol identifier
     let is_valid_type = valid_types
         .iter()
         .any(|valid_type| message.type_.contains(valid_type));
-        
+
     if !is_valid_type {
-        error!("TYPE FIELD VALIDATION FAILED: message.type_ = '{}'", message.type_);
+        error!(
+            "TYPE FIELD VALIDATION FAILED: message.type_ = '{}'",
+            message.type_
+        );
     }
-    
-    // Also check if typ field contains TAP protocol identifier 
+
+    // Also check if typ field contains TAP protocol identifier
     let is_valid_typ = valid_types
         .iter()
         .any(|valid_type| message.typ.contains(valid_type));
-        
+
     if !is_valid_typ {
-        error!("TYP FIELD VALIDATION FAILED: message.typ = '{}'", message.typ);
+        error!(
+            "TYP FIELD VALIDATION FAILED: message.typ = '{}'",
+            message.typ
+        );
     }
-    
+
     // If either field is valid, allow the message through
     let is_valid = is_valid_type || is_valid_typ;
 
     if !is_valid {
-        error!("MESSAGE TYPE VALIDATION FAILED: typ={}, type_={}", message.typ, message.type_);
+        error!(
+            "MESSAGE TYPE VALIDATION FAILED: typ={}, type_={}",
+            message.typ, message.type_
+        );
         return Err(Error::Validation(format!(
             "Unsupported message type: {}, expected TAP protocol message",
             message.typ
@@ -396,7 +411,7 @@ mod tests {
     async fn test_health_check() {
         // Create a dummy event bus
         let event_bus = Arc::new(crate::event::EventBus::new());
-        
+
         // Call the health check handler
         let response = handle_health_check(event_bus).await.unwrap();
 
@@ -415,13 +430,15 @@ mod tests {
     async fn test_handle_invalid_didcomm() {
         // Create a TAP Node for testing
         let node = Arc::new(TapNode::new(NodeConfig::default()));
-        
+
         // Create a dummy event bus
         let event_bus = Arc::new(crate::event::EventBus::new());
 
         // Test with invalid UTF-8 data
         let invalid_bytes = Bytes::from(vec![0xFF, 0xFF]);
-        let response = handle_didcomm(invalid_bytes, node.clone(), event_bus).await.unwrap();
+        let response = handle_didcomm(invalid_bytes, node.clone(), event_bus)
+            .await
+            .unwrap();
 
         // Convert the response to bytes and parse as JSON
         let response_bytes = to_bytes(response.into_response().into_body())

@@ -233,27 +233,27 @@ async fn test_all_event_types() {
     event_bus
         .publish_message_received(test_message.clone())
         .await;
-    
+
     event_bus
         .publish_message_sent(
             test_message.clone(),
             "did:example:sender".to_string(),
-            "did:example:receiver".to_string()
+            "did:example:receiver".to_string(),
         )
         .await;
-    
+
     event_bus
         .publish_agent_registered("did:example:agent1".to_string())
         .await;
-    
+
     event_bus
         .publish_agent_unregistered("did:example:agent2".to_string())
         .await;
-    
+
     event_bus
         .publish_did_resolved("did:example:agent3".to_string(), true)
         .await;
-    
+
     event_bus
         .publish_agent_message("did:example:agent4".to_string(), vec![1, 2, 3, 4])
         .await;
@@ -264,41 +264,41 @@ async fn test_all_event_types() {
     // Verify all events were logged
     let logs = log_messages_clone.lock().await;
     assert_eq!(logs.len(), 6); // We published 6 different events
-    
+
     // Parse each log entry to verify structured logging works for all event types
     for log in logs.iter() {
         // Each log should be valid JSON
         let parsed: Value = serde_json::from_str(log).unwrap();
-        
+
         // Verify common structure
         assert!(parsed["timestamp"].is_string());
         assert!(parsed["event_type"].is_string());
         assert!(parsed["data"].is_object());
-        
+
         // Check each event type
         match parsed["event_type"].as_str().unwrap() {
             "message_received" => {
                 assert!(parsed["data"]["message"].is_object());
-            },
+            }
             "message_sent" => {
                 assert!(parsed["data"]["message"].is_object());
                 assert_eq!(parsed["data"]["from"], "did:example:sender");
                 assert_eq!(parsed["data"]["to"], "did:example:receiver");
-            },
+            }
             "agent_registered" => {
                 assert_eq!(parsed["data"]["did"], "did:example:agent1");
-            },
+            }
             "agent_unregistered" => {
                 assert_eq!(parsed["data"]["did"], "did:example:agent2");
-            },
+            }
             "did_resolved" => {
                 assert_eq!(parsed["data"]["did"], "did:example:agent3");
                 assert_eq!(parsed["data"]["success"], true);
-            },
+            }
             "agent_message" => {
                 assert_eq!(parsed["data"]["did"], "did:example:agent4");
                 assert_eq!(parsed["data"]["message_length"], 4);
-            },
+            }
             _ => panic!("Unknown event type: {}", parsed["event_type"]),
         }
     }

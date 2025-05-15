@@ -66,7 +66,9 @@ async fn test_server_events() {
 
     // Add our test subscriber
     let events = Arc::new(Mutex::new(Vec::new()));
-    let subscriber = TestSubscriber { events: events.clone() };
+    let subscriber = TestSubscriber {
+        events: events.clone(),
+    };
     server.event_bus().subscribe(subscriber);
 
     // Start the server
@@ -83,21 +85,21 @@ async fn test_server_events() {
 
     // Verify the events were captured
     let captured_events = events.lock().await;
-    
+
     // We should have at least a server_started and server_stopped event
     assert!(captured_events.len() >= 2);
-    
+
     // Verify first event is server_started
     match &captured_events[0] {
         HttpEvent::ServerStarted { address } => {
             assert!(address.starts_with("127.0.0.1:"));
-        },
+        }
         _ => panic!("First event should be ServerStarted"),
     }
-    
+
     // Verify last event is server_stopped
     match &captured_events[captured_events.len() - 1] {
-        HttpEvent::ServerStopped => {},
+        HttpEvent::ServerStopped => {}
         _ => panic!("Last event should be ServerStopped"),
     }
 }
@@ -146,15 +148,15 @@ async fn test_json_event_logging() {
 
     // Verify the log file contents
     let log_content = fs::read_to_string(&log_path_str).unwrap();
-    
+
     // There should be at least one line in the log
     let log_lines: Vec<&str> = log_content.trim().split('\n').collect();
     assert!(!log_lines.is_empty());
-    
+
     // Verify each line is valid JSON
     for line in log_lines {
         let json: Value = serde_json::from_str(line).unwrap();
-        
+
         // Verify the JSON structure
         assert!(json["timestamp"].is_string());
         assert!(json["event_type"].is_string());

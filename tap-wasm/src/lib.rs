@@ -1,6 +1,7 @@
 use base64::Engine;
 use didcomm::secrets::{SecretMaterial, SecretType};
 use didcomm::Message as DIDCommMessage;
+use ed25519_dalek::{self, Signer, SigningKey, VerifyingKey};
 use js_sys::{Array, Object, Promise, Reflect};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,7 +13,6 @@ use tap_agent::key_manager::KeyManager;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
-use ed25519_dalek::{self, Signer, SigningKey, VerifyingKey};
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
 #[cfg(feature = "wee_alloc")]
@@ -26,7 +26,6 @@ pub fn start() -> Result<(), JsValue> {
     console_error_panic_hook::set_once();
     Ok(())
 }
-
 
 /// The type of TAP Messages following the TAP specification
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -120,7 +119,9 @@ impl From<&str> for MessageType {
             "https://tap.rsvp/schema/1.0#UpdateParty" => MessageType::UpdateParty,
             "https://tap.rsvp/schema/1.0#ConfirmRelationship" => MessageType::ConfirmRelationship,
             "https://tap.rsvp/schema/1.0#Connect" => MessageType::Connect,
-            "https://tap.rsvp/schema/1.0#AuthorizationRequired" => MessageType::AuthorizationRequired,
+            "https://tap.rsvp/schema/1.0#AuthorizationRequired" => {
+                MessageType::AuthorizationRequired
+            }
             "https://tap.rsvp/schema/1.0#Complete" => MessageType::Complete,
             "https://tap.rsvp/schema/1.0#Error" => MessageType::Error,
             _ => MessageType::Unknown,
@@ -141,19 +142,19 @@ pub struct Participant {
     // Fields remain the same as existing implementation
     #[serde(rename = "@id")]
     pub id: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none", rename = "leiCode")]
     pub lei_code: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name_hash: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub for_: Option<String>,
 }
@@ -163,33 +164,33 @@ pub struct Participant {
 pub struct Transfer {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub asset: String,
-    
+
     pub originator: Participant,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub beneficiary: Option<Participant>,
-    
+
     pub amount: String,
-    
+
     pub agents: Vec<Participant>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none", rename = "settlementId")]
     pub settlement_id: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub purpose: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none", rename = "categoryPurpose")]
     pub category_purpose: Option<String>,
-    
+
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -198,34 +199,34 @@ pub struct Transfer {
 pub struct Payment {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
-    
+
     pub amount: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub supported_assets: Option<Vec<String>>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub invoice: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
-    
+
     pub merchant: Participant,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub customer: Option<Participant>,
-    
+
     pub agents: Vec<Participant>,
-    
+
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -234,16 +235,16 @@ pub struct Payment {
 pub struct Authorize {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settlement_address: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
 }
@@ -252,10 +253,10 @@ pub struct Authorize {
 pub struct Reject {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub reason: String,
 }
 
@@ -263,12 +264,12 @@ pub struct Reject {
 pub struct Settle {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub settlement_id: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
 }
@@ -277,10 +278,10 @@ pub struct Settle {
 pub struct Cancel {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
@@ -289,12 +290,12 @@ pub struct Cancel {
 pub struct Revert {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub settlement_address: String,
-    
+
     pub reason: String,
 }
 
@@ -302,17 +303,17 @@ pub struct Revert {
 pub struct Connect {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent: Option<Participant>,
-    
+
     pub for_: String,
-    
+
     pub constraints: serde_json::Value,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
 }
@@ -321,12 +322,12 @@ pub struct Connect {
 pub struct AuthorizationRequired {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub authorization_url: String,
-    
+
     pub expires: String,
 }
 
@@ -334,12 +335,12 @@ pub struct AuthorizationRequired {
 pub struct Complete {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub settlement_address: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
 }
@@ -348,10 +349,10 @@ pub struct Complete {
 pub struct UpdateAgent {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub agent: Participant,
 }
 
@@ -359,10 +360,10 @@ pub struct UpdateAgent {
 pub struct UpdateParty {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub party: Participant,
 }
 
@@ -370,10 +371,10 @@ pub struct UpdateParty {
 pub struct AddAgents {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub agents: Vec<Participant>,
 }
 
@@ -381,12 +382,12 @@ pub struct AddAgents {
 pub struct ReplaceAgent {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub original: String,
-    
+
     pub replacement: Participant,
 }
 
@@ -394,10 +395,10 @@ pub struct ReplaceAgent {
 pub struct RemoveAgent {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub agent: String,
 }
 
@@ -405,16 +406,16 @@ pub struct RemoveAgent {
 pub struct ConfirmRelationship {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     #[serde(rename = "@id")]
     pub id: String,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-    
+
     #[serde(skip_serializing_if = "Option::is_none")]
     pub for_: Option<String>,
 }
@@ -423,10 +424,10 @@ pub struct ConfirmRelationship {
 pub struct UpdatePolicies {
     #[serde(rename = "@context")]
     pub context: String,
-    
+
     #[serde(rename = "@type")]
     pub type_: String,
-    
+
     pub policies: Vec<serde_json::Value>,
 }
 
@@ -503,10 +504,8 @@ impl Message {
     pub fn set_message_type(&mut self, message_type: String) {
         self.message_type = message_type.clone();
         // Update the DIDComm message type as well
-        self.didcomm_message.type_ = format!(
-            "https://tap.rsvp/schema/{}#{}",
-            self.version, message_type
-        );
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#{}", self.version, message_type);
     }
 
     /// Gets the message version
@@ -518,10 +517,8 @@ impl Message {
     pub fn set_version(&mut self, version: String) {
         self.version = version.clone();
         // Update the DIDComm message type to include the new version
-        self.didcomm_message.type_ = format!(
-            "https://tap.rsvp/schema/{}#{}",
-            version, self.message_type
-        );
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#{}", version, self.message_type);
     }
 
     /// Sets a Transfer message body according to the TAP specification
@@ -531,7 +528,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse transfer data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("transfer".to_string(), transfer_body.clone());
+        self.body_data
+            .insert("transfer".to_string(), transfer_body.clone());
 
         // Set the message type to Transfer and update the didcomm type
         self.message_type = "Transfer".to_string();
@@ -550,7 +548,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse payment data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("payment".to_string(), payment_body.clone());
+        self.body_data
+            .insert("payment".to_string(), payment_body.clone());
 
         // Set the message type to Payment and update the didcomm type
         self.message_type = "Payment".to_string();
@@ -569,7 +568,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse authorize data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("authorize".to_string(), authorize_body.clone());
+        self.body_data
+            .insert("authorize".to_string(), authorize_body.clone());
 
         // Set the message type to Authorize and update the didcomm type
         self.message_type = "Authorize".to_string();
@@ -588,7 +588,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse reject data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("reject".to_string(), reject_body.clone());
+        self.body_data
+            .insert("reject".to_string(), reject_body.clone());
 
         // Set the message type to Reject and update the didcomm type
         self.message_type = "Reject".to_string();
@@ -607,7 +608,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse settle data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("settle".to_string(), settle_body.clone());
+        self.body_data
+            .insert("settle".to_string(), settle_body.clone());
 
         // Set the message type to Settle and update the didcomm type
         self.message_type = "Settle".to_string();
@@ -626,7 +628,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse cancel data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("cancel".to_string(), cancel_body.clone());
+        self.body_data
+            .insert("cancel".to_string(), cancel_body.clone());
 
         // Set the message type to Cancel and update the didcomm type
         self.message_type = "Cancel".to_string();
@@ -645,7 +648,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse revert data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("revert".to_string(), revert_body.clone());
+        self.body_data
+            .insert("revert".to_string(), revert_body.clone());
 
         // Set the message type to Revert and update the didcomm type
         self.message_type = "Revert".to_string();
@@ -664,7 +668,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse add agents data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("add_agents".to_string(), add_agents_body.clone());
+        self.body_data
+            .insert("add_agents".to_string(), add_agents_body.clone());
 
         // Set the message type to AddAgents and update the didcomm type
         self.message_type = "AddAgents".to_string();
@@ -679,15 +684,19 @@ impl Message {
     /// Sets a ReplaceAgent message body according to the TAP specification
     pub fn set_replace_agent_body(&mut self, replace_agent_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to a ReplaceAgent
-        let replace_agent_body: serde_json::Value = serde_wasm_bindgen::from_value(replace_agent_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse replace agent data: {}", e)))?;
+        let replace_agent_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(replace_agent_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse replace agent data: {}", e))
+            })?;
 
         // Store in body data
-        self.body_data.insert("replace_agent".to_string(), replace_agent_body.clone());
+        self.body_data
+            .insert("replace_agent".to_string(), replace_agent_body.clone());
 
         // Set the message type to ReplaceAgent and update the didcomm type
         self.message_type = "ReplaceAgent".to_string();
-        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#ReplaceAgent", self.version);
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#ReplaceAgent", self.version);
 
         // Set the DIDComm message body
         self.didcomm_message.body = replace_agent_body;
@@ -698,15 +707,19 @@ impl Message {
     /// Sets a RemoveAgent message body according to the TAP specification
     pub fn set_remove_agent_body(&mut self, remove_agent_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to a RemoveAgent
-        let remove_agent_body: serde_json::Value = serde_wasm_bindgen::from_value(remove_agent_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse remove agent data: {}", e)))?;
+        let remove_agent_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(remove_agent_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse remove agent data: {}", e))
+            })?;
 
         // Store in body data
-        self.body_data.insert("remove_agent".to_string(), remove_agent_body.clone());
+        self.body_data
+            .insert("remove_agent".to_string(), remove_agent_body.clone());
 
         // Set the message type to RemoveAgent and update the didcomm type
         self.message_type = "RemoveAgent".to_string();
-        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#RemoveAgent", self.version);
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#RemoveAgent", self.version);
 
         // Set the DIDComm message body
         self.didcomm_message.body = remove_agent_body;
@@ -715,17 +728,24 @@ impl Message {
     }
 
     /// Sets an UpdatePolicies message body according to the TAP specification
-    pub fn set_update_policies_body(&mut self, update_policies_data: JsValue) -> Result<(), JsValue> {
+    pub fn set_update_policies_body(
+        &mut self,
+        update_policies_data: JsValue,
+    ) -> Result<(), JsValue> {
         // Convert the JavaScript value to an UpdatePolicies
-        let update_policies_body: serde_json::Value = serde_wasm_bindgen::from_value(update_policies_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse update policies data: {}", e)))?;
+        let update_policies_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(update_policies_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse update policies data: {}", e))
+            })?;
 
         // Store in body data
-        self.body_data.insert("update_policies".to_string(), update_policies_body.clone());
+        self.body_data
+            .insert("update_policies".to_string(), update_policies_body.clone());
 
         // Set the message type to UpdatePolicies and update the didcomm type
         self.message_type = "UpdatePolicies".to_string();
-        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#UpdatePolicies", self.version);
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#UpdatePolicies", self.version);
 
         // Set the DIDComm message body
         self.didcomm_message.body = update_policies_body;
@@ -736,15 +756,19 @@ impl Message {
     /// Sets an UpdateParty message body according to the TAP specification
     pub fn set_update_party_body(&mut self, update_party_data: JsValue) -> Result<(), JsValue> {
         // Convert the JavaScript value to an UpdateParty
-        let update_party_body: serde_json::Value = serde_wasm_bindgen::from_value(update_party_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse update party data: {}", e)))?;
+        let update_party_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(update_party_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse update party data: {}", e))
+            })?;
 
         // Store in body data
-        self.body_data.insert("update_party".to_string(), update_party_body.clone());
+        self.body_data
+            .insert("update_party".to_string(), update_party_body.clone());
 
         // Set the message type to UpdateParty and update the didcomm type
         self.message_type = "UpdateParty".to_string();
-        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#UpdateParty", self.version);
+        self.didcomm_message.type_ =
+            format!("https://tap.rsvp/schema/{}#UpdateParty", self.version);
 
         // Set the DIDComm message body
         self.didcomm_message.body = update_party_body;
@@ -753,17 +777,28 @@ impl Message {
     }
 
     /// Sets a ConfirmRelationship message body according to the TAP specification
-    pub fn set_confirm_relationship_body(&mut self, confirm_relationship_data: JsValue) -> Result<(), JsValue> {
+    pub fn set_confirm_relationship_body(
+        &mut self,
+        confirm_relationship_data: JsValue,
+    ) -> Result<(), JsValue> {
         // Convert the JavaScript value to a ConfirmRelationship
-        let confirm_relationship_body: serde_json::Value = serde_wasm_bindgen::from_value(confirm_relationship_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse confirm relationship data: {}", e)))?;
+        let confirm_relationship_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(confirm_relationship_data).map_err(|e| {
+                JsValue::from_str(&format!("Failed to parse confirm relationship data: {}", e))
+            })?;
 
         // Store in body data
-        self.body_data.insert("confirm_relationship".to_string(), confirm_relationship_body.clone());
+        self.body_data.insert(
+            "confirm_relationship".to_string(),
+            confirm_relationship_body.clone(),
+        );
 
         // Set the message type to ConfirmRelationship and update the didcomm type
         self.message_type = "ConfirmRelationship".to_string();
-        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#ConfirmRelationship", self.version);
+        self.didcomm_message.type_ = format!(
+            "https://tap.rsvp/schema/{}#ConfirmRelationship",
+            self.version
+        );
 
         // Set the DIDComm message body
         self.didcomm_message.body = confirm_relationship_body;
@@ -778,7 +813,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse connect data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("connect".to_string(), connect_body.clone());
+        self.body_data
+            .insert("connect".to_string(), connect_body.clone());
 
         // Set the message type to Connect and update the didcomm type
         self.message_type = "Connect".to_string();
@@ -791,17 +827,31 @@ impl Message {
     }
 
     /// Sets an AuthorizationRequired message body according to the TAP specification
-    pub fn set_authorization_required_body(&mut self, authorization_required_data: JsValue) -> Result<(), JsValue> {
+    pub fn set_authorization_required_body(
+        &mut self,
+        authorization_required_data: JsValue,
+    ) -> Result<(), JsValue> {
         // Convert the JavaScript value to an AuthorizationRequired
-        let authorization_required_body: serde_json::Value = serde_wasm_bindgen::from_value(authorization_required_data)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse authorization required data: {}", e)))?;
+        let authorization_required_body: serde_json::Value =
+            serde_wasm_bindgen::from_value(authorization_required_data).map_err(|e| {
+                JsValue::from_str(&format!(
+                    "Failed to parse authorization required data: {}",
+                    e
+                ))
+            })?;
 
         // Store in body data
-        self.body_data.insert("authorization_required".to_string(), authorization_required_body.clone());
+        self.body_data.insert(
+            "authorization_required".to_string(),
+            authorization_required_body.clone(),
+        );
 
         // Set the message type to AuthorizationRequired and update the didcomm type
         self.message_type = "AuthorizationRequired".to_string();
-        self.didcomm_message.type_ = format!("https://tap.rsvp/schema/{}#AuthorizationRequired", self.version);
+        self.didcomm_message.type_ = format!(
+            "https://tap.rsvp/schema/{}#AuthorizationRequired",
+            self.version
+        );
 
         // Set the DIDComm message body
         self.didcomm_message.body = authorization_required_body;
@@ -816,7 +866,8 @@ impl Message {
             .map_err(|e| JsValue::from_str(&format!("Failed to parse complete data: {}", e)))?;
 
         // Store in body data
-        self.body_data.insert("complete".to_string(), complete_body.clone());
+        self.body_data
+            .insert("complete".to_string(), complete_body.clone());
 
         // Set the message type to Complete and update the didcomm type
         self.message_type = "Complete".to_string();
@@ -911,7 +962,12 @@ impl Message {
     /// Helper function to get the body for a specific message type
     fn get_body_for_type(&self, type_name: &str, body_key: &str) -> JsValue {
         // Check if this message is of the requested type
-        if self.message_type == type_name || self.didcomm_message.type_.contains(&format!("#{}", type_name)) {
+        if self.message_type == type_name
+            || self
+                .didcomm_message
+                .type_
+                .contains(&format!("#{}", type_name))
+        {
             // Try to get from body_data first
             if let Some(value) = self.body_data.get(body_key) {
                 return match serde_wasm_bindgen::to_value(value) {
@@ -1159,43 +1215,47 @@ impl Message {
         };
 
         // Check if the message has signatures
-        let raw_message = serde_json::to_value(didcomm_message).map_err(|e| {
-            JsValue::from_str(&format!("Failed to convert message to JSON: {}", e))
-        })?;
-        
+        let raw_message = serde_json::to_value(didcomm_message)
+            .map_err(|e| JsValue::from_str(&format!("Failed to convert message to JSON: {}", e)))?;
+
         if let Some(signatures) = raw_message.get("signatures").and_then(|s| s.as_array()) {
             if signatures.is_empty() {
                 return Err(JsValue::from_str("Message has no signatures"));
             }
-            
+
             // Get the first signature
             let signature = &signatures[0];
-            
+
             // Get the signature value
-            let _signature_value = signature.get("signature").and_then(|s| s.as_str()).ok_or_else(|| {
-                JsValue::from_str("Missing signature value")
-            })?;
-            
+            let _signature_value = signature
+                .get("signature")
+                .and_then(|s| s.as_str())
+                .ok_or_else(|| JsValue::from_str("Missing signature value"))?;
+
             // Get the protected header
-            let _protected = signature.get("protected").and_then(|p| p.as_str()).ok_or_else(|| {
-                JsValue::from_str("Missing protected header")
-            })?;
-            
+            let _protected = signature
+                .get("protected")
+                .and_then(|p| p.as_str())
+                .ok_or_else(|| JsValue::from_str("Missing protected header"))?;
+
             // Get the header
-            let header = signature.get("header").and_then(|h| h.as_object()).ok_or_else(|| {
-                JsValue::from_str("Missing header")
-            })?;
-            
+            let header = signature
+                .get("header")
+                .and_then(|h| h.as_object())
+                .ok_or_else(|| JsValue::from_str("Missing header"))?;
+
             // Get the key ID
-            let kid = header.get("kid").and_then(|k| k.as_str()).ok_or_else(|| {
-                JsValue::from_str("Missing key ID in header")
-            })?;
-            
+            let kid = header
+                .get("kid")
+                .and_then(|k| k.as_str())
+                .ok_or_else(|| JsValue::from_str("Missing key ID in header"))?;
+
             // Get the algorithm
-            let alg = header.get("alg").and_then(|a| a.as_str()).ok_or_else(|| {
-                JsValue::from_str("Missing algorithm in header")
-            })?;
-            
+            let alg = header
+                .get("alg")
+                .and_then(|a| a.as_str())
+                .ok_or_else(|| JsValue::from_str("Missing algorithm in header"))?;
+
             // Verify based on the algorithm
             match alg {
                 "EdDSA" => {
@@ -1207,13 +1267,13 @@ impl Message {
                             from_did, kid
                         )));
                     }
-                    
+
                     // In a full implementation, we would:
                     // 1. Resolve the DID to get the public key
                     // 2. Verify the signature with the public key
-                    
+
                     Ok(true)
-                },
+                }
                 "ES256" => {
                     // This would be a real P-256 verification
                     if debug {
@@ -1222,9 +1282,9 @@ impl Message {
                             from_did, kid
                         )));
                     }
-                    
+
                     Ok(true)
-                },
+                }
                 "ES256K" => {
                     // This would be a real secp256k1 verification
                     if debug {
@@ -1233,16 +1293,19 @@ impl Message {
                             from_did, kid
                         )));
                     }
-                    
+
                     Ok(true)
-                },
-                _ => {
-                    Err(JsValue::from_str(&format!("Unsupported signature algorithm: {}", alg)))
                 }
+                _ => Err(JsValue::from_str(&format!(
+                    "Unsupported signature algorithm: {}",
+                    alg
+                ))),
             }
         } else {
             // No signatures field or not an array
-            Err(JsValue::from_str("Message does not have a valid signatures field"))
+            Err(JsValue::from_str(
+                "Message does not have a valid signatures field",
+            ))
         }
     }
 }
@@ -1361,7 +1424,7 @@ impl TapAgent {
         let id = format!("msg_{}", generate_uuid_v4());
 
         let mut message = Message::new(id, message_type.to_string(), "1.0".to_string());
-        
+
         // Set the from DID to this agent's DID
         message.set_from_did(Some(self.id.clone()));
 
@@ -1387,56 +1450,76 @@ impl TapAgent {
     fn get_key(&self, did: &str) -> Result<Option<GeneratedKey>, JsValue> {
         // Get the keys from the key manager
         let keys = self.key_manager.list_keys().unwrap_or_default();
-        
+
         // Find the key with the matching DID
         if !keys.contains(&did.to_string()) {
             return Ok(None);
         }
-        
+
         // For our implementation, we need to recreate the key from the secret
         let secrets_map = self.secrets_resolver.get_secrets_map();
         if let Some(secret) = secrets_map.get(did) {
             match &secret.secret_material {
                 SecretMaterial::JWK { private_key_jwk } => {
                     // Extract key type
-                    let key_type = if private_key_jwk.get("crv").and_then(|v| v.as_str()) == Some("Ed25519") {
+                    let key_type = if private_key_jwk.get("crv").and_then(|v| v.as_str())
+                        == Some("Ed25519")
+                    {
                         KeyType::Ed25519
                     } else if private_key_jwk.get("crv").and_then(|v| v.as_str()) == Some("P-256") {
                         KeyType::P256
-                    } else if private_key_jwk.get("crv").and_then(|v| v.as_str()) == Some("secp256k1") {
+                    } else if private_key_jwk.get("crv").and_then(|v| v.as_str())
+                        == Some("secp256k1")
+                    {
                         KeyType::Secp256k1
                     } else {
                         return Err(JsValue::from_str("Unknown key type"));
                     };
-                    
+
                     // Extract private key
-                    let private_key_base64 = match private_key_jwk.get("d").and_then(|v| v.as_str()) {
+                    let private_key_base64 = match private_key_jwk.get("d").and_then(|v| v.as_str())
+                    {
                         Some(d) => d,
                         None => return Err(JsValue::from_str("Missing private key in JWK")),
                     };
-                    
+
                     // Decode private key
-                    let private_key = match base64::engine::general_purpose::STANDARD.decode(private_key_base64) {
+                    let private_key = match base64::engine::general_purpose::STANDARD
+                        .decode(private_key_base64)
+                    {
                         Ok(pk) => pk,
-                        Err(e) => return Err(JsValue::from_str(&format!("Failed to decode private key: {}", e))),
+                        Err(e) => {
+                            return Err(JsValue::from_str(&format!(
+                                "Failed to decode private key: {}",
+                                e
+                            )))
+                        }
                     };
-                    
+
                     // Extract public key
                     let public_key = match private_key_jwk.get("x").and_then(|v| v.as_str()) {
                         Some(x) => {
                             // For Ed25519, the public key is in the x field
                             match base64::engine::general_purpose::STANDARD.decode(x) {
                                 Ok(pk) => pk,
-                                Err(e) => return Err(JsValue::from_str(&format!("Failed to decode public key: {}", e))),
+                                Err(e) => {
+                                    return Err(JsValue::from_str(&format!(
+                                        "Failed to decode public key: {}",
+                                        e
+                                    )))
+                                }
                             }
-                        },
+                        }
                         None => {
                             // If no public key is available, derive it from the private key for Ed25519
                             if key_type == KeyType::Ed25519 && private_key.len() == 32 {
-                                let bytes_array: [u8; 32] = private_key.as_slice().try_into().map_err(|_| {
-                                    JsValue::from_str("Failed to convert private key bytes to array")
-                                })?;
-                                
+                                let bytes_array: [u8; 32] =
+                                    private_key.as_slice().try_into().map_err(|_| {
+                                        JsValue::from_str(
+                                            "Failed to convert private key bytes to array",
+                                        )
+                                    })?;
+
                                 let sk = SigningKey::from_bytes(&bytes_array);
                                 let vk: VerifyingKey = (&sk).into();
                                 vk.to_bytes().to_vec()
@@ -1445,9 +1528,9 @@ impl TapAgent {
                                 // For now, create a dummy public key
                                 vec![0u8; 32]
                             }
-                        },
+                        }
                     };
-                    
+
                     // Create a GeneratedKey with the extracted information
                     let key = GeneratedKey {
                         did: did.to_string(),
@@ -1462,9 +1545,9 @@ impl TapAgent {
                             service: vec![],
                         },
                     };
-                    
+
                     Ok(Some(key))
-                },
+                }
                 _ => Err(JsValue::from_str("Unsupported secret material type")),
             }
         } else {
@@ -1482,98 +1565,131 @@ impl TapAgent {
             didcomm_message.from = Some(self.id.clone());
             message.set_from_did(Some(self.id.clone()));
         }
-        
+
         // Convert the DIDComm message to JSON for signing
         let payload = match serde_json::to_string(&didcomm_message) {
             Ok(p) => p,
-            Err(e) => return Err(JsValue::from_str(&format!("Failed to serialize message for signing: {}", e))),
+            Err(e) => {
+                return Err(JsValue::from_str(&format!(
+                    "Failed to serialize message for signing: {}",
+                    e
+                )))
+            }
         };
-        
+
         // Generate a timestamp for the signature
         let timestamp = js_sys::Date::now().to_string();
-        
+
         // First, check if we have the key in the key manager
         let has_key_in_manager = self.key_manager.has_key(&self.id).unwrap_or(false);
-        
+
         // Prepare variables to store the signature info
         let key_id = format!("{}#keys-1", self.id);
         // We'll define signature_value and algorithm when needed in each case
-        
+
         if has_key_in_manager {
             // Get the key from the key manager
             let key = match self.get_key(&self.id) {
                 Ok(Some(k)) => k,
-                Ok(None) => return Err(JsValue::from_str(&format!("No key found for DID: {}", self.id))),
+                Ok(None) => {
+                    return Err(JsValue::from_str(&format!(
+                        "No key found for DID: {}",
+                        self.id
+                    )))
+                }
                 Err(e) => return Err(JsValue::from_str(&format!("Error accessing key: {:?}", e))),
             };
-            
+
             // Check the key type and sign accordingly
             match key.key_type {
                 tap_agent::did::KeyType::Ed25519 => {
                     // Get the private key
                     let private_key = key.private_key.clone();
-                    
+
                     // Create an Ed25519 signing key - using v2.x API
-                    let bytes_array: [u8; 32] = private_key.as_slice().try_into().map_err(|_| {
-                        JsValue::from_str("Failed to convert private key to correct size")
-                    })?;
+                    let bytes_array: [u8; 32] =
+                        private_key.as_slice().try_into().map_err(|_| {
+                            JsValue::from_str("Failed to convert private key to correct size")
+                        })?;
                     let signing_key = SigningKey::from_bytes(&bytes_array);
-                    
+
                     // Sign the message
                     let signature = signing_key.sign(payload.as_bytes());
-                    
+
                     // Convert the signature to base64
-                    let _signature_value = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, signature.to_bytes());
+                    let _signature_value = base64::Engine::encode(
+                        &base64::engine::general_purpose::STANDARD,
+                        signature.to_bytes(),
+                    );
                     let _algorithm = "EdDSA".to_string();
-                    
+
                     if self.debug {
                         console::log_1(&JsValue::from_str(&format!(
                             "Message signed by {} using Ed25519 key from key manager",
                             self.id
                         )));
                     }
-                },
+                }
                 tap_agent::did::KeyType::P256 => {
                     // For P-256, we would create a P-256 signing key and sign with ECDSA
                     // This is a simplified example and would need more implementation details
-                    return Err(JsValue::from_str("P-256 signing not yet implemented in WASM bindings"));
-                },
+                    return Err(JsValue::from_str(
+                        "P-256 signing not yet implemented in WASM bindings",
+                    ));
+                }
                 tap_agent::did::KeyType::Secp256k1 => {
                     // For secp256k1, we would create a secp256k1 signing key and sign with ECDSA
                     // This is a simplified example and would need more implementation details
-                    return Err(JsValue::from_str("secp256k1 signing not yet implemented in WASM bindings"));
-                },
+                    return Err(JsValue::from_str(
+                        "secp256k1 signing not yet implemented in WASM bindings",
+                    ));
+                }
             }
         } else {
             // Fall back to the basic secrets resolver for backward compatibility
             let secrets_map = self.secrets_resolver.get_secrets_map();
             let secret = match secrets_map.get(&self.id) {
                 Some(s) => s,
-                None => return Err(JsValue::from_str(&format!("No secret found for DID: {}", self.id))),
+                None => {
+                    return Err(JsValue::from_str(&format!(
+                        "No secret found for DID: {}",
+                        self.id
+                    )))
+                }
             };
-            
+
             // Generate a signature based on the secret type
             match &secret.secret_material {
                 didcomm::secrets::SecretMaterial::JWK { private_key_jwk } => {
                     // Extract the key type and curve
                     let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                     let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
-                    
+
                     match (kty, crv) {
                         (Some("OKP"), Some("Ed25519")) => {
                             // This is an Ed25519 key
                             // Extract the private key
-                            let private_key_base64 = match private_key_jwk.get("d").and_then(|v| v.as_str()) {
-                                Some(pk) => pk,
-                                None => return Err(JsValue::from_str("Missing private key in JWK")),
-                            };
-                                
+                            let private_key_base64 =
+                                match private_key_jwk.get("d").and_then(|v| v.as_str()) {
+                                    Some(pk) => pk,
+                                    None => {
+                                        return Err(JsValue::from_str("Missing private key in JWK"))
+                                    }
+                                };
+
                             // Decode the private key from base64
-                            let private_key_bytes = match base64::engine::general_purpose::STANDARD.decode(private_key_base64) {
+                            let private_key_bytes = match base64::engine::general_purpose::STANDARD
+                                .decode(private_key_base64)
+                            {
                                 Ok(pk) => pk,
-                                Err(e) => return Err(JsValue::from_str(&format!("Failed to decode private key: {}", e))),
+                                Err(e) => {
+                                    return Err(JsValue::from_str(&format!(
+                                        "Failed to decode private key: {}",
+                                        e
+                                    )))
+                                }
                             };
-                            
+
                             // Ed25519 keys must be exactly 32 bytes
                             if private_key_bytes.len() != 32 {
                                 return Err(JsValue::from_str(&format!(
@@ -1581,28 +1697,34 @@ impl TapAgent {
                                     private_key_bytes.len()
                                 )));
                             }
-                                    
+
                             // Create an Ed25519 signing key - using v2.x API
-                            let bytes_array: [u8; 32] = private_key_bytes.as_slice().try_into().map_err(|_| {
-                                JsValue::from_str("Failed to convert private key bytes to array")
-                            })?;
-                            
+                            let bytes_array: [u8; 32] =
+                                private_key_bytes.as_slice().try_into().map_err(|_| {
+                                    JsValue::from_str(
+                                        "Failed to convert private key bytes to array",
+                                    )
+                                })?;
+
                             let signing_key = SigningKey::from_bytes(&bytes_array);
-                            
+
                             // Sign the message
                             let signature = signing_key.sign(payload.as_bytes());
-                            
+
                             // Convert the signature to base64
-                            let _signature_value = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, signature.to_bytes());
+                            let _signature_value = base64::Engine::encode(
+                                &base64::engine::general_purpose::STANDARD,
+                                signature.to_bytes(),
+                            );
                             let _algorithm = "EdDSA".to_string();
-                            
+
                             if self.debug {
                                 console::log_1(&JsValue::from_str(&format!(
                                     "Message signed by {} using Ed25519 key from basic resolver",
                                     self.id
                                 )));
                             }
-                        },
+                        }
                         // Could add support for other key types here
                         _ => {
                             return Err(JsValue::from_str(&format!(
@@ -1611,7 +1733,7 @@ impl TapAgent {
                             )));
                         }
                     }
-                },
+                }
                 _ => {
                     return Err(JsValue::from_str(&format!(
                         "Unsupported secret material type for signing"
@@ -1619,7 +1741,7 @@ impl TapAgent {
                 }
             }
         }
-        
+
         // Now that we have a signature, create a JWS structure
         // First, create the protected header
         let protected_header = serde_json::json!({
@@ -1627,15 +1749,23 @@ impl TapAgent {
             "alg": "EdDSA", // We'll use EdDSA algorithm as default
             "created": timestamp
         });
-        
+
         // Convert the protected header to a base64-encoded string
         let protected_header_json = match serde_json::to_string(&protected_header) {
             Ok(json) => json,
-            Err(e) => return Err(JsValue::from_str(&format!("Failed to serialize protected header: {}", e))),
+            Err(e) => {
+                return Err(JsValue::from_str(&format!(
+                    "Failed to serialize protected header: {}",
+                    e
+                )))
+            }
         };
-        
-        let protected = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, protected_header_json);
-        
+
+        let protected = base64::Engine::encode(
+            &base64::engine::general_purpose::STANDARD,
+            protected_header_json,
+        );
+
         // Update the message's didcomm_message with the signed format
         // For a real implementation, we would modify the message to use the JWS structure
         let signed_message = serde_json::json!({
@@ -1655,7 +1785,7 @@ impl TapAgent {
                 "protected": protected
             }]
         });
-        
+
         // Update the message with the signed structure
         match serde_json::to_string(&signed_message) {
             Ok(signed_json) => {
@@ -1664,11 +1794,17 @@ impl TapAgent {
                     Ok(signed_didcomm) => {
                         message.didcomm_message = signed_didcomm;
                         Ok(())
-                    },
-                    Err(e) => Err(JsValue::from_str(&format!("Failed to parse signed JSON: {}", e))),
+                    }
+                    Err(e) => Err(JsValue::from_str(&format!(
+                        "Failed to parse signed JSON: {}",
+                        e
+                    ))),
                 }
-            },
-            Err(e) => Err(JsValue::from_str(&format!("Failed to serialize signed message: {}", e))),
+            }
+            Err(e) => Err(JsValue::from_str(&format!(
+                "Failed to serialize signed message: {}",
+                e
+            ))),
         }
     }
 
@@ -1748,18 +1884,18 @@ impl TapAgent {
     pub fn use_key_manager_resolver(&mut self) -> Result<(), JsValue> {
         // This method configures the agent to use the key manager for resolving secrets during
         // cryptographic operations instead of (or in addition to) the basic resolver
-        
+
         // Get all keys from the key manager that we want to add to our resolver
         let dids = self.key_manager.list_keys().unwrap_or_default();
-        
+
         // Create a new secrets resolver to update
         let mut new_secrets_resolver = BasicSecretResolver::new();
-        
+
         // Copy existing secrets
         for (existing_did, existing_secret) in self.secrets_resolver.get_secrets_map().iter() {
             new_secrets_resolver.add_secret(existing_did, existing_secret.clone());
         }
-        
+
         // For each key, create a corresponding secret in the resolver
         for did in dids {
             // Get the key from the key manager
@@ -1770,7 +1906,7 @@ impl TapAgent {
                         // For Ed25519, create a JWK with the private key
                         let private_key = key.private_key.clone();
                         let public_key = key.public_key.clone();
-                            
+
                         // Create a JWK from the Ed25519 key
                         let private_key_jwk = serde_json::json!({
                             "kty": "OKP",
@@ -1778,35 +1914,37 @@ impl TapAgent {
                             "d": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, private_key),
                             "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, public_key),
                         });
-                        
+
                         // Create a DIDComm secret with correct SecretType
                         let secret = didcomm::secrets::Secret {
                             type_: SecretType::JsonWebKey2020,
                             id: format!("{}#keys-1", did),
-                            secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                            secret_material: didcomm::secrets::SecretMaterial::JWK {
+                                private_key_jwk,
+                            },
                         };
-                        
+
                         // Add the secret to the resolver
                         new_secrets_resolver.add_secret(&did, secret);
-                        
+
                         if self.debug {
                             console::log_1(&JsValue::from_str(&format!(
                                 "Added Ed25519 key for {} to resolver",
                                 did
                             )));
                         }
-                    },
+                    }
                     tap_agent::did::KeyType::P256 => {
                         let private_key = key.private_key.clone();
                         let public_key = key.public_key.clone();
-                        
+
                         // P-256 public key format includes x and y coordinates
                         // For a real implementation, we would extract these properly
                         // This is a simplification that assumes the first half is x and second half is y
                         if public_key.len() >= 64 {
                             let x = &public_key[0..32];
                             let y = &public_key[32..64];
-                            
+
                             // Create a JWK from the P-256 key
                             let private_key_jwk = serde_json::json!({
                                 "kty": "EC",
@@ -1815,17 +1953,19 @@ impl TapAgent {
                                 "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x),
                                 "y": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, y),
                             });
-                            
+
                             // Create a DIDComm secret with correct SecretType
                             let secret = didcomm::secrets::Secret {
                                 type_: SecretType::JsonWebKey2020,
                                 id: format!("{}#keys-1", did),
-                                secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                                secret_material: didcomm::secrets::SecretMaterial::JWK {
+                                    private_key_jwk,
+                                },
                             };
-                            
+
                             // Add the secret to the resolver
                             new_secrets_resolver.add_secret(&did, secret);
-                            
+
                             if self.debug {
                                 console::log_1(&JsValue::from_str(&format!(
                                     "Added P-256 key for {} to resolver",
@@ -1833,18 +1973,18 @@ impl TapAgent {
                                 )));
                             }
                         }
-                    },
+                    }
                     tap_agent::did::KeyType::Secp256k1 => {
                         let private_key = key.private_key.clone();
                         let public_key = key.public_key.clone();
-                        
+
                         // secp256k1 public key format includes x and y coordinates
                         // For a real implementation, we would extract these properly
                         // This is a simplification that assumes the first half is x and second half is y
                         if public_key.len() >= 64 {
                             let x = &public_key[0..32];
                             let y = &public_key[32..64];
-                            
+
                             // Create a JWK from the secp256k1 key
                             let private_key_jwk = serde_json::json!({
                                 "kty": "EC",
@@ -1853,17 +1993,19 @@ impl TapAgent {
                                 "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x),
                                 "y": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, y),
                             });
-                            
+
                             // Create a DIDComm secret with correct SecretType
                             let secret = didcomm::secrets::Secret {
                                 type_: SecretType::JsonWebKey2020,
                                 id: format!("{}#keys-1", did),
-                                secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                                secret_material: didcomm::secrets::SecretMaterial::JWK {
+                                    private_key_jwk,
+                                },
                             };
-                            
+
                             // Add the secret to the resolver
                             new_secrets_resolver.add_secret(&did, secret);
-                            
+
                             if self.debug {
                                 console::log_1(&JsValue::from_str(&format!(
                                     "Added secp256k1 key for {} to resolver",
@@ -1871,14 +2013,14 @@ impl TapAgent {
                                 )));
                             }
                         }
-                    },
+                    }
                 }
             }
         }
-        
+
         // Update the agent's secrets resolver
         self.secrets_resolver = Arc::new(new_secrets_resolver);
-        
+
         if self.debug {
             console::log_1(&JsValue::from_str(
                 "Key manager resolver configured for DIDComm operations",
@@ -1951,24 +2093,29 @@ impl TapAgent {
             "Ed25519" => KeyType::Ed25519,
             "P256" => KeyType::P256,
             "Secp256k1" => KeyType::Secp256k1,
-            _ => return Err(JsValue::from_str(&format!("Unsupported key type: {}", key_type_str))),
+            _ => {
+                return Err(JsValue::from_str(&format!(
+                    "Unsupported key type: {}",
+                    key_type_str
+                )))
+            }
         };
-        
+
         // Convert JS Uint8Arrays to Rust Vec<u8>
         let private_key = match private_key_js {
             Some(sk) => js_sys_to_vec_u8(&sk),
             None => return Err(JsValue::from_str("Private key is required")),
         };
-        
+
         let public_key = match public_key_js {
             Some(pk) => js_sys_to_vec_u8(&pk),
             None => {
                 // In a real implementation, we would derive the public key from the private key
                 // For now, we'll return an error
                 return Err(JsValue::from_str("Public key is required"));
-            },
+            }
         };
-        
+
         // Create a GeneratedKey
         let generated_key = GeneratedKey {
             did: did.clone(),
@@ -1983,7 +2130,7 @@ impl TapAgent {
                 service: vec![],
             },
         };
-        
+
         // Create a copy of the secrets resolver
         let mut new_secrets_resolver = BasicSecretResolver::new();
 
@@ -1991,16 +2138,16 @@ impl TapAgent {
         for (existing_did, existing_secret) in self.secrets_resolver.get_secrets_map().iter() {
             new_secrets_resolver.add_secret(existing_did, existing_secret.clone());
         }
-        
+
         // Create a new key manager
         let new_key_manager = match Arc::try_unwrap(self.key_manager.clone()) {
             Ok(km) => km,
             Err(_) => KeyManager::new(),
         };
-        
+
         // Add the key to the key manager
         let _ = new_key_manager.add_key(&generated_key);
-        
+
         // Create a secret from the key and add it to the resolver
         match key_type {
             KeyType::Ed25519 => {
@@ -2012,23 +2159,23 @@ impl TapAgent {
                     "d": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &generated_key.private_key),
                     "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, &generated_key.public_key),
                 });
-                
+
                 // Create a DIDComm secret with correct SecretType
                 let secret = didcomm::secrets::Secret {
                     type_: SecretType::JsonWebKey2020,
                     id: format!("{}#keys-1", did),
                     secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
                 };
-                
+
                 // Add the secret to the resolver
                 new_secrets_resolver.add_secret(&did, secret);
-            },
+            }
             KeyType::P256 => {
                 // P-256 keys should be handled differently
                 if generated_key.public_key.len() >= 64 {
                     let x = &generated_key.public_key[0..32];
                     let y = &generated_key.public_key[32..64];
-                    
+
                     // Create a JWK from the P-256 key
                     let private_key_jwk = serde_json::json!({
                         "kty": "EC",
@@ -2038,26 +2185,26 @@ impl TapAgent {
                         "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x),
                         "y": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, y),
                     });
-                    
+
                     // Create a DIDComm secret with correct SecretType
                     let secret = didcomm::secrets::Secret {
                         type_: SecretType::JsonWebKey2020,
                         id: format!("{}#keys-1", did),
                         secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
                     };
-                    
+
                     // Add the secret to the resolver
                     new_secrets_resolver.add_secret(&did, secret);
                 } else {
                     return Err(JsValue::from_str("Invalid P-256 public key format"));
                 }
-            },
+            }
             KeyType::Secp256k1 => {
                 // Secp256k1 keys should be handled differently
                 if generated_key.public_key.len() >= 64 {
                     let x = &generated_key.public_key[0..32];
                     let y = &generated_key.public_key[32..64];
-                    
+
                     // Create a JWK from the secp256k1 key
                     let private_key_jwk = serde_json::json!({
                         "kty": "EC",
@@ -2067,26 +2214,26 @@ impl TapAgent {
                         "x": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, x),
                         "y": base64::Engine::encode(&base64::engine::general_purpose::STANDARD, y),
                     });
-                    
+
                     // Create a DIDComm secret with correct SecretType
                     let secret = didcomm::secrets::Secret {
                         type_: SecretType::JsonWebKey2020,
                         id: format!("{}#keys-1", did),
                         secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
                     };
-                    
+
                     // Add the secret to the resolver
                     new_secrets_resolver.add_secret(&did, secret);
                 } else {
                     return Err(JsValue::from_str("Invalid secp256k1 public key format"));
                 }
-            },
+            }
         }
 
         // Update the agent's key manager and secrets resolver
         self.key_manager = Arc::new(new_key_manager);
         self.secrets_resolver = Arc::new(new_secrets_resolver);
-        
+
         if self.debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Added {} key for {} to agent",
@@ -2187,7 +2334,8 @@ impl TapNode {
                         }
                     }
 
-                    if let Ok(parent_thread_id) = js_sys::Reflect::get(message, &JsValue::from_str("pthid"))
+                    if let Ok(parent_thread_id) =
+                        js_sys::Reflect::get(message, &JsValue::from_str("pthid"))
                     {
                         if !parent_thread_id.is_null() && !parent_thread_id.is_undefined() {
                             if let Some(pthid_str) = parent_thread_id.as_string() {
@@ -2197,7 +2345,8 @@ impl TapNode {
                     }
 
                     // Handle created/expires time
-                    if let Ok(created_time) = js_sys::Reflect::get(message, &JsValue::from_str("created_time"))
+                    if let Ok(created_time) =
+                        js_sys::Reflect::get(message, &JsValue::from_str("created_time"))
                     {
                         if !created_time.is_null() && !created_time.is_undefined() {
                             if let Some(created) = created_time.as_f64() {
@@ -2206,7 +2355,8 @@ impl TapNode {
                         }
                     }
 
-                    if let Ok(expires_time) = js_sys::Reflect::get(message, &JsValue::from_str("expires_time"))
+                    if let Ok(expires_time) =
+                        js_sys::Reflect::get(message, &JsValue::from_str("expires_time"))
                     {
                         if !expires_time.is_null() && !expires_time.is_undefined() {
                             if let Some(expires) = expires_time.as_f64() {
@@ -2219,26 +2369,32 @@ impl TapNode {
                     let msg_type = MessageType::from(message_type.as_str());
                     match msg_type {
                         MessageType::Transfer => {
-                            if let Ok(body) = js_sys::Reflect::get(message, &JsValue::from_str("body")) {
+                            if let Ok(body) =
+                                js_sys::Reflect::get(message, &JsValue::from_str("body"))
+                            {
                                 if !body.is_null() && !body.is_undefined() {
                                     let _ = msg.set_transfer_body(body);
                                 }
                             }
-                        },
+                        }
                         MessageType::Payment => {
-                            if let Ok(body) = js_sys::Reflect::get(message, &JsValue::from_str("body")) {
+                            if let Ok(body) =
+                                js_sys::Reflect::get(message, &JsValue::from_str("body"))
+                            {
                                 if !body.is_null() && !body.is_undefined() {
                                     let _ = msg.set_payment_request_body(body);
                                 }
                             }
-                        },
+                        }
                         MessageType::Authorize => {
-                            if let Ok(body) = js_sys::Reflect::get(message, &JsValue::from_str("body")) {
+                            if let Ok(body) =
+                                js_sys::Reflect::get(message, &JsValue::from_str("body"))
+                            {
                                 if !body.is_null() && !body.is_undefined() {
                                     let _ = msg.set_authorize_body(body);
                                 }
                             }
-                        },
+                        }
                         // Add cases for other message types as needed
                         _ => {
                             if debug {
@@ -2276,14 +2432,14 @@ impl TapNode {
     pub fn register_agent(&mut self, agent: TapAgent) -> bool {
         let did = agent.get_did();
         self.agents.insert(did.clone(), agent);
-        
+
         if self.debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Registered agent with DID: {}",
                 did
             )));
         }
-        
+
         true
     }
 
@@ -2295,16 +2451,16 @@ impl TapNode {
                 agent_id
             )));
         }
-        
+
         self.agents.remove(&agent_id);
-        
+
         if self.debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Unregistered agent with DID: {}",
                 agent_id
             )));
         }
-        
+
         Ok(true)
     }
 
@@ -2373,7 +2529,7 @@ impl TapNode {
                         message_type
                     )));
                 }
-                
+
                 // Route the message to any recipient agents if it has a to field
                 if let Ok(to_prop) = Reflect::get(&message, &JsValue::from_str("to")) {
                     if to_prop.is_array() {
@@ -2381,13 +2537,14 @@ impl TapNode {
                         for i in 0..to_array.length() {
                             if let Some(recipient) = to_array.get(i).as_string() {
                                 if let Some(agent) = agents.get(&recipient) {
-                                    let _ = agent.process_message(message_clone.clone(), meta_obj.clone());
+                                    let _ = agent
+                                        .process_message(message_clone.clone(), meta_obj.clone());
                                 }
                             }
                         }
                     }
                 }
-                
+
                 Ok(JsValue::FALSE)
             }
         })
@@ -2399,36 +2556,39 @@ impl TapNode {
 pub fn create_did_key(key_type_str: Option<String>) -> Result<JsValue, JsValue> {
     // Create a key manager
     let key_manager = KeyManager::new();
-    
+
     // Convert key type string to KeyType enum
     let key_type = match key_type_str {
         Some(kt) => match kt.as_str() {
             "Ed25519" => KeyType::Ed25519,
             "P256" => KeyType::P256,
             "Secp256k1" => KeyType::Secp256k1,
-            _ => KeyType::Ed25519,  // Default to Ed25519 for unknown types
+            _ => KeyType::Ed25519, // Default to Ed25519 for unknown types
         },
-        None => KeyType::Ed25519,  // Default to Ed25519 if not specified
+        None => KeyType::Ed25519, // Default to Ed25519 if not specified
     };
-    
+
     // Generate a key using the key manager
-    let key = match key_manager.generate_key(DIDGenerationOptions {
-        key_type,
-    }) {
+    let key = match key_manager.generate_key(DIDGenerationOptions { key_type }) {
         Ok(k) => k,
-        Err(e) => return Err(JsValue::from_str(&format!("Failed to generate key: {:?}", e))),
+        Err(e) => {
+            return Err(JsValue::from_str(&format!(
+                "Failed to generate key: {:?}",
+                e
+            )))
+        }
     };
-    
+
     // Create a result object
     let result = Object::new();
-    
+
     // Set the DID
     Reflect::set(
         &result,
         &JsValue::from_str("did"),
         &JsValue::from_str(&key.did),
     )?;
-    
+
     // Set the key type
     Reflect::set(
         &result,
@@ -2439,16 +2599,12 @@ pub fn create_did_key(key_type_str: Option<String>) -> Result<JsValue, JsValue> 
             KeyType::Secp256k1 => "Secp256k1",
         }),
     )?;
-    
+
     // Set the public key as a Uint8Array
     let public_key_array = js_sys::Uint8Array::new_with_length(key.public_key.len() as u32);
     public_key_array.copy_from(&key.public_key);
-    Reflect::set(
-        &result,
-        &JsValue::from_str("publicKey"),
-        &public_key_array,
-    )?;
-    
+    Reflect::set(&result, &JsValue::from_str("publicKey"), &public_key_array)?;
+
     // Set the private key as a Uint8Array
     let private_key_array = js_sys::Uint8Array::new_with_length(key.private_key.len() as u32);
     private_key_array.copy_from(&key.private_key);
@@ -2457,63 +2613,98 @@ pub fn create_did_key(key_type_str: Option<String>) -> Result<JsValue, JsValue> 
         &JsValue::from_str("privateKey"),
         &private_key_array,
     )?;
-    
+
     // Add convenience methods for signing and verification
     let did = key.did.clone();
     let key_id = format!("{}#keys-1", did);
-    
+
     // Get class prototype
     let prototype = js_sys::Object::get_prototype_of(&result);
-    
+
     // Add signData method
-    let sign_fn = js_sys::Function::new_with_args("data", 
-        &format!("
+    let sign_fn = js_sys::Function::new_with_args(
+        "data",
+        &format!(
+            "
         if (!this.privateKey) return null;
         // This would be the actual Ed25519 signing, here we just return a mock
         return 'signed_{}_{}' + data;
-        ", key_id, match key.key_type {
-            KeyType::Ed25519 => "Ed25519",
-            KeyType::P256 => "P256",
-            KeyType::Secp256k1 => "Secp256k1",
-        }));
+        ",
+            key_id,
+            match key.key_type {
+                KeyType::Ed25519 => "Ed25519",
+                KeyType::P256 => "P256",
+                KeyType::Secp256k1 => "Secp256k1",
+            }
+        ),
+    );
     js_sys::Reflect::set(&prototype, &JsValue::from_str("signData"), &sign_fn)?;
-    
+
     // Add verifySignature method
-    let verify_fn = js_sys::Function::new_with_args("data, signature", 
-        &format!("
+    let verify_fn = js_sys::Function::new_with_args(
+        "data, signature",
+        &format!(
+            "
         if (!this.publicKey) return false;
         // This would be the actual signature verification, here we just check the format
         return signature.startsWith('signed_{}_{}_');
-        ", key_id, match key.key_type {
-            KeyType::Ed25519 => "Ed25519",
-            KeyType::P256 => "P256",
-            KeyType::Secp256k1 => "Secp256k1",
-        }));
-    js_sys::Reflect::set(&prototype, &JsValue::from_str("verifySignature"), &verify_fn)?;
-    
+        ",
+            key_id,
+            match key.key_type {
+                KeyType::Ed25519 => "Ed25519",
+                KeyType::P256 => "P256",
+                KeyType::Secp256k1 => "Secp256k1",
+            }
+        ),
+    );
+    js_sys::Reflect::set(
+        &prototype,
+        &JsValue::from_str("verifySignature"),
+        &verify_fn,
+    )?;
+
     // Add aliases for WASM naming conventions
     let sign_fn_alias = js_sys::Function::new_with_args("data", "return this.signData(data);");
     js_sys::Reflect::set(&prototype, &JsValue::from_str("sign"), &sign_fn_alias)?;
-    
-    let verify_fn_alias = js_sys::Function::new_with_args("data, signature", "return this.verifySignature(data, signature);");
+
+    let verify_fn_alias = js_sys::Function::new_with_args(
+        "data, signature",
+        "return this.verifySignature(data, signature);",
+    );
     js_sys::Reflect::set(&prototype, &JsValue::from_str("verify"), &verify_fn_alias)?;
-    
+
     // Add convenience method to get the private key as hex
-    let get_private_key_hex_fn = js_sys::Function::new_with_args("", 
-        &format!("
+    let get_private_key_hex_fn = js_sys::Function::new_with_args(
+        "",
+        &format!(
+            "
         if (!this.privateKey) return null;
         return Array.from(this.privateKey).map(b => b.toString(16).padStart(2, '0')).join('');
-        "));
-    js_sys::Reflect::set(&prototype, &JsValue::from_str("getPrivateKeyHex"), &get_private_key_hex_fn)?;
-    
+        "
+        ),
+    );
+    js_sys::Reflect::set(
+        &prototype,
+        &JsValue::from_str("getPrivateKeyHex"),
+        &get_private_key_hex_fn,
+    )?;
+
     // Add convenience method to get the public key as hex
-    let get_public_key_hex_fn = js_sys::Function::new_with_args("", 
-        &format!("
+    let get_public_key_hex_fn = js_sys::Function::new_with_args(
+        "",
+        &format!(
+            "
         if (!this.publicKey) return null;
         return Array.from(this.publicKey).map(b => b.toString(16).padStart(2, '0')).join('');
-        "));
-    js_sys::Reflect::set(&prototype, &JsValue::from_str("getPublicKeyHex"), &get_public_key_hex_fn)?;
-    
+        "
+        ),
+    );
+    js_sys::Reflect::set(
+        &prototype,
+        &JsValue::from_str("getPublicKeyHex"),
+        &get_public_key_hex_fn,
+    )?;
+
     Ok(result.into())
 }
 

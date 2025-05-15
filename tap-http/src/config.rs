@@ -24,7 +24,7 @@ pub struct TapHttpConfig {
 
     /// Default timeout for outbound HTTP requests in seconds.
     pub request_timeout_secs: u64,
-    
+
     /// Optional event logger configuration.
     /// If not provided, no event logging will be performed.
     #[serde(skip_serializing_if = "Option::is_none")]

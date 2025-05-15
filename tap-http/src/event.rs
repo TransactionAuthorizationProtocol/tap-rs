@@ -123,19 +123,19 @@ pub enum HttpEvent {
 pub enum LogDestination {
     /// Log to the console via the standard logging framework
     Console,
-    
+
     /// Log to a file with optional rotation
     File {
         /// Path to the log file
         path: String,
-        
+
         /// Maximum file size before rotation (in bytes)
         max_size: Option<usize>,
-        
+
         /// Whether to rotate log files when they reach max_size
         rotate: bool,
     },
-    
+
     /// Custom logging function
     Custom(Arc<dyn Fn(&str) + Send + Sync>),
 }
@@ -145,7 +145,11 @@ impl fmt::Debug for LogDestination {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             LogDestination::Console => write!(f, "LogDestination::Console"),
-            LogDestination::File { path, max_size, rotate } => f
+            LogDestination::File {
+                path,
+                max_size,
+                rotate,
+            } => f
                 .debug_struct("LogDestination::File")
                 .field("path", path)
                 .field("max_size", max_size)
@@ -156,17 +160,17 @@ impl fmt::Debug for LogDestination {
     }
 }
 
-use serde::{Deserialize, Serialize, Serializer, Deserializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 /// Configuration for the event logger
 #[derive(Debug, Clone)]
 pub struct EventLoggerConfig {
     /// Where to send the log output
     pub destination: LogDestination,
-    
+
     /// Whether to use structured (JSON) logging
     pub structured: bool,
-    
+
     /// The log level to use
     pub log_level: Level,
 }
@@ -179,23 +183,23 @@ impl Serialize for EventLoggerConfig {
     {
         use serde::ser::SerializeStruct;
         let mut state = serializer.serialize_struct("EventLoggerConfig", 3)?;
-        
+
         // For destination, serialize a type and path if it's a file
         match &self.destination {
             LogDestination::Console => {
                 state.serialize_field("destination_type", "console")?;
                 state.serialize_field("destination_path", "")?;
-            },
+            }
             LogDestination::File { path, .. } => {
                 state.serialize_field("destination_type", "file")?;
                 state.serialize_field("destination_path", path)?;
-            },
+            }
             LogDestination::Custom(_) => {
                 state.serialize_field("destination_type", "custom")?;
                 state.serialize_field("destination_path", "")?;
-            },
+            }
         }
-        
+
         state.serialize_field("structured", &self.structured)?;
         state.serialize_field("log_level", &format!("{:?}", self.log_level))?;
         state.end()
@@ -316,12 +320,7 @@ impl EventBus {
     }
 
     /// Publish a response sent event
-    pub async fn publish_response_sent(
-        &self,
-        status: StatusCode,
-        size: usize,
-        duration_ms: u64,
-    ) {
+    pub async fn publish_response_sent(&self, status: StatusCode, size: usize, duration_ms: u64) {
         let event = HttpEvent::ResponseSent {
             status,
             size,
@@ -371,7 +370,7 @@ impl EventBus {
             fut.await;
         }
     }
-    
+
     /// Get the number of subscribers (for testing)
     pub fn subscriber_count(&self) -> usize {
         self.subscribers.lock().unwrap().len()
@@ -392,7 +391,7 @@ impl Default for EventBus {
 pub struct EventLogger {
     /// Configuration for the logger
     config: EventLoggerConfig,
-    
+
     /// File handle if using file destination
     file: Option<Arc<Mutex<File>>>,
 }
@@ -401,35 +400,30 @@ impl EventLogger {
     /// Create a new event logger with the given configuration
     pub fn new(config: EventLoggerConfig) -> Self {
         let file = match &config.destination {
-            LogDestination::File { path, .. } => {
-                match Self::open_log_file(path) {
-                    Ok(file) => Some(Arc::new(Mutex::new(file))),
-                    Err(err) => {
-                        error!("Failed to open log file {}: {}", path, err);
-                        None
-                    }
+            LogDestination::File { path, .. } => match Self::open_log_file(path) {
+                Ok(file) => Some(Arc::new(Mutex::new(file))),
+                Err(err) => {
+                    error!("Failed to open log file {}: {}", path, err);
+                    None
                 }
-            }
+            },
             _ => None,
         };
-        
+
         Self { config, file }
     }
-    
+
     /// Open or create a log file
     fn open_log_file(path: &str) -> io::Result<File> {
         // Ensure directory exists
         if let Some(parent) = Path::new(path).parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         // Open or create the file
-        OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)
+        OpenOptions::new().create(true).append(true).open(path)
     }
-    
+
     /// Log an event to the configured destination
     fn log_event(&self, event: &HttpEvent) -> crate::error::Result<()> {
         let log_message = if self.config.structured {
@@ -437,7 +431,7 @@ impl EventLogger {
         } else {
             self.format_plain_log(event)
         };
-        
+
         match &self.config.destination {
             LogDestination::Console => {
                 // Use the standard logging framework
@@ -455,17 +449,17 @@ impl EventLogger {
                     let mut file_guard = file.lock().map_err(|_| {
                         crate::error::Error::Config("Failed to acquire log file lock".to_string())
                     })?;
-                    
+
                     // Write to the file with newline
                     writeln!(file_guard, "{}", log_message).map_err(|err| {
                         crate::error::Error::Config(format!("Failed to write to log file: {}", err))
                     })?;
-                    
+
                     // Ensure the log is flushed
                     file_guard.flush().map_err(|err| {
                         crate::error::Error::Config(format!("Failed to flush log file: {}", err))
                     })?;
-                    
+
                     Ok(())
                 } else {
                     // Fall back to console logging if file isn't available
@@ -480,13 +474,11 @@ impl EventLogger {
             }
         }
     }
-    
+
     /// Format an event as a plain text log message
     fn format_plain_log(&self, event: &HttpEvent) -> String {
-        let timestamp = DateTime::<Utc>::from(
-            SystemTime::now()
-        ).format("%Y-%m-%dT%H:%M:%S%.3fZ");
-        
+        let timestamp = DateTime::<Utc>::from(SystemTime::now()).format("%Y-%m-%dT%H:%M:%S%.3fZ");
+
         match event {
             HttpEvent::ServerStarted { address } => {
                 format!("[{}] SERVER STARTED: address={}", timestamp, address)
@@ -494,7 +486,12 @@ impl EventLogger {
             HttpEvent::ServerStopped => {
                 format!("[{}] SERVER STOPPED", timestamp)
             }
-            HttpEvent::RequestReceived { method, path, client_ip, timestamp } => {
+            HttpEvent::RequestReceived {
+                method,
+                path,
+                client_ip,
+                timestamp,
+            } => {
                 format!(
                     "[{}] REQUEST RECEIVED: method={}, path={}, client_ip={}, timestamp={}",
                     timestamp,
@@ -504,7 +501,11 @@ impl EventLogger {
                     timestamp.format("%Y-%m-%dT%H:%M:%S%.3fZ")
                 )
             }
-            HttpEvent::ResponseSent { status, size, duration_ms } => {
+            HttpEvent::ResponseSent {
+                status,
+                size,
+                duration_ms,
+            } => {
                 format!(
                     "[{}] RESPONSE SENT: status={}, size={}, duration_ms={}",
                     timestamp,
@@ -513,7 +514,12 @@ impl EventLogger {
                     duration_ms
                 )
             }
-            HttpEvent::MessageReceived { id, type_, from, to } => {
+            HttpEvent::MessageReceived {
+                id,
+                type_,
+                from,
+                to,
+            } => {
                 format!(
                     "[{}] MESSAGE RECEIVED: id={}, type={}, from={}, to={}",
                     timestamp,
@@ -523,7 +529,11 @@ impl EventLogger {
                     to.as_deref().unwrap_or("unknown")
                 )
             }
-            HttpEvent::MessageError { error_type, message, message_id } => {
+            HttpEvent::MessageError {
+                error_type,
+                message,
+                message_id,
+            } => {
                 format!(
                     "[{}] MESSAGE ERROR: type={}, message={}, message_id={}",
                     timestamp,
@@ -534,14 +544,12 @@ impl EventLogger {
             }
         }
     }
-    
+
     /// Format an event as a structured (JSON) log message
     fn format_structured_log(&self, event: &HttpEvent) -> crate::error::Result<String> {
         // Create common fields for all event types
-        let timestamp = DateTime::<Utc>::from(
-            SystemTime::now()
-        ).to_rfc3339();
-        
+        let timestamp = DateTime::<Utc>::from(SystemTime::now()).to_rfc3339();
+
         // Create event-specific fields
         let (event_type, event_data) = match event {
             HttpEvent::ServerStarted { address } => (
@@ -550,11 +558,13 @@ impl EventLogger {
                     "address": address,
                 }),
             ),
-            HttpEvent::ServerStopped => (
-                "server_stopped",
-                json!({})
-            ),
-            HttpEvent::RequestReceived { method, path, client_ip, timestamp } => (
+            HttpEvent::ServerStopped => ("server_stopped", json!({})),
+            HttpEvent::RequestReceived {
+                method,
+                path,
+                client_ip,
+                timestamp,
+            } => (
                 "request_received",
                 json!({
                     "method": method,
@@ -563,7 +573,11 @@ impl EventLogger {
                     "request_timestamp": timestamp.to_rfc3339(),
                 }),
             ),
-            HttpEvent::ResponseSent { status, size, duration_ms } => (
+            HttpEvent::ResponseSent {
+                status,
+                size,
+                duration_ms,
+            } => (
                 "response_sent",
                 json!({
                     "status": status.as_u16(),
@@ -571,7 +585,12 @@ impl EventLogger {
                     "duration_ms": duration_ms,
                 }),
             ),
-            HttpEvent::MessageReceived { id, type_, from, to } => (
+            HttpEvent::MessageReceived {
+                id,
+                type_,
+                from,
+                to,
+            } => (
                 "message_received",
                 json!({
                     "id": id,
@@ -580,7 +599,11 @@ impl EventLogger {
                     "to": to,
                 }),
             ),
-            HttpEvent::MessageError { error_type, message, message_id } => (
+            HttpEvent::MessageError {
+                error_type,
+                message,
+                message_id,
+            } => (
                 "message_error",
                 json!({
                     "error_type": error_type,
@@ -589,18 +612,16 @@ impl EventLogger {
                 }),
             ),
         };
-        
+
         // Combine into a single JSON object
         let log_entry = json!({
             "timestamp": timestamp,
             "event_type": event_type,
             "data": event_data,
         });
-        
+
         // Serialize to a string
-        serde_json::to_string(&log_entry).map_err(|err| {
-            crate::error::Error::Json(err.to_string())
-        })
+        serde_json::to_string(&log_entry).map_err(|err| crate::error::Error::Json(err.to_string()))
     }
 }
 
@@ -643,16 +664,22 @@ mod tests {
         // Create event bus and subscriber
         let event_bus = EventBus::new();
         let events = Arc::new(Mutex::new(Vec::new()));
-        let subscriber = TestSubscriber { events: events.clone() };
+        let subscriber = TestSubscriber {
+            events: events.clone(),
+        };
         event_bus.subscribe(subscriber);
 
         // Publish some events
-        event_bus.publish_server_started("127.0.0.1:8000".to_string()).await;
-        event_bus.publish_request_received(
-            "GET".to_string(),
-            "/didcomm".to_string(),
-            Some("192.168.1.1".to_string()),
-        ).await;
+        event_bus
+            .publish_server_started("127.0.0.1:8000".to_string())
+            .await;
+        event_bus
+            .publish_request_received(
+                "GET".to_string(),
+                "/didcomm".to_string(),
+                Some("192.168.1.1".to_string()),
+            )
+            .await;
 
         // Check that the events were received
         let received_events = events.lock().unwrap();
@@ -661,16 +688,21 @@ mod tests {
         match &received_events[0] {
             HttpEvent::ServerStarted { address } => {
                 assert_eq!(address, "127.0.0.1:8000");
-            },
+            }
             _ => panic!("Expected ServerStarted event"),
         }
 
         match &received_events[1] {
-            HttpEvent::RequestReceived { method, path, client_ip, .. } => {
+            HttpEvent::RequestReceived {
+                method,
+                path,
+                client_ip,
+                ..
+            } => {
                 assert_eq!(method, "GET");
                 assert_eq!(path, "/didcomm");
                 assert_eq!(client_ip, &Some("192.168.1.1".to_string()));
-            },
+            }
             _ => panic!("Expected RequestReceived event"),
         }
     }

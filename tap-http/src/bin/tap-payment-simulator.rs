@@ -6,13 +6,13 @@
 //! Usage:
 //!   tap-payment-simulator --url <server-url> --did <server-agent-did>
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::process;
 use tap_agent::{Agent, DefaultAgent};
-use tap_msg::{PaymentRequest, Transfer, Participant};
+use tap_msg::{Participant, PaymentRequest, Transfer};
 use tap_node::DefaultAgentExt;
 use tracing::{debug, info};
-use std::collections::HashMap;
 
 struct Args {
     url: String,
@@ -89,25 +89,33 @@ fn print_help() {
 }
 
 /// Send a TAP message to the server
-async fn send_tap_message<T: tap_msg::message::tap_message_trait::TapMessageBody + serde::Serialize + Send + Sync>(
+async fn send_tap_message<
+    T: tap_msg::message::tap_message_trait::TapMessageBody + serde::Serialize + Send + Sync,
+>(
     agent: &DefaultAgent,
     recipient_did: &str,
     recipient_url: &str,
     message: &T,
 ) -> Result<(), Box<dyn Error>> {
     // Create a DIDComm message from the TAP message using a custom approach
-    info!("Creating DIDComm message for TAP type: {}", T::message_type());
+    info!(
+        "Creating DIDComm message for TAP type: {}",
+        T::message_type()
+    );
     let from_did = agent.get_agent_did();
-    
+
     // Convert the TAP message to JSON value
-    let mut message_json = serde_json::to_value(message)
-        .map_err(|e| format!("Failed to serialize message: {}", e))?;
-    
+    let mut message_json =
+        serde_json::to_value(message).map_err(|e| format!("Failed to serialize message: {}", e))?;
+
     // Ensure the @type field is set correctly in the body
     if let Some(body_obj) = message_json.as_object_mut() {
-        body_obj.insert("@type".to_string(), serde_json::Value::String(T::message_type().to_string()));
+        body_obj.insert(
+            "@type".to_string(),
+            serde_json::Value::String(T::message_type().to_string()),
+        );
     }
-    
+
     // Create a proper DIDComm message with correct typ and type fields - this is critical!
     let id = uuid::Uuid::new_v4().to_string();
     let didcomm_message = tap_msg::didcomm::Message {
@@ -125,13 +133,18 @@ async fn send_tap_message<T: tap_msg::message::tap_message_trait::TapMessageBody
         from_prior: None,
         attachments: None,
     };
-        
+
     // Debug: Dump the raw message to see what's being sent
-    println!("RAW DIDCOMM MESSAGE:\n{}", serde_json::to_string_pretty(&didcomm_message).unwrap_or_default());
-    
+    println!(
+        "RAW DIDCOMM MESSAGE:\n{}",
+        serde_json::to_string_pretty(&didcomm_message).unwrap_or_default()
+    );
+
     // Pack the message using the agent's send_serialized_message method
     info!("Packing message for recipient {}", recipient_did);
-    let packed = agent.send_serialized_message(&didcomm_message, recipient_did).await?;
+    let packed = agent
+        .send_serialized_message(&didcomm_message, recipient_did)
+        .await?;
     debug!("Packed message size: {} bytes", packed.len());
 
     // Send to the server
@@ -191,7 +204,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create payment request message using the proper type
     info!("Creating payment request message");
-    
+
     // Create merchant and customer participants
     let merchant = Participant {
         id: args.recipient_did.clone(),
@@ -206,7 +219,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         policies: None,
         leiCode: None,
     };
-    
+
     // Create agent participants
     let sender_agent = Participant {
         id: agent_did.clone(),
@@ -214,17 +227,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         policies: None,
         leiCode: None,
     };
-    
+
     let recipient_agent = Participant {
         id: args.recipient_did.clone(),
         role: Some("recipient".to_string()),
         policies: None,
         leiCode: None,
     };
-    
+
     // Create a settlement agent participant (required by validation)
     let settlement_agent = Participant {
-        id: format!("did:pkh:eip155:1:0x{}", uuid::Uuid::new_v4().to_string().replace("-", "").get(0..40).unwrap_or("1234567890abcdef1234567890abcdef12345678")),
+        id: format!(
+            "did:pkh:eip155:1:0x{}",
+            uuid::Uuid::new_v4()
+                .to_string()
+                .replace("-", "")
+                .get(0..40)
+                .unwrap_or("1234567890abcdef1234567890abcdef12345678")
+        ),
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
@@ -233,7 +253,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a payment request using the proper struct
     let payment_request = PaymentRequest {
         asset: Some(
-            "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse().unwrap(),
+            "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                .parse()
+                .unwrap(),
         ),
         currency: Some(currency),
         amount: amount.to_string(),
@@ -242,19 +264,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
         expiry: None,
         merchant,
         customer: Some(customer),
-        agents: vec![sender_agent.clone(), recipient_agent.clone(), settlement_agent.clone()], // Include both DIDs plus settlement agent
+        agents: vec![
+            sender_agent.clone(),
+            recipient_agent.clone(),
+            settlement_agent.clone(),
+        ], // Include both DIDs plus settlement agent
         metadata: HashMap::new(),
     };
 
     // Send payment request message using the agent's proper method
     info!("Sending payment request message to server");
-    send_tap_message(
-        &agent,
-        &args.recipient_did,
-        &args.url,
-        &payment_request,
-    )
-    .await?;
+    send_tap_message(&agent, &args.recipient_did, &args.url, &payment_request).await?;
 
     // Wait a bit before sending the transfer
     info!("Waiting 2 seconds before sending transfer message...");
@@ -262,7 +282,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create transfer message using the proper type
     info!("Creating transfer message");
-    
+
     // Create originator and beneficiary participants
     let originator = Participant {
         id: agent_did.clone(),
@@ -281,11 +301,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create a transfer using the proper struct
     let transfer = Transfer {
         transaction_id: transaction_id.clone(),
-        asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse().unwrap(),
+        asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            .parse()
+            .unwrap(),
         originator,
         beneficiary: Some(beneficiary),
         amount: amount.to_string(),
-        agents: vec![sender_agent, recipient_agent, settlement_agent],  // Include both DIDs plus settlement agent
+        agents: vec![sender_agent, recipient_agent, settlement_agent], // Include both DIDs plus settlement agent
         settlement_id: None,
         memo: Some("Payment simulator transfer".to_string()),
         metadata: HashMap::new(),
@@ -293,13 +315,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Send transfer message using the agent's proper method
     info!("Sending transfer message to server");
-    send_tap_message(
-        &agent,
-        &args.recipient_did,
-        &args.url,
-        &transfer,
-    )
-    .await?;
+    send_tap_message(&agent, &args.recipient_did, &args.url, &transfer).await?;
 
     info!("Payment flow simulation completed successfully");
     Ok(())

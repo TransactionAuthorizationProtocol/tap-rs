@@ -156,45 +156,45 @@ impl DefaultAgentExt for DefaultAgent {
         // Since we cannot directly access the agent's MessagePacker (which handles signing),
         // and using send_message with a custom adapter proved difficult due to Rust's type system,
         // we'll take a different approach.
-        
+
         // First, serialize the DIDComm Message to a JSON Value
         let json_value = serde_json::to_value(message).map_err(Error::Serialization)?;
-        
+
         // Get the agent's DID as the sender
         let from_did = self.get_agent_did();
-        
+
         // Get the message type
         let message_type = message.type_.clone();
-        
+
         // We need a way to properly sign and package the message.
         // Instead of using a simulated signature, let's create a proper signed DIDComm v2 message.
         // Unfortunately, without direct access to MessagePacker, we need to implement a simplified version.
-        
+
         // First, create a payload that would normally be signed
         let _payload = serde_json::json!({
             // Use the message's ID or generate a new one if needed
             "id": message.id.clone(),
-            
+
             // Standard DIDComm type fields
             "typ": "application/didcomm-signed+json",
             "type": message_type,
-            
+
             // Include the from field for proper sender identification
             "from": from_did,
-            
+
             // Include the to field for proper recipient identification
             "to": [to_did],
-            
+
             // Include the original message body
             "body": json_value,
-            
+
             // Add timestamp
             "created_time": chrono::Utc::now().timestamp()
         });
-        
+
         // Since we can't use the agent's actual cryptographic signing capabilities directly,
         // we'll try another approach - call out to a lower-level method for DIDComm message preparation.
-        
+
         // Simulate a proper DIDComm signed message structure
         // In a real implementation, we would use the agent's cryptographic capabilities
         // to generate a real signature.
@@ -207,7 +207,7 @@ impl DefaultAgentExt for DefaultAgent {
             "to": [to_did],
             "body": json_value,
             "created_time": chrono::Utc::now().timestamp(),
-            
+
             // Add real signature structure but with simulated signature
             // In a production implementation, this would use actual Ed25519 signatures
             "signatures": [{
@@ -218,10 +218,10 @@ impl DefaultAgentExt for DefaultAgent {
                 }
             }]
         });
-        
+
         // Serialize to a string
         let packed = serde_json::to_string(&packed_message).map_err(Error::Serialization)?;
-        
+
         Ok(packed)
     }
 }
@@ -339,7 +339,7 @@ impl TapNode {
         // Set up the event logger if configured
         if let Some(logger_config) = &node.config.event_logger {
             let event_logger = Arc::new(EventLogger::new(logger_config.clone()));
-            
+
             // We need to handle the async subscribe in a blocking context
             // This is safe because EventBus methods are designed to be called in this way
             let event_bus = node.event_bus.clone();

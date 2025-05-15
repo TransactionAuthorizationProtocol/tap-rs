@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Configure the HTTP server with event logging to ./logs directory
     let mut config = TapHttpConfig::default();
-    
+
     // Configure event logger to log to ./logs directory
     config.event_logger = Some(EventLoggerConfig {
         destination: LogDestination::File {
@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start the server
     server.start().await?;
-    
+
     info!("Server started. Events are being logged to ./logs/tap-http.log");
     info!("Press Ctrl+C to stop the server...");
 
@@ -75,10 +75,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Stop the server
     server.stop().await?;
-    
+
     // Give time for shutdown events to be logged
     sleep(Duration::from_millis(100)).await;
-    
+
     info!("Server stopped. Event logging demo completed.");
 
     Ok(())
