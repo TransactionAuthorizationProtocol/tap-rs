@@ -6,7 +6,7 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
-use base64;
+use base64::Engine;
 use multibase;
 use didcomm;
 use tap_agent::DefaultAgent;
@@ -151,8 +151,8 @@ fn create_agent(
                 return Err("Invalid DID format. DID must start with 'did:'".into());
             }
             
-            // Create a key manager
-            let key_manager = tap_agent::key_manager::KeyManager::new();
+            // Create a key manager (not used directly yet, but kept for future extensions)
+            let _key_manager = tap_agent::key_manager::KeyManager::new();
             
             // Create a DID resolver
             let did_resolver = std::sync::Arc::new(tap_agent::did::MultiResolver::default());
@@ -176,15 +176,7 @@ fn create_agent(
                 
                 // Create a DIDComm secret
                 let secret = didcomm::secrets::Secret {
-                    type_: if jwk.get("crv").and_then(|v| v.as_str()) == Some("Ed25519") {
-                        didcomm::secrets::SecretType::Ed25519
-                    } else if jwk.get("crv").and_then(|v| v.as_str()) == Some("P-256") {
-                        didcomm::secrets::SecretType::P256
-                    } else if jwk.get("crv").and_then(|v| v.as_str()) == Some("secp256k1") {
-                        didcomm::secrets::SecretType::K256
-                    } else {
-                        didcomm::secrets::SecretType::Ed25519 // Default to Ed25519
-                    },
+                    type_: didcomm::secrets::SecretType::JsonWebKey2020, // Use the correct variant for all key types
                     id: format!("{}#keys-1", did),
                     secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
                 };
@@ -224,7 +216,7 @@ fn create_agent(
                     
                     // Create a DIDComm secret
                     let secret = didcomm::secrets::Secret {
-                        type_: didcomm::secrets::SecretType::Ed25519,
+                        type_: didcomm::secrets::SecretType::JsonWebKey2020,
                         id: format!("{}#keys-1", did),
                         secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
                     };
@@ -266,7 +258,7 @@ fn create_agent(
                 
                 // Create a DIDComm secret
                 let secret = didcomm::secrets::Secret {
-                    type_: didcomm::secrets::SecretType::Ed25519,
+                    type_: didcomm::secrets::SecretType::JsonWebKey2020,
                     id: format!("{}#keys-1", did),
                     secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
                 };

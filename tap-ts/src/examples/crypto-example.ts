@@ -17,7 +17,7 @@ async function cryptoExample() {
   
   // Create an agent with the key
   const agent = new TAPAgent({
-    did: didKey.did,
+    did: didKey.did as `did:${string}:${string}`,
     nickname: 'Crypto Agent',
     debug: true
   });

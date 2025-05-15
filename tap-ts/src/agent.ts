@@ -48,7 +48,7 @@ class DefaultKeyManager {
     // Now create the DID key with Ed25519 type
     try {
       // Generate an Ed25519 DID key (will be the default in the WASM too)
-      this._didKey = await tapWasm.create_did_key(tapWasm.DIDKeyType.Ed25519);
+      this._didKey = await tapWasm.create_did_key("Ed25519");
       this._did = this._didKey.did as DID;
       this.initialized = true;
       
@@ -252,11 +252,11 @@ export class TAPAgent {
     const message = this.wasmAgent.create_message(MessageType.Transfer);
     
     // Set the from field
-    this.wasmAgent.set_from(message);
+    message.set_from_did(this.did);
     
     // Set the to field if beneficiary is provided
     if (params.beneficiary && params.beneficiary['@id']) {
-      this.wasmAgent.set_to(message, params.beneficiary['@id']);
+      message.set_to_did(params.beneficiary['@id']);
     }
     
     // Set transfer body without duplicates
@@ -283,11 +283,11 @@ export class TAPAgent {
     const message = this.wasmAgent.create_message(MessageType.Payment);
     
     // Set the from field
-    this.wasmAgent.set_from(message);
+    message.set_from_did(this.did);
     
     // Set the to field if customer is provided
     if (params.customer && params.customer['@id']) {
-      this.wasmAgent.set_to(message, params.customer['@id']);
+      message.set_to_did(params.customer['@id']);
     }
     
     // Set payment request body without duplicates
@@ -315,11 +315,11 @@ export class TAPAgent {
     const message = this.wasmAgent.create_message(MessageType.Presentation);
     
     // Set the from field
-    this.wasmAgent.set_from(message);
+    message.set_from_did(this.did);
     
     // Set the to field if agent is provided
     if (params.agent && params.agent['@id']) {
-      this.wasmAgent.set_to(message, params.agent['@id']);
+      message.set_to_did(params.agent['@id']);
     }
     
     // Set connection body using the DIDComm message interface

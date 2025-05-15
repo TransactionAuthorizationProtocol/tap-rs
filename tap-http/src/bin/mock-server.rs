@@ -2,7 +2,6 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use tokio::io::AsyncReadExt;
 
 /// Handle requests and return appropriate responses
 async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
