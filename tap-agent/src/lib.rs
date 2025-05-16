@@ -41,7 +41,7 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 }
 
 // Re-export key types for convenience
-pub use agent::{Agent, DefaultAgent};
+pub use agent::{Agent, DefaultAgent, DeliveryResult};
 pub use config::AgentConfig;
 pub use crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
 pub use did::{

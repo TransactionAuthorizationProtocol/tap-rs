@@ -95,4 +95,8 @@ pub enum Error {
     /// Serde JSON error
     #[error("Serde JSON error: {0}")]
     SerdeError(#[from] serde_json::Error),
+    
+    /// Networking error
+    #[error("Networking error: {0}")]
+    Networking(String),
 }

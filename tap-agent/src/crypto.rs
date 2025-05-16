@@ -53,6 +53,17 @@ pub trait MessagePacker: Send + Sync + Debug {
         from: Option<&str>,
         mode: SecurityMode,
     ) -> Result<String>;
+    
+    /// Resolve a DID to its DID document
+    /// 
+    /// This method retrieves the DID document for a given DID
+    /// 
+    /// # Parameters
+    /// * `did` - The DID to resolve
+    /// 
+    /// # Returns
+    /// The resolved DID document, or None if not found
+    async fn resolve_did_doc(&self, did: &str) -> Result<Option<didcomm::did::DIDDoc>>;
 
     /// Unpack a message and return the JSON Value.
     ///
@@ -168,6 +179,18 @@ impl DefaultMessagePacker {
         // Convert the DID doc to a JSON string
         serde_json::to_string(&doc).map_err(|e| Error::Serialization(e.to_string()))
     }
+    
+    /// Resolve a DID to a DID document directly
+    ///
+    /// # Parameters
+    /// * `did` - The DID to resolve
+    ///
+    /// # Returns
+    /// The DID document or None if not found
+    async fn resolve_did_document(&self, did: &str) -> Result<Option<didcomm::did::DIDDoc>> {
+        // Delegate to the DID resolver
+        self.did_resolver.resolve(did).await
+    }
 
     /// Select the appropriate security mode for the message
     ///
@@ -220,6 +243,19 @@ impl DefaultMessagePacker {
 
 #[async_trait]
 impl MessagePacker for DefaultMessagePacker {
+    /// Resolve a DID to its DID document
+    /// 
+    /// This method retrieves the DID document for a given DID
+    /// 
+    /// # Parameters
+    /// * `did` - The DID to resolve
+    /// 
+    /// # Returns
+    /// The resolved DID document, or None if not found
+    async fn resolve_did_doc(&self, did: &str) -> Result<Option<didcomm::did::DIDDoc>> {
+        self.resolve_did_document(did).await
+    }
+    
     /// Pack a message for the specified recipient using DIDComm
     ///
     /// Serializes the message, creates a DIDComm message, and applies

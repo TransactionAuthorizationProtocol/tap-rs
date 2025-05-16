@@ -35,10 +35,11 @@ The `Agent` trait defines the core interface for TAP agents, with methods for:
 
 - Retrieving the agent's DID
 - Sending messages with appropriate security modes
+- Finding service endpoints from DID documents
 - Receiving and unpacking messages
 - Validating message contents
 
-The `DefaultAgent` implementation provides a standard implementation of this trait, using DIDComm for secure message exchange.
+The `DefaultAgent` implementation provides a standard implementation of this trait, using DIDComm for secure message exchange. It automatically checks for service endpoints when sending messages to help with message routing.
 
 #### DID Resolution
 
@@ -72,7 +73,7 @@ The agent supports different security modes for messages:
 
 - **Secure Identity Management**: Create and manage agent identities using DIDs
 - **Message Processing**: Handle TAP message flows with proper validation
-- **DID Resolution**: Resolve DIDs for message routing and key discovery
+- **DID Resolution**: Resolve DIDs for message routing, key discovery, and service endpoints
 - **Cryptographic Operations**: Sign, verify, encrypt, and decrypt messages
 - **Key Management**: Securely manage cryptographic keys
 - **DID Generation CLI**: Create DIDs and keys using a command-line interface
@@ -156,11 +157,31 @@ let transfer = Transfer {
     metadata: HashMap::new(),
 };
 
-// Send the message to the recipient
+// Look up the recipient's service endpoint (for DIDs with service endpoints like did:web or did:key)
 let recipient_did = "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k";
-let packed_message = agent.send_message(&transfer, recipient_did).await?;
 
-// The packed_message can now be transmitted to the recipient
+// Method 1: Use the convenience method to get the service endpoint directly
+if let Ok(Some(endpoint)) = agent.get_did_service_endpoint(recipient_did).await {
+    println!("Found service endpoint: {}", endpoint);
+    // In a complete implementation, you would send the packed message to this endpoint
+}
+
+// Method 2: Use send_message_with_delivery for automatic delivery
+// This will automatically send the message to the service endpoint if found
+// The third parameter (true) indicates to deliver the message automatically
+let (packed_message, delivery_results) = agent.send_message_with_delivery(&transfer, recipient_did, true).await?;
+
+// Check delivery results
+for result in delivery_results {
+    if let Some(status) = result.status {
+        println!("Message delivered to {} at endpoint {}, status: {}", 
+                 result.did, result.endpoint, status);
+    } else if let Some(error) = &result.error {
+        println!("Failed to deliver message to {}: {}", result.did, error);
+    }
+}
+
+// The packed_message is also returned and can be used for other purposes
 ```
 
 ### Receiving a Message
@@ -192,6 +213,16 @@ let did_doc = rt.block_on(async {
 
 if let Some(doc) = did_doc {
     println!("Resolved DID: {}", doc.id);
+    
+    // Check for service endpoints
+    if !doc.service.is_empty() {
+        println!("Service endpoints found:");
+        for (i, service) in doc.service.iter().enumerate() {
+            println!("  [{}] ID: {}", i+1, service.id);
+            println!("      Endpoint: {:?}", service.service_endpoint);
+        }
+    }
+    
     // Process the DID document...
 }
 ```
@@ -323,7 +354,7 @@ The `lookup` command resolves a DID to its DID document and displays detailed in
 - Verification methods (with key material)
 - Authentication methods
 - Key agreement methods
-- Services (if present)
+- Services (with their endpoints, useful for message routing)
 
 The resolver supports the following DID methods by default:
 - `did:key` - Resolves DIDs based on Ed25519 public keys 
@@ -349,6 +380,110 @@ tap-agent-cli lookup did:web:example.com:path:to:resource
 ```
 
 The resolver will automatically fetch the DID document from the appropriate URL based on the DID format.
+
+## Working with Service Endpoints
+
+Service endpoints in DID documents provide URLs where the DID subject can receive messages. The `tap-agent` crate makes it easy to work with service endpoints:
+
+```rust
+// Get a service endpoint for a DID
+async fn get_service_endpoint(agent: &DefaultAgent, did: &str) -> Result<()> {
+    // Look up the service endpoint
+    match agent.get_did_service_endpoint(did).await? {
+        Some(endpoint) => {
+            println!("Found service endpoint for {}: {}", did, endpoint);
+            
+            // Use the endpoint for sending messages
+            // For example, with an HTTP client:
+            // let client = reqwest::Client::new();
+            // let packed_message = agent.send_message(&message, did).await?;
+            // let response = client.post(endpoint)
+            //     .header("Content-Type", "application/didcomm-encrypted+json")
+            //     .body(packed_message)
+            //     .send()
+            //     .await?;
+        },
+        None => println!("No service endpoint found for {}", did),
+    }
+    
+    Ok(())
+}
+```
+
+### Service Endpoint Types and Message Delivery
+
+The `tap-agent` crate can work with different types of service endpoints defined in DID documents and automatically deliver messages to them:
+
+1. **DIDCommMessaging** endpoints - Specifically designed for DIDComm message exchange:
+   ```json
+   {
+     "service": [{
+       "id": "did:example:123#didcomm",
+       "type": "DIDCommMessaging",
+       "serviceEndpoint": {
+         "uri": "https://example.com/didcomm",
+         "accept": ["didcomm/v2"],
+         "routingKeys": []
+       }
+     }]
+   }
+   ```
+
+2. **Other** types of endpoints - General purpose service endpoints:
+   ```json
+   {
+     "service": [{
+       "id": "did:example:123#agent",
+       "type": "TapAgent",
+       "serviceEndpoint": "https://agent.example.com/tap"
+     }]
+   }
+   ```
+
+The `get_service_endpoint` method will prioritize DIDCommMessaging endpoints but will fall back to other types if needed.
+
+### Automatic Message Delivery
+
+The agent can automatically deliver messages to service endpoints using HTTP POST requests:
+
+```rust
+// Send a message to a single recipient with automatic delivery
+let (packed_message, delivery_results) = agent.send_message_with_delivery(&message, recipient_did, true).await?;
+
+// Send a message to multiple DIDs with automatic delivery
+let recipients = vec!["did:web:example.com", "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"];
+let (packed_message, delivery_results) = agent.send_message_to_many(&message, recipients, true).await?;
+
+// Process delivery results
+for result in &delivery_results {
+    if let Some(status) = result.status {
+        if status >= 200 && status < 300 {
+            println!("✓ Successfully delivered to {} (status {})", result.did, status);
+        } else {
+            println!("! Delivery to {} failed with status {}", result.did, status);
+        }
+    } else if let Some(error) = &result.error {
+        println!("✗ Error delivering to {}: {}", result.did, error);
+    }
+}
+```
+
+The delivery process:
+1. Resolves each recipient's DID to find service endpoints
+2. For each recipient with a service endpoint:
+   - Logs "Found service endpoint for [DID]: [endpoint]"
+   - Sends the packed message via HTTP POST with Content-Type: application/didcomm-encrypted+json
+   - On success: Logs "Delivered message [ID] to [DID] at [endpoint]"
+   - On failure: Logs error but continues without failing
+3. For recipients without a service endpoint:
+   - Logs "No service endpoint found for [DID], skipping delivery" and continues
+4. Returns delivery results for recipients where delivery was attempted in a `DeliveryResult` structure:
+   - `did`: The DID that was the target of the delivery
+   - `endpoint`: The service endpoint URL that was used
+   - `status`: HTTP status code if successful
+   - `error`: Error message if delivery failed
+
+The agent is designed to be resilient - it will log issues but won't fail the operation if service endpoints can't be found or messages can't be delivered.
 
 ## Creating Ephemeral DIDs
 
