@@ -107,7 +107,7 @@ fn bench_send_message(c: &mut Criterion) {
                 let transfer = create_transfer_message(&did1, &did2).await;
 
                 // Send message
-                let _ = agent1.send_message(&transfer, &did2).await.unwrap();
+                let (_, _) = agent1.send_message(&transfer, vec![&did2], false).await.unwrap();
             });
         });
     });
@@ -135,7 +135,7 @@ fn bench_message_packing(c: &mut Criterion) {
                 let transfer = create_transfer_message(&did1, &did2).await;
 
                 // Send and receive message
-                let packed = agent1.send_message(&transfer, &did2).await.unwrap();
+                let (packed, _) = agent1.send_message(&transfer, vec![&did2], false).await.unwrap();
                 let _: Transfer = agent2.receive_message(&packed).await.unwrap();
             });
         });

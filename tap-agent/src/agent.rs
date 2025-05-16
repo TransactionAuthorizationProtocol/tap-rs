@@ -41,63 +41,31 @@ pub trait Agent: Debug + Sync + Send {
     /// Returns the Decentralized Identifier (DID) that identifies this agent
     fn get_agent_did(&self) -> &str;
 
-    /// Send a TAP message to a recipient
+    /// Send a TAP message to one or more recipients
     ///
-    /// This method handles:
+    /// This unified method handles:
     /// 1. Serializing the message
-    /// 2. Determining appropriate security mode 
-    /// 3. Packing the message with DIDComm
+    /// 2. Determining appropriate security mode
+    /// 3. Packing the message with DIDComm for all recipients
+    /// 4. Optionally delivering the message to recipients' service endpoints
+    /// 5. Logging the plaintext and packed messages
     ///
     /// # Parameters
     /// * `message` - The message to send, implementing TapMessageBody
-    /// * `to` - The DID of the recipient
+    /// * `to` - A vector of recipient DIDs
+    /// * `deliver` - Whether to automatically deliver the message to service endpoints
     ///
     /// # Returns
-    /// The packed message as a string
+    /// A result containing the packed message and delivery results (if requested)
     async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
-        &self,
-        message: &T,
-        to: &str,
-    ) -> Result<String>;
-    
-    /// Send a TAP message to a recipient with delivery option
-    ///
-    /// This method handles:
-    /// 1. Serializing the message
-    /// 2. Determining appropriate security mode 
-    /// 3. Packing the message with DIDComm
-    /// 4. Optionally sending the message to service endpoints if available
-    ///
-    /// # Parameters
-    /// * `message` - The message to send, implementing TapMessageBody
-    /// * `to` - The DID of the recipient
-    /// * `deliver` - Whether to automatically deliver the message to service endpoints if available
-    ///
-    /// # Returns
-    /// A result containing the packed message and a vector of service delivery results
-    async fn send_message_with_delivery<T: TapMessageBody + serde::Serialize + Send + Sync>(
-        &self,
-        message: &T,
-        to: &str,
-        deliver: bool,
-    ) -> Result<(String, Vec<DeliveryResult>)>;
-    
-    /// Send a TAP message to multiple recipients with delivery option
-    ///
-    /// # Parameters
-    /// * `message` - The message to send, implementing TapMessageBody
-    /// * `to` - A list of DIDs to send the message to
-    /// * `deliver` - Whether to automatically deliver the message to service endpoints if available
-    ///
-    /// # Returns
-    /// A result containing the packed message and a vector of service delivery results
-    async fn send_message_to_many<T: TapMessageBody + serde::Serialize + Send + Sync>(
         &self,
         message: &T,
         to: Vec<&str>,
         deliver: bool,
     ) -> Result<(String, Vec<DeliveryResult>)>;
-    
+
+
+
     /// Find the service endpoint for a recipient DID
     ///
     /// This method looks up the DID document for the recipient and
@@ -138,36 +106,21 @@ impl<T: Agent + ?Sized> Agent for Arc<T> {
     async fn send_message<U: TapMessageBody + serde::Serialize + Send + Sync>(
         &self,
         message: &U,
-        to: &str,
-    ) -> Result<String> {
-        (**self).send_message(message, to).await
-    }
-    
-    async fn send_message_with_delivery<U: TapMessageBody + serde::Serialize + Send + Sync>(
-        &self,
-        message: &U,
-        to: &str,
-        deliver: bool,
-    ) -> Result<(String, Vec<DeliveryResult>)> {
-        (**self).send_message_with_delivery(message, to, deliver).await
-    }
-    
-    async fn send_message_to_many<U: TapMessageBody + serde::Serialize + Send + Sync>(
-        &self,
-        message: &U,
         to: Vec<&str>,
         deliver: bool,
     ) -> Result<(String, Vec<DeliveryResult>)> {
-        (**self).send_message_to_many(message, to, deliver).await
+        (**self).send_message(message, to, deliver).await
     }
-    
+
+
+
     async fn receive_message<U: TapMessageBody + DeserializeOwned + Send>(
         &self,
         packed_message: &str,
     ) -> Result<U> {
         (**self).receive_message(packed_message).await
     }
-    
+
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>> {
         (**self).get_service_endpoint(to).await
     }
@@ -203,7 +156,7 @@ impl DefaultAgent {
             http_client: Client::new(),
         }
     }
-    
+
     /// Create a new DefaultAgent with a specific HTTP client
     ///
     /// # Parameters
@@ -214,7 +167,7 @@ impl DefaultAgent {
     /// # Returns
     /// A new DefaultAgent instance
     pub fn new_with_client(
-        config: AgentConfig, 
+        config: AgentConfig,
         message_packer: Arc<dyn MessagePacker>,
         http_client: Client,
     ) -> Self {
@@ -224,14 +177,14 @@ impl DefaultAgent {
             http_client,
         }
     }
-    
+
     /// Convenience method to get a service endpoint for a DID
     ///
     /// This is a public wrapper around the get_service_endpoint trait method
-    /// 
+    ///
     /// # Parameters
     /// * `did` - The DID to look up the service endpoint for
-    /// 
+    ///
     /// # Returns
     /// The service endpoint URL or None if not found
     pub async fn get_did_service_endpoint(&self, did: &str) -> Result<Option<String>> {
@@ -282,7 +235,7 @@ impl DefaultAgent {
 
         Ok((agent, key.did))
     }
-    
+
     /// Send a packed message to a service endpoint via HTTP POST
     ///
     /// # Parameters
@@ -293,20 +246,21 @@ impl DefaultAgent {
     /// The HTTP response status code, or error if the request failed
     pub async fn send_to_endpoint(&self, packed_message: &str, endpoint: &str) -> Result<u16> {
         // Send the message to the endpoint via HTTP POST
-        let response = self.http_client
+        let response = self
+            .http_client
             .post(endpoint)
             .header("Content-Type", "application/didcomm-encrypted+json")
             .body(packed_message.to_string())
             .send()
             .await
             .map_err(|e| Error::Networking(format!("Failed to send message to endpoint: {}", e)))?;
-            
+
         // Get the status code
         let status = response.status().as_u16();
-        
+
         // Log the response status
         println!("Message sent to endpoint {}, status: {}", endpoint, status);
-        
+
         Ok(status)
     }
 
@@ -317,12 +271,25 @@ impl DefaultAgent {
     /// - Presentation messages use authenticated encryption (AuthCrypt)
     /// - All other messages use digital signatures (Signed)
     ///
+    /// If security_mode is specified in the agent config, that takes precedence.
+    ///
     /// # Parameters
     /// * `message_type` - The type of the message
     ///
     /// # Returns
     /// The appropriate SecurityMode for the message type
     fn determine_security_mode<T: TapMessageBody>(&self) -> SecurityMode {
+        // If security mode is explicitly configured, use that
+        if let Some(ref mode) = self.config.security_mode {
+            if mode.to_uppercase() == "AUTHCRYPT" {
+                return SecurityMode::AuthCrypt;
+            } else {
+                // Default to Signed for any other value
+                return SecurityMode::Signed;
+            }
+        }
+
+        // Otherwise use type-based rules
         let message_type = T::message_type();
         if message_type == crate::message::PRESENTATION_MESSAGE_TYPE {
             SecurityMode::AuthCrypt
@@ -337,157 +304,47 @@ impl Agent for DefaultAgent {
     fn get_agent_did(&self) -> &str {
         &self.config.agent_did
     }
-    
+
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>> {
         // Get the recipient's DID document
         let did_doc = self.message_packer.resolve_did_doc(to).await?;
-        
+
         // Look for service endpoints
         if let Some(doc) = did_doc {
             // First pass: Look for DIDCommMessaging services specifically
-            for service in &doc.service {
-                // Check the service type and extract the URI based on the type
-                match &service.service_endpoint {
-                    didcomm::did::ServiceKind::DIDCommMessaging { value } => {
-                        // For DIDCommMessaging, return the URI directly
-                        return Ok(Some(value.uri.clone()));
-                    },
-                    didcomm::did::ServiceKind::Other { value } => {
-                        // For other services, try to extract a service endpoint from the value
-                        if let Some(endpoint) = value.get("serviceEndpoint").and_then(|v| v.as_str()) {
-                            return Ok(Some(endpoint.to_string()));
-                        } else if let Some(uri) = value.get("uri").and_then(|v| v.as_str()) {
-                            return Ok(Some(uri.to_string()));
-                        } else {
-                            // If we can't find a specific field, use the whole value as a string
-                            return Ok(Some(format!("{}", value)));
-                        }
+            // Try to find a DIDCommMessaging service first
+            if let Some(service) = doc.service.iter().find(|s| {
+                matches!(&s.service_endpoint, didcomm::did::ServiceKind::DIDCommMessaging { .. })
+            }) {
+                if let didcomm::did::ServiceKind::DIDCommMessaging { value } = &service.service_endpoint {
+                    // For DIDCommMessaging, return the URI directly
+                    return Ok(Some(value.uri.clone()));
+                }
+            }
+            
+            // If no DIDCommMessaging service found, look for other service types
+            if let Some(service) = doc.service.iter().find(|s| {
+                matches!(&s.service_endpoint, didcomm::did::ServiceKind::Other { .. })
+            }) {
+                if let didcomm::did::ServiceKind::Other { value } = &service.service_endpoint {
+                    // For other services, try to extract a service endpoint from the value
+                    if let Some(endpoint) = value.get("serviceEndpoint").and_then(|v| v.as_str()) {
+                        return Ok(Some(endpoint.to_string()));
+                    } else if let Some(uri) = value.get("uri").and_then(|v| v.as_str()) {
+                        return Ok(Some(uri.to_string()));
+                    } else {
+                        // If we can't find a specific field, use the whole value as a string
+                        return Ok(Some(format!("{}", value)));
                     }
                 }
             }
         }
-        
+
         // No service endpoint found
         Ok(None)
     }
 
     async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
-        &self,
-        message: &T,
-        to: &str,
-    ) -> Result<String> {
-        // Create the message object with proper type
-        let mut message_obj = serde_json::to_value(message)
-            .map_err(|e| Error::Serialization(format!("Failed to serialize message: {}", e)))?;
-
-        // Ensure message has a type field
-        if message_obj.get("type").is_none() {
-            if let serde_json::Value::Object(ref mut obj) = message_obj {
-                obj.insert(
-                    "type".to_string(),
-                    serde_json::Value::String(T::message_type().to_string()),
-                );
-            }
-        }
-
-        // Validate the message
-        message.validate().map_err(|e| {
-            Error::Validation(format!(
-                "Message validation failed for type {}: {}",
-                T::message_type(),
-                e
-            ))
-        })?;
-
-        // Determine the appropriate security mode
-        let security_mode = self.determine_security_mode::<T>();
-
-        // Look up service endpoint before sending (only for logging, not delivery)
-        if let Ok(Some(endpoint)) = self.get_service_endpoint(to).await {
-            // Log the found service endpoint - this can be helpful for debugging in both production and tests
-            println!("Found service endpoint for {}: {}", to, endpoint);
-            println!("Message will be delivered to this endpoint");
-        }
-
-        // Use message packer to pack the message
-        let packed = self
-            .message_packer
-            .pack_message(&message_obj, to, Some(self.get_agent_did()), security_mode)
-            .await?;
-
-        Ok(packed)
-    }
-    
-    async fn send_message_with_delivery<T: TapMessageBody + serde::Serialize + Send + Sync>(
-        &self,
-        message: &T,
-        to: &str,
-        deliver: bool,
-    ) -> Result<(String, Vec<DeliveryResult>)> {
-        // First pack the message
-        let packed = self.send_message(message, to).await?;
-        
-        // If delivery is not requested, just return the packed message
-        if !deliver {
-            return Ok((packed, Vec::new()));
-        }
-        
-        // Try to deliver the message
-        let mut delivery_results = Vec::new();
-        
-        match self.get_service_endpoint(to).await {
-            Ok(Some(endpoint)) => {
-                println!("Found service endpoint for {}: {}", to, endpoint);
-                
-                // Extract message ID for logging
-                let message_id = match serde_json::from_str::<serde_json::Value>(&packed) {
-                    Ok(json) => json.get("id").and_then(|id| id.as_str()).map(String::from).unwrap_or_else(|| "unknown".to_string()),
-                    Err(_) => "unknown".to_string(),
-                };
-                
-                // Attempt to deliver the message
-                match self.send_to_endpoint(&packed, &endpoint).await {
-                    Ok(status) => {
-                        // Log success
-                        println!("Delivered message {} to {} at {}", message_id, to, endpoint);
-                        
-                        delivery_results.push(DeliveryResult {
-                            did: to.to_string(),
-                            endpoint: endpoint.clone(),
-                            status: Some(status),
-                            error: None,
-                        });
-                    },
-                    Err(e) => {
-                        // Log error but don't fail
-                        let error_msg = format!("Failed to deliver message {} to {} at {}: {}", 
-                                               message_id, to, endpoint, e);
-                        println!("{}", error_msg);
-                        
-                        delivery_results.push(DeliveryResult {
-                            did: to.to_string(),
-                            endpoint: endpoint.clone(),
-                            status: None, 
-                            error: Some(error_msg),
-                        });
-                    }
-                }
-            },
-            Ok(None) => {
-                // Just log a message but don't add an error result
-                println!("No service endpoint found for {}, skipping delivery", to);
-            },
-            Err(e) => {
-                // Log error but don't fail
-                let error_msg = format!("Failed to resolve service endpoint for {}: {}", to, e);
-                println!("{}", error_msg);
-            }
-        }
-        
-        Ok((packed, delivery_results))
-    }
-    
-    async fn send_message_to_many<T: TapMessageBody + serde::Serialize + Send + Sync>(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -496,7 +353,7 @@ impl Agent for DefaultAgent {
         if to.is_empty() {
             return Err(Error::Validation("No recipients specified".to_string()));
         }
-        
+
         // Create the message object with proper type
         let mut message_obj = serde_json::to_value(message)
             .map_err(|e| Error::Serialization(format!("Failed to serialize message: {}", e)))?;
@@ -511,6 +368,15 @@ impl Agent for DefaultAgent {
             }
         }
 
+        // Log the plaintext message with clear formatting
+        println!("\n==== SENDING TAP MESSAGE ====");
+        println!("Message Type: {}", T::message_type());
+        println!("Recipients: {:?}", to);
+        println!("--- PLAINTEXT CONTENT ---\n{}", 
+            serde_json::to_string_pretty(&message_obj)
+                .unwrap_or_else(|_| message_obj.to_string()));
+        println!("-------------------------");
+
         // Validate the message
         message.validate().map_err(|e| {
             Error::Validation(format!(
@@ -522,68 +388,90 @@ impl Agent for DefaultAgent {
 
         // Determine the appropriate security mode
         let security_mode = self.determine_security_mode::<T>();
+        println!("Security Mode: {:?}", security_mode);
 
-        // Use the first recipient for packing - DIDComm will include all recipients
+        // For each recipient, look up service endpoint before sending (only for logging, not delivery)
+        for recipient in &to {
+            if let Ok(Some(endpoint)) = self.get_service_endpoint(recipient).await {
+                // Log the found service endpoint - this can be helpful for debugging
+                println!("Found service endpoint for {}: {}", recipient, endpoint);
+            }
+        }
+
+        // Use message packer to pack the message for all recipients
         let packed = self
             .message_packer
-            .pack_message(&message_obj, to[0], Some(self.get_agent_did()), security_mode)
+            .pack_message(&message_obj, &to, Some(self.get_agent_did()), security_mode)
             .await?;
-        
+
+        // Log the packed message with clear separation and formatting
+        println!("--- PACKED MESSAGE ---");
+        println!("{}", serde_json::from_str::<serde_json::Value>(&packed)
+            .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed.clone()))
+            .unwrap_or(packed.clone()));
+        println!("=====================");
+
         // If delivery is not requested, just return the packed message
         if !deliver {
             return Ok((packed, Vec::new()));
         }
-        
+
         // Try to deliver the message to each recipient's service endpoint
         let mut delivery_results = Vec::new();
-        
+
         for recipient in &to {
             match self.get_service_endpoint(recipient).await {
                 Ok(Some(endpoint)) => {
-                    println!("Found service endpoint for {}: {}", recipient, endpoint);
-                    
+                    println!("Delivering message to {} at {}", recipient, endpoint);
+
                     // Extract message ID for logging
                     let message_id = match serde_json::from_str::<serde_json::Value>(&packed) {
-                        Ok(json) => json.get("id").and_then(|id| id.as_str()).map(String::from).unwrap_or_else(|| "unknown".to_string()),
+                        Ok(json) => json
+                            .get("id")
+                            .and_then(|id| id.as_str())
+                            .map(String::from)
+                            .unwrap_or_else(|| "unknown".to_string()),
                         Err(_) => "unknown".to_string(),
                     };
-                    
+
                     // Attempt to deliver the message
                     match self.send_to_endpoint(&packed, &endpoint).await {
                         Ok(status) => {
-                            // Log success
-                            println!("Delivered message {} to {} at {}", message_id, recipient, endpoint);
-                            
+                            // Log success with clear formatting
+                            println!("✅ Delivered message {} to {} at {}", message_id, recipient, endpoint);
+
                             delivery_results.push(DeliveryResult {
                                 did: recipient.to_string(),
                                 endpoint: endpoint.clone(),
                                 status: Some(status),
                                 error: None,
                             });
-                        },
+                        }
                         Err(e) => {
-                            // Log error but don't fail
-                            let error_msg = format!("Failed to deliver message {} to {} at {}: {}", 
-                                                  message_id, recipient, endpoint, e);
-                            println!("{}", error_msg);
-                            
+                            // Log error with clear formatting but don't fail
+                            let error_msg = format!(
+                                "Failed to deliver message {} to {} at {}: {}",
+                                message_id, recipient, endpoint, e
+                            );
+                            println!("❌ {}", error_msg);
+
                             delivery_results.push(DeliveryResult {
                                 did: recipient.to_string(),
                                 endpoint: endpoint.clone(),
-                                status: None, 
+                                status: None,
                                 error: Some(error_msg),
                             });
                         }
                     }
-                },
+                }
                 Ok(None) => {
-                    // Just log a message but don't add an error result
-                    println!("No service endpoint found for {}, skipping delivery", recipient);
-                },
+                    // Log with clear formatting but don't add an error result
+                    println!("⚠️ No service endpoint found for {}, skipping delivery", recipient);
+                }
                 Err(e) => {
-                    // Log error but don't fail
+                    // Log error with clear formatting but don't fail
                     let error_msg = format!("Failed to resolve service endpoint for {}: {}", recipient, e);
-                    println!("{}", error_msg);
+                    println!("❌ {}", error_msg);
                 }
             }
         }
@@ -591,15 +479,33 @@ impl Agent for DefaultAgent {
         Ok((packed, delivery_results))
     }
 
+    // Main send_message implementation handles all cases
+
     async fn receive_message<T: TapMessageBody + DeserializeOwned + Send>(
         &self,
         packed_message: &str,
     ) -> Result<T> {
+        // Log the received packed message with clear formatting
+        println!("\n==== RECEIVING TAP MESSAGE ====");
+        println!("--- PACKED MESSAGE ---");
+        println!("{}", serde_json::from_str::<serde_json::Value>(packed_message)
+            .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed_message.to_string()))
+            .unwrap_or(packed_message.to_string()));
+        println!("---------------------");
+
         // Unpack the message
         let message_value: Value = self
             .message_packer
             .unpack_message_value(packed_message)
             .await?;
+
+        // Log the unpacked message value with clear formatting
+        println!("--- UNPACKED CONTENT ---");
+        println!("{}",
+            serde_json::to_string_pretty(&message_value)
+                .unwrap_or_else(|_| message_value.to_string())
+        );
+        println!("------------------------");
 
         // Get the message type from the unpacked message
         let message_type = message_value
@@ -609,12 +515,15 @@ impl Agent for DefaultAgent {
 
         // Validate the message type
         if message_type != T::message_type() {
+            println!("❌ Message type validation failed: expected {}, got {}", 
+                T::message_type(), message_type);
             return Err(Error::Validation(format!(
                 "Expected message type {} but got {}",
                 T::message_type(),
                 message_type
             )));
         }
+        println!("✅ Message type validation passed: {}", message_type);
 
         // Check if we need to convert to a DIDComm message first
         if let Some(id) = message_value.get("id") {
@@ -652,15 +561,21 @@ impl Agent for DefaultAgent {
                 .map_err(|e| Error::Validation(format!("Failed to convert message: {}", e)))?;
 
             // Validate the message
-            message.validate().map_err(|e| {
-                Error::Validation(format!(
-                    "Message validation failed for type {}: {}",
-                    T::message_type(),
-                    e
-                ))
-            })?;
-
-            Ok(message)
+            match message.validate() {
+                Ok(_) => {
+                    println!("✅ Message content validation passed");
+                    println!("==== MESSAGE PROCESSING COMPLETE ====\n");
+                    Ok(message)
+                },
+                Err(e) => {
+                    println!("❌ Message content validation failed: {}", e);
+                    Err(Error::Validation(format!(
+                        "Message validation failed for type {}: {}",
+                        T::message_type(),
+                        e
+                    )))
+                }
+            }
         } else {
             // This might be just the message body directly, try to deserialize
             let message = serde_json::from_value::<T>(message_value).map_err(|e| {
@@ -668,15 +583,21 @@ impl Agent for DefaultAgent {
             })?;
 
             // Validate the message
-            message.validate().map_err(|e| {
-                Error::Validation(format!(
-                    "Message validation failed for type {}: {}",
-                    T::message_type(),
-                    e
-                ))
-            })?;
-
-            Ok(message)
+            match message.validate() {
+                Ok(_) => {
+                    println!("✅ Message content validation passed");
+                    println!("==== MESSAGE PROCESSING COMPLETE ====\n");
+                    Ok(message)
+                },
+                Err(e) => {
+                    println!("❌ Message content validation failed: {}", e);
+                    Err(Error::Validation(format!(
+                        "Message validation failed for type {}: {}",
+                        T::message_type(),
+                        e
+                    )))
+                }
+            }
         }
     }
 }

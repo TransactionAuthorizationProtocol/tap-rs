@@ -98,7 +98,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
 
         // Pack the payment message
-        let packed_payment = merchant_agent.send_message(&payment, &customer_did).await?;
+        let (packed_payment, _delivery_results) = merchant_agent.send_message(&payment, vec![&customer_did], false).await?;
         println!("Merchant sends the payment request with invoice to the customer\n");
 
         // Step 2: Customer receives and processes the payment request
@@ -146,8 +146,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
         };
 
-        let packed_authorize = customer_agent
-            .send_message(&authorize, &merchant_did)
+        let (packed_authorize, _delivery_results) = customer_agent
+            .send_message(&authorize, vec![&merchant_did], false)
             .await?;
         println!("Customer sends authorization to the merchant\n");
 
@@ -176,7 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             amount: Some(payment.amount.clone()),
         };
 
-        let packed_settle = customer_agent.send_message(&settle, &merchant_did).await?;
+        let (packed_settle, _delivery_results) = customer_agent.send_message(&settle, vec![&merchant_did], false).await?;
         println!("Customer sends settlement confirmation to the merchant");
         println!("  Settlement ID: {}\n", settlement_id);
 

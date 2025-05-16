@@ -206,6 +206,19 @@ struct EncryptionTestEnvironment {
 }
 
 impl EncryptionTestEnvironment {
+    // Helper method to adapt to the new pack_message API
+    async fn pack_message_single(
+        &self,
+        message: &(dyn erased_serde::Serialize + Sync),
+        to: &str,
+        from: Option<&str>,
+        mode: SecurityMode,
+    ) -> Result<String> {
+        // Wrap the single recipient in a slice
+        let to_slice = &[to];
+        self.message_packer.pack_message(message, to_slice, from, mode).await
+    }
+
     fn new() -> Self {
         // Create DIDs
         let sender_did = "did:example:sender".to_string();
@@ -306,8 +319,7 @@ async fn test_basic_authcrypt() {
 
     // Encrypt with AuthCrypt mode
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -459,8 +471,7 @@ async fn test_authcrypt_payload_sizes() {
 
         // Encrypt with AuthCrypt mode - it's OK if this fails due to encryption not being fully implemented
         let pack_result = env
-            .message_packer
-            .pack_message(
+            .pack_message_single(
                 &test_message,
                 &env.recipient_did,
                 Some(&env.sender_did),
@@ -530,8 +541,7 @@ async fn test_authcrypt_randomness() {
 
         // Encrypt with AuthCrypt mode
         let packed = env
-            .message_packer
-            .pack_message(
+            .pack_message_single(
                 &message,
                 &env.recipient_did,
                 Some(&env.sender_did),
@@ -576,8 +586,7 @@ async fn test_authcrypt_cek_format() {
 
     // Encrypt with AuthCrypt mode
     let packed = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -648,8 +657,7 @@ async fn test_authcrypt_structured_data() {
 
     // Encrypt with AuthCrypt mode - it's OK if this fails due to encryption not being fully implemented
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -723,8 +731,7 @@ async fn test_authcrypt_corrupted_tag() {
 
     // Encrypt with AuthCrypt mode
     let packed = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -770,8 +777,7 @@ async fn test_authcrypt_corrupted_ciphertext() {
 
     // Encrypt with AuthCrypt mode
     let packed = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -820,8 +826,7 @@ async fn test_authcrypt_wrong_key() {
 
     // Encrypt with AuthCrypt mode
     let packed = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -863,8 +868,7 @@ async fn test_authcrypt_corrupted_iv() {
 
     // Encrypt with AuthCrypt mode
     let packed = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -910,8 +914,7 @@ async fn test_authcrypt_corrupted_header() {
 
     // Encrypt with AuthCrypt mode
     let packed = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),
@@ -961,8 +964,7 @@ async fn test_authcrypt_missing_fields() {
 
     // Encrypt with AuthCrypt mode
     let packed = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.recipient_did,
             Some(&env.sender_did),

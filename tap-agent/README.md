@@ -166,10 +166,10 @@ if let Ok(Some(endpoint)) = agent.get_did_service_endpoint(recipient_did).await 
     // In a complete implementation, you would send the packed message to this endpoint
 }
 
-// Method 2: Use send_message_with_delivery for automatic delivery
+// Method 2: Use send_message with delivery parameter for automatic delivery
 // This will automatically send the message to the service endpoint if found
 // The third parameter (true) indicates to deliver the message automatically
-let (packed_message, delivery_results) = agent.send_message_with_delivery(&transfer, recipient_did, true).await?;
+let (packed_message, delivery_results) = agent.send_message(&transfer, vec![recipient_did], true).await?;
 
 // Check delivery results
 for result in delivery_results {
@@ -448,11 +448,11 @@ The agent can automatically deliver messages to service endpoints using HTTP POS
 
 ```rust
 // Send a message to a single recipient with automatic delivery
-let (packed_message, delivery_results) = agent.send_message_with_delivery(&message, recipient_did, true).await?;
+let (packed_message, delivery_results) = agent.send_message(&message, vec![recipient_did], true).await?;
 
 // Send a message to multiple DIDs with automatic delivery
 let recipients = vec!["did:web:example.com", "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"];
-let (packed_message, delivery_results) = agent.send_message_to_many(&message, recipients, true).await?;
+let (packed_message, delivery_results) = agent.send_message(&message, recipients, true).await?;
 
 // Process delivery results
 for result in &delivery_results {

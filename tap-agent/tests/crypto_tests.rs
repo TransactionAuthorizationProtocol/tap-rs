@@ -224,6 +224,21 @@ struct TestEnvironment {
 }
 
 impl TestEnvironment {
+    // Helper method to adapt to the new pack_message API
+    async fn pack_message_single(
+        &self,
+        message: &(dyn erased_serde::Serialize + Sync),
+        to: &str,
+        from: Option<&str>,
+        mode: SecurityMode,
+    ) -> Result<String> {
+        // Wrap the single recipient in a slice
+        let to_slice = &[to];
+        self.message_packer.pack_message(message, to_slice, from, mode).await
+    }
+}
+
+impl TestEnvironment {
     fn new() -> Self {
         // Create DIDs
         let ed25519_did = "did:example:ed25519".to_string();
@@ -335,8 +350,7 @@ async fn test_ed25519_signing() {
 
     // Test signing with Ed25519
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -389,8 +403,7 @@ async fn test_p256_signing() {
 
     // Test signing with P-256 - it's OK if this fails due to P-256 not being supported yet
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.ed25519_did,
             Some(&env.p256_did),
@@ -447,8 +460,7 @@ async fn test_secp256k1_signing() {
 
     // Test signing with secp256k1 - it's OK if this fails due to secp256k1 not being supported yet
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.ed25519_did,
             Some(&env.secp256k1_did),
@@ -505,8 +517,7 @@ async fn test_authcrypt_encryption() {
 
     // Test encryption with AuthCrypt mode - it's OK if this fails because P-256 might not be supported yet
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -577,8 +588,7 @@ async fn test_invalid_signature() {
 
     // Sign a message with Ed25519
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -632,9 +642,9 @@ async fn test_wrong_key_signature() {
     let test_message = TestEnvironment::create_test_message();
 
     // Sign a message with Ed25519
+    // Test failure with wrong key signature
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -686,8 +696,7 @@ async fn test_authcrypt_wrong_key() {
 
     // Attempt to encrypt with AuthCrypt mode
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -741,9 +750,9 @@ async fn test_authcrypt_corrupted_content() {
     let test_message = TestEnvironment::create_test_message();
 
     // Encrypt with AuthCrypt mode - it's OK if this fails because P-256 might not be supported yet
+    // Test failure when the authentication tag is corrupted
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -804,9 +813,9 @@ async fn test_authcrypt_corrupted_tag() {
     let test_message = TestEnvironment::create_test_message();
 
     // Encrypt with AuthCrypt mode - it's OK if this fails because P-256 might not be supported yet
+    // Test decryption failure with wrong key
     let pack_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -892,8 +901,7 @@ async fn test_message_sizes() {
 
     // Small message
     let small_signed_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &small_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -903,8 +911,7 @@ async fn test_message_sizes() {
 
     // Medium message
     let medium_signed_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &medium_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -914,8 +921,7 @@ async fn test_message_sizes() {
 
     // Large message
     let large_signed_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &large_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -986,8 +992,7 @@ async fn test_mixed_security_mode() {
 
     // First sign a message with Ed25519 (which should work)
     let sign_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),
@@ -997,8 +1002,7 @@ async fn test_mixed_security_mode() {
 
     // Then try to encrypt a message - it might not work yet
     let encrypt_result = env
-        .message_packer
-        .pack_message(
+        .pack_message_single(
             &test_message,
             &env.p256_did,
             Some(&env.ed25519_did),

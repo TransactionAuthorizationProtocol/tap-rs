@@ -89,11 +89,11 @@ fn main() -> Result<()> {
         println!("Step 3: Sending the transfer request with proper security");
 
         // Pack the transfer message with appropriate security mode
-        let packed_transfer = match originator_agent
-            .send_message(&transfer, &beneficiary_did)
+        let (packed_transfer, _delivery_results) = match originator_agent
+            .send_message(&transfer, vec![&beneficiary_did], false)
             .await
         {
-            Ok(packed) => packed,
+            Ok((packed, delivery_results)) => (packed, delivery_results),
             Err(e) => {
                 println!("Error packing transfer message: {}", e);
                 return Err(e);
@@ -122,7 +122,7 @@ fn main() -> Result<()> {
                 };
 
                     let _ = beneficiary_agent
-                        .send_message(&reject, &originator_did)
+                        .send_message(&reject, vec![&originator_did], false)
                         .await;
                     println!("Sent rejection due to validation failure");
                 }
@@ -157,11 +157,11 @@ fn main() -> Result<()> {
             reason: format!("risk.threshold.exceeded: Risk score ({}) exceeds threshold ({}). Please contact support for further assistance", risk_score, risk_threshold),
         };
 
-            let packed_reject = match beneficiary_agent
-                .send_message(&reject, &originator_did)
+            let (packed_reject, _delivery_results) = match beneficiary_agent
+                .send_message(&reject, vec![&originator_did], false)
                 .await
             {
-                Ok(packed) => packed,
+                Ok((packed, delivery_results)) => (packed, delivery_results),
                 Err(e) => {
                     println!("Error sending rejection: {}", e);
                     return Err(e);
@@ -200,11 +200,11 @@ fn main() -> Result<()> {
             )),
         };
 
-        let packed_authorize = match beneficiary_agent
-            .send_message(&authorize, &originator_did)
+        let (packed_authorize, _delivery_results) = match beneficiary_agent
+            .send_message(&authorize, vec![&originator_did], false)
             .await
         {
-            Ok(packed) => packed,
+            Ok((packed, delivery_results)) => (packed, delivery_results),
             Err(e) => {
                 println!("Error sending authorization: {}", e);
                 return Err(e);
@@ -254,11 +254,11 @@ fn main() -> Result<()> {
             amount: Some(transfer.amount.clone()),
         };
 
-        let packed_settle = match originator_agent
-            .send_message(&settle, &beneficiary_did)
+        let (packed_settle, _delivery_results) = match originator_agent
+            .send_message(&settle, vec![&beneficiary_did], false)
             .await
         {
-            Ok(packed) => packed,
+            Ok((packed, delivery_results)) => (packed, delivery_results),
             Err(e) => {
                 println!("Error sending settlement: {}", e);
                 return Err(e);

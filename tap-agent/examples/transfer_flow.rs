@@ -58,8 +58,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("  To: {}\n", transfer.beneficiary.as_ref().unwrap().id);
 
         // Pack the transfer message
-        let packed_transfer = originator_agent
-            .send_message(&transfer, &beneficiary_did)
+        let (packed_transfer, _delivery_results) = originator_agent
+            .send_message(&transfer, vec![&beneficiary_did], false)
             .await?;
         println!("Originator sends the transfer request to the beneficiary\n");
 
@@ -91,8 +91,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             )),
         };
 
-        let packed_authorize = beneficiary_agent
-            .send_message(&authorize, &originator_did)
+        let (packed_authorize, _delivery_results) = beneficiary_agent
+            .send_message(&authorize, vec![&originator_did], false)
             .await?;
         println!("Beneficiary sends authorization to the originator\n");
 
@@ -121,8 +121,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             amount: Some(transfer.amount.clone()),
         };
 
-        let packed_settle = originator_agent
-            .send_message(&settle, &beneficiary_did)
+        let (packed_settle, _delivery_results) = originator_agent
+            .send_message(&settle, vec![&beneficiary_did], false)
             .await?;
         println!("Originator sends settlement confirmation to the beneficiary");
         println!("  Settlement ID: {}\n", settlement_id);

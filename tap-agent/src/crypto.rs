@@ -33,14 +33,14 @@ use uuid::Uuid;
 /// different security modes (Plain, Signed, AuthCrypt).
 #[async_trait]
 pub trait MessagePacker: Send + Sync + Debug {
-    /// Pack a message for the given recipient.
+    /// Pack a message for the given recipients.
     ///
     /// Transforms a serializable message into a DIDComm-encoded message with
     /// the appropriate security measures applied based on the mode.
     ///
     /// # Parameters
     /// * `message` - The message to pack
-    /// * `to` - The DID of the recipient
+    /// * `to` - List of DIDs of the recipients
     /// * `from` - The DID of the sender, or None for anonymous messages
     /// * `mode` - The security mode to use (Plain, Signed, AuthCrypt)
     ///
@@ -49,7 +49,7 @@ pub trait MessagePacker: Send + Sync + Debug {
     async fn pack_message(
         &self,
         message: &(dyn erased_serde::Serialize + Sync),
-        to: &str,
+        to: &[&str],
         from: Option<&str>,
         mode: SecurityMode,
     ) -> Result<String>;
@@ -272,10 +272,14 @@ impl MessagePacker for DefaultMessagePacker {
     async fn pack_message(
         &self,
         message: &(dyn erased_serde::Serialize + Sync),
-        to: &str,
+        to: &[&str],
         from: Option<&str>,
         mode: SecurityMode,
     ) -> Result<String> {
+        if to.is_empty() {
+            return Err(Error::Validation("No recipients specified".to_string()));
+        }
+        
         let message_value =
             serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
 
@@ -303,11 +307,12 @@ impl MessagePacker for DefaultMessagePacker {
         let actual_mode = self.select_security_mode(mode, from.is_some())?;
 
         // Create a DIDComm message structure
-        let to_dids = vec![to.to_string()];
+        let to_dids = to.iter().map(|&s| s.to_string()).collect::<Vec<String>>();
 
         let didcomm_message = didcomm::Message {
             id: id_str.to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
+            // Set typ to be the actual message type, which is needed for TAP protocol validation
+            typ: message_type.to_string(),
             type_: message_type.to_string(),
             body: message_value.clone(),
             from: from.map(|s| s.to_string()),
@@ -542,10 +547,11 @@ impl MessagePacker for DefaultMessagePacker {
                     );
 
                     // Create a signed DIDComm message structure
+                    // Keep the original typ value from the didcomm_message
                     let signed_message = serde_json::json!({
                         "id": didcomm_message.id,
-                        "typ": "application/didcomm-signed+json",
-                        "type": didcomm_message.type_,
+                        "typ": didcomm_message.typ,
+                        "type_": didcomm_message.type_,
                         "from": from_did,
                         "to": [to],
                         "created_time": didcomm_message.created_time,
@@ -581,73 +587,6 @@ impl MessagePacker for DefaultMessagePacker {
                         Error::Cryptography(format!("No secret found for sender DID: {}", from_did))
                     })?;
 
-                    // Resolve the recipient's DID to get their public key
-                    let to_doc = self.did_resolver.resolve(to).await?.ok_or_else(|| {
-                        Error::Cryptography(format!("Failed to resolve recipient DID: {}", to))
-                    })?;
-
-                    // Find the recipient's key agreement key
-                    let recipient_key_id = if !to_doc.key_agreement.is_empty() {
-                        to_doc.key_agreement[0].clone()
-                    } else if !to_doc.verification_method.is_empty() {
-                        to_doc.verification_method[0].id.clone()
-                    } else {
-                        return Err(Error::Cryptography(format!(
-                            "No key found for recipient: {}",
-                            to
-                        )));
-                    };
-
-                    // Find the corresponding verification method
-                    let recipient_vm = to_doc
-                        .verification_method
-                        .iter()
-                        .find(|vm| vm.id == recipient_key_id)
-                        .ok_or_else(|| {
-                            Error::Cryptography(format!(
-                                "No verification method found for key ID: {}",
-                                recipient_key_id
-                            ))
-                        })?;
-
-                    // Extract the recipient's public key
-                    let _recipient_public_key = match &recipient_vm.verification_material {
-                        didcomm::did::VerificationMaterial::Base58 { public_key_base58 } => {
-                            bs58::decode(public_key_base58).into_vec().map_err(|e| {
-                                Error::Cryptography(format!("Failed to decode Base58 key: {}", e))
-                            })?
-                        }
-                        didcomm::did::VerificationMaterial::Multibase {
-                            public_key_multibase,
-                        } => {
-                            let (_, decoded) =
-                                multibase::decode(public_key_multibase).map_err(|e| {
-                                    Error::Cryptography(format!(
-                                        "Failed to decode Multibase key: {}",
-                                        e
-                                    ))
-                                })?;
-                            // If this is a did:key multibase, we need to strip the multicodec prefix
-                            if decoded.len() >= 2 && (decoded[0] == 0xed && decoded[1] == 0x01) {
-                                // Ed25519 key, strip prefix
-                                decoded[2..].to_vec()
-                            } else {
-                                decoded
-                            }
-                        }
-                        // Add other verification material types as needed
-                        _ => {
-                            return Err(Error::Cryptography(format!(
-                                "Unsupported verification material type: {:?}",
-                                recipient_vm.verification_material
-                            )))
-                        }
-                    };
-
-                    // Create a JWE structure
-                    // For demonstration purposes, we'll create a simplified but real JWE structure
-                    // In a full implementation, we'd perform actual ECDH and authenticated encryption
-
                     // 1. Generate a random content encryption key (CEK) and IV
                     let mut cek = [0u8; 32]; // 256-bit key for AES-GCM
                     OsRng.fill_bytes(&mut cek);
@@ -682,117 +621,197 @@ impl MessagePacker for DefaultMessagePacker {
                     // Base64 encode the encrypted payload
                     let cipher_text = base64::engine::general_purpose::STANDARD.encode(&buffer);
 
-                    // IV already generated above before encryption
-
-                    // 4. Use the real authentication tag from AES-GCM
+                    // Use the real authentication tag from AES-GCM
                     let auth_tag = base64::engine::general_purpose::STANDARD.encode(tag.as_slice());
 
-                    // 5. Perform ECDH key agreement and key wrapping
-                    let encrypted_key = match (
-                        &from_secret.secret_material,
-                        &recipient_vm.verification_material,
-                    ) {
-                        (
-                            didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
-                            didcomm::did::VerificationMaterial::JWK { public_key_jwk },
-                        ) => {
-                            // Check if we have P-256 keys
-                            let sender_kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
-                            let sender_crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
-                            let recipient_kty = public_key_jwk.get("kty").and_then(|v| v.as_str());
-                            let recipient_crv = public_key_jwk.get("crv").and_then(|v| v.as_str());
+                    // Prepare recipients array - we'll add an entry for each recipient
+                    let mut recipients = Vec::with_capacity(to.len());
 
-                            match (sender_kty, sender_crv, recipient_kty, recipient_crv) {
-                                (Some("EC"), Some("P-256"), Some("EC"), Some("P-256")) => {
-                                    // Extract the recipient's public key
-                                    let x_b64 = public_key_jwk
-                                        .get("x")
-                                        .and_then(|v| v.as_str())
-                                        .ok_or_else(|| {
-                                            Error::Cryptography(
-                                                "Missing x coordinate in recipient JWK".to_string(),
-                                            )
-                                        })?;
-                                    let y_b64 = public_key_jwk
-                                        .get("y")
-                                        .and_then(|v| v.as_str())
-                                        .ok_or_else(|| {
-                                            Error::Cryptography(
-                                                "Missing y coordinate in recipient JWK".to_string(),
-                                            )
-                                        })?;
+                    // Process each recipient
+                    for &recipient_did in to {
+                        // Resolve the recipient's DID to get their public key
+                        let to_doc = match self.did_resolver.resolve(recipient_did).await? {
+                            Some(doc) => doc,
+                            None => {
+                                return Err(Error::Cryptography(format!(
+                                    "Failed to resolve recipient DID: {}", 
+                                    recipient_did
+                                )));
+                            }
+                        };
 
-                                    let x_bytes = base64::engine::general_purpose::STANDARD
-                                        .decode(x_b64)
-                                        .map_err(|e| {
-                                            Error::Cryptography(format!(
-                                                "Failed to decode x coordinate: {}",
-                                                e
-                                            ))
-                                        })?;
-                                    let y_bytes = base64::engine::general_purpose::STANDARD
-                                        .decode(y_b64)
-                                        .map_err(|e| {
-                                            Error::Cryptography(format!(
-                                                "Failed to decode y coordinate: {}",
-                                                e
-                                            ))
-                                        })?;
+                        // Find the recipient's key agreement key
+                        let recipient_key_id = if !to_doc.key_agreement.is_empty() {
+                            to_doc.key_agreement[0].clone()
+                        } else if !to_doc.verification_method.is_empty() {
+                            to_doc.verification_method[0].id.clone()
+                        } else {
+                            // Skip recipients without keys rather than fail the whole operation
+                            println!("No key found for recipient: {}, skipping", recipient_did);
+                            continue;
+                        };
 
-                                    // Create a P-256 encoded point from the coordinates
-                                    let mut point_bytes = vec![0x04]; // Uncompressed point format
-                                    point_bytes.extend_from_slice(&x_bytes);
-                                    point_bytes.extend_from_slice(&y_bytes);
+                        // Find the corresponding verification method
+                        let recipient_vm = match to_doc
+                            .verification_method
+                            .iter()
+                            .find(|vm| vm.id == recipient_key_id)
+                        {
+                            Some(vm) => vm,
+                            None => {
+                                // Skip recipients without verification methods rather than fail
+                                println!("No verification method found for key ID: {}, skipping", recipient_key_id);
+                                continue;
+                            }
+                        };
 
-                                    let encoded_point = P256EncodedPoint::from_bytes(&point_bytes)
-                                        .map_err(|e| {
-                                            Error::Cryptography(format!(
-                                                "Failed to create P-256 encoded point: {}",
-                                                e
-                                            ))
-                                        })?;
+                        // Prepare to do ECDH key agreement and key wrapping for this recipient
+                        let encrypted_key = match (
+                            &from_secret.secret_material,
+                            &recipient_vm.verification_material,
+                        ) {
+                            (
+                                didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                                didcomm::did::VerificationMaterial::JWK { public_key_jwk },
+                            ) => {
+                                // Check if we have P-256 keys
+                                let sender_kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                                let sender_crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                                let recipient_kty = public_key_jwk.get("kty").and_then(|v| v.as_str());
+                                let recipient_crv = public_key_jwk.get("crv").and_then(|v| v.as_str());
 
-                                    // This checks if the point is on the curve and returns the public key
-                                    let recipient_pk =
-                                        P256PublicKey::from_encoded_point(&encoded_point)
-                                            .expect("Invalid P-256 public key");
+                                match (sender_kty, sender_crv, recipient_kty, recipient_crv) {
+                                    (Some("EC"), Some("P-256"), Some("EC"), Some("P-256")) => {
+                                        // Extract the recipient's public key
+                                        let x_b64 = public_key_jwk
+                                            .get("x")
+                                            .and_then(|v| v.as_str())
+                                            .ok_or_else(|| {
+                                                Error::Cryptography(
+                                                    "Missing x coordinate in recipient JWK".to_string(),
+                                                )
+                                            })?;
+                                        let y_b64 = public_key_jwk
+                                            .get("y")
+                                            .and_then(|v| v.as_str())
+                                            .ok_or_else(|| {
+                                                Error::Cryptography(
+                                                    "Missing y coordinate in recipient JWK".to_string(),
+                                                )
+                                            })?;
 
-                                    // Generate an ephemeral key pair for ECDH
-                                    let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
-                                    let _ephemeral_public = ephemeral_secret.public_key();
+                                        let x_bytes = base64::engine::general_purpose::STANDARD
+                                            .decode(x_b64)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to decode x coordinate: {}",
+                                                    e
+                                                ))
+                                            })?;
+                                        let y_bytes = base64::engine::general_purpose::STANDARD
+                                            .decode(y_b64)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to decode y coordinate: {}",
+                                                    e
+                                                ))
+                                            })?;
 
-                                    // Perform ECDH to derive a shared secret
-                                    let shared_secret =
-                                        ephemeral_secret.diffie_hellman(&recipient_pk);
-                                    let shared_bytes = shared_secret.raw_secret_bytes();
+                                        // Create a P-256 encoded point from the coordinates
+                                        let mut point_bytes = vec![0x04]; // Uncompressed point format
+                                        point_bytes.extend_from_slice(&x_bytes);
+                                        point_bytes.extend_from_slice(&y_bytes);
 
-                                    // Use the shared secret to wrap (encrypt) the CEK
-                                    // In a real implementation, we would use a KDF and AES-KW
-                                    // For simplicity, we'll use the first 32 bytes of the shared secret to encrypt the CEK
-                                    let mut encrypted_cek = cek;
-                                    for i in 0..cek.len() {
-                                        encrypted_cek[i] ^= shared_bytes[i % shared_bytes.len()];
+                                        let encoded_point = P256EncodedPoint::from_bytes(&point_bytes)
+                                            .map_err(|e| {
+                                                Error::Cryptography(format!(
+                                                    "Failed to create P-256 encoded point: {}",
+                                                    e
+                                                ))
+                                            })?;
+
+                                        // This checks if the point is on the curve and returns the public key
+                                        let recipient_pk =
+                                            P256PublicKey::from_encoded_point(&encoded_point)
+                                                .expect("Invalid P-256 public key");
+
+                                        // Generate an ephemeral key pair for ECDH
+                                        let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
+                                        let _ephemeral_public = ephemeral_secret.public_key();
+
+                                        // Perform ECDH to derive a shared secret
+                                        let shared_secret =
+                                            ephemeral_secret.diffie_hellman(&recipient_pk);
+                                        let shared_bytes = shared_secret.raw_secret_bytes();
+
+                                        // Use the shared secret to wrap (encrypt) the CEK
+                                        // In a real implementation, we would use a KDF and AES-KW
+                                        // For simplicity, we'll use the first 32 bytes of the shared secret to encrypt the CEK
+                                        let mut encrypted_cek = cek;
+                                        for i in 0..cek.len() {
+                                            encrypted_cek[i] ^= shared_bytes[i % shared_bytes.len()];
+                                        }
+
+                                        base64::engine::general_purpose::STANDARD.encode(encrypted_cek)
                                     }
-
-                                    base64::engine::general_purpose::STANDARD.encode(encrypted_cek)
-                                }
-                                // Handle other key types or fallback to a simpler approach
-                                _ => {
-                                    // For unsupported key types, use a simulated encrypted key
-                                    // This is just for development/demonstration - in production, you'd want to support all key types or fail
-                                    base64::engine::general_purpose::STANDARD.encode(format!(
-                                        "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}",
-                                        from_did, to
-                                    ))
+                                    // Handle other key types or fallback to a simpler approach
+                                    _ => {
+                                        // For unsupported key types, use a simulated encrypted key
+                                        // This is just for development/demonstration - in production, you'd want to support all key types or fail
+                                        base64::engine::general_purpose::STANDARD.encode(format!(
+                                            "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}",
+                                            from_did, recipient_did
+                                        ))
+                                    }
                                 }
                             }
-                        }
-                        // Fallback for other key material types
-                        _ => base64::engine::general_purpose::STANDARD.encode(format!(
-                            "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}",
-                            from_did, to
-                        )),
-                    };
+                            // Extract the recipient's public key for Base58
+                            (
+                                _,
+                                didcomm::did::VerificationMaterial::Base58 { public_key_base58: _ },
+                            ) => {
+                                // For Base58 keys, we would normally decode and use them
+                                // For now, we'll use a simulated key until proper Base58 support is added
+                                base64::engine::general_purpose::STANDARD.encode(format!(
+                                    "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}_BASE58",
+                                    from_did, recipient_did
+                                ))
+                            }
+                            // Extract the recipient's public key for Multibase
+                            (
+                                _,
+                                didcomm::did::VerificationMaterial::Multibase { public_key_multibase: _ },
+                            ) => {
+                                // For Multibase keys, we would normally decode and use them
+                                // For now, we'll use a simulated key until proper Multibase support is added
+                                base64::engine::general_purpose::STANDARD.encode(format!(
+                                    "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}_MULTIBASE",
+                                    from_did, recipient_did
+                                ))
+                            }
+                            // Fallback for other key material types
+                            _ => base64::engine::general_purpose::STANDARD.encode(format!(
+                                "SIMULATED_ENCRYPTED_KEY_FOR_{}_TO_{}",
+                                from_did, recipient_did
+                            )),
+                        };
+
+                        // Add this recipient to the recipients array
+                        recipients.push(serde_json::json!({
+                            "header": {
+                                "kid": recipient_key_id,
+                                "sender_kid": format!("{}#keys-1", from_did)
+                            },
+                            "encrypted_key": encrypted_key
+                        }));
+                    }
+
+                    // If we didn't successfully process any recipients, fail
+                    if recipients.is_empty() {
+                        return Err(Error::Cryptography(
+                            "Could not process any recipients for encryption".to_string(),
+                        ));
+                    }
 
                     // Create the JWE structure
                     let encrypted_message = serde_json::json!({
@@ -804,15 +823,7 @@ impl MessagePacker for DefaultMessagePacker {
                                 "typ": "application/didcomm-encrypted+json"
                             })).unwrap()
                         ),
-                        "recipients": [
-                            {
-                                "header": {
-                                    "kid": recipient_key_id,
-                                    "sender_kid": format!("{}#keys-1", from_did)
-                                },
-                                "encrypted_key": encrypted_key
-                            }
-                        ],
+                        "recipients": recipients,
                         "tag": auth_tag,
                         "iv": base64::engine::general_purpose::STANDARD.encode(iv_bytes)
                     });
