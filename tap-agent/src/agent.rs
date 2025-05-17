@@ -64,8 +64,6 @@ pub trait Agent: Debug + Sync + Send {
         deliver: bool,
     ) -> Result<(String, Vec<DeliveryResult>)>;
 
-
-
     /// Find the service endpoint for a recipient DID
     ///
     /// This method looks up the DID document for the recipient and
@@ -111,8 +109,6 @@ impl<T: Agent + ?Sized> Agent for Arc<T> {
     ) -> Result<(String, Vec<DeliveryResult>)> {
         (**self).send_message(message, to, deliver).await
     }
-
-
 
     async fn receive_message<U: TapMessageBody + DeserializeOwned + Send>(
         &self,
@@ -314,18 +310,25 @@ impl Agent for DefaultAgent {
             // First pass: Look for DIDCommMessaging services specifically
             // Try to find a DIDCommMessaging service first
             if let Some(service) = doc.service.iter().find(|s| {
-                matches!(&s.service_endpoint, didcomm::did::ServiceKind::DIDCommMessaging { .. })
+                matches!(
+                    &s.service_endpoint,
+                    didcomm::did::ServiceKind::DIDCommMessaging { .. }
+                )
             }) {
-                if let didcomm::did::ServiceKind::DIDCommMessaging { value } = &service.service_endpoint {
+                if let didcomm::did::ServiceKind::DIDCommMessaging { value } =
+                    &service.service_endpoint
+                {
                     // For DIDCommMessaging, return the URI directly
                     return Ok(Some(value.uri.clone()));
                 }
             }
-            
+
             // If no DIDCommMessaging service found, look for other service types
-            if let Some(service) = doc.service.iter().find(|s| {
-                matches!(&s.service_endpoint, didcomm::did::ServiceKind::Other { .. })
-            }) {
+            if let Some(service) = doc
+                .service
+                .iter()
+                .find(|s| matches!(&s.service_endpoint, didcomm::did::ServiceKind::Other { .. }))
+            {
                 if let didcomm::did::ServiceKind::Other { value } = &service.service_endpoint {
                     // For other services, try to extract a service endpoint from the value
                     if let Some(endpoint) = value.get("serviceEndpoint").and_then(|v| v.as_str()) {
@@ -372,9 +375,10 @@ impl Agent for DefaultAgent {
         println!("\n==== SENDING TAP MESSAGE ====");
         println!("Message Type: {}", T::message_type());
         println!("Recipients: {:?}", to);
-        println!("--- PLAINTEXT CONTENT ---\n{}", 
-            serde_json::to_string_pretty(&message_obj)
-                .unwrap_or_else(|_| message_obj.to_string()));
+        println!(
+            "--- PLAINTEXT CONTENT ---\n{}",
+            serde_json::to_string_pretty(&message_obj).unwrap_or_else(|_| message_obj.to_string())
+        );
         println!("-------------------------");
 
         // Validate the message
@@ -406,9 +410,12 @@ impl Agent for DefaultAgent {
 
         // Log the packed message with clear separation and formatting
         println!("--- PACKED MESSAGE ---");
-        println!("{}", serde_json::from_str::<serde_json::Value>(&packed)
-            .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed.clone()))
-            .unwrap_or(packed.clone()));
+        println!(
+            "{}",
+            serde_json::from_str::<serde_json::Value>(&packed)
+                .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed.clone()))
+                .unwrap_or(packed.clone())
+        );
         println!("=====================");
 
         // If delivery is not requested, just return the packed message
@@ -438,7 +445,10 @@ impl Agent for DefaultAgent {
                     match self.send_to_endpoint(&packed, &endpoint).await {
                         Ok(status) => {
                             // Log success with clear formatting
-                            println!("✅ Delivered message {} to {} at {}", message_id, recipient, endpoint);
+                            println!(
+                                "✅ Delivered message {} to {} at {}",
+                                message_id, recipient, endpoint
+                            );
 
                             delivery_results.push(DeliveryResult {
                                 did: recipient.to_string(),
@@ -466,11 +476,17 @@ impl Agent for DefaultAgent {
                 }
                 Ok(None) => {
                     // Log with clear formatting but don't add an error result
-                    println!("⚠️ No service endpoint found for {}, skipping delivery", recipient);
+                    println!(
+                        "⚠️ No service endpoint found for {}, skipping delivery",
+                        recipient
+                    );
                 }
                 Err(e) => {
                     // Log error with clear formatting but don't fail
-                    let error_msg = format!("Failed to resolve service endpoint for {}: {}", recipient, e);
+                    let error_msg = format!(
+                        "Failed to resolve service endpoint for {}: {}",
+                        recipient, e
+                    );
                     println!("❌ {}", error_msg);
                 }
             }
@@ -488,9 +504,12 @@ impl Agent for DefaultAgent {
         // Log the received packed message with clear formatting
         println!("\n==== RECEIVING TAP MESSAGE ====");
         println!("--- PACKED MESSAGE ---");
-        println!("{}", serde_json::from_str::<serde_json::Value>(packed_message)
-            .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed_message.to_string()))
-            .unwrap_or(packed_message.to_string()));
+        println!(
+            "{}",
+            serde_json::from_str::<serde_json::Value>(packed_message)
+                .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed_message.to_string()))
+                .unwrap_or(packed_message.to_string())
+        );
         println!("---------------------");
 
         // Unpack the message
@@ -501,7 +520,8 @@ impl Agent for DefaultAgent {
 
         // Log the unpacked message value with clear formatting
         println!("--- UNPACKED CONTENT ---");
-        println!("{}",
+        println!(
+            "{}",
             serde_json::to_string_pretty(&message_value)
                 .unwrap_or_else(|_| message_value.to_string())
         );
@@ -515,8 +535,11 @@ impl Agent for DefaultAgent {
 
         // Validate the message type
         if message_type != T::message_type() {
-            println!("❌ Message type validation failed: expected {}, got {}", 
-                T::message_type(), message_type);
+            println!(
+                "❌ Message type validation failed: expected {}, got {}",
+                T::message_type(),
+                message_type
+            );
             return Err(Error::Validation(format!(
                 "Expected message type {} but got {}",
                 T::message_type(),
@@ -566,7 +589,7 @@ impl Agent for DefaultAgent {
                     println!("✅ Message content validation passed");
                     println!("==== MESSAGE PROCESSING COMPLETE ====\n");
                     Ok(message)
-                },
+                }
                 Err(e) => {
                     println!("❌ Message content validation failed: {}", e);
                     Err(Error::Validation(format!(
@@ -588,7 +611,7 @@ impl Agent for DefaultAgent {
                     println!("✅ Message content validation passed");
                     println!("==== MESSAGE PROCESSING COMPLETE ====\n");
                     Ok(message)
-                },
+                }
                 Err(e) => {
                     println!("❌ Message content validation failed: {}", e);
                     Err(Error::Validation(format!(

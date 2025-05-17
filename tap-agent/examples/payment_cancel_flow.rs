@@ -65,7 +65,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!();
 
         // Pack the payment message
-        let (packed_payment, _delivery_results) = merchant_agent.send_message(&payment, vec![&customer_did], false).await?;
+        let (packed_payment, _delivery_results) = merchant_agent
+            .send_message(&payment, vec![&customer_did], false)
+            .await?;
         println!("Merchant sends the payment request to the customer\n");
 
         // Step 2: Customer receives and processes the payment request
@@ -91,7 +93,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             note: Some("Will consider purchasing at a later date".to_string()),
         };
 
-        let (packed_cancel, _delivery_results) = customer_agent.send_message(&cancel, vec![&merchant_did], false).await?;
+        let (packed_cancel, _delivery_results) = customer_agent
+            .send_message(&cancel, vec![&merchant_did], false)
+            .await?;
         println!("Customer sends cancellation to the merchant\n");
 
         // Step 4: Merchant receives the cancellation

@@ -216,7 +216,9 @@ impl EncryptionTestEnvironment {
     ) -> Result<String> {
         // Wrap the single recipient in a slice
         let to_slice = &[to];
-        self.message_packer.pack_message(message, to_slice, from, mode).await
+        self.message_packer
+            .pack_message(message, to_slice, from, mode)
+            .await
     }
 
     fn new() -> Self {

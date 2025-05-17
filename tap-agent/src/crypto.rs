@@ -53,14 +53,14 @@ pub trait MessagePacker: Send + Sync + Debug {
         from: Option<&str>,
         mode: SecurityMode,
     ) -> Result<String>;
-    
+
     /// Resolve a DID to its DID document
-    /// 
+    ///
     /// This method retrieves the DID document for a given DID
-    /// 
+    ///
     /// # Parameters
     /// * `did` - The DID to resolve
-    /// 
+    ///
     /// # Returns
     /// The resolved DID document, or None if not found
     async fn resolve_did_doc(&self, did: &str) -> Result<Option<didcomm::did::DIDDoc>>;
@@ -179,7 +179,7 @@ impl DefaultMessagePacker {
         // Convert the DID doc to a JSON string
         serde_json::to_string(&doc).map_err(|e| Error::Serialization(e.to_string()))
     }
-    
+
     /// Resolve a DID to a DID document directly
     ///
     /// # Parameters
@@ -244,18 +244,18 @@ impl DefaultMessagePacker {
 #[async_trait]
 impl MessagePacker for DefaultMessagePacker {
     /// Resolve a DID to its DID document
-    /// 
+    ///
     /// This method retrieves the DID document for a given DID
-    /// 
+    ///
     /// # Parameters
     /// * `did` - The DID to resolve
-    /// 
+    ///
     /// # Returns
     /// The resolved DID document, or None if not found
     async fn resolve_did_doc(&self, did: &str) -> Result<Option<didcomm::did::DIDDoc>> {
         self.resolve_did_document(did).await
     }
-    
+
     /// Pack a message for the specified recipient using DIDComm
     ///
     /// Serializes the message, creates a DIDComm message, and applies
@@ -279,7 +279,7 @@ impl MessagePacker for DefaultMessagePacker {
         if to.is_empty() {
             return Err(Error::Validation("No recipients specified".to_string()));
         }
-        
+
         let message_value =
             serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
 
@@ -634,7 +634,7 @@ impl MessagePacker for DefaultMessagePacker {
                             Some(doc) => doc,
                             None => {
                                 return Err(Error::Cryptography(format!(
-                                    "Failed to resolve recipient DID: {}", 
+                                    "Failed to resolve recipient DID: {}",
                                     recipient_did
                                 )));
                             }
@@ -660,7 +660,10 @@ impl MessagePacker for DefaultMessagePacker {
                             Some(vm) => vm,
                             None => {
                                 // Skip recipients without verification methods rather than fail
-                                println!("No verification method found for key ID: {}, skipping", recipient_key_id);
+                                println!(
+                                    "No verification method found for key ID: {}, skipping",
+                                    recipient_key_id
+                                );
                                 continue;
                             }
                         };
@@ -675,10 +678,14 @@ impl MessagePacker for DefaultMessagePacker {
                                 didcomm::did::VerificationMaterial::JWK { public_key_jwk },
                             ) => {
                                 // Check if we have P-256 keys
-                                let sender_kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
-                                let sender_crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
-                                let recipient_kty = public_key_jwk.get("kty").and_then(|v| v.as_str());
-                                let recipient_crv = public_key_jwk.get("crv").and_then(|v| v.as_str());
+                                let sender_kty =
+                                    private_key_jwk.get("kty").and_then(|v| v.as_str());
+                                let sender_crv =
+                                    private_key_jwk.get("crv").and_then(|v| v.as_str());
+                                let recipient_kty =
+                                    public_key_jwk.get("kty").and_then(|v| v.as_str());
+                                let recipient_crv =
+                                    public_key_jwk.get("crv").and_then(|v| v.as_str());
 
                                 match (sender_kty, sender_crv, recipient_kty, recipient_crv) {
                                     (Some("EC"), Some("P-256"), Some("EC"), Some("P-256")) => {
@@ -688,7 +695,8 @@ impl MessagePacker for DefaultMessagePacker {
                                             .and_then(|v| v.as_str())
                                             .ok_or_else(|| {
                                                 Error::Cryptography(
-                                                    "Missing x coordinate in recipient JWK".to_string(),
+                                                    "Missing x coordinate in recipient JWK"
+                                                        .to_string(),
                                                 )
                                             })?;
                                         let y_b64 = public_key_jwk
@@ -696,7 +704,8 @@ impl MessagePacker for DefaultMessagePacker {
                                             .and_then(|v| v.as_str())
                                             .ok_or_else(|| {
                                                 Error::Cryptography(
-                                                    "Missing y coordinate in recipient JWK".to_string(),
+                                                    "Missing y coordinate in recipient JWK"
+                                                        .to_string(),
                                                 )
                                             })?;
 
@@ -722,13 +731,15 @@ impl MessagePacker for DefaultMessagePacker {
                                         point_bytes.extend_from_slice(&x_bytes);
                                         point_bytes.extend_from_slice(&y_bytes);
 
-                                        let encoded_point = P256EncodedPoint::from_bytes(&point_bytes)
-                                            .map_err(|e| {
-                                                Error::Cryptography(format!(
-                                                    "Failed to create P-256 encoded point: {}",
-                                                    e
-                                                ))
-                                            })?;
+                                        let encoded_point = P256EncodedPoint::from_bytes(
+                                            &point_bytes,
+                                        )
+                                        .map_err(|e| {
+                                            Error::Cryptography(format!(
+                                                "Failed to create P-256 encoded point: {}",
+                                                e
+                                            ))
+                                        })?;
 
                                         // This checks if the point is on the curve and returns the public key
                                         let recipient_pk =
@@ -736,7 +747,8 @@ impl MessagePacker for DefaultMessagePacker {
                                                 .expect("Invalid P-256 public key");
 
                                         // Generate an ephemeral key pair for ECDH
-                                        let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
+                                        let ephemeral_secret =
+                                            P256EphemeralSecret::random(&mut OsRng);
                                         let _ephemeral_public = ephemeral_secret.public_key();
 
                                         // Perform ECDH to derive a shared secret
@@ -749,10 +761,12 @@ impl MessagePacker for DefaultMessagePacker {
                                         // For simplicity, we'll use the first 32 bytes of the shared secret to encrypt the CEK
                                         let mut encrypted_cek = cek;
                                         for i in 0..cek.len() {
-                                            encrypted_cek[i] ^= shared_bytes[i % shared_bytes.len()];
+                                            encrypted_cek[i] ^=
+                                                shared_bytes[i % shared_bytes.len()];
                                         }
 
-                                        base64::engine::general_purpose::STANDARD.encode(encrypted_cek)
+                                        base64::engine::general_purpose::STANDARD
+                                            .encode(encrypted_cek)
                                     }
                                     // Handle other key types or fallback to a simpler approach
                                     _ => {
@@ -768,7 +782,9 @@ impl MessagePacker for DefaultMessagePacker {
                             // Extract the recipient's public key for Base58
                             (
                                 _,
-                                didcomm::did::VerificationMaterial::Base58 { public_key_base58: _ },
+                                didcomm::did::VerificationMaterial::Base58 {
+                                    public_key_base58: _,
+                                },
                             ) => {
                                 // For Base58 keys, we would normally decode and use them
                                 // For now, we'll use a simulated key until proper Base58 support is added
@@ -780,7 +796,9 @@ impl MessagePacker for DefaultMessagePacker {
                             // Extract the recipient's public key for Multibase
                             (
                                 _,
-                                didcomm::did::VerificationMaterial::Multibase { public_key_multibase: _ },
+                                didcomm::did::VerificationMaterial::Multibase {
+                                    public_key_multibase: _,
+                                },
                             ) => {
                                 // For Multibase keys, we would normally decode and use them
                                 // For now, we'll use a simulated key until proper Multibase support is added
