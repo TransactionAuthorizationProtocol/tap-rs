@@ -6,22 +6,31 @@ on:
   pull_request:
 
 jobs:
-  rust:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '18'
-      - uses: actions/setup-rust@v1
-        with:
-          rust-version: stable
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Run cargo tests
+        run: cargo test --workspace --all-targets --release
       - name: Install Node dependencies
         working-directory: tap-ts
         run: npm ci
       - name: Run Node tests
         working-directory: tap-ts
         run: npm test --if-present
-      - name: Run cargo tests
-        run: cargo test --workspace --all-targets --release
 
+  formatting:
+    name: cargo fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Ensure rustfmt is installed and setup problem matcher
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          components: rustfmt
+      - name: Rustfmt Check
+        uses: actions-rust-lang/rustfmt@v1
