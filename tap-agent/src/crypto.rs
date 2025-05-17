@@ -15,6 +15,10 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::sync::Arc;
 
+use didcomm::error::Result as DidcommResult;
+use didcomm::secrets::{Secret, SecretsResolver};
+use didcomm::unpack::{unpack, UnpackOptions};
+
 /// A trait for packing and unpacking messages with DIDComm.
 ///
 /// This trait defines the interface for secure message handling, including
@@ -136,14 +140,30 @@ impl DebugSecretsResolver for BasicSecretResolver {
 
 #[async_trait(?Send)]
 impl SecretsResolver for BasicSecretResolver {
-    async fn get_secret(&self, secret_id: &str) -> didcomm::error::Result<Option<Secret>> {
+    async fn get_secret(&self, secret_id: &str) -> DidcommResult<Option<Secret>> {
         Ok(self.secrets.get(secret_id).cloned())
     }
 
-    async fn find_secrets(&self, secret_ids: &[String]) -> didcomm::error::Result<Vec<Secret>> {
+    async fn find_secrets(&self, secret_ids: &[String]) -> DidcommResult<Vec<String>> {
         Ok(secret_ids
             .iter()
-            .filter_map(|id| self.secrets.get(id).cloned())
+            .filter(|id| self.secrets.contains_key(id.as_str()))
+            .cloned()
+            .collect())
+    }
+}
+
+#[async_trait(?Send)]
+impl SecretsResolver for dyn DebugSecretsResolver {
+    async fn get_secret(&self, secret_id: &str) -> DidcommResult<Option<Secret>> {
+        Ok(self.get_secrets_map().get(secret_id).cloned())
+    }
+
+    async fn find_secrets(&self, secret_ids: &[String]) -> DidcommResult<Vec<String>> {
+        Ok(secret_ids
+            .iter()
+            .filter(|id| self.get_secrets_map().contains_key(id.as_str()))
+            .cloned()
             .collect())
     }
 }
@@ -249,51 +269,20 @@ impl DefaultMessagePacker {
 
     /// Unpack a message and parse it to the requested type
     pub async fn unpack_message<T: DeserializeOwned + Send>(&self, packed: &str) -> Result<T> {
-        let value = self.unpack_message_value(packed).await?;
+        let options = UnpackOptions::default();
+        let unpacked = unpack(
+            packed,
+            self.did_resolver.as_ref(),
+            self.secrets_resolver.as_ref(),
+            &options,
+        )
+        .await
+        .map_err(Error::from)?;
 
-        // Parse the unpacked message to the requested type
-        serde_json::from_value::<T>(value).map_err(|e| Error::Serialization(e.to_string()))
+        serde_json::from_value::<T>(unpacked.message.body)
+            .map_err(|e| Error::Serialization(e.to_string()))
     }
 
-    /// Helper method to manually extract the message body from a signed or encrypted message
-    async fn verify_signature(&self, packed: &str) -> Result<Value> {
-        // For simplicity, we'll just try to extract the message body ourselves rather than 
-        // using didcomm::Message::unpack which has more complex requirements
-        
-        // Parse the message to extract the body
-        let value: Value = serde_json::from_str(packed)
-            .map_err(|e| Error::Serialization(format!("Failed to parse signed message: {}", e)))?;
-        
-        // Get the payload field for JWS format or body for plain format
-        if let Some(payload) = value.get("payload") {
-            // This is a JWS format message
-            if let Some(payload_str) = payload.as_str() {
-                // Base64 decode the payload
-                let decoded = base64::engine::general_purpose::URL_SAFE.decode(payload_str)
-                    .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
-                
-                // Parse the decoded payload
-                let payload_json: Value = serde_json::from_slice(&decoded)
-                    .map_err(|e| Error::Serialization(format!("Failed to parse payload JSON: {}", e)))?;
-                
-                // Get the body from the payload
-                if let Some(body) = payload_json.get("body") {
-                    return Ok(body.clone());
-                }
-                
-                // If no body field, return the whole payload
-                return Ok(payload_json);
-            }
-        }
-        
-        // Try to get the body directly (plain format)
-        if let Some(body) = value.get("body") {
-            return Ok(body.clone());
-        }
-        
-        // If no recognizable format, return an error
-        Err(Error::Validation("Could not extract body from message".to_string()))
-    }
 
     /// Helper method to resolve DID documents for recipients
     #[allow(dead_code)] // This is kept for future use in authenticated encryption
@@ -541,47 +530,24 @@ impl MessagePacker for DefaultMessagePacker {
     async fn unpack_message_value(&self, packed: &str) -> Result<Value> {
         // Special case for Presentation messages which might not be DIDComm formatted
         if let Ok(value) = serde_json::from_str::<Value>(packed) {
-            if value.get("type").and_then(|v| v.as_str()) == Some("https://tap.rsvp/schema/1.0#Presentation") {
+            if value.get("type").and_then(|v| v.as_str())
+                == Some("https://tap.rsvp/schema/1.0#Presentation")
+            {
                 return Ok(value);
             }
         }
-        
-        // Try to determine the message type by inspecting the packed message
-        let message_type = if packed.contains("\"signatures\"") {
-            "signed"
-        } else if packed.contains("\"ciphertext\"") {
-            "encrypted"
-        } else if let Ok(value) = serde_json::from_str::<Value>(packed) {
-            if value.get("body").is_some() {
-                "plain"
-            } else {
-                "unknown"
-            }
-        } else {
-            "unknown"
-        };
-        
-        match message_type {
-            "signed" | "encrypted" => {
-                // Use our simplified method for both signed and encrypted messages
-                self.verify_signature(packed).await
-            },
-            "plain" => {
-                // For plain messages, just parse and return the body
-                let value: Value = serde_json::from_str(packed)
-                    .map_err(|e| Error::Serialization(format!("Failed to parse plain message: {}", e)))?;
-                
-                if let Some(body) = value.get("body") {
-                    Ok(body.clone())
-                } else {
-                    // If no body, return the entire message
-                    Ok(value)
-                }
-            },
-            _ => {
-                // Return an error for unknown message types
-                Err(Error::Validation(format!("Unknown message format: {}", packed)))
-            }
-        }
+
+        // Use didcomm::unpack to process the message
+        let options = UnpackOptions::default();
+        let unpacked = unpack(
+            packed,
+            self.did_resolver.as_ref(),
+            self.secrets_resolver.as_ref(),
+            &options,
+        )
+        .await
+        .map_err(Error::from)?;
+
+        Ok(unpacked.message.body)
     }
 }
