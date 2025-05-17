@@ -9,6 +9,7 @@ use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
 use crate::message::SecurityMode;
 use async_trait::async_trait;
+use didcomm::secrets::{Secret, SecretsResolver};
 use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -130,6 +131,20 @@ impl BasicSecretResolver {
 impl DebugSecretsResolver for BasicSecretResolver {
     fn get_secrets_map(&self) -> &std::collections::HashMap<String, didcomm::secrets::Secret> {
         &self.secrets
+    }
+}
+
+#[async_trait(?Send)]
+impl SecretsResolver for BasicSecretResolver {
+    async fn get_secret(&self, secret_id: &str) -> didcomm::error::Result<Option<Secret>> {
+        Ok(self.secrets.get(secret_id).cloned())
+    }
+
+    async fn find_secrets(&self, secret_ids: &[String]) -> didcomm::error::Result<Vec<Secret>> {
+        Ok(secret_ids
+            .iter()
+            .filter_map(|id| self.secrets.get(id).cloned())
+            .collect())
     }
 }
 
