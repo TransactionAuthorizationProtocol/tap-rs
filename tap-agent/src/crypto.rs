@@ -9,6 +9,7 @@ use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
 use crate::message::SecurityMode;
 use async_trait::async_trait;
+use didcomm::secrets::{Secret, SecretsResolver};
 use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
