@@ -99,4 +99,20 @@ pub enum Error {
     /// Networking error
     #[error("Networking error: {0}")]
     Networking(String),
+
+    /// Key not found for operations like signing
+    #[error("Key not found: {0}")]
+    KeyNotFound(String),
+
+    /// Invalid key type for cryptographic operation
+    #[error("Invalid key type: {0}")]
+    InvalidKeyType(String),
+
+    /// Signature verification error
+    #[error("Signature verification failed: {0}")]
+    SignatureVerification(String),
+
+    /// Encryption/decryption error
+    #[error("Encryption/decryption error: {0}")]
+    EncryptionError(String),
 }

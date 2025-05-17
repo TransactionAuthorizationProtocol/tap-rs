@@ -19,7 +19,7 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
 url = { workspace = true }
 reqwest = { version = "0.11", features = ["json"] }
 chrono = { workspace = true }
-didcomm = "0.4"
+didcomm = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 erased-serde = "0.3"
@@ -56,9 +56,9 @@ harness = false
 default = ["native"]
 native = []
 wasm = [
-  "tap-msg/wasm",
-  "wasm-bindgen",
-  "js-sys",
-  "web-sys",
-  "wasm-bindgen-futures"
+    "tap-msg/wasm",
+    "wasm-bindgen",
+    "js-sys",
+    "web-sys",
+    "wasm-bindgen-futures",
 ]
