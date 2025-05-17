@@ -23,7 +23,7 @@ async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
     // Create a secret resolver with the test key
     let mut secret_resolver = BasicSecretResolver::new();
 
-    // Add a test Ed25519 key
+    // Add a test Ed25519 key with correctly sized private key (32 bytes)
     let secret = Secret {
         id: format!("{}#keys-1", did),
         type_: SecretType::JsonWebKey2020,
@@ -32,8 +32,8 @@ async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
                 "kty": "OKP",
                 "kid": format!("{}#keys-1", did),
                 "crv": "Ed25519",
-                "x": "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-                "d": "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh"
+                "x": "F74Yk9BrwnXVJUEKwDxBfNjOElv1eIHr9QypeZ2DQQg",
+                "d": "9kVnxrZlZW6V2MrNfcXUL8sAle/XX9XBbOxmHKFbvs4="
             }),
         },
     };
@@ -107,7 +107,10 @@ fn bench_send_message(c: &mut Criterion) {
                 let transfer = create_transfer_message(&did1, &did2).await;
 
                 // Send message
-                let (_, _) = agent1.send_message(&transfer, vec![&did2], false).await.unwrap();
+                let (_, _) = agent1
+                    .send_message(&transfer, vec![&did2], false)
+                    .await
+                    .unwrap();
             });
         });
     });
@@ -135,7 +138,10 @@ fn bench_message_packing(c: &mut Criterion) {
                 let transfer = create_transfer_message(&did1, &did2).await;
 
                 // Send and receive message
-                let (packed, _) = agent1.send_message(&transfer, vec![&did2], false).await.unwrap();
+                let (packed, _) = agent1
+                    .send_message(&transfer, vec![&did2], false)
+                    .await
+                    .unwrap();
                 let _: Transfer = agent2.receive_message(&packed).await.unwrap();
             });
         });

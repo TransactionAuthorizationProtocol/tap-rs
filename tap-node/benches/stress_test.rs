@@ -71,6 +71,7 @@ fn stress_test(c: &mut Criterion) {
         enable_message_logging: false,
         log_message_content: false,
         processor_pool: Some(pool_config),
+        event_logger: None,
     };
 
     // For testing, we'll create some DIDs that don't rely on external resolvers

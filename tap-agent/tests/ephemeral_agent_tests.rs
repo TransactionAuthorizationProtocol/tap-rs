@@ -78,7 +78,10 @@ async fn test_ephemeral_agent_signing() {
     };
 
     // Agent 1 sends a message to Agent 2
-    let (packed_message, _) = agent1.send_message(&message, vec![&did2], false).await.unwrap();
+    let (packed_message, _) = agent1
+        .send_message(&message, vec![&did2], false)
+        .await
+        .unwrap();
 
     // Agent 2 receives and unpacks the message
     let received_message: TestMessage = agent2.receive_message(&packed_message).await.unwrap();
@@ -145,7 +148,10 @@ mod key_type_tests {
             message_type: "test-message".to_string(),
         };
 
-        let (packed_message, _) = agent1.send_message(&message, vec![&did2], false).await.unwrap();
+        let (packed_message, _) = agent1
+            .send_message(&message, vec![&did2], false)
+            .await
+            .unwrap();
         let received_message: TestMessage = agent2.receive_message(&packed_message).await.unwrap();
 
         assert_eq!(received_message.message_text, "Ed25519 test");
