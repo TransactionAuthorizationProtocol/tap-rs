@@ -84,7 +84,6 @@ pub trait MessageSender: Send + Sync + Debug {
 /// Node message sender implementation
 pub struct NodeMessageSender {
     /// Callback function for sending messages
-    #[allow(dead_code)]
     send_callback: Arc<dyn Fn(String, Vec<String>) -> Result<()> + Send + Sync>,
 }
 
@@ -149,7 +148,7 @@ pub struct HttpMessageSender {
     #[cfg(feature = "reqwest")]
     client: reqwest::Client,
     /// Timeout for HTTP requests in milliseconds
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Used for future timeout configuration
     timeout_ms: u64,
     /// Maximum number of retries
     max_retries: u32,

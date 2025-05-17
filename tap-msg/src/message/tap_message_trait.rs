@@ -130,6 +130,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
     /// Note: This method now directly uses the enhanced to_didcomm implementation
     /// which automatically extracts agent DIDs. The explicit 'to' parameter allows
     /// overriding the automatically extracted recipients when needed.
+    #[allow(dead_code)] // Used in tests but not in production code
     fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
     where
         I: IntoIterator<Item = &'a str>,

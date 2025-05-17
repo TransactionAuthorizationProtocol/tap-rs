@@ -40,6 +40,7 @@
 pub mod client;
 pub mod config;
 pub mod error;
+pub mod event;
 pub mod handler;
 pub mod server;
 

@@ -478,6 +478,7 @@ impl TapMessageBody for Transfer {
         Ok(message)
     }
 
+    #[allow(dead_code)] // Used in tests
     fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
     where
         I: IntoIterator<Item = &'a str>,
@@ -2000,7 +2001,7 @@ impl PaymentRequest {
         Ok(())
     }
 
-    #[allow(dead_code)] // Suppress dead code warning for now
+    #[allow(dead_code)] // Used in tests
     fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
     where
         I: IntoIterator<Item = &'a str>,

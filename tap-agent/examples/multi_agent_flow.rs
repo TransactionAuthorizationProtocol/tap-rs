@@ -179,8 +179,8 @@ fn main() -> Result<()> {
         println!("Step 2: Sending transfer to beneficiary VASP");
 
         // Pack and send to VASP
-        let packed_transfer_vasp = originator_vasp
-            .send_message(&transfer, &beneficiary_vasp_did)
+        let (packed_transfer_vasp, _delivery_results) = originator_vasp
+            .send_message(&transfer, vec![&beneficiary_vasp_did], false)
             .await?;
 
         println!("Transfer sent to beneficiary VASP\n");
@@ -223,8 +223,8 @@ fn main() -> Result<()> {
         };
 
         // Send AddAgents message to originator VASP
-        let packed_add_agents = beneficiary_vasp
-            .send_message(&add_agents, &originator_vasp_did)
+        let (packed_add_agents, _delivery_results) = beneficiary_vasp
+            .send_message(&add_agents, vec![&originator_vasp_did], false)
             .await?;
 
         println!("Beneficiary VASP sends AddAgents message to add wallet and wallet API");
@@ -269,8 +269,8 @@ fn main() -> Result<()> {
         reason: "compliance.policy: Additional beneficiary information required. Please provide additional beneficiary information to comply with regulations".to_string(),
     };
 
-        let packed_reject = beneficiary_vasp
-            .send_message(&reject, &originator_vasp_did)
+        let (packed_reject, _delivery_results) = beneficiary_vasp
+            .send_message(&reject, vec![&originator_vasp_did], false)
             .await?;
 
         // Originator receives the rejection
@@ -291,8 +291,8 @@ fn main() -> Result<()> {
             note: Some("Transfer authorized after compliance review".to_string()),
         };
 
-        let packed_authorize_vasp = beneficiary_vasp
-            .send_message(&authorize, &originator_vasp_did)
+        let (packed_authorize_vasp, _delivery_results) = beneficiary_vasp
+            .send_message(&authorize, vec![&originator_vasp_did], false)
             .await?;
 
         // Originator receives the authorization
@@ -313,8 +313,8 @@ fn main() -> Result<()> {
             note: Some("Wallet ready to receive funds".to_string()),
         };
 
-        let packed_authorize_wallet = beneficiary_wallet
-            .send_message(&authorize_wallet, &originator_wallet_did)
+        let (packed_authorize_wallet, _delivery_results) = beneficiary_wallet
+            .send_message(&authorize_wallet, vec![&originator_wallet_did], false)
             .await?;
 
         // Originator wallet receives the authorization
@@ -345,8 +345,8 @@ fn main() -> Result<()> {
             note: Some(api_note.clone()),
         };
 
-        let packed_api_authorize = originator_wallet_api
-            .send_message(&api_authorize, &beneficiary_wallet_api_did)
+        let (packed_api_authorize, _delivery_results) = originator_wallet_api
+            .send_message(&api_authorize, vec![&beneficiary_wallet_api_did], false)
             .await?;
 
         // Beneficiary wallet API receives the technical details
@@ -374,11 +374,11 @@ fn main() -> Result<()> {
         };
 
         // Send settlement to all relevant parties
-        let packed_settle_vasp = originator_wallet
-            .send_message(&settle, &beneficiary_vasp_did)
+        let (packed_settle_vasp, _delivery_results1) = originator_wallet
+            .send_message(&settle, vec![&beneficiary_vasp_did], false)
             .await?;
-        let packed_settle_wallet = originator_wallet
-            .send_message(&settle, &beneficiary_wallet_did)
+        let (packed_settle_wallet, _delivery_results2) = originator_wallet
+            .send_message(&settle, vec![&beneficiary_wallet_did], false)
             .await?;
 
         println!("Settlement sent to beneficiary VASP and wallet");
@@ -396,8 +396,8 @@ fn main() -> Result<()> {
             amount: Some(transfer.amount.clone()),
         };
 
-        let packed_api_settle = originator_wallet_api
-            .send_message(&api_settle, &beneficiary_wallet_api_did)
+        let (packed_api_settle, _delivery_results) = originator_wallet_api
+            .send_message(&api_settle, vec![&beneficiary_wallet_api_did], false)
             .await?;
 
         // Beneficiary wallet API receives settlement confirmation

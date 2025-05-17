@@ -160,6 +160,7 @@ async fn test_node_configuration() {
         enable_message_logging: true,
         log_message_content: true,
         processor_pool: None,
+        event_logger: None,
     };
     let node = TapNode::new(config);
 

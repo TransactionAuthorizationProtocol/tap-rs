@@ -34,7 +34,7 @@ pub mod wasm {
     use wasm_bindgen::prelude::*;
 
     /// Initialize the WASM module.
-    #[wasm_bindgen(start)]
+    #[wasm_bindgen(js_name = init_tap_msg)]
     pub fn init() {
         #[cfg(feature = "console_error_panic_hook")]
         console_error_panic_hook::set_once();

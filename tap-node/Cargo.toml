@@ -42,6 +42,7 @@ uuid = { workspace = true }
 futures = { version = "0.3" }
 sha2 = "0.10"
 base58 = "0.2"
+base64 = "0.13"  # For encoding signatures
 chrono = { workspace = true }
 log = "0.4"
 didcomm = "0.4"
@@ -57,6 +58,7 @@ tokio-test = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
 futures = { version = "0.3" }
 env_logger = "0.10"
+tempfile = "3.8"
 
 [[bench]]
 name = "stress_test"

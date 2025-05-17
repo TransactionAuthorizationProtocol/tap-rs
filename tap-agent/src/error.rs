@@ -46,6 +46,10 @@ pub enum Error {
     #[error("Crypto error: {0}")]
     Crypto(String),
 
+    /// Error related to cryptographic operations during signing/encryption
+    #[error("Cryptography error: {0}")]
+    Cryptography(String),
+
     /// Error related to message processing
     #[error("Message error: {0}")]
     Message(String),
@@ -91,4 +95,8 @@ pub enum Error {
     /// Serde JSON error
     #[error("Serde JSON error: {0}")]
     SerdeError(#[from] serde_json::Error),
+
+    /// Networking error
+    #[error("Networking error: {0}")]
+    Networking(String),
 }

@@ -18,7 +18,9 @@
     "lint": "eslint src --ext .ts",
     "prepublishOnly": "npm run build && npm run build:browser",
     "did": "node dist/cli/did-generator.js",
-    "example:did": "node dist/examples/did-generation-example.js"
+    "example:did": "node dist/examples/did-generation-example.js",
+    "example:crypto": "node dist/examples/crypto-example.js",
+    "example:transfer": "node dist/examples/transfer-flow.js"
   },
   "keywords": [
     "tap",

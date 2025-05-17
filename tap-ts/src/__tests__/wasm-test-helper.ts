@@ -201,6 +201,7 @@ export async function setupWasmTests(): Promise<void> {
       // Mock initialization functions
       init: vi.fn(),
       init_tap_wasm: vi.fn(),
+      init_tap_msg: vi.fn(),
       
       // Mock DID key creation
       create_did_key: vi.fn().mockImplementation((keyType) => {

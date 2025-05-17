@@ -18,10 +18,11 @@ pub struct AgentConfig {
 
 impl AgentConfig {
     /// Creates a new AgentConfig with the specified DID
+    /// Default security mode is SIGNED
     pub fn new(did: String) -> Self {
         Self {
             agent_did: did,
-            security_mode: Some("PLAIN".to_string()),
+            security_mode: Some("SIGNED".to_string()),
             parameters: HashMap::new(),
         }
     }
