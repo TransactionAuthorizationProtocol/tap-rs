@@ -6,6 +6,8 @@
 use crate::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey};
 use crate::error::{Error, Result};
 use didcomm::secrets::Secret;
+use didcomm::secrets::SecretsResolver;
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -133,7 +135,7 @@ pub struct KeyManagerSecretResolver {
     secrets: Arc<RwLock<HashMap<String, Secret>>>,
 }
 
-// Let's implement a custom method to get a secret without using the trait
+// Custom helper methods for working with secrets
 impl KeyManagerSecretResolver {
     /// Get a secret by ID
     pub fn get_secret_by_id(&self, secret_id: &str) -> Option<Secret> {
@@ -146,9 +148,27 @@ impl KeyManagerSecretResolver {
     }
 }
 
-// We won't implement the didcomm SecretsResolver trait directly to avoid
-// compatibility issues. Instead, we'll implement our own methods and
-// use a compatibility adapter in the tests.
+#[async_trait(?Send)]
+impl SecretsResolver for KeyManagerSecretResolver {
+    async fn get_secret(&self, secret_id: &str) -> didcomm::error::Result<Option<Secret>> {
+        if let Ok(secrets) = self.secrets.read() {
+            Ok(secrets.get(secret_id).cloned())
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn find_secrets(&self, secret_ids: &[String]) -> didcomm::error::Result<Vec<Secret>> {
+        if let Ok(secrets) = self.secrets.read() {
+            Ok(secret_ids
+                .iter()
+                .filter_map(|id| secrets.get(id).cloned())
+                .collect())
+        } else {
+            Ok(Vec::new())
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
