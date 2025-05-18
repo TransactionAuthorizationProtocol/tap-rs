@@ -1,4 +1,4 @@
-use didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use serde_json::json;
 use std::collections::HashMap;
 use tap_msg::message::{Attachment, AttachmentData, DIDCommPresentation, TapMessageBody};
@@ -63,9 +63,9 @@ async fn test_didcomm_presentation_deserialization() {
         ]
     });
 
-    // Convert to a DIDComm Message
+    // Convert to a PlainMessage
     let message_str = message_json.to_string();
-    let message: Message = serde_json::from_str(&message_str).expect("Failed to parse message");
+    let message: PlainMessage = serde_json::from_str(&message_str).expect("Failed to parse message");
 
     // Test deserialization
     let presentation = DIDCommPresentation::from_didcomm(&message)
@@ -170,7 +170,7 @@ async fn test_didcomm_presentation_to_didcomm() {
 
     // Convert to DIDComm message
     let message = presentation
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm");
 
     // Verify message attributes
@@ -249,7 +249,7 @@ async fn test_round_trip_conversion() {
     let presentation = DIDCommPresentation::from_didcomm(&didcomm_message).unwrap();
 
     // Convert back to DIDComm message
-    let round_trip_message = presentation.to_didcomm(None).unwrap();
+    let round_trip_message = presentation.to_didcomm("did:example:sender").unwrap();
 
     // Check that the basic properties match
     assert_eq!(round_trip_message.type_, didcomm_message.type_);

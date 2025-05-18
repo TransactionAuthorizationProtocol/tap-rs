@@ -74,7 +74,7 @@ impl Connect {
 }
 
 impl Connectable for Connect {
-    fn with_connection(&mut self, connect_id: &str) -> &mut Self {
+    fn with_connection(&mut self, _connect_id: &str) -> &mut Self {
         // Connect messages don't have a connection ID
         self
     }

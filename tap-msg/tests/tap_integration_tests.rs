@@ -7,7 +7,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
-use tap_msg::message::types::{
+use tap_msg::message::{
     Agent, Authorize, Connect, ConnectionConstraints, Participant, PaymentRequest, Reject, Settle,
     Transfer, UpdateParty,
 };
@@ -25,7 +25,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Step 1: Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
     let connect_id = connect_message.id.clone();
 
@@ -132,7 +132,7 @@ fn test_payment_flow() {
     // Step 1: Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
     let connect_id = connect_message.id.clone();
 
@@ -239,7 +239,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Step 1: Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
     let connect_id = connect_message.id.clone();
 

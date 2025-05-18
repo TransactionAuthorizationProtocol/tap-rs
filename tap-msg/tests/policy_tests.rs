@@ -206,7 +206,7 @@ fn test_update_policies_didcomm_conversion() {
 
     // Convert to DIDComm message
     let didcomm_message = original_update
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm");
 
     // Debug: Print the actual body of the DIDComm message

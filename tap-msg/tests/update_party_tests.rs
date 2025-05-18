@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::{Participant, Transfer, UpdateParty};
+use tap_msg::message::{Participant, Transfer, UpdateParty};
 
 #[test]
 fn test_update_party_creation() {
@@ -205,7 +205,7 @@ fn test_authorizable_with_update_party() {
 
     // Convert transfer to a DIDComm message *first* to get its ID
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert initial transfer to DIDComm message");
 
     // Create a participant to update (e.g., the beneficiary)

@@ -3,7 +3,6 @@
 //! This module defines the Authorizable trait, which allows message types
 //! to be authorized, and implementations for relevant TAP message types.
 
-use crate::error::Result;
 use crate::message::policy::Policy;
 use crate::message::{Authorize, Participant, RemoveAgent, ReplaceAgent, Transfer, UpdatePolicies};
 

@@ -5,7 +5,7 @@ use serde_json::json;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::{
+use tap_msg::message::{
     Agent, Attachment, AttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
     OutOfBand, Participant, PaymentRequest, TransactionLimits,
 };

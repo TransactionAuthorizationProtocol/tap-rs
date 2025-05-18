@@ -5,7 +5,8 @@ use std::str::FromStr;
 
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::{Authorizable, Authorize, Participant, Transfer, UpdateParty};
+use tap_msg::message::authorizable::Authorizable;
+use tap_msg::message::{Authorize, Participant, Transfer, UpdateParty};
 
 #[test]
 fn test_transfer_authorizable() {
@@ -14,7 +15,7 @@ fn test_transfer_authorizable() {
 
     // Convert to DIDComm message to get an ID
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
 
@@ -24,7 +25,7 @@ fn test_transfer_authorizable() {
 
     // Create a new DIDComm message from the auth object to get its transfer_id
     let auth_message = auth
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert auth to DIDComm");
 
     // Update the auth object with the transfer_id from the original transfer message
@@ -57,7 +58,7 @@ fn test_didcomm_message_authorizable() {
     // Create a Transfer message and convert to DIDComm message
     let transfer = create_test_transfer();
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let transfer_id = transfer_message.id.clone();
 
@@ -67,7 +68,7 @@ fn test_didcomm_message_authorizable() {
 
     // Create a new DIDComm message from the auth object to get its transfer_id
     let auth_message = auth
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert auth to DIDComm");
 
     // Update the auth object with the transfer_id from the original transfer message
@@ -100,7 +101,7 @@ fn test_full_flow() {
     // Create a Transfer message
     let transfer = create_test_transfer();
     let _original_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
     // Generate authorize response - Create Authorize struct manually
@@ -109,7 +110,7 @@ fn test_full_flow() {
 
     // Convert authorize to DIDComm message
     let auth_message = auth
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert authorize to DIDComm message");
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
@@ -118,7 +119,7 @@ fn test_full_flow() {
 
     // Convert settle to DIDComm message
     let settle_message = settle
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert settle to DIDComm message");
     assert_eq!(settle_message.type_, "https://tap.rsvp/schema/1.0#settle");
 }
@@ -130,7 +131,7 @@ fn test_update_party_message() {
 
     // Get the transfer_id (in a real scenario, this would be available)
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
 
@@ -156,7 +157,7 @@ fn test_update_party_message() {
 
     // Test conversion to DIDComm
     let didcomm_message = update_party
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     // Verify fields

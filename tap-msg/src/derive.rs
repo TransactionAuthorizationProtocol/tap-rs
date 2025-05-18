@@ -299,7 +299,7 @@ macro_rules! impl_tap_message {
                 creator_did: &str,
             ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
-                let mut message = body.to_didcomm(creator_did)?;
+                let message = body.to_didcomm(creator_did)?;
 
                 // For types without thread/transaction ID, we don't set thread ID on replies
 

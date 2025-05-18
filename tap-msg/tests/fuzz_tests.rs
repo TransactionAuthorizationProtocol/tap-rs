@@ -200,7 +200,7 @@ fn test_fuzz_didcomm_conversion() {
 
     // Convert to DIDComm message
     let didcomm_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm");
 
     // Modify the message to have an invalid type

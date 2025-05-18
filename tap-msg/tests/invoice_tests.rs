@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use tap_msg::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::PaymentRequest;
+use tap_msg::message::PaymentRequest;
 use tap_msg::Participant;
 
 #[test]
@@ -185,7 +185,7 @@ fn test_payment_request_with_invoice() {
 
     // Convert to DIDComm
     let didcomm_message = payment_request
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert PaymentRequest to DIDComm");
 
     // Verify DIDComm message type

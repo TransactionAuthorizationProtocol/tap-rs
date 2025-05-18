@@ -171,14 +171,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Creating payment request message");
 
     // Create merchant and customer participants
-    let merchant = Participant {
+    let _merchant = Participant {
         id: args.recipient_did.clone(),
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
     };
 
-    let customer = Participant {
+    let _customer = Participant {
         id: agent_did.clone(),
         role: Some("customer".to_string()),
         policies: None,

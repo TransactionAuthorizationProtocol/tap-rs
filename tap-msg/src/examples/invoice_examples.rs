@@ -129,7 +129,7 @@ pub fn create_payment_request_with_invoice_example(
     customer_did: Option<&str>,
 ) -> Result<PlainMessage> {
     // Create merchant participant
-    let merchant = Participant {
+    let _merchant = Participant {
         id: merchant_did.to_string(),
         role: Some("merchant".to_string()),
         policies: None,
@@ -137,7 +137,7 @@ pub fn create_payment_request_with_invoice_example(
     };
 
     // Create a merchant agent (e.g., a payment processor)
-    let agent = Participant {
+    let _agent = Participant {
         id: "did:example:payment_processor".to_string(),
         role: Some("agent".to_string()),
         policies: None,
