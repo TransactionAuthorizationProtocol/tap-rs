@@ -3,8 +3,8 @@
  */
 
 // Import the WASM module
-import * as tapWasm from 'tap-wasm';
-import __wbg_init from 'tap-wasm';
+import * as tapWasm from "tap-wasm";
+import __wbg_init from "tap-wasm";
 
 // Track initialization state
 let initialized = false;
@@ -14,9 +14,9 @@ let initializationPromise: Promise<void> | null = null;
  * The type of key used for DID generation
  */
 export enum DIDKeyType {
-  Ed25519 = 'Ed25519',
-  P256 = 'P256',
-  Secp256k1 = 'Secp256k1'
+  Ed25519 = "Ed25519",
+  P256 = "P256",
+  Secp256k1 = "Secp256k1",
 }
 
 /**
@@ -27,77 +27,77 @@ export interface DIDKey {
    * The DID string
    */
   did: string;
-  
+
   /**
    * The DID document as a JSON string
    */
   didDocument: string;
-  
+
   /**
    * Get the public key as a hex string (WASM style)
    */
   get_public_key_hex(): string;
-  
+
   /**
    * Get the private key as a hex string (WASM style)
    */
   get_private_key_hex(): string;
-  
+
   /**
    * Get the public key as a base64 string (WASM style)
    */
   get_public_key_base64(): string;
-  
+
   /**
    * Get the private key as a base64 string (WASM style)
    */
   get_private_key_base64(): string;
-  
+
   /**
    * Get the key type as a string (WASM style)
    */
   get_key_type(): string;
-  
+
   /**
    * Sign data with this key (WASM style)
    */
   sign(data: string): string;
-  
+
   /**
    * Verify a signature with this key (WASM style)
    */
   verify(data: string, signature: string): boolean;
-  
+
   /**
    * Get the public key as a hex string (JS style alias)
    */
   getPublicKeyHex(): string;
-  
+
   /**
    * Get the private key as a hex string (JS style alias)
    */
   getPrivateKeyHex(): string;
-  
+
   /**
    * Get the public key as a base64 string (JS style alias)
    */
   getPublicKeyBase64(): string;
-  
+
   /**
    * Get the private key as a base64 string (JS style alias)
    */
   getPrivateKeyBase64(): string;
-  
+
   /**
    * Get the key type as a string (JS style alias)
    */
   getKeyType(): string;
-  
+
   /**
    * Sign data with this key (JS style alias)
    */
   signData(data: string): string;
-  
+
   /**
    * Verify a signature with this key (JS style alias)
    */
@@ -112,44 +112,46 @@ export function initWasm(): Promise<void> {
   if (initialized) {
     return Promise.resolve();
   }
-  
+
   if (initializationPromise) {
     return initializationPromise;
   }
-  
+
   initializationPromise = new Promise<void>((resolve, reject) => {
     // Skip actual WASM loading in Node.js test environment
     // Tests will use the mock implementation provided in wasm-test-helper.ts
-    if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
-      console.log('Test environment detected, skipping actual WASM initialization');
+    if (process.env.NODE_ENV === "test" || process.env.VITEST) {
+      console.log(
+        "Test environment detected, skipping actual WASM initialization",
+      );
       initialized = true;
       resolve();
       return;
     }
-    
+
     // Normal WASM initialization for browser/production
     __wbg_init()
       .then(() => {
         // After WASM is loaded, initialize the module
         let wasmInitialized = false;
-        
+
         // Try to initialize tap-msg module if available
-        if (typeof tapWasm.init_tap_msg === 'function') {
+        if (typeof tapWasm.init_tap_msg === "function") {
           tapWasm.init_tap_msg();
           wasmInitialized = true;
         }
-        
+
         // Always run start if available (this is the main entry point from tap-wasm)
-        if (typeof tapWasm.start === 'function') {
+        if (typeof tapWasm.start === "function") {
           tapWasm.start();
           wasmInitialized = true;
         }
-        
+
         // Legacy initialization methods for backward compatibility
         // We don't use these anymore as they're not in the generated WASM module
         if (!wasmInitialized) {
-          console.log('Using legacy initialization methods as fallback');
-          
+          console.log("Using legacy initialization methods as fallback");
+
           // These commented out checks remain for historical reference
           // if (typeof tapWasm.init === 'function') {
           //   tapWasm.init();
@@ -159,19 +161,21 @@ export function initWasm(): Promise<void> {
           //   wasmInitialized = true;
           // }
         }
-        
+
         if (!wasmInitialized) {
-          console.warn('Warning: Could not find WASM initialization function. Using module as-is.');
+          console.warn(
+            "Warning: Could not find WASM initialization function. Using module as-is.",
+          );
         }
-        
+
         initialized = true;
         resolve();
       })
-      .catch(error => {
+      .catch((error) => {
         reject(new Error(`Failed to initialize WASM module: ${error}`));
       });
   });
-  
+
   return initializationPromise;
 }
 
@@ -198,21 +202,26 @@ async function ensureWasmInitialized(): Promise<void> {
  */
 export async function createDIDKey(keyType?: DIDKeyType): Promise<DIDKey> {
   await ensureWasmInitialized();
-  
+
   const keyTypeStr = keyType || DIDKeyType.Ed25519;
   const wasmDIDKey = tapWasm.create_did_key(keyTypeStr);
-  
+
   // Create DID document if it doesn't exist
-  const didDocument = wasmDIDKey.didDocument || wasmDIDKey.did_document || JSON.stringify({
-    id: wasmDIDKey.did,
-    verificationMethod: [{
-      id: `${wasmDIDKey.did}#key1`,
-      type: `${keyType || 'Ed25519'}VerificationKey2020`,
-      controller: wasmDIDKey.did,
-      publicKeyMultibase: 'z123'
-    }],
-    keyAgreement: [`${wasmDIDKey.did}#keyAgreement`]
-  });
+  const didDocument =
+    wasmDIDKey.didDocument ||
+    wasmDIDKey.did_document ||
+    JSON.stringify({
+      id: wasmDIDKey.did,
+      verificationMethod: [
+        {
+          id: `${wasmDIDKey.did}#key1`,
+          type: `${keyType || "Ed25519"}VerificationKey2020`,
+          controller: wasmDIDKey.did,
+          publicKeyMultibase: "z123",
+        },
+      ],
+      keyAgreement: [`${wasmDIDKey.did}#keyAgreement`],
+    });
 
   // Create a wrapper object that implements both the WASM interface and our TypeScript interface
   const didKey: DIDKey = {
@@ -220,86 +229,102 @@ export async function createDIDKey(keyType?: DIDKeyType): Promise<DIDKey> {
     didDocument: didDocument,
 
     // Native WASM methods
-    get_public_key_hex: function() {
+    get_public_key_hex: function () {
       try {
-        return typeof wasmDIDKey.get_public_key_hex === 'function'
+        return typeof wasmDIDKey.get_public_key_hex === "function"
           ? wasmDIDKey.get_public_key_hex()
-          : '0x1234';
+          : "0x1234";
       } catch (e) {
-        return '0x1234';
+        return "0x1234";
       }
     },
-    
-    get_private_key_hex: function() {
+
+    get_private_key_hex: function () {
       try {
-        return typeof wasmDIDKey.get_private_key_hex === 'function'
+        return typeof wasmDIDKey.get_private_key_hex === "function"
           ? wasmDIDKey.get_private_key_hex()
-          : '0x5678';
+          : "0x5678";
       } catch (e) {
-        return '0x5678';
+        return "0x5678";
       }
     },
-    
-    get_public_key_base64: function() {
+
+    get_public_key_base64: function () {
       try {
-        return typeof wasmDIDKey.get_public_key_base64 === 'function'
+        return typeof wasmDIDKey.get_public_key_base64 === "function"
           ? wasmDIDKey.get_public_key_base64()
-          : 'YWJjZA==';
+          : "YWJjZA==";
       } catch (e) {
-        return 'YWJjZA==';
+        return "YWJjZA==";
       }
     },
-    
-    get_private_key_base64: function() {
+
+    get_private_key_base64: function () {
       try {
-        return typeof wasmDIDKey.get_private_key_base64 === 'function'
+        return typeof wasmDIDKey.get_private_key_base64 === "function"
           ? wasmDIDKey.get_private_key_base64()
-          : 'ZWZnaA==';
+          : "ZWZnaA==";
       } catch (e) {
-        return 'ZWZnaA==';
+        return "ZWZnaA==";
       }
     },
-    
-    get_key_type: function() {
-      return keyType || 
-        (typeof wasmDIDKey.get_key_type === 'function' 
-          ? wasmDIDKey.get_key_type() 
-          : 'Ed25519');
+
+    get_key_type: function () {
+      return (
+        keyType ||
+        (typeof wasmDIDKey.get_key_type === "function"
+          ? wasmDIDKey.get_key_type()
+          : "Ed25519")
+      );
     },
-    
+
     // Add signing and verification methods
-    sign: function(data: string) {
+    sign: function (data: string) {
       try {
-        return typeof wasmDIDKey.sign === 'function'
+        return typeof wasmDIDKey.sign === "function"
           ? wasmDIDKey.sign(data)
-          : 'mock_signature';
+          : "mock_signature";
       } catch (e) {
-        console.warn('Error signing data:', e);
-        return 'mock_signature';
+        console.warn("Error signing data:", e);
+        return "mock_signature";
       }
     },
-    
-    verify: function(data: string, signature: string) {
+
+    verify: function (data: string, signature: string) {
       try {
-        return typeof wasmDIDKey.verify === 'function'
+        return typeof wasmDIDKey.verify === "function"
           ? wasmDIDKey.verify(data, signature)
           : true;
       } catch (e) {
-        console.warn('Error verifying signature:', e);
+        console.warn("Error verifying signature:", e);
         return false;
       }
     },
-    
+
     // Interface alias methods
-    getPublicKeyHex: function() { return this.get_public_key_hex(); },
-    getPrivateKeyHex: function() { return this.get_private_key_hex(); },
-    getPublicKeyBase64: function() { return this.get_public_key_base64(); },
-    getPrivateKeyBase64: function() { return this.get_private_key_base64(); },
-    getKeyType: function() { return this.get_key_type(); },
-    signData: function(data: string) { return this.sign(data); },
-    verifySignature: function(data: string, signature: string) { return this.verify(data, signature); }
+    getPublicKeyHex: function () {
+      return this.get_public_key_hex();
+    },
+    getPrivateKeyHex: function () {
+      return this.get_private_key_hex();
+    },
+    getPublicKeyBase64: function () {
+      return this.get_public_key_base64();
+    },
+    getPrivateKeyBase64: function () {
+      return this.get_private_key_base64();
+    },
+    getKeyType: function () {
+      return this.get_key_type();
+    },
+    signData: function (data: string) {
+      return this.sign(data);
+    },
+    verifySignature: function (data: string, signature: string) {
+      return this.verify(data, signature);
+    },
   };
-  
+
   return didKey;
 }
 
@@ -309,28 +334,36 @@ export async function createDIDKey(keyType?: DIDKeyType): Promise<DIDKey> {
  * @param keyType The type of key to use (Ed25519, P256, or Secp256k1)
  * @returns A Promise that resolves to a DIDKey object
  */
-export async function createDIDWeb(domain: string, keyType?: DIDKeyType): Promise<DIDKey> {
+export async function createDIDWeb(
+  domain: string,
+  keyType?: DIDKeyType,
+): Promise<DIDKey> {
   await ensureWasmInitialized();
-  
+
   const keyTypeStr = keyType || DIDKeyType.Ed25519;
   // Note: create_did_web is not available in the latest generated bindings
-  // We'll need to use create_did_key and then manually update the DID 
+  // We'll need to use create_did_key and then manually update the DID
   const wasmDIDKey = tapWasm.create_did_key(keyTypeStr);
-  
+
   // Manually create a "did:web:" DID by replacing the "did:key:" part
   wasmDIDKey.did = `did:web:${domain}`;
-  
+
   // Create DID document if it doesn't exist
-  const didDocument = wasmDIDKey.didDocument || wasmDIDKey.did_document || JSON.stringify({
-    id: wasmDIDKey.did,
-    verificationMethod: [{
-      id: `${wasmDIDKey.did}#key1`,
-      type: `${keyType || 'Ed25519'}VerificationKey2020`,
-      controller: wasmDIDKey.did,
-      publicKeyMultibase: 'z123'
-    }],
-    keyAgreement: [`${wasmDIDKey.did}#keyAgreement`]
-  });
+  const didDocument =
+    wasmDIDKey.didDocument ||
+    wasmDIDKey.did_document ||
+    JSON.stringify({
+      id: wasmDIDKey.did,
+      verificationMethod: [
+        {
+          id: `${wasmDIDKey.did}#key1`,
+          type: `${keyType || "Ed25519"}VerificationKey2020`,
+          controller: wasmDIDKey.did,
+          publicKeyMultibase: "z123",
+        },
+      ],
+      keyAgreement: [`${wasmDIDKey.did}#keyAgreement`],
+    });
 
   // Create a wrapper object that implements both the WASM interface and our TypeScript interface
   const didKey: DIDKey = {
@@ -338,86 +371,102 @@ export async function createDIDWeb(domain: string, keyType?: DIDKeyType): Promis
     didDocument: didDocument,
 
     // Native WASM methods
-    get_public_key_hex: function() {
+    get_public_key_hex: function () {
       try {
-        return typeof wasmDIDKey.get_public_key_hex === 'function'
+        return typeof wasmDIDKey.get_public_key_hex === "function"
           ? wasmDIDKey.get_public_key_hex()
-          : '0x1234';
+          : "0x1234";
       } catch (e) {
-        return '0x1234';
+        return "0x1234";
       }
     },
-    
-    get_private_key_hex: function() {
+
+    get_private_key_hex: function () {
       try {
-        return typeof wasmDIDKey.get_private_key_hex === 'function'
+        return typeof wasmDIDKey.get_private_key_hex === "function"
           ? wasmDIDKey.get_private_key_hex()
-          : '0x5678';
+          : "0x5678";
       } catch (e) {
-        return '0x5678';
+        return "0x5678";
       }
     },
-    
-    get_public_key_base64: function() {
+
+    get_public_key_base64: function () {
       try {
-        return typeof wasmDIDKey.get_public_key_base64 === 'function'
+        return typeof wasmDIDKey.get_public_key_base64 === "function"
           ? wasmDIDKey.get_public_key_base64()
-          : 'YWJjZA==';
+          : "YWJjZA==";
       } catch (e) {
-        return 'YWJjZA==';
+        return "YWJjZA==";
       }
     },
-    
-    get_private_key_base64: function() {
+
+    get_private_key_base64: function () {
       try {
-        return typeof wasmDIDKey.get_private_key_base64 === 'function'
+        return typeof wasmDIDKey.get_private_key_base64 === "function"
           ? wasmDIDKey.get_private_key_base64()
-          : 'ZWZnaA==';
+          : "ZWZnaA==";
       } catch (e) {
-        return 'ZWZnaA==';
+        return "ZWZnaA==";
       }
     },
-    
-    get_key_type: function() {
-      return keyType || 
-        (typeof wasmDIDKey.get_key_type === 'function' 
-          ? wasmDIDKey.get_key_type() 
-          : 'Ed25519');
+
+    get_key_type: function () {
+      return (
+        keyType ||
+        (typeof wasmDIDKey.get_key_type === "function"
+          ? wasmDIDKey.get_key_type()
+          : "Ed25519")
+      );
     },
-    
+
     // Add signing and verification methods
-    sign: function(data: string) {
+    sign: function (data: string) {
       try {
-        return typeof wasmDIDKey.sign === 'function'
+        return typeof wasmDIDKey.sign === "function"
           ? wasmDIDKey.sign(data)
-          : 'mock_signature';
+          : "mock_signature";
       } catch (e) {
-        console.warn('Error signing data:', e);
-        return 'mock_signature';
+        console.warn("Error signing data:", e);
+        return "mock_signature";
       }
     },
-    
-    verify: function(data: string, signature: string) {
+
+    verify: function (data: string, signature: string) {
       try {
-        return typeof wasmDIDKey.verify === 'function'
+        return typeof wasmDIDKey.verify === "function"
           ? wasmDIDKey.verify(data, signature)
           : true;
       } catch (e) {
-        console.warn('Error verifying signature:', e);
+        console.warn("Error verifying signature:", e);
         return false;
       }
     },
-    
+
     // Interface alias methods
-    getPublicKeyHex: function() { return this.get_public_key_hex(); },
-    getPrivateKeyHex: function() { return this.get_private_key_hex(); },
-    getPublicKeyBase64: function() { return this.get_public_key_base64(); },
-    getPrivateKeyBase64: function() { return this.get_private_key_base64(); },
-    getKeyType: function() { return this.get_key_type(); },
-    signData: function(data: string) { return this.sign(data); },
-    verifySignature: function(data: string, signature: string) { return this.verify(data, signature); }
+    getPublicKeyHex: function () {
+      return this.get_public_key_hex();
+    },
+    getPrivateKeyHex: function () {
+      return this.get_private_key_hex();
+    },
+    getPublicKeyBase64: function () {
+      return this.get_public_key_base64();
+    },
+    getPrivateKeyBase64: function () {
+      return this.get_private_key_base64();
+    },
+    getKeyType: function () {
+      return this.get_key_type();
+    },
+    signData: function (data: string) {
+      return this.sign(data);
+    },
+    verifySignature: function (data: string, signature: string) {
+      return this.verify(data, signature);
+    },
   };
-  
+
   return didKey;
 }
 
@@ -434,13 +483,13 @@ function mapKeyType(keyType: DIDKeyType): string {
 // Object mapping for message types
 export const MessageType = {
   Transfer: tapWasm.MessageType?.Transfer ?? 0,
-  Payment: tapWasm.MessageType?.Payment ?? 1,  // Fixed from PaymentRequest to Payment
+  Payment: tapWasm.MessageType?.Payment ?? 1, // Fixed from Payment to Payment
   Presentation: tapWasm.MessageType?.Presentation ?? 2,
   Authorize: tapWasm.MessageType?.Authorize ?? 3,
   Reject: tapWasm.MessageType?.Reject ?? 4,
   Settle: tapWasm.MessageType?.Settle ?? 5,
-  Cancel: tapWasm.MessageType?.Cancel ?? 6,  // Updated based on wasm definition
-  Revert: tapWasm.MessageType?.Revert ?? 7,  // Updated based on wasm definition
+  Cancel: tapWasm.MessageType?.Cancel ?? 6, // Updated based on wasm definition
+  Revert: tapWasm.MessageType?.Revert ?? 7, // Updated based on wasm definition
   AddAgents: tapWasm.MessageType?.AddAgents ?? 8,
   ReplaceAgent: tapWasm.MessageType?.ReplaceAgent ?? 9,
   RemoveAgent: tapWasm.MessageType?.RemoveAgent ?? 10,
@@ -451,7 +500,7 @@ export const MessageType = {
   AuthorizationRequired: tapWasm.MessageType?.AuthorizationRequired ?? 15,
   Complete: tapWasm.MessageType?.Complete ?? 16,
   Error: tapWasm.MessageType?.Error ?? 17,
-  Unknown: tapWasm.MessageType?.Unknown ?? 18
+  Unknown: tapWasm.MessageType?.Unknown ?? 18,
 };
 
 // Re-export the entire module for ease of use, but avoid the deprecated methods

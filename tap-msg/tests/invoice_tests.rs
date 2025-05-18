@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use tap_msg::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::PaymentRequest;
+use tap_msg::message::Payment;
 use tap_msg::Participant;
 
 #[test]
@@ -160,8 +160,8 @@ fn test_payment_request_with_invoice() {
         metadata: HashMap::new(),
     };
 
-    // Create a PaymentRequest with currency and invoice
-    let mut payment_request = PaymentRequest::with_currency(
+    // Create a Payment with currency and invoice
+    let mut payment_request = Payment::with_currency(
         "USD".to_string(),
         "100.0".to_string(),
         merchant.clone(),
@@ -186,7 +186,7 @@ fn test_payment_request_with_invoice() {
     // Convert to DIDComm
     let didcomm_message = payment_request
         .to_didcomm("did:example:sender")
-        .expect("Failed to convert PaymentRequest to DIDComm");
+        .expect("Failed to convert Payment to DIDComm");
 
     // Verify DIDComm message type
     assert_eq!(
@@ -195,8 +195,8 @@ fn test_payment_request_with_invoice() {
     );
 
     // Verify that we can extract the message body including the invoice
-    let extracted = PaymentRequest::from_didcomm(&didcomm_message)
-        .expect("Failed to extract PaymentRequest from DIDComm");
+    let extracted =
+        Payment::from_didcomm(&didcomm_message).expect("Failed to extract Payment from DIDComm");
 
     assert_eq!(extracted.amount, "100.0");
     assert_eq!(extracted.currency, Some("USD".to_string()));

@@ -74,7 +74,7 @@ let message_id = received_transfer.message_id(); // Returns the transaction_id f
 ### Payment Request with Invoice
 
 ```rust
-use tap_msg::{PaymentRequest, Invoice, LineItem, Participant};
+use tap_msg::{Payment, Invoice, LineItem, Participant};
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use std::collections::HashMap;
 
@@ -109,7 +109,7 @@ let invoice = Invoice::new(
 );
 
 // Create a payment request with the invoice
-let mut payment_request = PaymentRequest::with_currency(
+let mut payment_request = Payment::with_currency(
     "USD".to_string(),
     "100.0".to_string(),
     merchant,
@@ -150,7 +150,7 @@ The TAP protocol supports defining agent policies according to TAIP-7, which all
 
 ```rust
 use tap_msg::message::{
-    Participant, Policy, RequireAuthorization, RequirePresentation, 
+    Participant, Policy, RequireAuthorization, RequirePresentation,
     RequireProofOfControl, UpdatePolicies
 };
 use std::collections::HashMap;
@@ -237,7 +237,7 @@ pub struct ErrorBody {
 TAP supports structured invoices according to TAIP-16, which can be embedded in payment requests (TAIP-14):
 
 ```rust
-use tap_msg::{PaymentRequest, Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
+use tap_msg::{Payment, Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::Participant;
 use std::collections::HashMap;
@@ -288,7 +288,7 @@ let invoice = Invoice {
 };
 
 // Create a payment request with the invoice
-let mut payment_request = PaymentRequest::with_currency(
+let mut payment_request = Payment::with_currency(
     "USD".to_string(),
     "25.0".to_string(),
     merchant.clone(),
@@ -305,19 +305,19 @@ let message = payment_request.to_didcomm_with_route(
 ).unwrap();
 
 // When receiving a payment request, extract and validate the invoice
-let received_request = PaymentRequest::from_didcomm(&message).unwrap();
+let received_request = Payment::from_didcomm(&message).unwrap();
 received_request.validate().unwrap();
 
 if let Some(received_invoice) = received_request.invoice {
     println!("Invoice ID: {}", received_invoice.id);
     println!("Total amount: {}", received_invoice.total);
-    
+
     // Process line items
     for item in received_invoice.line_items {
-        println!("{} x {} @ ${} = ${}", 
-            item.quantity, 
-            item.description, 
-            item.unit_price, 
+        println!("{} x {} @ ${} = ${}",
+            item.quantity,
+            item.description,
+            item.unit_price,
             item.line_total
         );
     }
@@ -332,16 +332,16 @@ The `TapMessageBody` trait provides methods for converting between TAP messages 
 pub trait TapMessageBody: DeserializeOwned + Serialize + Send + Sync {
     /// Gets the message type string for this TAP message type
     fn message_type() -> &'static str;
-    
+
     /// Converts a DIDComm message to this TAP message type
     fn from_didcomm(msg: &Message) -> Result<Self, Error>;
-    
+
     /// Validates the message content
     fn validate(&self) -> Result<(), Error>;
-    
+
     /// Converts this TAP message to a DIDComm message
     fn to_didcomm(&self) -> Result<Message, Error>;
-    
+
     /// Converts this TAP message to a DIDComm message with routing information
     fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message, Error>
     where

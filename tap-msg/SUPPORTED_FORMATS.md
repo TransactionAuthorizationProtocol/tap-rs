@@ -31,8 +31,8 @@ The following message types are fully supported in our implementation:
 | ConfirmRelationship | `https://tap.rsvp/schema/1.0#ConfirmRelationship` | Full | - |
 | OutOfBand | `https://didcomm.org/out-of-band/2.0/invitation` | Full | - |
 | DIDCommPresentation | `https://didcomm.org/present-proof/3.0/presentation` | Full | Fully compliant with standard DIDComm present-proof protocol |
-| PaymentRequest | `https://tap.rsvp/schema/1.0#PaymentRequest` | Full | TAIP-14 support with currency/asset options and embedded invoice |
-| Invoice | Embedded in PaymentRequest | Full | TAIP-16 compliant structured invoice with line items and tax details |
+| Payment | `https://tap.rsvp/schema/1.0#Payment` | Full | TAIP-14 support with currency/asset options and embedded invoice |
+| Invoice | Embedded in Payment | Full | TAIP-16 compliant structured invoice with line items and tax details |
 | AuthorizationRequired | `https://tap.rsvp/schema/1.0#AuthorizationRequired` | Full | - |
 | Connect | `https://tap.rsvp/schema/1.0#Connect` | Full | - |
 

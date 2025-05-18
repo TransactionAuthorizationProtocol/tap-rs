@@ -8,7 +8,7 @@ use tap_caip::AssetId;
 use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
 use tap_msg::message::{
-    Agent, Authorize, Connect, ConnectionConstraints, Participant, PaymentRequest, Reject, Settle,
+    Agent, Authorize, Connect, ConnectionConstraints, Participant, Payment, Reject, Settle,
     Transfer, UpdateParty,
 };
 use tap_msg::Result;
@@ -124,9 +124,9 @@ fn test_full_tap_flow() -> Result<()> {
 
 /// Integration test for the payment flow:
 /// 1. Create a Connect message
-/// 2. Create a PaymentRequest message connected to the Connect message
-/// 3. Authorize the PaymentRequest
-/// 4. Reject a subsequent PaymentRequest
+/// 2. Create a Payment message connected to the Connect message
+/// 3. Authorize the Payment
+/// 4. Reject a subsequent Payment
 #[test]
 fn test_payment_flow() {
     // Step 1: Create a Connect message
@@ -136,7 +136,7 @@ fn test_payment_flow() {
         .expect("Failed to convert Connect to DIDComm");
     let connect_id = connect_message.id.clone();
 
-    // Step 2: Create a PaymentRequest message connected to the Connect message
+    // Step 2: Create a Payment message connected to the Connect message
     let mut payment = create_test_payment_request();
     println!(
         "DEBUG: Before with_connection, payment.connection_id() = {:?}",
@@ -160,12 +160,12 @@ fn test_payment_flow() {
                 .iter()
                 .copied(),
         )
-        .expect("Failed to convert PaymentRequest to DIDComm");
+        .expect("Failed to convert Payment to DIDComm");
 
     // Check that the payment message has the correct pthid (parent thread ID)
     assert_eq!(payment_message.pthid, Some(connect_id.clone()));
 
-    // Step 3: Authorize the PaymentRequest
+    // Step 3: Authorize the Payment
     let authorize_body = Authorize {
         transaction_id: payment_message.id.clone(), // Use the ID of the message being authorized
         note: Some("Payment authorized".to_string()),
@@ -187,7 +187,7 @@ fn test_payment_flow() {
     // Verify the authorize message has the correct thread ID (should be the payment ID)
     assert_eq!(authorize_message.thid, Some(payment_message.id.clone()));
 
-    // Step 4: Create a second PaymentRequest and reject it
+    // Step 4: Create a second Payment and reject it
     let mut payment2 = create_test_payment_request();
     println!(
         "DEBUG: Before with_connection, payment2.connection_id() = {:?}",
@@ -205,7 +205,7 @@ fn test_payment_flow() {
                 .iter()
                 .copied(),
         )
-        .expect("Failed to convert PaymentRequest to DIDComm");
+        .expect("Failed to convert Payment to DIDComm");
 
     // Reject the payment
     let reject_body = Reject {
@@ -217,7 +217,7 @@ fn test_payment_flow() {
     let mut reject_message = reject_body
         .to_didcomm_with_route(
             Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"), // Rejector's DID
-            [payment_message2.from.as_deref().unwrap_or_default()], // Send back to PaymentRequest sender
+            [payment_message2.from.as_deref().unwrap_or_default()], // Send back to Payment sender
         )
         .expect("Failed to convert Reject to DIDComm");
 
@@ -467,7 +467,7 @@ fn create_test_transfer() -> Transfer {
     }
 }
 
-fn create_test_payment_request() -> PaymentRequest {
+fn create_test_payment_request() -> Payment {
     let merchant = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("merchant".to_string()),
@@ -482,7 +482,7 @@ fn create_test_payment_request() -> PaymentRequest {
         leiCode: None,
     }];
 
-    PaymentRequest {
+    Payment {
         asset: None,
         currency: Some("USD".to_string()),
         amount: "100.0".to_string(),

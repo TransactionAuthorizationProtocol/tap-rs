@@ -2,7 +2,7 @@
 
 ## Overview
 
-The **Transaction Authorization Protocol (TAP)** is a decentralized off-chain protocol that allows multiple participants in a blockchain transaction to identify each other and collaboratively authorize or reject the transaction *before* on-chain settlement. 
+The **Transaction Authorization Protocol (TAP)** is a decentralized off-chain protocol that allows multiple participants in a blockchain transaction to identify each other and collaboratively authorize or reject the transaction *before* on-chain settlement.
 
 TAP adds an **authorization layer** on top of the blockchain's settlement layer, enabling counterparties (originators and beneficiaries, and their service providers) to coordinate safely and privately without modifying on-chain mechanisms. This approach helps solve real-world challenges like regulatory compliance and fraud prevention while preserving the trustless nature of blockchain transactions.
 
@@ -92,7 +92,7 @@ Here's a simplified example of how two parties might coordinate a transfer:
 
 1. **Originator** creates a Transfer message describing the intended transaction
 2. **Originator's Agent** signs and sends the Transfer to the Beneficiary's Agent
-3. **Beneficiary's Agent** verifies and processes the Transfer 
+3. **Beneficiary's Agent** verifies and processes the Transfer
 4. **Beneficiary's Agent** creates an Authorize message if the transfer is acceptable
 5. **Originator's Agent** receives the Authorize, verifies it is valid
 6. **Originator** submits the transaction on-chain
@@ -110,7 +110,7 @@ TAP-RS supports all standard TAP message types:
 - **Settle**: Confirms on-chain settlement
 - **Cancel**: Cancels an in-progress transaction
 - **Presentation**: Provides requested credentials
-- **PaymentRequest**: Requests payment with specified details
+- **Payment**: Requests payment with specified details
 - **Invoice**: Detailed invoice structure with line items
 
 See [tap-messages.md](./tap-messages.md) for a complete list of message types.
@@ -139,11 +139,11 @@ TAP-RS includes comprehensive WebAssembly support for integration in browser and
 ### Browser Usage
 
 ```javascript
-import init, { 
-  init_tap_wasm, 
-  Message, 
-  TapAgent, 
-  MessageType 
+import init, {
+  init_tap_wasm,
+  Message,
+  TapAgent,
+  MessageType
 } from 'tap-wasm';
 
 async function main() {
@@ -156,10 +156,10 @@ async function main() {
     nickname: "Test Agent",
     debug: true
   });
-  
+
   // Generate and process TAP messages
   const message = new Message('msg_123', 'Transfer', '1.0');
-  
+
   // Set the transfer message body
   message.set_transfer_body({
     asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",

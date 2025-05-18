@@ -21,8 +21,8 @@ pub use didcomm::PlainMessage;
 pub use error::{Error, Result};
 pub use message::{
     create_tap_message, AddAgents, Attachment, AttachmentData, Authorize, DocumentReference,
-    ErrorBody, Invoice, LineItem, OrderReference, Participant, PaymentRequest, Presentation,
-    Reject, Settle, TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, Transfer,
+    ErrorBody, Invoice, LineItem, OrderReference, Participant, Payment, Presentation, Reject,
+    Settle, TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, Transfer,
 };
 
 // Conditional compilation for WASM targets

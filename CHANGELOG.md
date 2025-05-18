@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New utility functions for conversion between Uint8Array and Vec<u8>
 - README.md for tap-wasm describing WebAssembly bindings and usage
 - Comprehensive documentation updates with clearer use cases and examples
-- Support for additional message types (PaymentRequest, Invoice, Connect, Revert)
+- Support for additional message types (Payment, Invoice, Connect, Revert)
 - MIT License file added
 
 ### Changed

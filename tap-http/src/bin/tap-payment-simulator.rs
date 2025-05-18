@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::process;
 use tap_agent::{Agent, DefaultAgent};
-use tap_msg::message::{Participant, PaymentRequest, Transfer};
+use tap_msg::message::{Participant, Payment, Transfer};
 // No longer needed: use tap_node::DefaultAgentExt;
 use tracing::{debug, info};
 
@@ -216,7 +216,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     // Create a payment request using the proper struct
-    let payment_request = PaymentRequest {
+    let payment_request = Payment {
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             .parse()
             .unwrap(),

@@ -19,7 +19,7 @@ use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_caip::AssetId;
 use tap_msg::message::types::{Authorize, Settle};
-use tap_msg::{Participant, PaymentRequest};
+use tap_msg::{Participant, Payment};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -72,8 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 2: Customer receives and processes the payment request
         println!("Step 2: Customer receives and processes the payment request");
 
-        let received_payment: PaymentRequest =
-            customer_agent.receive_message(&packed_payment).await?;
+        let received_payment: Payment = customer_agent.receive_message(&packed_payment).await?;
         println!("Customer received payment request:");
         println!("  Asset: {}", received_payment.asset.as_ref().unwrap());
         println!("  Amount: {}", received_payment.amount);
@@ -194,7 +193,7 @@ fn create_payment_message(
     merchant_did: &str,
     customer_did: &str,
     settlement_address: &str,
-) -> PaymentRequest {
+) -> Payment {
     // Create merchant and customer participants
     let merchant = Participant {
         id: merchant_did.to_string(),

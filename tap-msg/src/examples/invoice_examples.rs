@@ -1,10 +1,10 @@
-//! Examples for using the Invoice and PaymentRequest functionality.
+//! Examples for using the Invoice and Payment functionality.
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::{Participant, PaymentRequest};
+use crate::message::{Participant, Payment};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -123,7 +123,7 @@ pub fn create_invoice_with_tax_example() -> Result<Invoice> {
     Ok(invoice)
 }
 
-/// Example of creating a PaymentRequest with an embedded invoice
+/// Example of creating a Payment with an embedded invoice
 pub fn create_payment_request_with_invoice_example(
     merchant_did: &str,
     customer_did: Option<&str>,
@@ -147,16 +147,16 @@ pub fn create_payment_request_with_invoice_example(
     // Create an invoice with tax
     let invoice = create_invoice_with_tax_example()?;
 
-    // Create a PaymentRequest using the new API
+    // Create a Payment using the new API
     let asset =
         AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
     // Create transaction ID
     let transaction_id = uuid::Uuid::new_v4().to_string();
     let mut payment_request =
-        PaymentRequest::new(&transaction_id, asset, &format!("{:.2}", invoice.total))
+        Payment::new(&transaction_id, asset, &format!("{:.2}", invoice.total))
             .with_currency_code(&invoice.currency_code);
 
-    // We can't add agents directly to PaymentRequest as it doesn't have an agents field
+    // We can't add agents directly to Payment as it doesn't have an agents field
 
     // Add the invoice to metadata
     payment_request.metadata.insert(
@@ -196,12 +196,12 @@ pub fn create_payment_request_with_invoice_example(
     Ok(message)
 }
 
-/// Example of extracting and validating an invoice from a PaymentRequest message
+/// Example of extracting and validating an invoice from a Payment message
 pub fn process_payment_request_with_invoice_example(message: &PlainMessage) -> Result<()> {
-    // Extract the PaymentRequest
-    let payment_request = PaymentRequest::from_didcomm(message)?;
+    // Extract the Payment
+    let payment_request = Payment::from_didcomm(message)?;
 
-    // Validate the PaymentRequest
+    // Validate the Payment
     payment_request.validate()?;
 
     // Check if it has an invoice in metadata

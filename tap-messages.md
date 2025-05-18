@@ -14,7 +14,7 @@ Each message type is documented with its corresponding TAIP specification refere
 | Settle | [TAIP-4](prds/taips/TAIPs/taip-4.md) | ✅ | ✅ | ✅ |
 | Cancel | [TAIP-4](prds/taips/TAIPs/taip-4.md) | ✅ | ✅ | ✅ |
 | Presentation | [TAIP-8](prds/taips/TAIPs/taip-8.md) | ✅ | ✅ | ✅ |
-| PaymentRequest | [TAIP-14](prds/taips/TAIPs/taip-14.md) | ✅ | ✅ | ✅ |
+| Payment | [TAIP-14](prds/taips/TAIPs/taip-14.md) | ✅ | ✅ | ✅ |
 | Invoice | [TAIP-16](prds/taips/TAIPs/taip-16.md) | ✅ | ✅ | ✅ |
 | Connect | [TAIP-11](prds/taips/TAIPs/taip-11.md) | ✅ | ✅ | ✅ |
 | Revert | [TAIP-12](prds/taips/TAIPs/taip-12.md) | ✅ | ✅ | ✅ |
@@ -30,7 +30,7 @@ Each message type is documented with its corresponding TAIP specification refere
 
 TAP messages typically flow in the following sequence:
 
-1. **Initiation**: Transfer or PaymentRequest initiates a new transaction flow
+1. **Initiation**: Transfer or Payment initiates a new transaction flow
 2. **Response**: Authorize, Reject, or Cancel responds to the initiation
 3. **Completion**: Settle confirms on-chain settlement
 4. **Exception**: Revert can be used after Settle if needed to reverse a transaction
@@ -93,7 +93,7 @@ Message for cancelling an in-progress transaction.
 
 ## Payment-Related Messages
 
-### PaymentRequest (TAIP-14)
+### Payment (TAIP-14)
 
 Message for requesting a payment with specific details.
 

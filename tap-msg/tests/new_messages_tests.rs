@@ -7,12 +7,12 @@ use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
     Agent, Attachment, AttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
-    OutOfBand, Participant, PaymentRequest, TransactionLimits,
+    OutOfBand, Participant, Payment, TransactionLimits,
 };
 
 #[test]
 fn test_payment_request_with_asset() {
-    // Create a PaymentRequest message with asset
+    // Create a Payment message with asset
     let asset = "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7"
         .parse::<AssetId>()
         .unwrap();
@@ -31,7 +31,7 @@ fn test_payment_request_with_asset() {
         leiCode: None,
     };
 
-    let body = PaymentRequest::with_asset(
+    let body = Payment::with_asset(
         asset,
         "100000000".to_string(),
         merchant.clone(),
@@ -69,7 +69,7 @@ fn test_payment_request_with_asset() {
 
 #[test]
 fn test_payment_request_with_currency() {
-    // Create a PaymentRequest message with currency
+    // Create a Payment message with currency
     let merchant = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("merchant".to_string()),
@@ -84,7 +84,7 @@ fn test_payment_request_with_currency() {
         leiCode: None,
     };
 
-    let body = PaymentRequest::with_currency(
+    let body = Payment::with_currency(
         "USD".to_string(),
         "100.00".to_string(),
         merchant.clone(),
@@ -310,7 +310,7 @@ fn test_invalid_out_of_band_message() {
 fn test_payment_request_message() {
     let asset = AssetId::from_str("eip155:1/slip44:60").unwrap(); // Ethereum
 
-    let payment_request_body = PaymentRequest {
+    let payment_request_body = Payment {
         asset: Some(asset),
         amount: "1000000000000000000".to_string(), // 1 ETH
         // note: Some("Test payment request".to_string()), // Invalid field
@@ -338,6 +338,6 @@ fn test_payment_request_message() {
     assert!(!message.body.is_null()); // Check if body is not null
 
     let body_json = message.body;
-    let body: PaymentRequest = serde_json::from_value(body_json).unwrap();
+    let body: Payment = serde_json::from_value(body_json).unwrap();
     assert_eq!(body.amount, "1000000000000000000"); // Verify body content
 }
