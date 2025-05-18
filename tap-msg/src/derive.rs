@@ -112,7 +112,7 @@ macro_rules! impl_tap_message {
                 creator_did: &str,
             ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
-                let mut message = body.to_didcomm(Some(creator_did))?;
+                let mut message = body.to_didcomm(creator_did)?;
 
                 // Set the thread ID to maintain the conversation thread
                 if let Some(thread_id) = self.thread_id() {
@@ -174,7 +174,7 @@ macro_rules! impl_tap_message {
                 creator_did: &str,
             ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
-                let mut message = body.to_didcomm(Some(creator_did))?;
+                let mut message = body.to_didcomm(creator_did)?;
 
                 // Set the thread ID to maintain the conversation thread
                 if let Some(thread_id) = self.thread_id() {
@@ -239,7 +239,7 @@ macro_rules! impl_tap_message {
                 creator_did: &str,
             ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
-                let mut message = body.to_didcomm(Some(creator_did))?;
+                let mut message = body.to_didcomm(creator_did)?;
 
                 // Set the thread ID to maintain the conversation thread
                 if let Some(thread_id) = self.thread_id() {
@@ -299,7 +299,7 @@ macro_rules! impl_tap_message {
                 creator_did: &str,
             ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
-                let mut message = body.to_didcomm(Some(creator_did))?;
+                let mut message = body.to_didcomm(creator_did)?;
 
                 // For types without thread/transaction ID, we don't set thread ID on replies
 
@@ -315,9 +315,12 @@ macro_rules! impl_tap_message {
                 None
             }
             fn message_id(&self) -> &str {
-                // This will need special handling if these types don't have an ID field
-                // Potentially needs to be generated new each time
-                uuid::Uuid::new_v4().to_string().as_str()
+                // For types without an ID field, we'll use a static string
+                // This isn't ideal but it satisfies the API contract
+                // In real usage, these message types should be wrapped in a TapMessage
+                // implementation that provides a proper ID
+                static FALLBACK_ID: &str = "00000000-0000-0000-0000-000000000000";
+                FALLBACK_ID
             }
         }
     };

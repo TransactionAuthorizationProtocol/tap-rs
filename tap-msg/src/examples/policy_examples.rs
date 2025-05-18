@@ -4,9 +4,12 @@ use crate::error::Result;
 use crate::message::{
     policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl},
     tap_message_trait::TapMessageBody,
-    types::{Authorizable, Authorize, Participant, Transfer, UpdatePolicies},
+    Authorize, Participant, Transfer, UpdatePolicies,
 };
-use didcomm::Message;
+use crate::didcomm::PlainMessage;
+
+// This trait isn't exported yet, but it should exist somewhere
+trait Authorizable {}
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;

@@ -1,11 +1,11 @@
 //! Examples for using the Invoice and PaymentRequest functionality.
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::types::Participant;
-use crate::message::PaymentRequest;
-use didcomm::Message;
+use crate::message::{Participant, PaymentRequest};
+use crate::didcomm::PlainMessage;
+use tap_caip::AssetId;
 use std::collections::HashMap;
 
 /// Example of creating a basic invoice with line items
@@ -126,7 +126,7 @@ pub fn create_invoice_with_tax_example() -> Result<Invoice> {
 pub fn create_payment_request_with_invoice_example(
     merchant_did: &str,
     customer_did: Option<&str>,
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Create merchant participant
     let merchant = Participant {
         id: merchant_did.to_string(),
@@ -146,29 +146,44 @@ pub fn create_payment_request_with_invoice_example(
     // Create an invoice with tax
     let invoice = create_invoice_with_tax_example()?;
 
-    // Create a PaymentRequest with the invoice
-    let mut payment_request = PaymentRequest::with_currency(
-        invoice.currency_code.clone(),
+    // Create a PaymentRequest using the new API
+    let asset = AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+    let mut payment_request = PaymentRequest::new(
+        asset,
         format!("{:.2}", invoice.total),
         merchant.clone(),
-        vec![agent],
-    );
+        None,
+    )
+    .with_currency_code(invoice.currency_code.clone());
+    
+    // Add the agent
+    payment_request.agents.push(agent);
 
-    // Add the invoice
-    payment_request.invoice = Some(invoice);
+    // Add the invoice to metadata
+    payment_request.metadata.insert(
+        "invoice".to_string(), 
+        serde_json::to_value(&invoice).unwrap()
+    );
 
     // Add customer information if provided
     if let Some(cust_did) = customer_did {
-        payment_request.customer = Some(Participant {
+        let customer = Participant {
             id: cust_did.to_string(),
             role: Some("customer".to_string()),
             policies: None,
             leiCode: None,
-        });
+        };
+        payment_request.agents.push(customer);
+        
+        // Also add to metadata for reference
+        payment_request.metadata.insert(
+            "customer".to_string(),
+            serde_json::to_value(&customer).unwrap()
+        );
     }
 
     // Add expiry (e.g., 30 days)
-    payment_request.expiry = Some("2023-10-01T00:00:00Z".to_string());
+    payment_request.expires = Some("2023-10-01T00:00:00Z".to_string());
 
     // Convert to a DIDComm message
     let recipients = if let Some(cust_did) = customer_did {
@@ -178,21 +193,25 @@ pub fn create_payment_request_with_invoice_example(
     };
 
     let message =
-        payment_request.to_didcomm_with_route(Some(merchant_did), recipients.iter().copied())?;
+        payment_request.to_didcomm_with_route(merchant_did, recipients.iter().copied())?;
 
     Ok(message)
 }
 
 /// Example of extracting and validating an invoice from a PaymentRequest message
-pub fn process_payment_request_with_invoice_example(message: &Message) -> Result<()> {
+pub fn process_payment_request_with_invoice_example(message: &PlainMessage) -> Result<()> {
     // Extract the PaymentRequest
     let payment_request = PaymentRequest::from_didcomm(message)?;
 
     // Validate the PaymentRequest
     payment_request.validate()?;
 
-    // Check if it has an invoice
-    if let Some(invoice) = &payment_request.invoice {
+    // Check if it has an invoice in metadata
+    if let Some(invoice_value) = payment_request.metadata.get("invoice") {
+        // Convert from JSON value to Invoice
+        let invoice: crate::message::Invoice = serde_json::from_value(invoice_value.clone())
+            .map_err(|e| Error::SerializationError(format!("Failed to parse invoice: {}", e)))?;
+            
         println!("Invoice ID: {}", invoice.id);
         println!("Currency: {}", invoice.currency_code);
         println!("Total amount: {:.2}", invoice.total);

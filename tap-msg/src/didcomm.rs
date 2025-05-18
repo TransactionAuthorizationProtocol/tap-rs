@@ -66,9 +66,6 @@ pub struct PlainMessage {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_prior: Option<String>,
 
-    /// Message attachments
-    // #[serde(skip_serializing_if = "Option::is_none")]
-    // pub attachments: Option<Vec<Attachment>>,
 }
 
 const PLAINTEXT_TYP: &str = "application/didcomm-plain+json";

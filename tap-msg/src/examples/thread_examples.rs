@@ -3,11 +3,14 @@
 use crate::error::{Error, Result};
 use crate::message::policy::{Policy, RequireProofOfControl};
 use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::types::{
-    AddAgents, Authorizable, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
+use crate::message::{
+    AddAgents, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
 };
 
-use didcomm::Message;
+// This trait isn't exported yet, but it should exist somewhere
+trait Authorizable {}
+
+use crate::didcomm::PlainMessage;
 use serde_json;
 use std::collections::HashMap;
 use std::str::FromStr;

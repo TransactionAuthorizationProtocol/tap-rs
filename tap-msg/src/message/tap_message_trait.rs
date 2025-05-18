@@ -20,7 +20,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
     fn validate(&self) -> Result<()>;
 
     /// Convert this body to a DIDComm message.
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
         // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -94,19 +94,14 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
         agent_dids.dedup();
 
         // If from_did is provided, remove it from the recipients list to avoid sending to self
-        if let Some(from) = from_did {
-            agent_dids.retain(|did| did != from);
-        }
-
-        // The from field is required in our PlainMessage, so ensure we have a valid value
-        let from = from_did.map_or_else(String::new, |s| s.to_string());
+        agent_dids.retain(|did| did != from);
 
         // Create the message
         let message = PlainMessage {
             id,
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            from,
+            from: from.to_string(),
             to: agent_dids,
             thid: None,
             pthid: None,
@@ -120,17 +115,20 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
         Ok(message)
     }
 
-    /// Convert this body to a DIDComm message with a sender and multiple recipients.
+    /// Convert this body to a DIDComm message with a custom routing path.
     ///
-    /// According to TAP requirements:
-    /// - The `from` field should always be the creator's DID
-    /// - The `to` field should include DIDs of all agents involved except the creator
+    /// This method allows specifying an explicit list of recipient DIDs, overriding
+    /// the automatic extraction of participants from the message body.
     ///
-    /// Note: This method now directly uses the enhanced to_didcomm implementation
-    /// which automatically extracts agent DIDs. The explicit 'to' parameter allows
-    /// overriding the automatically extracted recipients when needed.
-    #[allow(dead_code)] // Used in tests but not in production code
-    fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<PlainMessage>
+    /// # Arguments
+    ///
+    /// * `from` - The sender DID
+    /// * `to` - An iterator of recipient DIDs
+    ///
+    /// # Returns
+    ///
+    /// A new DIDComm message with the specified routing
+    fn to_didcomm_with_route<'a, I>(&self, from: &str, to: I) -> Result<PlainMessage>
     where
         I: IntoIterator<Item = &'a str>,
     {
@@ -274,7 +272,7 @@ pub trait TapMessage {
     /// A new DIDComm message that is properly linked to this message as a reply
     fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<PlainMessage> {
         // Create the base message with creator as sender
-        let mut message = body.to_didcomm(Some(creator_did))?;
+        let mut message = body.to_didcomm(creator_did)?;
 
         // Set the thread ID to maintain the conversation thread
         if let Some(thread_id) = self.thread_id() {
@@ -461,7 +459,7 @@ impl Connectable for PlainMessage {
 ///
 /// * `body` - The message body to include
 /// * `id` - Optional message ID (will be generated if None)
-/// * `from_did` - Optional sender DID
+/// * `from_did` - Sender DID
 /// * `to_dids` - Recipient DIDs (will override automatically extracted agent DIDs)
 ///
 /// # Returns
@@ -470,7 +468,7 @@ impl Connectable for PlainMessage {
 pub fn create_tap_message<T: TapMessageBody>(
     body: &T,
     id: Option<String>,
-    from_did: Option<&str>,
+    from_did: &str,
     to_dids: &[&str],
 ) -> Result<PlainMessage> {
     // Create the base message from the body, passing the from_did
