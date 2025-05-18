@@ -171,21 +171,11 @@ fn test_multiple_connections() {
 
 fn create_test_connect() -> Connect {
     Connect {
-        agent: Some(
-            Participant {
-                id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-                role: None,
-                policies: None,
-                leiCode: None,
-            }
-        ),
-        for_id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        constraints: ConnectionConstraints {
-            purposes: None,
-            category_purposes: None,
-            limits: None,
-        },
-        metadata: HashMap::new(),
+        transaction_id: uuid::Uuid::new_v4().to_string(),
+        agent_id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
+        for_: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+        role: None,
+        constraints: None,
     }
 }
 
