@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::process;
 use tap_agent::{Agent, DefaultAgent};
-use tap_msg::message::{Participant, Payment, Transfer};
+use tap_msg::message::{Participant, Transfer};
 // No longer needed: use tap_node::DefaultAgentExt;
 use tracing::{debug, info};
 
@@ -215,18 +215,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         leiCode: None,
     };
 
-    // Create a payment request using the proper struct
-    let payment_request = Payment {
-        asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-            .parse()
-            .unwrap(),
-        currency_code: Some(currency),
-        amount: amount.to_string(),
-        transaction_id: transaction_id.clone(),
-        memo: Some("Payment simulator payment request".to_string()),
-        expires: None,
-        metadata: HashMap::new(),
-    };
+    // Create a payment request using the proper struct and builder pattern
+    let payment_request = tap_msg::message::payment::PaymentBuilder::default()
+        .asset("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse().unwrap())
+        .amount(amount.to_string())
+        .transaction_id(transaction_id.clone())
+        .memo("Payment simulator payment request".to_string())
+        .originator(sender_agent.clone())
+        .beneficiary(recipient_agent.clone())
+        .build();
+        
+    // Add currency code
+    let mut payment_request = payment_request;
+    payment_request.currency_code = Some(currency);
 
     // Send payment request message using the agent's proper method
     info!("Sending payment request message to server");

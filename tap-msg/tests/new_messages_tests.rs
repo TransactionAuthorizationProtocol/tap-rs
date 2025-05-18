@@ -6,8 +6,8 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Agent, Attachment, AttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
-    OutOfBand, Participant, Payment, TransactionLimits,
+    Attachment, AttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
+    OutOfBand, Participant, Payment, PaymentBuilder, TransactionLimits,
 };
 
 #[test]
@@ -31,12 +31,17 @@ fn test_payment_request_with_asset() {
         leiCode: None,
     };
 
-    let body = Payment::with_asset(
-        asset,
-        "100000000".to_string(),
-        merchant.clone(),
-        vec![agent.clone()],
-    );
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+    
+    // Create the Payment using the builder pattern
+    let body = PaymentBuilder::default()
+        .transaction_id(transaction_id)
+        .asset(asset)
+        .amount("100000000".to_string())
+        .originator(merchant.clone())
+        .beneficiary(agent.clone())
+        .add_agent(agent.clone())
+        .build();
 
     // Validate the message
     assert!(body.validate().is_ok());
@@ -44,7 +49,7 @@ fn test_payment_request_with_asset() {
     // Convert to DIDComm message
     let message = body
         .to_didcomm_with_route(
-            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                 .iter()
                 .copied(),
@@ -57,13 +62,13 @@ fn test_payment_request_with_asset() {
     assert!(message.created_time.is_some());
     assert_eq!(
         message.from,
-        Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string())
+        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()
     );
     assert_eq!(
         message.to,
-        Some(vec![
+        vec![
             "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string()
-        ])
+        ]
     );
 }
 
@@ -111,28 +116,25 @@ fn test_payment_request_with_currency() {
 #[test]
 fn test_connect_message() {
     // Create a Connect message
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+    let agent_id = "did:example:b2b-service".to_string();
+    let for_id = "did:example:business-customer".to_string();
+    let role = Some("ServiceAgent");
+    
+    // Create transaction limits
+    let transaction_limits = TransactionLimits {
+        max_amount: Some("10000.00".to_string()),
+        max_total_amount: Some("50000.00".to_string()),
+        max_transactions: Some(100),
+    };
+    
     let constraints = ConnectionConstraints {
-        purposes: Some(vec!["BEXP".to_string(), "SUPP".to_string()]),
-        category_purposes: Some(vec!["CASH".to_string(), "CCRD".to_string()]),
-        limits: Some(TransactionLimits {
-            per_transaction: Some("10000.00".to_string()),
-            daily: Some("50000.00".to_string()),
-            currency: "USD".to_string(),
-        }),
+        transaction_limits: Some(transaction_limits),
     };
-
-    let agent_details = Agent {
-        id: "did:example:b2b-service".to_string(),
-        name: Some("B2B Payment Service".to_string()),
-        agent_type: Some("ServiceAgent".to_string()),
-        service_url: Some("https://b2b-service/did-comm".to_string()),
-    };
-
-    let body = Connect::with_agent(
-        agent_details,
-        "did:example:business-customer".to_string(),
-        constraints,
-    );
+    
+    // Create the Connect message
+    let mut body = Connect::new(&transaction_id, &agent_id, &for_id, role);
+    body.constraints = Some(constraints);
 
     // Validate the message
     assert!(body.validate().is_ok());
@@ -140,7 +142,7 @@ fn test_connect_message() {
     // Convert to DIDComm message
     let message = body
         .to_didcomm_with_route(
-            Some("did:example:b2b-service"),
+            "did:example:b2b-service",
             ["did:example:vasp"].iter().copied(),
         )
         .unwrap();
@@ -149,24 +151,22 @@ fn test_connect_message() {
     assert!(!message.id.is_empty());
     assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#connect");
     assert!(message.created_time.is_some());
-    assert_eq!(message.from, Some("did:example:b2b-service".to_string()));
-    assert_eq!(message.to, Some(vec!["did:example:vasp".to_string()]));
+    assert_eq!(message.from, "did:example:b2b-service".to_string());
+    assert_eq!(message.to, vec!["did:example:vasp".to_string()]);
 
-    // Test validation fails with empty for_id
+    // Test validation fails with empty for_
     let mut invalid_body = body.clone();
-    invalid_body.for_id = "".to_string();
+    invalid_body.for_ = "".to_string();
     assert!(invalid_body.validate().is_err());
 
-    // Test validation fails with empty currency
-    let mut invalid_constraints = body.constraints.clone();
-    if let Some(ref mut limits) = invalid_constraints.limits {
-        limits.currency = "".to_string();
-    }
-    let invalid_body_currency = Connect::new(
-        "did:example:business-customer".to_string(),
-        invalid_constraints,
+    // Test minimal validation
+    let minimal_body = Connect::new(
+        "test-transaction-id",
+        "did:example:b2b-service",
+        "did:example:business-customer",
+        None
     );
-    assert!(invalid_body_currency.validate().is_err());
+    assert!(minimal_body.validate().is_ok());
 }
 
 #[test]
@@ -187,7 +187,7 @@ fn test_authorization_required_message() {
     // Convert to DIDComm message
     let message = body
         .to_didcomm_with_route(
-            Some("did:example:vasp"),
+            "did:example:vasp",
             ["did:example:b2b-service"].iter().copied(),
         )
         .unwrap();
@@ -199,10 +199,10 @@ fn test_authorization_required_message() {
         "https://tap.rsvp/schema/1.0#authorizationrequired"
     );
     assert!(message.created_time.is_some());
-    assert_eq!(message.from, Some("did:example:vasp".to_string()));
+    assert_eq!(message.from, "did:example:vasp".to_string());
     assert_eq!(
         message.to,
-        Some(vec!["did:example:b2b-service".to_string()])
+        vec!["did:example:b2b-service".to_string()]
     );
 
     // Test validation fails with empty authorization_url
@@ -252,7 +252,7 @@ fn test_out_of_band_message() {
     // Convert to DIDComm message
     let message = body
         .to_didcomm_with_route(
-            Some("did:example:sender"),
+            "did:example:sender",
             ["did:example:recipient"].iter().copied(),
         )
         .unwrap();
@@ -261,8 +261,8 @@ fn test_out_of_band_message() {
     assert!(!message.id.is_empty());
     assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#outofband");
     assert!(message.created_time.is_some());
-    assert_eq!(message.from, Some("did:example:sender".to_string()));
-    assert_eq!(message.to, Some(vec!["did:example:recipient".to_string()]));
+    assert_eq!(message.from, "did:example:sender".to_string());
+    assert_eq!(message.to, vec!["did:example:recipient".to_string()]);
 
     // Test validation fails with invalid attachment
     let invalid_attachment = Attachment {

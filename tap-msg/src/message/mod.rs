@@ -59,7 +59,7 @@ pub use invoice::{
 pub use participant::Participant;
 
 // Re-export payment types
-pub use payment::{Payment, Payment, PaymentBuilder};
+pub use payment::{Payment, PaymentBuilder};
 
 // Re-export policy types
 pub use policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl};

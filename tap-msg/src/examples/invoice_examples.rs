@@ -5,6 +5,7 @@ use crate::error::{Error, Result};
 use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::{Participant, Payment};
+use crate::message::payment::PaymentBuilder;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -152,9 +153,33 @@ pub fn create_payment_request_with_invoice_example(
         AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
     // Create transaction ID
     let transaction_id = uuid::Uuid::new_v4().to_string();
-    let mut payment_request =
-        Payment::new(&transaction_id, asset, &format!("{:.2}", invoice.total))
-            .with_currency_code(&invoice.currency_code);
+    
+    // Create a new dummy merchant and customer participants
+    let originator = Participant {
+        id: merchant_did.to_string(),
+        role: Some("originator".to_string()),
+        policies: None,
+        leiCode: None,
+    };
+    
+    let beneficiary = Participant {
+        id: customer_did.unwrap_or("did:example:beneficiary").to_string(),
+        role: Some("beneficiary".to_string()),
+        policies: None,
+        leiCode: None,
+    };
+    
+    // Use the builder pattern to create the payment
+    let mut payment_request = PaymentBuilder::default()
+        .transaction_id(transaction_id)
+        .asset(asset)
+        .amount(format!("{:.2}", invoice.total))
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .build();
+    
+    // Add currency code if available
+    payment_request.currency_code = Some(invoice.currency_code.clone());
 
     // We can't add agents directly to Payment as it doesn't have an agents field
 

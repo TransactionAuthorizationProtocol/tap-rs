@@ -45,7 +45,7 @@ fn test_update_party_creation() {
 
     // Convert to DIDComm
     let didcomm_message = update_party
-        .to_didcomm(Some("did:example:1234567890abcdef"))
+        .to_didcomm("did:example:1234567890abcdef")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     assert_eq!(
@@ -55,7 +55,7 @@ fn test_update_party_creation() {
 
     // Convert to DIDComm
     let didcomm_message = update_party_with_note
-        .to_didcomm(Some("did:example:1234567890abcdef"))
+        .to_didcomm("did:example:1234567890abcdef")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     assert_eq!(
@@ -125,7 +125,7 @@ fn test_update_party_didcomm_conversion() {
 
     // Convert to DIDComm
     let didcomm_message = update_party
-        .to_didcomm(Some("did:example:1234567890abcdef"))
+        .to_didcomm("did:example:1234567890abcdef")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     // Verify fields

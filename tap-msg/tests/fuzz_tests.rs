@@ -105,17 +105,17 @@ fn test_fuzz_payment_request_deserialization() {
 
 #[test]
 fn test_fuzz_message_deserialization() {
-    // Test with valid JSON but invalid Message structure
+    // Test with valid JSON but invalid PlainMessage structure
     let invalid_json = r#"{
         "id": 12345,
         "type": "not-a-valid-type",
         "body": "not-a-valid-body"
     }"#;
 
-    let result = serde_json::from_str::<Message>(invalid_json);
+    let result = serde_json::from_str::<PlainMessage>(invalid_json);
     assert!(
         result.is_err(),
-        "Should fail to deserialize invalid Message JSON"
+        "Should fail to deserialize invalid PlainMessage JSON"
     );
 
     // Test with missing required fields
@@ -123,10 +123,10 @@ fn test_fuzz_message_deserialization() {
         "body": {}
     }"#; // Missing id and type
 
-    let result = serde_json::from_str::<Message>(missing_fields_json);
+    let result = serde_json::from_str::<PlainMessage>(missing_fields_json);
     assert!(
         result.is_err(),
-        "Should fail to deserialize Message with missing fields"
+        "Should fail to deserialize PlainMessage with missing fields"
     );
 }
 

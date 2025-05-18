@@ -8,8 +8,8 @@ use tap_caip::AssetId;
 use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
 use tap_msg::message::{
-    Agent, Authorize, Connect, ConnectionConstraints, Participant, Payment, Reject, Settle,
-    Transfer, UpdateParty,
+    Authorize, Connect, ConnectionConstraints, Participant, Payment, PaymentBuilder, Reject, Settle,
+    Transfer, UpdateParty, AddAgents, RemoveAgent, ReplaceAgent, TransactionLimits,
 };
 use tap_msg::Result;
 
@@ -48,7 +48,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Convert to DIDComm message
     let transfer_message = transfer
         .to_didcomm_with_route(
-            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                 .iter()
                 .copied(),
@@ -155,7 +155,7 @@ fn test_payment_flow() {
     // Convert to DIDComm message
     let payment_message = payment
         .to_didcomm_with_route(
-            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                 .iter()
                 .copied(),
@@ -200,7 +200,7 @@ fn test_payment_flow() {
     );
     let payment_message2 = payment2
         .to_didcomm_with_route(
-            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                 .iter()
                 .copied(),
@@ -412,21 +412,24 @@ fn test_complex_message_flow() -> Result<()> {
 // Helper functions to create test messages
 
 fn create_test_connect() -> Connect {
-    Connect {
-        agent: Some(Agent {
-            id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-            name: None,
-            agent_type: None,
-            service_url: None,
-        }),
-        for_id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        constraints: ConnectionConstraints {
-            purposes: None,
-            category_purposes: None,
-            limits: None,
-        },
-        metadata: HashMap::new(),
-    }
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+    let agent_id = "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string();
+    let for_id = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
+    
+    let mut connect = Connect::new(&transaction_id, &agent_id, &for_id, Some("agent"));
+    
+    let transaction_limits = TransactionLimits {
+        max_amount: Some("1000.0".to_string()),
+        max_total_amount: Some("5000.0".to_string()),
+        max_transactions: Some(10),
+    };
+    
+    let constraints = ConnectionConstraints {
+        transaction_limits: Some(transaction_limits),
+    };
+    
+    connect.constraints = Some(constraints);
+    connect
 }
 
 fn create_test_transfer() -> Transfer {
@@ -468,30 +471,41 @@ fn create_test_transfer() -> Transfer {
 }
 
 fn create_test_payment_request() -> Payment {
-    let merchant = Participant {
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+    
+    let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
+        role: Some("originator".to_string()),
+        policies: None,
+        leiCode: None,
+    };
+
+    let beneficiary = Participant {
+        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
+        role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
     };
 
     let agents = vec![Participant {
         id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
+        role: Some("agent".to_string()),
         policies: None,
         leiCode: None,
     }];
 
-    Payment {
-        asset: None,
-        currency: Some("USD".to_string()),
-        amount: "100.0".to_string(),
-        supported_assets: None,
-        invoice: None,
-        expiry: None,
-        merchant,
-        customer: None,
-        agents,
-        metadata: HashMap::new(),
-    }
+    let asset = AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+    
+    let mut payment = PaymentBuilder::default()
+        .transaction_id(transaction_id)
+        .asset(asset)
+        .amount("100.0".to_string())
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .agents(agents)
+        .build();
+        
+    payment.currency_code = Some("USD".to_string());
+    payment.expires = Some("2023-12-31T23:59:59Z".to_string());
+    payment
 }
