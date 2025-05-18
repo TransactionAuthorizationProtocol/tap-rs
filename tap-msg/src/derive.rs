@@ -53,7 +53,7 @@
 /// use tap_msg::message::tap_message_trait::{TapMessageBody, TapMessage};
 /// use tap_msg::error::Result;
 /// use serde::{Serialize, Deserialize};
-/// use didcomm::Message;
+/// use crate::didcomm::PlainMessage;
 ///
 /// // Your struct that implements TapMessageBody
 /// #[derive(Serialize, Deserialize)]
@@ -110,7 +110,7 @@ macro_rules! impl_tap_message {
                 &self,
                 body: &T,
                 creator_did: &str,
-            ) -> $crate::error::Result<didcomm::Message> {
+            ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
                 let mut message = body.to_didcomm(Some(creator_did))?;
 
@@ -172,7 +172,7 @@ macro_rules! impl_tap_message {
                 &self,
                 body: &T,
                 creator_did: &str,
-            ) -> $crate::error::Result<didcomm::Message> {
+            ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
                 let mut message = body.to_didcomm(Some(creator_did))?;
 
@@ -237,7 +237,7 @@ macro_rules! impl_tap_message {
                 &self,
                 body: &T,
                 creator_did: &str,
-            ) -> $crate::error::Result<didcomm::Message> {
+            ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
                 let mut message = body.to_didcomm(Some(creator_did))?;
 
@@ -297,7 +297,7 @@ macro_rules! impl_tap_message {
                 &self,
                 body: &T,
                 creator_did: &str,
-            ) -> $crate::error::Result<didcomm::Message> {
+            ) -> $crate::error::Result<$crate::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
                 let mut message = body.to_didcomm(Some(creator_did))?;
 

@@ -3,9 +3,9 @@
 //! This module provides traits for converting between DIDComm messages
 //! and TAP-specific message bodies, as well as validation of those bodies.
 
+use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use chrono::Utc;
-use didcomm::Message;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -20,7 +20,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
     fn validate(&self) -> Result<()>;
 
     /// Convert this body to a DIDComm message.
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
         // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -98,16 +98,16 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
             agent_dids.retain(|did| did != from);
         }
 
-        // Always set the 'to' field, even if it's an empty list
-        let to = Some(agent_dids);
+        // The from field is required in our PlainMessage, so ensure we have a valid value
+        let from = from_did.map_or_else(String::new, |s| s.to_string());
 
         // Create the message
-        let message = Message {
+        let message = PlainMessage {
             id,
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            from: from_did.map(|s| s.to_string()),
-            to,
+            from,
+            to: agent_dids,
             thid: None,
             pthid: None,
             created_time: Some(now),
@@ -115,7 +115,6 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
-            attachments: None,
         };
 
         Ok(message)
@@ -131,7 +130,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
     /// which automatically extracts agent DIDs. The explicit 'to' parameter allows
     /// overriding the automatically extracted recipients when needed.
     #[allow(dead_code)] // Used in tests but not in production code
-    fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
+    fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<PlainMessage>
     where
         I: IntoIterator<Item = &'a str>,
     {
@@ -141,14 +140,14 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
         // Override with explicitly provided recipients if any
         let to_vec: Vec<String> = to.into_iter().map(String::from).collect();
         if !to_vec.is_empty() {
-            message.to = Some(to_vec);
+            message.to = to_vec;
         }
 
         Ok(message)
     }
 
     /// Extract this body type from a DIDComm message.
-    fn from_didcomm(message: &Message) -> Result<Self>
+    fn from_didcomm(message: &PlainMessage) -> Result<Self>
     where
         Self: Sized,
     {
@@ -273,7 +272,7 @@ pub trait TapMessage {
     /// # Returns
     ///
     /// A new DIDComm message that is properly linked to this message as a reply
-    fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<Message> {
+    fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<PlainMessage> {
         // Create the base message with creator as sender
         let mut message = body.to_didcomm(Some(creator_did))?;
 
@@ -300,7 +299,7 @@ pub trait TapMessage {
             .collect();
 
         if !recipients.is_empty() {
-            message.to = Some(recipients);
+            message.to = recipients;
         }
 
         Ok(message)
@@ -319,8 +318,8 @@ pub trait TapMessage {
     fn message_id(&self) -> &str;
 }
 
-// Implement TapMessage trait for didcomm::Message
-impl TapMessage for Message {
+// Implement TapMessage trait for PlainMessage
+impl TapMessage for PlainMessage {
     fn validate(&self) -> Result<()> {
         // Check if it's a TAP message first
         if !self.is_tap_message() {
@@ -390,15 +389,13 @@ impl TapMessage for Message {
     fn get_all_participants(&self) -> Vec<String> {
         let mut participants = Vec::new();
 
-        // Add sender if present
-        if let Some(from) = &self.from {
-            participants.push(from.clone());
+        // Add sender
+        if !self.from.is_empty() {
+            participants.push(self.from.clone());
         }
 
-        // Add recipients if present
-        if let Some(to) = &self.to {
-            participants.extend(to.clone());
-        }
+        // Add recipients
+        participants.extend(self.to.clone());
 
         participants
     }
@@ -439,8 +436,8 @@ impl TapMessage for Message {
     }
 }
 
-// Implement Connectable trait for Message
-impl Connectable for Message {
+// Implement Connectable trait for PlainMessage
+impl Connectable for PlainMessage {
     fn with_connection(&mut self, connect_id: &str) -> &mut Self {
         self.pthid = Some(connect_id.to_string());
         self
@@ -475,7 +472,7 @@ pub fn create_tap_message<T: TapMessageBody>(
     id: Option<String>,
     from_did: Option<&str>,
     to_dids: &[&str],
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Create the base message from the body, passing the from_did
     let mut message = body.to_didcomm(from_did)?;
 
@@ -486,7 +483,7 @@ pub fn create_tap_message<T: TapMessageBody>(
 
     // Override with explicitly provided recipients if any
     if !to_dids.is_empty() {
-        message.to = Some(to_dids.iter().map(|&s| s.to_string()).collect());
+        message.to = to_dids.iter().map(|&s| s.to_string()).collect();
     }
 
     Ok(message)

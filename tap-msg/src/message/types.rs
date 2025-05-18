@@ -5,12 +5,12 @@
 extern crate serde;
 extern crate serde_json;
 
-use didcomm::Message;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use tap_caip::AssetId;
 
+use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
 use crate::message::policy::Policy;
@@ -413,7 +413,7 @@ impl TapMessageBody for Transfer {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
         // Serialize the Transfer to a JSON value
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -458,21 +458,23 @@ impl TapMessageBody for Transfer {
             .connection_id()
             .map(|connect_id| connect_id.to_string());
 
+        // The from field is required in our PlainMessage, so ensure we have a valid value
+        let from = from_did.map_or_else(String::new, |s| s.to_string());
+
         // Create a new Message with required fields
-        let message = Message {
+        let message = PlainMessage {
             id: uuid::Uuid::new_v4().to_string(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             body: body_json,
-            from: from_did.map(|s| s.to_string()),
-            to: Some(agent_dids),
+            from,
+            to: agent_dids,
             thid: None,
             pthid,
             created_time: Some(now),
             expires_time: None,
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
-            attachments: None,
         };
 
         Ok(message)
@@ -2753,7 +2755,7 @@ impl DIDCommPresentation {
     /// fn check_presentation(presentation: &DIDCommPresentation) -> Result<()> {
     ///     // Validate the presentation
     ///     presentation.validate()?;
-    ///     
+    ///
     ///     // If we get here, the presentation is valid
     ///     Ok(())
     /// }
