@@ -21,8 +21,8 @@
 //! The TAP Node is built with several key components:
 //!
 //! - **Agent Registry**: Maintains a collection of TAP agents by their DIDs
-//! - **Message Processors**: Process, validate, and transform messages
-//! - **Message Routers**: Determine the target agent for a message
+//! - **PlainMessage Processors**: Process, validate, and transform messages
+//! - **PlainMessage Routers**: Determine the target agent for a message
 //! - **Processor Pool**: Provides concurrent message processing for scalability
 //! - **Event Bus**: Broadcasts node events to subscribers
 //! - **DID Resolver**: Resolves DIDs to DID Documents for message verification
@@ -75,7 +75,7 @@
 //!     // In a real scenario, you'd create these properly:
 //!     let did_resolver = Arc::new(tap_agent::did::MultiResolver::default());
 //!     let secrets_resolver = Arc::new(TestSecretsResolver::new());
-//!     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
+//!     let message_packer = Arc::new(tap_agent::crypto::DefaultPlainMessagePacker::new(
 //!         did_resolver, secrets_resolver
 //!     ));
 //!     let agent = DefaultAgent::new(agent_config, message_packer);
@@ -104,24 +104,24 @@ pub mod resolver;
 
 pub use error::{Error, Result};
 pub use message::sender::{
-    HttpMessageSender, MessageSender, NodeMessageSender, WebSocketMessageSender,
+    HttpPlainMessageSender, PlainMessageSender, NodePlainMessageSender, WebSocketPlainMessageSender,
 };
 
 use std::sync::Arc;
 
 use tap_agent::{Agent, DefaultAgent};
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 
 use agent::AgentRegistry;
 use event::EventBus;
 use message::processor::{
-    DefaultMessageProcessor, LoggingMessageProcessor, MessageProcessor, ValidationMessageProcessor,
+    DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor, ValidationPlainMessageProcessor,
 };
 use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
-use message::router::DefaultMessageRouter;
+use message::router::DefaultPlainMessageRouter;
 use message::RouterAsyncExt;
 use message::{
-    CompositeMessageProcessor, CompositeMessageRouter, MessageProcessorType, MessageRouterType,
+    CompositePlainMessageProcessor, CompositePlainMessageRouter, PlainMessageProcessorType, PlainMessageRouterType,
 };
 use resolver::NodeResolver;
 
@@ -138,7 +138,7 @@ pub trait DefaultAgentExt {
     /// Pack and serialize a DIDComm message for transmission
     ///
     /// This method takes a DIDComm message and recipient DID, then:
-    /// 1. Uses the agent's MessagePacker to properly sign and encrypt the message
+    /// 1. Uses the agent's PlainMessagePacker to properly sign and encrypt the message
     /// 2. Serializes the message to a string format
     ///
     /// # Parameters
@@ -147,17 +147,17 @@ pub trait DefaultAgentExt {
     ///
     /// # Returns
     /// The packed message as a string, ready for transmission
-    async fn send_serialized_message(&self, message: &Message, to_did: &str) -> Result<String>;
+    async fn send_serialized_message(&self, message: &PlainMessage, to_did: &str) -> Result<String>;
 }
 
 #[async_trait]
 impl DefaultAgentExt for DefaultAgent {
-    async fn send_serialized_message(&self, message: &Message, to_did: &str) -> Result<String> {
-        // Since we cannot directly access the agent's MessagePacker (which handles signing),
+    async fn send_serialized_message(&self, message: &PlainMessage, to_did: &str) -> Result<String> {
+        // Since we cannot directly access the agent's PlainMessagePacker (which handles signing),
         // and using send_message with a custom adapter proved difficult due to Rust's type system,
         // we'll take a different approach.
 
-        // First, serialize the DIDComm Message to a JSON Value
+        // First, serialize the DIDComm PlainMessage to a JSON Value
         let json_value = serde_json::to_value(message).map_err(Error::Serialization)?;
 
         // Get the agent's DID as the sender
@@ -168,7 +168,7 @@ impl DefaultAgentExt for DefaultAgent {
 
         // We need a way to properly sign and package the message.
         // Instead of using a simulated signature, let's create a proper signed DIDComm v2 message.
-        // Unfortunately, without direct access to MessagePacker, we need to implement a simplified version.
+        // Unfortunately, without direct access to PlainMessagePacker, we need to implement a simplified version.
 
         // First, create a payload that would normally be signed
         let _payload = serde_json::json!({
@@ -253,8 +253,8 @@ pub struct NodeConfig {
 /// ## Core Responsibilities
 ///
 /// - **Agent Management**: Registration and deregistration of TAP Agents
-/// - **Message Processing**: Processing incoming and outgoing messages through middleware chains
-/// - **Message Routing**: Determining the appropriate recipient for each message
+/// - **PlainMessage Processing**: Processing incoming and outgoing messages through middleware chains
+/// - **PlainMessage Routing**: Determining the appropriate recipient for each message
 /// - **Event Publishing**: Broadcasting node events to subscribers
 /// - **Scalability**: Managing concurrent message processing through worker pools
 ///
@@ -278,11 +278,11 @@ pub struct TapNode {
     /// Event bus
     event_bus: Arc<EventBus>,
     /// Incoming message processor
-    incoming_processor: CompositeMessageProcessor,
+    incoming_processor: CompositePlainMessageProcessor,
     /// Outgoing message processor
-    outgoing_processor: CompositeMessageProcessor,
-    /// Message router
-    router: CompositeMessageRouter,
+    outgoing_processor: CompositePlainMessageProcessor,
+    /// PlainMessage router
+    router: CompositePlainMessageRouter,
     /// Resolver for DIDs
     resolver: Arc<NodeResolver>,
     /// Worker pool for handling messages
@@ -301,22 +301,22 @@ impl TapNode {
         let event_bus = Arc::new(EventBus::new());
 
         // Create the message router
-        let default_router = MessageRouterType::Default(DefaultMessageRouter::new());
+        let default_router = PlainMessageRouterType::Default(DefaultPlainMessageRouter::new());
 
-        let router = CompositeMessageRouter::new(vec![default_router]);
+        let router = CompositePlainMessageRouter::new(vec![default_router]);
 
         // Create the message processors
-        let logging_processor = MessageProcessorType::Logging(LoggingMessageProcessor);
-        let validation_processor = MessageProcessorType::Validation(ValidationMessageProcessor);
-        let default_processor = MessageProcessorType::Default(DefaultMessageProcessor);
+        let logging_processor = PlainMessageProcessorType::Logging(LoggingPlainMessageProcessor);
+        let validation_processor = PlainMessageProcessorType::Validation(ValidationPlainMessageProcessor);
+        let default_processor = PlainMessageProcessorType::Default(DefaultPlainMessageProcessor);
 
-        let incoming_processor = CompositeMessageProcessor::new(vec![
+        let incoming_processor = CompositePlainMessageProcessor::new(vec![
             logging_processor.clone(),
             validation_processor.clone(),
             default_processor.clone(),
         ]);
 
-        let outgoing_processor = CompositeMessageProcessor::new(vec![
+        let outgoing_processor = CompositePlainMessageProcessor::new(vec![
             logging_processor,
             validation_processor,
             default_processor,
@@ -392,18 +392,18 @@ impl TapNode {
     ///
     /// ```no_run
     /// # use tap_node::{TapNode, NodeConfig};
-    /// # use tap_msg::didcomm::Message;
-    /// # async fn example(node: &TapNode, message: Message) -> Result<(), tap_node::Error> {
+    /// # use tap_msg::didcomm::PlainMessage;
+    /// # async fn example(node: &TapNode, message: PlainMessage) -> Result<(), tap_node::Error> {
     /// // Process an incoming message
     /// node.receive_message(message).await?;
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn receive_message(&self, message: Message) -> Result<()> {
+    pub async fn receive_message(&self, message: PlainMessage) -> Result<()> {
         // Process the incoming message
         let processed_message = match self.incoming_processor.process_incoming(message).await? {
             Some(msg) => msg,
-            None => return Ok(()), // Message was dropped during processing
+            None => return Ok(()), // PlainMessage was dropped during processing
         };
 
         // Route the message to the appropriate agent
@@ -428,7 +428,7 @@ impl TapNode {
     }
 
     /// Dispatch a message to an agent by DID
-    pub async fn dispatch_message(&self, target_did: String, message: Message) -> Result<()> {
+    pub async fn dispatch_message(&self, target_did: String, message: PlainMessage) -> Result<()> {
         let agent = self.agents.get_agent(&target_did).await?;
 
         // Convert the message to a packed format for transport
@@ -450,12 +450,12 @@ impl TapNode {
         &self,
         from_did: &str,
         to_did: &str,
-        message: Message,
+        message: PlainMessage,
     ) -> Result<String> {
         // Process the outgoing message
         let processed_message = match self.outgoing_processor.process_outgoing(message).await? {
             Some(msg) => msg,
-            None => return Err(Error::Processing("Message was dropped".to_string())),
+            None => return Err(Error::Processing("PlainMessage was dropped".to_string())),
         };
 
         // Get the sending agent

@@ -79,7 +79,7 @@ impl TapMessageBody for ErrorBody {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
         // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -96,8 +96,8 @@ impl TapMessageBody for ErrorBody {
         let id = uuid::Uuid::new_v4().to_string();
         let created_time = Utc::now().timestamp() as u64;
 
-        // The from field is required in our PlainMessage, so ensure we have a valid value
-        let from = from_did.map_or_else(String::new, |s| s.to_string());
+        // The from field is required in our PlainMessage
+        let from = from_did.to_string();
 
         // If we have an original message ID, use it as the thread ID
         let thid = self.original_message_id.clone();

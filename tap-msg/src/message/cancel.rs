@@ -70,7 +70,7 @@ impl TapMessageBody for Cancel {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
         // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -86,22 +86,19 @@ impl TapMessageBody for Cancel {
         // Create a new message with a random ID
         let id = uuid::Uuid::new_v4().to_string();
         
-        // The from field is required in our PlainMessage, so ensure we have a valid value
-        let from = from_did.map_or_else(String::new, |s| s.to_string());
-
         // Create the message
         let message = PlainMessage {
             id,
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             body: body_json,
-            from,
+            from: from_did.to_string(),
             to: Vec::new(),
             thid: Some(self.transaction_id.clone()),
             pthid: None,
-            extra_headers: HashMap::new(),
-            created_time: None,
+            created_time: Some(Utc::now().timestamp() as u64),
             expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
             from_prior: None,
         };
 

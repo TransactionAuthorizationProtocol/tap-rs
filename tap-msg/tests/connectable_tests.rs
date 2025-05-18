@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody};
-use tap_msg::message::types::{
-    Agent, Connect, ConnectionConstraints, Participant, PaymentRequest, Transfer,
+use tap_msg::message::{
+    Connect, ConnectionConstraints, Participant, PaymentRequest, Transfer,
 };
 
 #[test]
@@ -11,7 +12,7 @@ fn test_transfer_connectable() {
     // Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let connect_id = connect_message.id.clone();
 
@@ -31,7 +32,7 @@ fn test_transfer_connectable() {
 
     // Convert to DIDComm message and verify the connection is preserved
     let _transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
     // The connection should be stored in the metadata
@@ -47,7 +48,7 @@ fn test_payment_request_connectable() {
     // Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let connect_id = connect_message.id.clone();
 
@@ -67,7 +68,7 @@ fn test_payment_request_connectable() {
 
     // Convert to DIDComm message and verify the connection is preserved
     let _payment_message = payment
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
     // The connection should be stored in the metadata
@@ -83,14 +84,14 @@ fn test_message_connectable() {
     // Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let connect_id = connect_message.id.clone();
 
     // Create a Transfer message and convert to DIDComm message
     let transfer = create_test_transfer();
     let mut transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
     // Test initial state (no connection)
@@ -113,7 +114,7 @@ fn test_connection_round_trip() {
     // Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let connect_id = connect_message.id.clone();
 
@@ -121,7 +122,7 @@ fn test_connection_round_trip() {
     let mut transfer = create_test_transfer();
     transfer.with_connection(&connect_id);
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
     // Convert back to Transfer and verify the connection is preserved
@@ -140,13 +141,13 @@ fn test_multiple_connections() {
     // Create two Connect messages
     let connect1 = create_test_connect();
     let connect_message1 = connect1
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let connect_id1 = connect_message1.id.clone();
 
     let connect2 = create_test_connect();
     let connect_message2 = connect2
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let connect_id2 = connect_message2.id.clone();
 
@@ -170,12 +171,14 @@ fn test_multiple_connections() {
 
 fn create_test_connect() -> Connect {
     Connect {
-        agent: Some(Agent {
-            id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-            name: None,
-            agent_type: None,
-            service_url: None,
-        }),
+        agent: Some(
+            Participant {
+                id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
+                role: None,
+                policies: None,
+                leiCode: None,
+            }
+        ),
         for_id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         constraints: ConnectionConstraints {
             purposes: None,
@@ -225,30 +228,16 @@ fn create_test_transfer() -> Transfer {
 }
 
 fn create_test_payment_request() -> PaymentRequest {
-    let merchant = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-    };
-
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-    }];
+    let asset =
+        AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
     PaymentRequest {
-        asset: None,
-        currency: Some("USD".to_string()),
+        asset,
         amount: "100.0".to_string(),
-        supported_assets: None,
-        invoice: None,
-        expiry: None,
-        merchant,
-        customer: None,
-        agents,
+        currency_code: Some("USD".to_string()),
+        transaction_id: uuid::Uuid::new_v4().to_string(),
+        memo: None,
+        expires: None,
         metadata: HashMap::new(),
     }
 }

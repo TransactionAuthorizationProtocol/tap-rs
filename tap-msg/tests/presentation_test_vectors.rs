@@ -203,7 +203,7 @@ async fn test_presentation_round_trip() {
 
     // Convert back to DIDComm
     let round_trip_message = presentation
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert DIDCommPresentation back to DIDComm message");
 
     // Convert again to DIDCommPresentation to verify integrity

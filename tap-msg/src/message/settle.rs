@@ -88,7 +88,7 @@ impl TapMessageBody for Settle {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
         // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -106,15 +106,12 @@ impl TapMessageBody for Settle {
         let id = uuid::Uuid::new_v4().to_string();
         let created_time = Utc::now().timestamp() as u64;
 
-        // The from field is required in our PlainMessage, so ensure we have a valid value
-        let from = from_did.map_or_else(String::new, |s| s.to_string());
-
         // Create the message
         let message = PlainMessage {
             id,
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            from,
+            from: from_did.to_string(),
             to: Vec::new(), // Empty recipients, will be determined by the framework later
             thid: Some(self.transaction_id.clone()),
             pthid: None,

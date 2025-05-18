@@ -3,9 +3,8 @@
 //! This module defines the Reject message type, which is used
 //! for rejecting transactions in the TAP protocol.
 
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
@@ -53,7 +52,7 @@ impl TapMessageBody for Reject {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
         // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -71,8 +70,8 @@ impl TapMessageBody for Reject {
         let id = uuid::Uuid::new_v4().to_string();
         let created_time = Utc::now().timestamp() as u64;
 
-        // The from field is required in our PlainMessage, so ensure we have a valid value
-        let from = from_did.map_or_else(String::new, |s| s.to_string());
+        // The from field is required in our PlainMessage
+        let from = from_did.to_string();
 
         // Create the message
         let message = PlainMessage {

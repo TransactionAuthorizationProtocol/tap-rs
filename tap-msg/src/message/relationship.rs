@@ -77,7 +77,7 @@ impl TapMessageBody for ConfirmRelationship {
         self.validate()
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
         // 1. Serialize self to JSON value
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -95,8 +95,8 @@ impl TapMessageBody for ConfirmRelationship {
         let id = uuid::Uuid::new_v4().to_string();
         let created_time = Utc::now().timestamp_millis() as u64;
 
-        // The from field is required in our PlainMessage, so ensure we have a valid value
-        let from = from_did.map_or_else(String::new, |s| s.to_string());
+        // The from field is required in our PlainMessage
+        let from = from_did.to_string();
 
         // 4. Explicitly set the recipient using agent_id
         let to = vec![self.agent_id.clone()];

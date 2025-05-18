@@ -2,13 +2,13 @@
 
 use crate::error::Result;
 use crate::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
-use didcomm::Message;
+use crate::didcomm::PlainMessage;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 
 /// Example function to create a Transfer message using the new approach.
-pub fn create_transfer_message_example() -> Result<Message> {
+pub fn create_transfer_message_example() -> Result<PlainMessage> {
     // Create originator and beneficiary participants
     let originator = Participant {
         id: "did:example:alice".to_string(),
@@ -38,16 +38,16 @@ pub fn create_transfer_message_example() -> Result<Message> {
     };
 
     // Convert the Transfer body to a DIDComm message
-    let message = transfer_body.to_didcomm(Some(
+    let message = transfer_body.to_didcomm(
         "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-    ))?;
+    )?;
 
     // The message is ready to be encrypted and sent
     Ok(message)
 }
 
 /// Example function to process a received Transfer message.
-pub fn process_transfer_message_example(message: &Message) -> Result<()> {
+pub fn process_transfer_message_example(message: &PlainMessage) -> Result<()> {
     // First, check if this is a TAP message
     if message.type_.contains("transfer") {
         println!(
@@ -75,23 +75,23 @@ pub fn process_transfer_message_example(message: &Message) -> Result<()> {
 }
 
 /// Example function to create a Reject message.
-pub fn create_reject_message_example(transaction_id: &str) -> Result<Message> {
+pub fn create_reject_message_example(transaction_id: &str) -> Result<PlainMessage> {
     let reject_body = Reject {
         transaction_id: transaction_id.to_string(),
         reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Further documentation needed.".to_string(),
     };
 
     // Convert the Reject body to a DIDComm message
-    let message = reject_body.to_didcomm(Some(
+    let message = reject_body.to_didcomm(
         "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
-    ))?;
+    )?;
 
     // The message is ready to be encrypted and sent
     Ok(message)
 }
 
 /// Example function to create a Settle message.
-pub fn create_settle_message_example(transaction_id: &str) -> Result<Message> {
+pub fn create_settle_message_example(transaction_id: &str) -> Result<PlainMessage> {
     let settle_body = Settle {
         transaction_id: transaction_id.to_string(),
         settlement_id: "0x123456789abcdef".to_string(),
@@ -99,16 +99,16 @@ pub fn create_settle_message_example(transaction_id: &str) -> Result<Message> {
     };
 
     // Convert the Settle body to a DIDComm message
-    let message = settle_body.to_didcomm(Some(
+    let message = settle_body.to_didcomm(
         "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
-    ))?;
+    )?;
 
     // The message is ready to be encrypted and sent
     Ok(message)
 }
 
 /// This example shows how to use the common interface to work with various TAP message types.
-pub fn process_any_tap_message_example(message: &Message) -> Result<()> {
+pub fn process_any_tap_message_example(message: &PlainMessage) -> Result<()> {
     // Get the message type
     let type_str = &message.type_;
 

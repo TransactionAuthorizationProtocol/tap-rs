@@ -65,7 +65,6 @@ pub struct PlainMessage {
     /// from_prior is a compactly serialized signed JWT containing FromPrior value
     #[serde(skip_serializing_if = "Option::is_none")]
     pub from_prior: Option<String>,
-
 }
 
 const PLAINTEXT_TYP: &str = "application/didcomm-plain+json";
@@ -90,4 +89,24 @@ pub struct Signature {
 struct JWS {
     pub payload: String,
     pub signatures: Vec<Signature>,
+}
+
+/// Message for out-of-band invitations (TAIP-2).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OutOfBand {
+    /// Goal code for the invitation.
+    #[serde(rename = "goal_code")]
+    pub goal_code: String,
+
+    /// Invitation message ID.
+    pub id: String,
+
+    /// Label for the invitation.
+    pub label: String,
+
+    /// Accept option for the invitation.
+    pub accept: Option<String>,
+
+    /// The DIDComm services to connect to.
+    pub services: Vec<serde_json::Value>,
 }

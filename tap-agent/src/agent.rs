@@ -552,7 +552,7 @@ impl Agent for DefaultAgent {
         if let Some(id) = message_value.get("id") {
             // This appears to be a proper DIDComm message already
             // Create a DIDComm message with the required fields
-            let didcomm_message = didcomm::Message {
+            let didcomm_message = tap_msg::didcomm::PlainMessage {
                 id: id.as_str().unwrap_or("").to_string(),
                 typ: "application/didcomm-plain+json".to_string(),
                 type_: message_type.to_string(),
@@ -561,7 +561,8 @@ impl Agent for DefaultAgent {
                 from: message_value
                     .get("from")
                     .and_then(|v| v.as_str())
-                    .map(|s| s.to_string()),
+                    .map(|s| s.to_string())
+                    .unwrap_or_default(),
                 to: message_value
                     .get("to")
                     .and_then(|v| v.as_array())
@@ -569,14 +570,14 @@ impl Agent for DefaultAgent {
                         arr.iter()
                             .filter_map(|v| v.as_str().map(|s| s.to_string()))
                             .collect()
-                    }),
+                    })
+                    .unwrap_or_default(),
                 thid: None,
                 pthid: None,
                 extra_headers: Default::default(),
                 created_time: None,
                 expires_time: None,
                 from_prior: None,
-                attachments: None,
             };
 
             // Convert to the requested type using the TapMessageBody trait

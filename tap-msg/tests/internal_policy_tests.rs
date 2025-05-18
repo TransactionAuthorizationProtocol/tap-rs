@@ -229,14 +229,14 @@ fn test_reply_creation_maintains_thread() -> Result<()> {
     };
 
     // Create a reply using the TapMessageBody trait
-    let mut reply = update_policies.to_didcomm(Some("did:example:sender_vasp"))?;
+    let mut reply = update_policies.to_didcomm("did:example:sender_vasp")?;
 
     // Manually set the thread ID for the reply
     reply.thid = Some(transfer_message.id.clone());
 
     // Verify that thread correlation is maintained
     assert_eq!(reply.thid, Some(transfer_message.id.clone()));
-    assert_eq!(reply.from, Some(creator_did.to_string()));
+    assert_eq!(reply.from, creator_did.to_string());
 
     // Verify that the message body contains the right content
     let body = reply.body_as::<UpdatePolicies>()?;
@@ -266,7 +266,7 @@ fn test_reply_chain() -> Result<()> {
         })],
     };
 
-    let mut policies_message = update_policies.to_didcomm(Some("did:example:sender_vasp"))?;
+    let mut policies_message = update_policies.to_didcomm("did:example:sender_vasp")?;
     policies_message.thid = Some(transfer_message.id.clone());
 
     // Step 2: Beneficiary authorizes in response
@@ -276,7 +276,7 @@ fn test_reply_chain() -> Result<()> {
     };
 
     // Pass sender DID as required by compiler here
-    let mut authorize_message = authorize.to_didcomm(Some("did:example:beneficiary"))?;
+    let mut authorize_message = authorize.to_didcomm("did:example:beneficiary")?;
     authorize_message.thid = Some(transfer_message.id.clone());
 
     // Step 3: VASP adds an agent
@@ -291,7 +291,7 @@ fn test_reply_chain() -> Result<()> {
     };
 
     // Pass sender DID as required by compiler here
-    let mut add_agents_message = add_agents.to_didcomm(Some("did:example:sender_vasp"))?;
+    let mut add_agents_message = add_agents.to_didcomm("did:example:sender_vasp")?;
     add_agents_message.thid = Some(transfer_message.id.clone());
 
     // Verify thread correlation is maintained throughout the chain

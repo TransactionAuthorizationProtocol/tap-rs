@@ -1,29 +1,29 @@
-//! Message routing implementation.
+//! PlainMessage routing implementation.
 //!
 //! This module provides message routing capabilities for the TAP Node.
 
 use log::debug;
 use std::sync::Arc;
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 
 use crate::agent::AgentRegistry;
 use crate::error::{Error, Result};
-use crate::message::MessageRouter;
+use crate::message::PlainMessageRouter;
 
-/// Default implementation of MessageRouter
+/// Default implementation of PlainMessageRouter
 #[derive(Debug, Clone)]
-pub struct DefaultMessageRouter {
+pub struct DefaultPlainMessageRouter {
     /// Registry of agents
     agents: Option<Arc<AgentRegistry>>,
 }
 
-impl Default for DefaultMessageRouter {
+impl Default for DefaultPlainMessageRouter {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl DefaultMessageRouter {
+impl DefaultPlainMessageRouter {
     /// Create a new default message router
     pub fn new() -> Self {
         Self { agents: None }
@@ -36,13 +36,13 @@ impl DefaultMessageRouter {
     }
 }
 
-impl MessageRouter for DefaultMessageRouter {
-    fn route_message_impl(&self, message: &Message) -> Result<String> {
+impl PlainMessageRouter for DefaultPlainMessageRouter {
+    fn route_message_impl(&self, message: &PlainMessage) -> Result<String> {
         // Check if the message has a "to" field
-        if let Some(to) = &message.to {
-            if !to.is_empty() {
+        if !message.to.is_empty() {
+            {
                 // Check if the first to DID exists in our registry
-                let to_did = to[0].clone();
+                let to_did = message.to[0].clone();
 
                 // If we have an agent registry, check if the agent exists
                 if let Some(agents) = &self.agents {
@@ -68,29 +68,29 @@ impl MessageRouter for DefaultMessageRouter {
 
 /// Composite message router that can delegate to multiple routers
 #[derive(Debug, Default)]
-pub struct CompositeMessageRouter {
+pub struct CompositePlainMessageRouter {
     /// The routers to use, in order
-    routers: Vec<crate::message::MessageRouterType>,
+    routers: Vec<crate::message::PlainMessageRouterType>,
 }
 
-impl CompositeMessageRouter {
+impl CompositePlainMessageRouter {
     /// Create a new composite router
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Add a router to the chain
-    pub fn add_router(&mut self, router: crate::message::MessageRouterType) {
+    pub fn add_router(&mut self, router: crate::message::PlainMessageRouterType) {
         self.routers.push(router);
     }
 }
 
-impl MessageRouter for CompositeMessageRouter {
-    fn route_message_impl(&self, message: &Message) -> Result<String> {
+impl PlainMessageRouter for CompositePlainMessageRouter {
+    fn route_message_impl(&self, message: &PlainMessage) -> Result<String> {
         // Try each router in sequence
         for router in &self.routers {
             match router {
-                crate::message::MessageRouterType::Default(r) => {
+                crate::message::PlainMessageRouterType::Default(r) => {
                     match r.route_message_impl(message) {
                         Ok(target) => return Ok(target),
                         Err(_) => continue, // Try the next router

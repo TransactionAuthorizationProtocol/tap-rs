@@ -3,7 +3,7 @@
 //! This module provides utility functions used throughout the TAP core library.
 
 use crate::error::Error;
-use crate::message::types::Attachment as TapAttachment;
+use crate::message::attachment::Attachment as TapAttachment;
 use crate::Result;
 use didcomm::{
     Attachment as DidcommAttachment, AttachmentData as DidcommAttachmentData, Base64AttachmentData,

@@ -1,9 +1,9 @@
-use didcomm::Message;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody};
-use tap_msg::message::types::{Connect, Participant, PaymentRequest, Transfer};
+use tap_msg::message::{Connect, Participant, PaymentRequest, Transfer};
 
 /// This module contains fuzzing tests for TAP message types.
 /// These tests are designed to ensure that our code handles malformed inputs gracefully.

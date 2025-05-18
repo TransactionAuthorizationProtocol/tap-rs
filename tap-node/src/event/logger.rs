@@ -216,10 +216,10 @@ impl EventLogger {
         let timestamp = DateTime::<Utc>::from(SystemTime::now()).format("%Y-%m-%dT%H:%M:%S%.3fZ");
 
         match event {
-            NodeEvent::MessageReceived { message } => {
+            NodeEvent::PlainMessageReceived { message } => {
                 format!("[{}] MESSAGE RECEIVED: {}", timestamp, message)
             }
-            NodeEvent::MessageSent { message, from, to } => {
+            NodeEvent::PlainMessageSent { message, from, to } => {
                 format!(
                     "[{}] MESSAGE SENT: from={}, to={}, message={}",
                     timestamp, from, to, message
@@ -237,7 +237,7 @@ impl EventLogger {
                     timestamp, did, success
                 )
             }
-            NodeEvent::AgentMessage { did, message } => {
+            NodeEvent::AgentPlainMessage { did, message } => {
                 format!(
                     "[{}] AGENT MESSAGE: did={}, message_length={}",
                     timestamp,
@@ -255,13 +255,13 @@ impl EventLogger {
 
         // Create event-specific fields
         let (event_type, event_data) = match event {
-            NodeEvent::MessageReceived { message } => (
+            NodeEvent::PlainMessageReceived { message } => (
                 "message_received",
                 json!({
                     "message": message,
                 }),
             ),
-            NodeEvent::MessageSent { message, from, to } => (
+            NodeEvent::PlainMessageSent { message, from, to } => (
                 "message_sent",
                 json!({
                     "from": from,
@@ -288,7 +288,7 @@ impl EventLogger {
                     "success": success,
                 }),
             ),
-            NodeEvent::AgentMessage { did, message } => (
+            NodeEvent::AgentPlainMessage { did, message } => (
                 "agent_message",
                 json!({
                     "did": did,

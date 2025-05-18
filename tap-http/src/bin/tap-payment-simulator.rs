@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::process;
 use tap_agent::{Agent, DefaultAgent};
-use tap_msg::{Participant, PaymentRequest, Transfer};
-use tap_node::DefaultAgentExt;
+use tap_msg::message::{Participant, PaymentRequest, Transfer};
+// No longer needed: use tap_node::DefaultAgentExt;
 use tracing::{debug, info};
 
 struct Args {
@@ -90,61 +90,25 @@ fn print_help() {
 
 /// Send a TAP message to the server
 async fn send_tap_message<
-    T: tap_msg::message::tap_message_trait::TapMessageBody + serde::Serialize + Send + Sync,
+    T: tap_msg::message::tap_message_trait::TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug,
 >(
     agent: &DefaultAgent,
     recipient_did: &str,
     recipient_url: &str,
     message: &T,
 ) -> Result<(), Box<dyn Error>> {
-    // Create a DIDComm message from the TAP message using a custom approach
+    // Create a DIDComm message from the TAP message using the agent's send_message method
     info!(
-        "Creating DIDComm message for TAP type: {}",
+        "Creating message for TAP type: {}",
         T::message_type()
     );
-    let from_did = agent.get_agent_did();
 
-    // Convert the TAP message to JSON value
-    let mut message_json =
-        serde_json::to_value(message).map_err(|e| format!("Failed to serialize message: {}", e))?;
-
-    // Ensure the @type field is set correctly in the body
-    if let Some(body_obj) = message_json.as_object_mut() {
-        body_obj.insert(
-            "@type".to_string(),
-            serde_json::Value::String(T::message_type().to_string()),
-        );
-    }
-
-    // Create a proper DIDComm message with correct typ and type fields - this is critical!
-    let id = uuid::Uuid::new_v4().to_string();
-    let didcomm_message = tap_msg::didcomm::Message {
-        id,
-        typ: T::message_type().to_string(), // Set this to the TAP message type, not the media type
-        type_: T::message_type().to_string(),
-        body: message_json,
-        from: Some(from_did.to_string()),
-        to: Some(vec![recipient_did.to_string()]),
-        thid: None,
-        pthid: None,
-        created_time: Some(chrono::Utc::now().timestamp() as u64),
-        expires_time: None,
-        extra_headers: std::collections::HashMap::new(),
-        from_prior: None,
-        attachments: None,
-    };
-
-    // Debug: Dump the raw message to see what's being sent
-    println!(
-        "RAW DIDCOMM MESSAGE:\n{}",
-        serde_json::to_string_pretty(&didcomm_message).unwrap_or_default()
-    );
-
-    // Pack the message using the agent's send_serialized_message method
+    // Send the message using the agent's send_message method
     info!("Packing message for recipient {}", recipient_did);
-    let packed = agent
-        .send_serialized_message(&didcomm_message, recipient_did)
-        .await?;
+    let (packed, _) = agent
+        .send_message(message, vec![recipient_did], false)
+        .await
+        .map_err(|e| format!("Failed to pack message: {}", e))?;
     debug!("Packed message size: {} bytes", packed.len());
 
     // Send to the server
@@ -252,23 +216,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a payment request using the proper struct
     let payment_request = PaymentRequest {
-        asset: Some(
-            "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
-                .parse()
-                .unwrap(),
-        ),
-        currency: Some(currency),
+        asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            .parse()
+            .unwrap(),
+        currency_code: Some(currency),
         amount: amount.to_string(),
-        supported_assets: None,
-        invoice: None,
-        expiry: None,
-        merchant,
-        customer: Some(customer),
-        agents: vec![
-            sender_agent.clone(),
-            recipient_agent.clone(),
-            settlement_agent.clone(),
-        ], // Include both DIDs plus settlement agent
+        transaction_id: transaction_id.clone(),
+        memo: Some("Payment simulator payment request".to_string()),
+        expires: None,
         metadata: HashMap::new(),
     };
 

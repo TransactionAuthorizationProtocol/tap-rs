@@ -19,7 +19,7 @@ use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_caip::AssetId;
 use tap_msg::message::types::{Authorize, Settle};
-use tap_msg::{Invoice, LineItem, Participant, PaymentRequest, TaxCategory, TaxSubtotal, TaxTotal};
+use tap_msg::{Invoice, LineItem, Participant, Payment, TaxCategory, TaxSubtotal, TaxTotal};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -352,7 +352,7 @@ fn create_payment_message_with_invoice(
     };
 
     // Create a payment message with the invoice
-    PaymentRequest {
+    Payment {
         asset: Some(
             AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
         ),

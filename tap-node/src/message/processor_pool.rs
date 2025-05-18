@@ -2,13 +2,13 @@
 //!
 //! This module provides a processor pool for handling concurrent message processing.
 
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::time::Duration;
 
 use crate::error::{Error, Result};
-use crate::message::processor::MessageProcessor;
-use crate::message::{CompositeMessageProcessor, MessageProcessorType};
+use crate::message::processor::PlainMessageProcessor;
+use crate::message::{CompositePlainMessageProcessor, PlainMessageProcessorType};
 
 /// Configuration for the processor pool
 #[derive(Debug, Clone)]
@@ -35,17 +35,17 @@ impl Default for ProcessorPoolConfig {
 #[derive(Clone)]
 pub struct ProcessorPool {
     /// The message processor to use
-    processor: CompositeMessageProcessor,
+    processor: CompositePlainMessageProcessor,
     /// Channel for submitting messages for processing
-    tx: Sender<Message>,
+    tx: Sender<PlainMessage>,
 }
 
 impl ProcessorPool {
     /// Create a new processor pool
     pub fn new(config: ProcessorPoolConfig) -> Self {
-        let (tx, mut rx) = channel::<Message>(config.channel_capacity);
-        let processors: Vec<MessageProcessorType> = Vec::new();
-        let processor = CompositeMessageProcessor::new(processors);
+        let (tx, mut rx) = channel::<PlainMessage>(config.channel_capacity);
+        let processors: Vec<PlainMessageProcessorType> = Vec::new();
+        let processor = CompositePlainMessageProcessor::new(processors);
         let processor_for_workers = processor.clone();
 
         // Spawn a single task to distribute messages to workers
@@ -53,7 +53,7 @@ impl ProcessorPool {
             // Create worker channels
             let mut worker_channels = Vec::with_capacity(config.workers);
             for _ in 0..config.workers {
-                let (worker_tx, mut worker_rx) = channel::<Message>(config.channel_capacity);
+                let (worker_tx, mut worker_rx) = channel::<PlainMessage>(config.channel_capacity);
                 worker_channels.push(worker_tx);
 
                 let worker_processor = processor_for_workers.clone();
@@ -75,7 +75,7 @@ impl ProcessorPool {
                             }
                             Err(_) => {
                                 eprintln!(
-                                    "Message processing timed out after {:?}",
+                                    "PlainMessage processing timed out after {:?}",
                                     worker_timeout
                                 );
                             }
@@ -112,14 +112,14 @@ impl ProcessorPool {
     }
 
     /// Submit a message for processing
-    pub async fn submit(&self, message: Message) -> Result<()> {
+    pub async fn submit(&self, message: PlainMessage) -> Result<()> {
         self.tx.send(message).await.map_err(|e| {
             Error::Processing(format!("Failed to submit message to processor pool: {}", e))
         })
     }
 
     /// Add a processor to the pool
-    pub fn add_processor(&mut self, processor: MessageProcessorType) {
+    pub fn add_processor(&mut self, processor: PlainMessageProcessorType) {
         self.processor.add_processor(processor);
     }
 }

@@ -6,6 +6,7 @@ use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::{Participant, PaymentRequest};
 use crate::didcomm::PlainMessage;
 use tap_caip::AssetId;
+use std::str::FromStr;
 use std::collections::HashMap;
 
 /// Example of creating a basic invoice with line items
@@ -148,16 +149,16 @@ pub fn create_payment_request_with_invoice_example(
 
     // Create a PaymentRequest using the new API
     let asset = AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+    // Create transaction ID
+    let transaction_id = uuid::Uuid::new_v4().to_string();
     let mut payment_request = PaymentRequest::new(
+        &transaction_id,
         asset,
-        format!("{:.2}", invoice.total),
-        merchant.clone(),
-        None,
+        &format!("{:.2}", invoice.total)
     )
-    .with_currency_code(invoice.currency_code.clone());
+    .with_currency_code(&invoice.currency_code);
     
-    // Add the agent
-    payment_request.agents.push(agent);
+    // We can't add agents directly to PaymentRequest as it doesn't have an agents field
 
     // Add the invoice to metadata
     payment_request.metadata.insert(
@@ -173,7 +174,6 @@ pub fn create_payment_request_with_invoice_example(
             policies: None,
             leiCode: None,
         };
-        payment_request.agents.push(customer);
         
         // Also add to metadata for reference
         payment_request.metadata.insert(

@@ -72,7 +72,7 @@
 ///         "my-message"
 ///     }
 ///
-///     fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+///     fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
 ///         // Implementation omitted
 ///         unimplemented!()
 ///     }

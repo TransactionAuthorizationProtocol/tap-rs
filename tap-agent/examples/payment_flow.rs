@@ -219,7 +219,7 @@ fn create_payment_message(
     };
 
     // Create a payment message
-    PaymentRequest {
+    Payment {
         asset: Some(
             AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
         ),

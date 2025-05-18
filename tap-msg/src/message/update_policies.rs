@@ -64,7 +64,7 @@ impl TapMessageBody for UpdatePolicies {
         self.validate()
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
         // Serialize the UpdatePolicies to a JSON value
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -79,8 +79,8 @@ impl TapMessageBody for UpdatePolicies {
 
         let now = Utc::now().timestamp() as u64;
         
-        // The from field is required in our PlainMessage, so ensure we have a valid value
-        let from = from_did.map_or_else(String::new, |s| s.to_string());
+        // The from field is required in our PlainMessage
+        let from = from_did.to_string();
 
         // Create a new Message with required fields
         let message = PlainMessage {
