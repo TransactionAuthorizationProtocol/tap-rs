@@ -3,9 +3,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody};
-use tap_msg::message::{
-    Connect, ConnectionConstraints, Participant, PaymentRequest, Transfer,
-};
+use tap_msg::message::{Connect, ConnectionConstraints, Participant, PaymentRequest, Transfer};
 
 #[test]
 fn test_transfer_connectable() {

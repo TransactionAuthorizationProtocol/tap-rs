@@ -2,12 +2,12 @@
 //!
 //! This module provides functionality to validate TAP messages according to the specification.
 
+use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
+use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::{
     AddAgents, Authorize, DIDCommPresentation, ErrorBody, Presentation, Reject, Settle, Transfer,
 };
-use crate::message::tap_message_trait::TapMessageBody;
-use crate::didcomm::PlainMessage;
 use serde_json::Value;
 
 /// Validate a didcomm message's contents based on its type

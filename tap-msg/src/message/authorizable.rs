@@ -4,10 +4,8 @@
 //! to be authorized, and implementations for relevant TAP message types.
 
 use crate::error::Result;
-use crate::message::{
-    Authorize, Participant, RemoveAgent, ReplaceAgent, Transfer, UpdatePolicies,
-};
 use crate::message::policy::Policy;
+use crate::message::{Authorize, Participant, RemoveAgent, ReplaceAgent, Transfer, UpdatePolicies};
 
 /// Authorizable trait for types that can be authorized or can generate authorization-related messages.
 pub trait Authorizable {
@@ -18,7 +16,12 @@ pub trait Authorizable {
     fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies;
 
     /// Create a ReplaceAgent message for this object.
-    fn replace_agent(&self, transaction_id: String, original_agent: String, replacement: Participant) -> ReplaceAgent;
+    fn replace_agent(
+        &self,
+        transaction_id: String,
+        original_agent: String,
+        replacement: Participant,
+    ) -> ReplaceAgent;
 
     /// Create a RemoveAgent message for this object.
     fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
@@ -39,7 +42,12 @@ impl Authorizable for Transfer {
         }
     }
 
-    fn replace_agent(&self, transaction_id: String, original_agent: String, replacement: Participant) -> ReplaceAgent {
+    fn replace_agent(
+        &self,
+        transaction_id: String,
+        original_agent: String,
+        replacement: Participant,
+    ) -> ReplaceAgent {
         ReplaceAgent {
             transaction_id,
             original: original_agent,

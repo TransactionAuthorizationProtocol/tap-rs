@@ -3,8 +3,8 @@
 //! This module defines the Revert message type, which is used
 //! for requesting reversal of settled transactions in the TAP protocol.
 
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
@@ -40,7 +40,12 @@ impl Revert {
     }
 
     /// Create a new Revert message with a note
-    pub fn with_note(transaction_id: &str, settlement_address: &str, reason: &str, note: &str) -> Self {
+    pub fn with_note(
+        transaction_id: &str,
+        settlement_address: &str,
+        reason: &str,
+        note: &str,
+    ) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             settlement_address: settlement_address.to_string(),

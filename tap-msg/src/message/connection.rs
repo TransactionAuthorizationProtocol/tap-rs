@@ -206,13 +206,13 @@ impl_tap_message!(Connect);
 pub struct OutOfBand {
     /// The goal code for this invitation.
     pub goal_code: String,
-    
+
     /// The goal for this invitation.
     pub goal: String,
-    
+
     /// The public DID or endpoint URL for the inviter.
     pub service: String,
-    
+
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,

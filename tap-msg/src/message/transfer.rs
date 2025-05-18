@@ -3,16 +3,16 @@
 //! This module defines the Transfer message type and its builder, which is
 //! the foundational message type for initiating a transfer in the TAP protocol.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tap_caip::AssetId;
-use chrono::Utc;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
-use crate::message::Participant;
 use crate::message::tap_message_trait::{Connectable, TapMessageBody};
+use crate::message::Participant;
 
 /// Transfer message body (TAIP-3).
 #[derive(Debug, Clone, Serialize, Deserialize)]

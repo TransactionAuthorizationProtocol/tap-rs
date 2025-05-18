@@ -46,8 +46,7 @@ pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
     };
 
     // Create the initial transfer message
-    let transfer_message =
-        transfer.to_didcomm_with_route(alice_did, [bob_did].iter().copied())?;
+    let transfer_message = transfer.to_didcomm_with_route(alice_did, [bob_did].iter().copied())?;
 
     // Create an Authorize message
     let authorize = Authorize {
@@ -391,8 +390,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     };
 
     // Create the initial transfer message
-    let transfer_message =
-        transfer.to_didcomm_with_route(alice_did, [bob_did].iter().copied())?;
+    let transfer_message = transfer.to_didcomm_with_route(alice_did, [bob_did].iter().copied())?;
 
     println!("Created initial transfer message: {:?}", transfer_message);
 

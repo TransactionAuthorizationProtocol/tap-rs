@@ -1,13 +1,13 @@
 //! Examples for using the Invoice and PaymentRequest functionality.
 
+use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::{Participant, PaymentRequest};
-use crate::didcomm::PlainMessage;
-use tap_caip::AssetId;
-use std::str::FromStr;
 use std::collections::HashMap;
+use std::str::FromStr;
+use tap_caip::AssetId;
 
 /// Example of creating a basic invoice with line items
 pub fn create_basic_invoice_example() -> Result<Invoice> {
@@ -148,22 +148,20 @@ pub fn create_payment_request_with_invoice_example(
     let invoice = create_invoice_with_tax_example()?;
 
     // Create a PaymentRequest using the new API
-    let asset = AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+    let asset =
+        AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
     // Create transaction ID
     let transaction_id = uuid::Uuid::new_v4().to_string();
-    let mut payment_request = PaymentRequest::new(
-        &transaction_id,
-        asset,
-        &format!("{:.2}", invoice.total)
-    )
-    .with_currency_code(&invoice.currency_code);
-    
+    let mut payment_request =
+        PaymentRequest::new(&transaction_id, asset, &format!("{:.2}", invoice.total))
+            .with_currency_code(&invoice.currency_code);
+
     // We can't add agents directly to PaymentRequest as it doesn't have an agents field
 
     // Add the invoice to metadata
     payment_request.metadata.insert(
-        "invoice".to_string(), 
-        serde_json::to_value(&invoice).unwrap()
+        "invoice".to_string(),
+        serde_json::to_value(&invoice).unwrap(),
     );
 
     // Add customer information if provided
@@ -174,11 +172,11 @@ pub fn create_payment_request_with_invoice_example(
             policies: None,
             leiCode: None,
         };
-        
+
         // Also add to metadata for reference
         payment_request.metadata.insert(
             "customer".to_string(),
-            serde_json::to_value(&customer).unwrap()
+            serde_json::to_value(&customer).unwrap(),
         );
     }
 
@@ -211,7 +209,7 @@ pub fn process_payment_request_with_invoice_example(message: &PlainMessage) -> R
         // Convert from JSON value to Invoice
         let invoice: crate::message::Invoice = serde_json::from_value(invoice_value.clone())
             .map_err(|e| Error::SerializationError(format!("Failed to parse invoice: {}", e)))?;
-            
+
         println!("Invoice ID: {}", invoice.id);
         println!("Currency: {}", invoice.currency_code);
         println!("Total amount: {:.2}", invoice.total);

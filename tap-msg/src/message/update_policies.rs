@@ -3,9 +3,9 @@
 //! This module defines the UpdatePolicies message type, which is used
 //! to update policies in an existing transaction.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Utc;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
@@ -20,7 +20,7 @@ use crate::message::tap_message_trait::TapMessageBody;
 pub struct UpdatePolicies {
     #[serde(rename = "transactionId")]
     pub transaction_id: String,
-    
+
     pub policies: Vec<Policy>,
 }
 
@@ -78,7 +78,7 @@ impl TapMessageBody for UpdatePolicies {
         }
 
         let now = Utc::now().timestamp() as u64;
-        
+
         // The from field is required in our PlainMessage
         let from = from_did.to_string();
 

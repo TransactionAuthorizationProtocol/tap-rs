@@ -302,7 +302,10 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         // Validate DID format if present
         if !message.from.is_empty() {
             if !message.from.starts_with("did:") {
-                info!("Invalid 'from' DID format in outgoing message: {}", message.from);
+                info!(
+                    "Invalid 'from' DID format in outgoing message: {}",
+                    message.from
+                );
                 return Ok(None);
             }
         }
@@ -432,23 +435,35 @@ impl DefaultPlainMessageProcessorImpl {
 impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
     async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         match &self.processor {
-            crate::message::PlainMessageProcessorType::Default(p) => p.process_incoming(message).await,
-            crate::message::PlainMessageProcessorType::Logging(p) => p.process_incoming(message).await,
+            crate::message::PlainMessageProcessorType::Default(p) => {
+                p.process_incoming(message).await
+            }
+            crate::message::PlainMessageProcessorType::Logging(p) => {
+                p.process_incoming(message).await
+            }
             crate::message::PlainMessageProcessorType::Validation(p) => {
                 p.process_incoming(message).await
             }
-            crate::message::PlainMessageProcessorType::Composite(p) => p.process_incoming(message).await,
+            crate::message::PlainMessageProcessorType::Composite(p) => {
+                p.process_incoming(message).await
+            }
         }
     }
 
     async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         match &self.processor {
-            crate::message::PlainMessageProcessorType::Default(p) => p.process_outgoing(message).await,
-            crate::message::PlainMessageProcessorType::Logging(p) => p.process_outgoing(message).await,
+            crate::message::PlainMessageProcessorType::Default(p) => {
+                p.process_outgoing(message).await
+            }
+            crate::message::PlainMessageProcessorType::Logging(p) => {
+                p.process_outgoing(message).await
+            }
             crate::message::PlainMessageProcessorType::Validation(p) => {
                 p.process_outgoing(message).await
             }
-            crate::message::PlainMessageProcessorType::Composite(p) => p.process_outgoing(message).await,
+            crate::message::PlainMessageProcessorType::Composite(p) => {
+                p.process_outgoing(message).await
+            }
         }
     }
 }

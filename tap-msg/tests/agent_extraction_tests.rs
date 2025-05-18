@@ -57,7 +57,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
     // The to field should include all participant DIDs except the sender
     assert!(!message.to.is_empty());
     assert_eq!(message.to.len(), 3); // All 3 agents
-    
+
     // Verify each agent DID is in the recipients
     assert!(message.to.contains(&agent1.id));
     assert!(message.to.contains(&agent2.id));
@@ -230,7 +230,7 @@ fn test_create_tap_message() {
     // Verify the message properties
     assert_eq!(message.id, "test-id-123");
     assert_eq!(message.from, sender_did);
-    
+
     // Verify recipients
     assert_eq!(message.to.len(), 1);
     assert!(message.to.contains(&agent2.id));

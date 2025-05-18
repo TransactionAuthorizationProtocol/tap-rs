@@ -90,7 +90,11 @@ fn print_help() {
 
 /// Send a TAP message to the server
 async fn send_tap_message<
-    T: tap_msg::message::tap_message_trait::TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug,
+    T: tap_msg::message::tap_message_trait::TapMessageBody
+        + serde::Serialize
+        + Send
+        + Sync
+        + std::fmt::Debug,
 >(
     agent: &DefaultAgent,
     recipient_did: &str,
@@ -98,10 +102,7 @@ async fn send_tap_message<
     message: &T,
 ) -> Result<(), Box<dyn Error>> {
     // Create a DIDComm message from the TAP message using the agent's send_message method
-    info!(
-        "Creating message for TAP type: {}",
-        T::message_type()
-    );
+    info!("Creating message for TAP type: {}", T::message_type());
 
     // Send the message using the agent's send_message method
     info!("Packing message for recipient {}", recipient_did);

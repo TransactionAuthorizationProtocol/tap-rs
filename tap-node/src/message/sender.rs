@@ -539,7 +539,8 @@ impl PlainMessageSender for WebSocketPlainMessageSender {
                 if let Ok(txt) = e.data().dyn_into::<js_sys::JsString>() {
                     log::debug!("Received message: {}", String::from(txt));
                 }
-            }) as Box<dyn FnMut(PlainMessageEvent)>);
+            })
+                as Box<dyn FnMut(PlainMessageEvent)>);
 
             // Register event handlers
             ws.set_onopen(Some(onopen_callback.as_ref().unchecked_ref()));

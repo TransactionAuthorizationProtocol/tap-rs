@@ -167,7 +167,11 @@ pub async fn handle_didcomm(
             didcomm_message.id.clone(),
             didcomm_message.typ.clone(),
             Some(didcomm_message.from.clone()),
-            if didcomm_message.to.is_empty() { None } else { Some(didcomm_message.to.join(", ")) },
+            if didcomm_message.to.is_empty() {
+                None
+            } else {
+                Some(didcomm_message.to.join(", "))
+            },
         )
         .await;
 

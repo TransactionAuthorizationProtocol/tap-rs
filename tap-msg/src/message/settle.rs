@@ -3,9 +3,9 @@
 //! This module defines the Settle message type, which is used
 //! for settling transactions in the TAP protocol.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Utc;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
@@ -70,7 +70,7 @@ impl TapMessageBody for Settle {
                     "Amount must be a valid number".to_string(),
                 ));
             }
-            
+
             // Validate amount is a positive number if provided
             match amount.parse::<f64>() {
                 Ok(amount) if amount <= 0.0 => {

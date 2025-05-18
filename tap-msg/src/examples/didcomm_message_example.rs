@@ -1,8 +1,8 @@
 //! Example usage of the new DIDComm Message approach for TAP messages.
 
+use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
-use crate::didcomm::PlainMessage;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -38,9 +38,8 @@ pub fn create_transfer_message_example() -> Result<PlainMessage> {
     };
 
     // Convert the Transfer body to a DIDComm message
-    let message = transfer_body.to_didcomm(
-        "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-    )?;
+    let message =
+        transfer_body.to_didcomm("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK")?;
 
     // The message is ready to be encrypted and sent
     Ok(message)
@@ -82,9 +81,8 @@ pub fn create_reject_message_example(transaction_id: &str) -> Result<PlainMessag
     };
 
     // Convert the Reject body to a DIDComm message
-    let message = reject_body.to_didcomm(
-        "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
-    )?;
+    let message =
+        reject_body.to_didcomm("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6")?;
 
     // The message is ready to be encrypted and sent
     Ok(message)
@@ -99,9 +97,8 @@ pub fn create_settle_message_example(transaction_id: &str) -> Result<PlainMessag
     };
 
     // Convert the Settle body to a DIDComm message
-    let message = settle_body.to_didcomm(
-        "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
-    )?;
+    let message =
+        settle_body.to_didcomm("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6")?;
 
     // The message is ready to be encrypted and sent
     Ok(message)

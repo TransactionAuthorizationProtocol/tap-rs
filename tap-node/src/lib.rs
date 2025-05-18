@@ -104,7 +104,7 @@ pub mod resolver;
 
 pub use error::{Error, Result};
 pub use message::sender::{
-    HttpPlainMessageSender, PlainMessageSender, NodePlainMessageSender, WebSocketPlainMessageSender,
+    HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender, WebSocketPlainMessageSender,
 };
 
 use std::sync::Arc;
@@ -115,13 +115,15 @@ use tap_msg::didcomm::PlainMessage;
 use agent::AgentRegistry;
 use event::EventBus;
 use message::processor::{
-    DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor, ValidationPlainMessageProcessor,
+    DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor,
+    ValidationPlainMessageProcessor,
 };
 use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
 use message::router::DefaultPlainMessageRouter;
 use message::RouterAsyncExt;
 use message::{
-    CompositePlainMessageProcessor, CompositePlainMessageRouter, PlainMessageProcessorType, PlainMessageRouterType,
+    CompositePlainMessageProcessor, CompositePlainMessageRouter, PlainMessageProcessorType,
+    PlainMessageRouterType,
 };
 use resolver::NodeResolver;
 
@@ -147,12 +149,17 @@ pub trait DefaultAgentExt {
     ///
     /// # Returns
     /// The packed message as a string, ready for transmission
-    async fn send_serialized_message(&self, message: &PlainMessage, to_did: &str) -> Result<String>;
+    async fn send_serialized_message(&self, message: &PlainMessage, to_did: &str)
+        -> Result<String>;
 }
 
 #[async_trait]
 impl DefaultAgentExt for DefaultAgent {
-    async fn send_serialized_message(&self, message: &PlainMessage, to_did: &str) -> Result<String> {
+    async fn send_serialized_message(
+        &self,
+        message: &PlainMessage,
+        to_did: &str,
+    ) -> Result<String> {
         // Since we cannot directly access the agent's PlainMessagePacker (which handles signing),
         // and using send_message with a custom adapter proved difficult due to Rust's type system,
         // we'll take a different approach.
@@ -307,7 +314,8 @@ impl TapNode {
 
         // Create the message processors
         let logging_processor = PlainMessageProcessorType::Logging(LoggingPlainMessageProcessor);
-        let validation_processor = PlainMessageProcessorType::Validation(ValidationPlainMessageProcessor);
+        let validation_processor =
+            PlainMessageProcessorType::Validation(ValidationPlainMessageProcessor);
         let default_processor = PlainMessageProcessorType::Default(DefaultPlainMessageProcessor);
 
         let incoming_processor = CompositePlainMessageProcessor::new(vec![

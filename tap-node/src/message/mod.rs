@@ -9,11 +9,12 @@ pub mod sender;
 
 // Re-export processors, routers, and senders
 pub use processor::{
-    DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor, ValidationPlainMessageProcessor,
+    DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor,
+    ValidationPlainMessageProcessor,
 };
 pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
 pub use router::DefaultPlainMessageRouter;
-pub use sender::{HttpPlainMessageSender, PlainMessageSender, NodePlainMessageSender};
+pub use sender::{HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender};
 
 // Import the PlainMessage type from tap-msg
 use crate::error::Result;
@@ -80,10 +81,18 @@ impl PlainMessageProcessor for CompositePlainMessageProcessor {
 
         for processor in &self.processors {
             let processed = match processor {
-                PlainMessageProcessorType::Default(p) => p.process_incoming(current_message).await?,
-                PlainMessageProcessorType::Logging(p) => p.process_incoming(current_message).await?,
-                PlainMessageProcessorType::Validation(p) => p.process_incoming(current_message).await?,
-                PlainMessageProcessorType::Composite(p) => p.process_incoming(current_message).await?,
+                PlainMessageProcessorType::Default(p) => {
+                    p.process_incoming(current_message).await?
+                }
+                PlainMessageProcessorType::Logging(p) => {
+                    p.process_incoming(current_message).await?
+                }
+                PlainMessageProcessorType::Validation(p) => {
+                    p.process_incoming(current_message).await?
+                }
+                PlainMessageProcessorType::Composite(p) => {
+                    p.process_incoming(current_message).await?
+                }
             };
 
             if let Some(msg) = processed {
@@ -102,10 +111,18 @@ impl PlainMessageProcessor for CompositePlainMessageProcessor {
 
         for processor in &self.processors {
             let processed = match processor {
-                PlainMessageProcessorType::Default(p) => p.process_outgoing(current_message).await?,
-                PlainMessageProcessorType::Logging(p) => p.process_outgoing(current_message).await?,
-                PlainMessageProcessorType::Validation(p) => p.process_outgoing(current_message).await?,
-                PlainMessageProcessorType::Composite(p) => p.process_outgoing(current_message).await?,
+                PlainMessageProcessorType::Default(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::Logging(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::Validation(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::Composite(p) => {
+                    p.process_outgoing(current_message).await?
+                }
             };
 
             if let Some(msg) = processed {

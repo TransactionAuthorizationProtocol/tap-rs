@@ -311,25 +311,25 @@ impl_tap_message!(Payment);
 pub struct PaymentRequest {
     /// Asset identifier (CAIP-19 format)
     pub asset: AssetId,
-    
+
     /// Payment amount
     pub amount: String,
-    
+
     /// Currency code for fiat amounts
     #[serde(skip_serializing_if = "Option::is_none")]
     pub currency_code: Option<String>,
-    
+
     /// Additional metadata
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
-    
+
     /// Transaction identifier
     pub transaction_id: String,
-    
+
     /// Memo for the payment request (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub memo: Option<String>,
-    
+
     /// Expiration time in ISO 8601 format (optional)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires: Option<String>,
@@ -348,25 +348,25 @@ impl PaymentRequest {
             expires: None,
         }
     }
-    
+
     /// Add additional metadata to the request
     pub fn add_metadata(mut self, key: &str, value: serde_json::Value) -> Self {
         self.metadata.insert(key.to_string(), value);
         self
     }
-    
+
     /// Set the memo
     pub fn with_memo(mut self, memo: &str) -> Self {
         self.memo = Some(memo.to_string());
         self
     }
-    
+
     /// Set the currency code
     pub fn with_currency_code(mut self, code: &str) -> Self {
         self.currency_code = Some(code.to_string());
         self
     }
-    
+
     /// Set the expiration time
     pub fn with_expiration(mut self, expires: &str) -> Self {
         self.expires = Some(expires.to_string());

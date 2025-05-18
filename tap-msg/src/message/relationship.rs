@@ -3,9 +3,9 @@
 //! This module defines the ConfirmRelationship message type, which is used to confirm
 //! relationships between agents in the TAP protocol.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Utc;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};

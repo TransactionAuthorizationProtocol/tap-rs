@@ -3,9 +3,9 @@
 //! This module defines the Cancel message type, which is used
 //! for canceling transactions in the TAP protocol.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Utc;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
@@ -85,7 +85,7 @@ impl TapMessageBody for Cancel {
 
         // Create a new message with a random ID
         let id = uuid::Uuid::new_v4().to_string();
-        
+
         // Create the message
         let message = PlainMessage {
             id,

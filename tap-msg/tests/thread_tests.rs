@@ -3,11 +3,11 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::{Error, Result};
-use tap_msg::message::{
-    AddAgents, Authorizable, Authorize, ConfirmRelationship, Participant, RemoveAgent, ReplaceAgent,
-    Transfer,
-};
 use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
+use tap_msg::message::{
+    AddAgents, Authorizable, Authorize, ConfirmRelationship, Participant, RemoveAgent,
+    ReplaceAgent, Transfer,
+};
 use uuid::Uuid;
 
 #[test]
@@ -287,15 +287,12 @@ fn test_confirm_relationship() -> Result<()> {
     // Verify the created message
     assert_eq!(confirm_message.from, _alice_did.to_string());
     assert!(confirm_message.to.is_empty()); // No recipients yet, would be set later
-    
+
     // The thid should be None until set (or come from transaction_id in future implementation)
     assert_eq!(confirm_message.thid, None);
 
     // Check body content (role)
-    assert_eq!(
-        confirm_message.body["role"].as_str().unwrap(), 
-        "custodian"
-    );
+    assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian");
 
     Ok(())
 }

@@ -1,12 +1,12 @@
 //! Examples for using policies according to TAIP-7.
 
+use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::{
     policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl},
     tap_message_trait::TapMessageBody,
     Authorize, Participant, Transfer, UpdatePolicies,
 };
-use crate::didcomm::PlainMessage;
 
 use crate::message::authorizable::Authorizable;
 use std::collections::HashMap;
@@ -158,10 +158,7 @@ pub fn policy_workflow_example() -> Result<()> {
     // Link to our transfer thread
     message.thid = Some(transfer_id.to_string());
 
-    println!(
-        "  Created UpdatePolicies message: {:?}",
-        message
-    );
+    println!("  Created UpdatePolicies message: {:?}", message);
     println!("  This message will be routed to all participants");
 
     println!("=== Policy Workflow Example Completed ===");

@@ -3,15 +3,15 @@
 //! This module defines the UpdateParty message type, which is used to update
 //! party information in an existing transaction.
 
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use chrono::Utc;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
-use crate::message::Participant;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::message::Participant;
 
 /// UpdateParty message body (TAIP-6).
 ///
@@ -85,7 +85,12 @@ impl UpdateParty {
     }
 
     /// Creates a new UpdateParty message body with a note.
-    pub fn with_note(transaction_id: &str, party_type: &str, party: Participant, note: &str) -> Self {
+    pub fn with_note(
+        transaction_id: &str,
+        party_type: &str,
+        party: Participant,
+        note: &str,
+    ) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             party_type: party_type.to_string(),

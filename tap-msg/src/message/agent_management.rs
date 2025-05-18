@@ -3,14 +3,14 @@
 //! This module defines the message types for managing agents in the TAP protocol,
 //! including adding, replacing, and removing agents from transactions.
 
-use serde::{Deserialize, Serialize};
 use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
-use crate::message::Participant;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::message::Participant;
 
 /// Add agents message body (TAIP-5).
 #[derive(Debug, Clone, Serialize, Deserialize)]

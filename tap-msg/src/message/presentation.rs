@@ -85,7 +85,7 @@ pub struct Presentation {
     /// Transfer ID that this presentation is related to (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transaction_id: Option<String>,
-    
+
     /// Identifier for this presentation (used for message_id)
     pub id: String,
 
