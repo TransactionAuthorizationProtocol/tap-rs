@@ -206,11 +206,9 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         }
 
         // Validate DID format if present
-        if !message.from.is_empty() {
-            if !message.from.starts_with("did:") {
-                info!("Invalid 'from' DID format: {}", message.from);
-                return Ok(None);
-            }
+        if !message.from.is_empty() && !message.from.starts_with("did:") {
+            info!("Invalid 'from' DID format: {}", message.from);
+            return Ok(None);
         }
 
         // Validate recipient DIDs
@@ -300,14 +298,12 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         }
 
         // Validate DID format if present
-        if !message.from.is_empty() {
-            if !message.from.starts_with("did:") {
-                info!(
-                    "Invalid 'from' DID format in outgoing message: {}",
-                    message.from
-                );
-                return Ok(None);
-            }
+        if !message.from.is_empty() && !message.from.starts_with("did:") {
+            info!(
+                "Invalid 'from' DID format in outgoing message: {}",
+                message.from
+            );
+            return Ok(None);
         }
 
         // Validate recipient DIDs

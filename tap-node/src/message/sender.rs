@@ -36,8 +36,8 @@
 //!     typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
 //!     type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
 //!     body: json!({"amount": "100.00"}),
-//!     from: Some("did:example:sender".to_string()),
-//!     to: Some(vec!["did:example:recipient".to_string()]),
+//!     from: "did:example:sender".to_string(),
+//!     to: vec!["did:example:recipient".to_string()],
 //!     created_time: Some(chrono::Utc::now().timestamp() as u64),
 //!     expires_time: None,
 //!     thid: None,
@@ -73,6 +73,8 @@ use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
+#[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
+use tokio_tungstenite::tungstenite::protocol::Message as WebSocketMessage;
 
 /// PlainMessage sender trait for sending packed messages to recipients
 #[async_trait]
@@ -316,7 +318,10 @@ impl WebSocketPlainMessageSender {
     ) -> Result<tokio::sync::mpsc::Sender<String>> {
         use futures::sink::SinkExt;
         use futures::stream::StreamExt;
-        use tokio_tungstenite::{connect_async, tungstenite::protocol::PlainMessage};
+        use tokio_tungstenite::connect_async;
+        use tokio_tungstenite::{
+            connect_async, tungstenite::protocol::Message as WebSocketMessage,
+        };
 
         // Check if we already have an active connection and return it if we do
         {
@@ -376,7 +381,7 @@ impl WebSocketPlainMessageSender {
                     // Handle outgoing messages
                     Some(message) = rx.recv() => {
                         log::debug!("Sending message to {} via WebSocket", recipient_clone);
-                        if let Err(e) = write.send(PlainMessage::Text(message)).await {
+                        if let Err(e) = write.send(tokio_tungstenite::tungstenite::protocol::Message::Text(message)).await {
                             log::error!("Failed to send WebSocket message to {}: {}", recipient_clone, e);
                             // Try to reconnect? For now we'll just log the error
                         }
@@ -387,7 +392,7 @@ impl WebSocketPlainMessageSender {
                         match result {
                             Some(Ok(message)) => {
                                 // Process incoming message - for now just log it
-                                if let PlainMessage::Text(text) = message {
+                                if let tokio_tungstenite::tungstenite::protocol::Message::Text(text) = message {
                                     log::debug!("Received WebSocket message from {}: {}", recipient_clone, text);
                                 }
                             }

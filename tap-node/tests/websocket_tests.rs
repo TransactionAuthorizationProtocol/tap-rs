@@ -8,12 +8,12 @@
 
 #[cfg(feature = "websocket")]
 mod websocket_tests {
-    use tap_node::{MessageSender, WebSocketMessageSender};
+    use tap_node::{PlainMessageSender, WebSocketPlainMessageSender};
 
     #[tokio::test]
     async fn test_websocket_message_sender_url_construction() {
         // Test that the WebSocket URL is constructed correctly
-        let sender = WebSocketMessageSender::new("https://example.com".to_string());
+        let sender = WebSocketPlainMessageSender::new("https://example.com".to_string());
 
         // The get_endpoint_url method is private, but we can indirectly test it
         // by checking the debug output which should contain the URL
@@ -49,7 +49,7 @@ mod websocket_tests {
     #[tokio::test]
     async fn test_websocket_message_sender_options() {
         // Test custom options
-        let sender = WebSocketMessageSender::with_options("https://example.com".to_string());
+        let sender = WebSocketPlainMessageSender::with_options("https://example.com".to_string());
 
         let sender_debug = format!("{:?}", sender);
         assert!(sender_debug.contains("base_url"));
@@ -58,12 +58,12 @@ mod websocket_tests {
 
 #[cfg(not(feature = "websocket"))]
 mod fallback_tests {
-    use tap_node::{MessageSender, WebSocketMessageSender};
+    use tap_node::{PlainMessageSender, WebSocketPlainMessageSender};
 
     #[tokio::test]
     async fn test_websocket_message_sender_fallback() {
         // Test that the fallback implementation works and doesn't panic
-        let sender = WebSocketMessageSender::new("https://example.com".to_string());
+        let sender = WebSocketPlainMessageSender::new("https://example.com".to_string());
 
         let recipient = "did:example:123".to_string();
         let message = "test message".to_string();

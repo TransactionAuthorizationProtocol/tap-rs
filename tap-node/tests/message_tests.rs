@@ -48,7 +48,7 @@ impl SyncDIDResolver for TestDIDResolver {
 /// Test Secrets Resolver for testing
 #[derive(Debug)]
 struct TestSecretsResolver {
-    secrets_map: HashMap<String, didcomm::secrets::Secret>,
+    secrets_map: HashMap<String, tap_agent::key_manager::Secret>,
 }
 
 impl TestSecretsResolver {
@@ -60,7 +60,7 @@ impl TestSecretsResolver {
 }
 
 impl DebugSecretsResolver for TestSecretsResolver {
-    fn get_secrets_map(&self) -> &HashMap<String, didcomm::secrets::Secret> {
+    fn get_secrets_map(&self) -> &HashMap<String, tap_agent::key_manager::Secret> {
         &self.secrets_map
     }
 }
@@ -98,16 +98,20 @@ fn create_didcomm_message<T: TapMessageBody>(
     body: &T,
     from_did: Option<&str>,
     to_did: Option<&str>,
-) -> Message {
+) -> PlainMessage {
     let body_json = serde_json::to_value(body).unwrap();
+    let from = from_did.unwrap_or("did:example:default_sender").to_string();
+    let to = to_did
+        .map(|did| vec![did.to_string()])
+        .unwrap_or_else(|| vec!["did:example:default_recipient".to_string()]);
 
     // Create basic DIDComm message with all required fields
-    Message {
+    PlainMessage {
         id: uuid::Uuid::new_v4().to_string(),
         typ: "application/didcomm-plain+json".to_string(),
         body: body_json,
-        from: from_did.map(|s| s.to_string()),
-        to: to_did.map(|s| vec![s.to_string()]),
+        from,
+        to,
         thid: None,
         pthid: None,
         created_time: Some(chrono::Utc::now().timestamp() as u64),
@@ -120,7 +124,7 @@ fn create_didcomm_message<T: TapMessageBody>(
 }
 
 /// Create a DIDComm Message for testing
-fn create_test_message(from_did: &str, to_did: &str) -> Message {
+fn create_test_message(from_did: &str, to_did: &str) -> PlainMessage {
     // Create an error body
     let error_body = create_test_error_body(from_did, to_did);
 
@@ -132,7 +136,7 @@ fn create_test_message(from_did: &str, to_did: &str) -> Message {
 async fn test_message_routing() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = tap_node::TapNode::new(config);
+    let node = tap_node::TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -142,14 +146,14 @@ async fn test_message_routing() {
     let agent_2 = create_test_agent(agent_2_did);
 
     // Register agents with the node
-    _node.register_agent(agent_1.clone()).await.unwrap();
-    _node.register_agent(agent_2.clone()).await.unwrap();
+    node.register_agent(agent_1.clone()).await.unwrap();
+    node.register_agent(agent_2.clone()).await.unwrap();
 
     // Create a message from agent 1 to agent 2
     let message = create_test_message(agent_1_did, agent_2_did);
 
     // Process the message
-    let result = _node.receive_message(message).await;
+    let result = node.receive_message(message).await;
     assert!(result.is_ok());
 }
 
@@ -157,7 +161,7 @@ async fn test_message_routing() {
 async fn test_message_with_unregistered_agent() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = tap_node::TapNode::new(config);
+    let node = tap_node::TapNode::new(config);
 
     // Create a test agent
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -166,14 +170,14 @@ async fn test_message_with_unregistered_agent() {
     let agent_1 = create_test_agent(agent_1_did);
 
     // Register the first agent only
-    _node.register_agent(agent_1.clone()).await.unwrap();
+    node.register_agent(agent_1.clone()).await.unwrap();
 
     // Create a message from registered agent to unregistered agent
     let message = create_test_message(agent_1_did, unregistered_did);
 
     // Process the message - our handler returns Ok(()) even if validation drops the message
     // We're actually expecting it to be Ok(()) with the message dropped internally
-    let result = _node.receive_message(message).await;
+    let result = node.receive_message(message).await;
     assert!(result.is_ok());
 }
 
@@ -181,23 +185,23 @@ async fn test_message_with_unregistered_agent() {
 async fn test_invalid_message() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = tap_node::TapNode::new(config);
+    let node = tap_node::TapNode::new(config);
 
     // Create a test agent
     let agent_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
     let agent = create_test_agent(agent_did);
 
     // Register the agent with the node
-    _node.register_agent(agent.clone()).await.unwrap();
+    node.register_agent(agent.clone()).await.unwrap();
 
-    // Create invalid message with missing to field
-    let message = Message {
+    // Create invalid message with empty to field
+    let message = PlainMessage {
         id: uuid::Uuid::new_v4().to_string(),
         typ: "application/didcomm-plain+json".to_string(),
         body: serde_json::to_value(create_test_error_body(agent_did, "did:example:invalid"))
             .unwrap(),
-        from: Some(agent_did.to_string()),
-        to: None, // Missing to field
+        from: agent_did.to_string(),
+        to: vec![], // Empty to field
         thid: None,
         pthid: None,
         created_time: Some(chrono::Utc::now().timestamp() as u64),
@@ -209,7 +213,7 @@ async fn test_invalid_message() {
     };
 
     // Process the message - our handler returns Ok(()) even if validation drops the message
-    let result = _node.receive_message(message).await;
+    let result = node.receive_message(message).await;
     assert!(result.is_ok());
 }
 
@@ -217,7 +221,7 @@ async fn test_invalid_message() {
 async fn test_custom_node_middleware() {
     // Create a node with custom middleware
     let config = NodeConfig::default();
-    let _node = tap_node::TapNode::new(config);
+    let node = tap_node::TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -227,14 +231,14 @@ async fn test_custom_node_middleware() {
     let agent_2 = create_test_agent(agent_2_did);
 
     // Register agents with the node
-    _node.register_agent(agent_1.clone()).await.unwrap();
-    _node.register_agent(agent_2.clone()).await.unwrap();
+    node.register_agent(agent_1.clone()).await.unwrap();
+    node.register_agent(agent_2.clone()).await.unwrap();
 
     // Create a message from agent 1 to agent 2
     let message = create_test_message(agent_1_did, agent_2_did);
 
     // Process the message - the default middleware should handle this correctly
-    let result = _node.receive_message(message).await;
+    let result = node.receive_message(message).await;
     assert!(result.is_ok());
 }
 
@@ -242,7 +246,7 @@ async fn test_custom_node_middleware() {
 async fn test_node_agent_communication() {
     // Create a node
     let config = NodeConfig::default();
-    let _node = tap_node::TapNode::new(config);
+    let node = tap_node::TapNode::new(config);
 
     // Create test agents
     let agent_1_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
@@ -252,8 +256,8 @@ async fn test_node_agent_communication() {
     let agent_2 = create_test_agent(agent_2_did);
 
     // Register agents with the node
-    _node.register_agent(agent_1.clone()).await.unwrap();
-    _node.register_agent(agent_2.clone()).await.unwrap();
+    node.register_agent(agent_1.clone()).await.unwrap();
+    node.register_agent(agent_2.clone()).await.unwrap();
 
     // Create a message from agent 1 to agent 2 with a TAP protocol type
     let mut message = create_test_message(agent_1_did, agent_2_did);
@@ -263,16 +267,12 @@ async fn test_node_agent_communication() {
     message.type_ = "https://tap.rsvp/schema/1.0#transfer".to_string();
 
     // Send the message
-    let result = _node.send_message(agent_1_did, agent_2_did, message).await;
+    let result = node.send_message(agent_1_did, agent_2_did, message).await;
     assert!(result.is_ok());
 }
 
 #[tokio::test]
 async fn test_error_message() {
-    // Create a node
-    let config = NodeConfig::default();
-    let _node = tap_node::TapNode::new(config);
-
     // Create an error message
     let error_body = ErrorBody {
         code: "TEST001".to_string(),
@@ -281,8 +281,8 @@ async fn test_error_message() {
         metadata: HashMap::new(),
     };
 
-    // Convert the error_body to a message
-    let message = error_body.to_didcomm(Some("did:example:sender")).unwrap();
+    // Convert the error_body to a message - note we must unwrap from Option when using to_didcomm
+    let message = error_body.to_didcomm("did:example:sender").unwrap();
 
     // Validate message has required fields
     assert!(!message.id.is_empty());
@@ -303,7 +303,7 @@ async fn test_error_message() {
 #[tokio::test]
 async fn test_message_creation() {
     // Create a Message directly with the required fields
-    let message = Message {
+    let message = PlainMessage {
         id: uuid::Uuid::new_v4().to_string(),
         typ: "application/didcomm-plain+json".to_string(),
         type_: "https://example.com/protocol/1.0/test".to_string(),
@@ -311,8 +311,8 @@ async fn test_message_creation() {
             "key": "value",
             "number": 42
         }),
-        from: Some("did:example:sender".to_string()),
-        to: Some(vec!["did:example:recipient".to_string()]),
+        from: "did:example:sender".to_string(),
+        to: vec!["did:example:recipient".to_string()],
         created_time: Some(1234567890),
         expires_time: Some(1234657890),
         thid: None,
@@ -326,8 +326,8 @@ async fn test_message_creation() {
     assert!(!message.id.is_empty());
     assert!(!message.typ.is_empty());
     assert!(!message.body.is_null());
-    assert!(message.from.is_some());
-    assert!(message.to.is_some());
+    assert!(!message.from.is_empty());
+    assert!(!message.to.is_empty());
 
     // Check specific properties
     assert_eq!(message.type_, "https://example.com/protocol/1.0/test");

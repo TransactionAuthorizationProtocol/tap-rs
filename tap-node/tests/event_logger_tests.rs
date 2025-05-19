@@ -213,13 +213,13 @@ async fn test_all_event_types() {
     event_bus.subscribe(logger).await;
 
     // Create a test message for testing message events
-    let test_message = Message {
+    let test_message = PlainMessage {
         id: "msg-123".to_string(),
         typ: "application/didcomm-plain+json".to_string(),
         type_: "test-message".to_string(),
         body: serde_json::json!("Hello world"),
-        from: None,
-        to: None,
+        from: "did:example:sender".to_string(),
+        to: vec!["did:example:recipient".to_string()],
         thid: None,
         pthid: None,
         created_time: Some(chrono::Utc::now().timestamp() as u64),

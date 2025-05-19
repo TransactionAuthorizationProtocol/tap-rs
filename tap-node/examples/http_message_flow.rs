@@ -3,7 +3,8 @@ use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::MultiResolver;
 use tap_agent::{AgentConfig, DefaultAgent};
-use tap_node::{HttpMessageSender, NodeConfig, TapNode};
+use tap_msg::didcomm::PlainMessage;
+use tap_node::{HttpPlainMessageSender, NodeConfig, TapNode};
 
 // Example message structure, left here for reference
 // #[derive(serde::Serialize)]
@@ -41,14 +42,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node.register_agent(agent2).await?;
 
     // Create a test message
-    let message = tap_msg::tap_msg::PlainMessage {
+    let message = PlainMessage {
         id: uuid::Uuid::new_v4().to_string(),
-        typ: "https://tap.rsvp/schema/tap-message-v1".to_string(),
-        type_: "".to_string(), // This field is required but unused
-        from: Some("did:example:alice".to_string()),
-        to: Some(vec!["did:example:bob".to_string()]),
+        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        from: "did:example:alice".to_string(),
+        to: vec!["did:example:bob".to_string()],
         body: json!({
-            "content": "Hello, Bob!",
+            "amount": "100.00",
+            "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
+            "transaction_id": uuid::Uuid::new_v4().to_string(),
+            "memo": "Hello, Bob!",
             "timestamp": chrono::Utc::now().timestamp()
         }),
         created_time: Some(chrono::Utc::now().timestamp() as u64),
@@ -68,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Message packed successfully: {}", packed_message);
 
     // Create an HTTP message sender for external dispatch
-    let _sender = HttpMessageSender::with_options(
+    let _sender = HttpPlainMessageSender::with_options(
         "https://recipient-node.example.com".to_string(),
         5000, // 5 second timeout
         2,    // 2 retries
@@ -79,6 +83,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Would send message to did:example:bob via HTTP");
 
     // This would actually send the message in a real environment
+    // let sender = HttpPlainMessageSender::with_options(
+    //     "https://recipient-node.example.com".to_string(),
+    //     5000, // 5 second timeout
+    //     2,    // 2 retries
+    // );
     // sender.send(packed_message, vec!["did:example:bob".to_string()]).await?;
 
     // For demonstration, let's show how to configure HTTP sender for different environments

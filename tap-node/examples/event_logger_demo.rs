@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a test secrets resolver for the example
     #[derive(Debug)]
     struct TestSecretsResolver {
-        secrets: std::collections::HashMap<String, didcomm::secrets::Secret>,
+        secrets: std::collections::HashMap<String, tap_agent::key_manager::Secret>,
     }
 
     impl TestSecretsResolver {
@@ -69,7 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     impl tap_agent::crypto::DebugSecretsResolver for TestSecretsResolver {
-        fn get_secrets_map(&self) -> &std::collections::HashMap<String, didcomm::secrets::Secret> {
+        fn get_secrets_map(
+            &self,
+        ) -> &std::collections::HashMap<String, tap_agent::key_manager::Secret> {
             &self.secrets
         }
     }
@@ -89,7 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generate some events for demonstration
 
     // 1. Create a test message
-    let message = Message {
+    let message = PlainMessage {
         id: "msg-demo-1".to_string(),
         typ: "application/didcomm-plain+json".to_string(),
         type_: "test-message".to_string(),
@@ -97,8 +99,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "greeting": "Hello, TAP!",
             "timestamp": chrono::Utc::now().to_rfc3339()
         }),
-        from: None,
-        to: None,
+        from: "did:example:sender".to_string(),
+        to: vec!["did:example:recipient".to_string()],
         thid: None,
         pthid: None,
         created_time: Some(chrono::Utc::now().timestamp() as u64),

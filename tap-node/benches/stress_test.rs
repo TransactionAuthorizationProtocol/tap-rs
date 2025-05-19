@@ -10,7 +10,7 @@ use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::{AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker};
 use tap_msg::message::TapMessageBody;
 use tap_msg::message::Transfer;
-use tap_msg::PlainMessage as DIDCommMessage;
+use tap_msg::PlainMessage;
 use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
 
@@ -23,7 +23,7 @@ async fn create_test_message(
     from_did: &str,
     to_did: &str,
     index: usize,
-) -> (DIDCommMessage, Transfer) {
+) -> (PlainMessage, Transfer) {
     // Create a simple transfer message
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -51,7 +51,7 @@ async fn create_test_message(
     };
 
     // Convert to DIDComm message
-    let message = body.to_didcomm(Some(from_did)).unwrap();
+    let message = body.to_didcomm(from_did).unwrap();
     (message, body)
 }
 

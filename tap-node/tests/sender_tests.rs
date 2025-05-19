@@ -1,5 +1,5 @@
 use tap_node::error::Result;
-use tap_node::message::sender::{HttpMessageSender, MessageSender};
+use tap_node::message::sender::{HttpPlainMessageSender, PlainMessageSender};
 
 #[cfg(feature = "reqwest")]
 #[tokio::test]
@@ -9,7 +9,7 @@ async fn test_http_message_sender_native() -> Result<()> {
     let recipient = vec!["did:example:123".to_string()];
 
     // Create an HTTP message sender with a test URL
-    let sender = HttpMessageSender::new("http://localhost:8080".to_string());
+    let sender = HttpPlainMessageSender::new("http://localhost:8080".to_string());
 
     // For testing, we expect this to return an error since there's no real server
     let result = sender.send(message, recipient).await;
@@ -40,7 +40,7 @@ async fn test_http_message_sender_wasm() -> Result<()> {
     let recipient = vec!["did:example:123".to_string()];
 
     // Create an HTTP message sender with a test URL
-    let sender = HttpMessageSender::new("http://localhost:8080".to_string());
+    let sender = HttpPlainMessageSender::new("http://localhost:8080".to_string());
 
     // For testing, we expect this to return an error since there's no real server
     let result = sender.send(message, recipient).await;
@@ -71,7 +71,7 @@ async fn test_http_message_sender_fallback() -> Result<()> {
     let recipient = vec!["did:example:123".to_string()];
 
     // Create an HTTP message sender with a test URL
-    let sender = HttpMessageSender::new("http://localhost:8080".to_string());
+    let sender = HttpPlainMessageSender::new("http://localhost:8080".to_string());
 
     // For testing purposes, the fallback implementation should succeed
     let result = sender.send(message, recipient).await;
@@ -91,7 +91,7 @@ async fn test_http_message_sender_wasm_fallback() -> Result<()> {
     let recipient = vec!["did:example:123".to_string()];
 
     // Create an HTTP message sender with a test URL
-    let sender = HttpMessageSender::new("http://localhost:8080".to_string());
+    let sender = HttpPlainMessageSender::new("http://localhost:8080".to_string());
 
     // For testing purposes, the fallback implementation should succeed
     let result = sender.send(message, recipient).await;

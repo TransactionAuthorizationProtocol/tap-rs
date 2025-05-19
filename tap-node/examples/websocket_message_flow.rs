@@ -1,6 +1,6 @@
 //! WebSocket message flow example
 //!
-//! This example demonstrates how to use the WebSocketMessageSender
+//! This example demonstrates how to use the WebSocketPlainMessageSender
 //! to establish persistent connections for real-time messaging.
 //!
 //! Run with: cargo run --example websocket_message_flow --features websocket
@@ -11,7 +11,7 @@ use tap_agent::crypto::BasicSecretResolver;
 use tap_agent::did::MultiResolver;
 use tap_agent::{AgentConfig, DefaultAgent, DefaultMessagePacker};
 use tap_msg::didcomm::PlainMessage;
-use tap_node::{MessageSender, NodeConfig, TapNode, WebSocketMessageSender};
+use tap_node::{NodeConfig, PlainMessageSender, TapNode, WebSocketPlainMessageSender};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node.register_agent(recipient_agent).await?;
 
     // Create a sample message
-    let message = Message {
+    let message = PlainMessage {
         id: "test-123".to_string(),
         typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
         type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
@@ -62,8 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "transaction_id": "tx-123456",
             "memo": "Test WebSocket transfer"
         }),
-        from: Some(sender_did.clone()),
-        to: Some(vec![recipient_did.clone()]),
+        from: sender_did.clone(),
+        to: vec![recipient_did.clone()],
         created_time: Some(chrono::Utc::now().timestamp() as u64),
         expires_time: None,
         thid: Some("thread-123".to_string()),
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     // Create a WebSocket message sender with options
-    let websocket_sender = WebSocketMessageSender::with_options(
+    let websocket_sender = WebSocketPlainMessageSender::with_options(
         "https://api.example.com".to_string(), // Your actual WebSocket server URL
     );
 

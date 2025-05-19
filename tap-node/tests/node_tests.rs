@@ -46,7 +46,7 @@ impl SyncDIDResolver for TestDIDResolver {
 /// Test Secrets Resolver for testing
 #[derive(Debug)]
 struct TestSecretsResolver {
-    secrets_map: HashMap<String, didcomm::secrets::Secret>,
+    secrets_map: HashMap<String, tap_agent::key_manager::Secret>,
 }
 
 impl TestSecretsResolver {
@@ -58,7 +58,7 @@ impl TestSecretsResolver {
 }
 
 impl DebugSecretsResolver for TestSecretsResolver {
-    fn get_secrets_map(&self) -> &HashMap<String, didcomm::secrets::Secret> {
+    fn get_secrets_map(&self) -> &HashMap<String, tap_agent::key_manager::Secret> {
         &self.secrets_map
     }
 }

@@ -39,7 +39,7 @@
 //! // Test secrets resolver for doctests
 //! #[derive(Debug)]
 //! struct TestSecretsResolver {
-//!     secrets: std::collections::HashMap<String, didcomm::secrets::Secret>
+//!     secrets: std::collections::HashMap<String, tap_agent::key_manager::Secret>
 //! }
 //!
 //! impl TestSecretsResolver {
@@ -51,7 +51,7 @@
 //! }
 //!
 //! impl tap_agent::crypto::DebugSecretsResolver for TestSecretsResolver {
-//!     fn get_secrets_map(&self) -> &std::collections::HashMap<String, didcomm::secrets::Secret> {
+//!     fn get_secrets_map(&self) -> &std::collections::HashMap<String, tap_agent::key_manager::Secret> {
 //!         &self.secrets
 //!     }
 //! }
@@ -75,7 +75,7 @@
 //!     // In a real scenario, you'd create these properly:
 //!     let did_resolver = Arc::new(tap_agent::did::MultiResolver::default());
 //!     let secrets_resolver = Arc::new(TestSecretsResolver::new());
-//!     let message_packer = Arc::new(tap_agent::crypto::DefaultPlainMessagePacker::new(
+//!     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
 //!         did_resolver, secrets_resolver
 //!     ));
 //!     let agent = DefaultAgent::new(agent_config, message_packer);
