@@ -280,7 +280,23 @@ These utilities will reside in `tap-agent/src/message.rs`.
 - The codebase is more modular, with clearer separation of concerns regarding key management and cryptographic operations.
 - Documentation for `KeyManager` and `AgentKey` is updated.
 
-## 10. Checklist (from prds/v1.md)
+## 10. Key Storage Integration
+
+The new `KeyManager` will leverage the existing `tap-agent/src/storage.rs` module for persisting keys:
+
+- `LocalAgentKey` instances will be serializable to and deserializable from `StoredKey` structures
+- The `KeyManager` will provide methods to:
+  - Load all keys from a `KeyStorage` instance
+  - Export keys to a `KeyStorage` instance for persistence
+  - Create `AgentKey` instances from individual `StoredKey` entries
+- A new `KeyManagerBuilder` will support loading keys from the filesystem using the existing `KeyStorage::load_default()` and `KeyStorage::load_from_path()` methods
+- Key metadata in `StoredKey.metadata` will be used to store additional properties needed by `AgentKey` implementations
+- `KeyManager` will be configurable to automatically persist changes to key material when keys are added or modified
+- For remote keys that should not have their private material persisted, a special flag in metadata will indicate storage requirements
+
+This integration allows the new abstraction to benefit from the existing key persistence infrastructure while providing a cleaner interface for cryptographic operations.
+
+## 11. Checklist (from prds/v1.md)
 
 - [ ] **Feature Complete:** (To be checked upon completion)
 - [ ] **Security Review:** (To be checked after implementation and review)
