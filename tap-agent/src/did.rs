@@ -1799,7 +1799,7 @@ mod tests {
 
         // Check the DID document
         assert_eq!(key.did_doc.id, key.did);
-        assert!(key.did_doc.verification_method.len() >= 1);
+        assert!(!key.did_doc.verification_method.is_empty());
 
         // Verify that all verification methods have the correct controller
         for vm in &key.did_doc.verification_method {

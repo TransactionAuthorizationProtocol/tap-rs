@@ -94,7 +94,7 @@ impl KeyStorage {
         if self.keys.is_empty() {
             self.default_did = Some(key.did.clone());
         }
-        
+
         self.keys.insert(key.did.clone(), key);
         self.updated_at = chrono::Utc::now();
     }
@@ -118,13 +118,11 @@ impl KeyStorage {
             return Ok(Self::new());
         }
 
-        let contents = fs::read_to_string(path).map_err(|e| {
-            Error::Storage(format!("Failed to read key storage file: {}", e))
-        })?;
+        let contents = fs::read_to_string(path)
+            .map_err(|e| Error::Storage(format!("Failed to read key storage file: {}", e)))?;
 
-        let storage: KeyStorage = serde_json::from_str(&contents).map_err(|e| {
-            Error::Storage(format!("Failed to parse key storage file: {}", e))
-        })?;
+        let storage: KeyStorage = serde_json::from_str(&contents)
+            .map_err(|e| Error::Storage(format!("Failed to parse key storage file: {}", e)))?;
 
         Ok(storage)
     }
@@ -134,26 +132,24 @@ impl KeyStorage {
         let path = Self::default_key_path().ok_or_else(|| {
             Error::Storage("Could not determine home directory for default key path".to_string())
         })?;
-        
+
         // Ensure directory exists
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| {
                 Error::Storage(format!("Failed to create key storage directory: {}", e))
             })?;
         }
-        
+
         self.save_to_path(&path)
     }
 
     /// Save keys to a specific path
     pub fn save_to_path(&self, path: &Path) -> Result<()> {
-        let contents = serde_json::to_string_pretty(self).map_err(|e| {
-            Error::Storage(format!("Failed to serialize key storage: {}", e))
-        })?;
+        let contents = serde_json::to_string_pretty(self)
+            .map_err(|e| Error::Storage(format!("Failed to serialize key storage: {}", e)))?;
 
-        fs::write(path, contents).map_err(|e| {
-            Error::Storage(format!("Failed to write key storage file: {}", e))
-        })?;
+        fs::write(path, contents)
+            .map_err(|e| Error::Storage(format!("Failed to write key storage file: {}", e)))?;
 
         Ok(())
     }
@@ -162,7 +158,7 @@ impl KeyStorage {
     pub fn from_generated_key(key: &GeneratedKey) -> StoredKey {
         StoredKey {
             did: key.did.clone(),
-            key_type: key.key_type.clone(),
+            key_type: key.key_type,
             private_key: base64::engine::general_purpose::STANDARD.encode(&key.private_key),
             public_key: base64::engine::general_purpose::STANDARD.encode(&key.public_key),
             metadata: HashMap::new(),

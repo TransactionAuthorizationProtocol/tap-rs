@@ -17,7 +17,6 @@ use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::runtime::Runtime;
 
 /// TAP Agent CLI Tool for DID and Key Management
 #[derive(Parser, Debug)]
@@ -53,11 +52,11 @@ pub enum Commands {
         /// Output file for private key (if not specified, key is shown only in console)
         #[arg(short = 'k', long)]
         key_output: Option<PathBuf>,
-        
+
         /// Save key to default location (~/.tap/keys.json)
         #[arg(short = 's', long)]
         save: bool,
-        
+
         /// Set as default key
         #[arg(long)]
         default: bool,
@@ -74,21 +73,21 @@ pub enum Commands {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
-    
+
     /// List all stored keys
     #[command(name = "keys", about = "List, view, and manage stored keys")]
     Keys {
         #[command(subcommand)]
         subcommand: Option<KeysCommands>,
     },
-    
+
     /// Import an existing key into storage
     #[command(name = "import", about = "Import an existing key into storage")]
     Import {
         /// The JSON file containing the key to import
         #[arg(required = true)]
         key_file: PathBuf,
-        
+
         /// Set as default key
         #[arg(long)]
         default: bool,
@@ -101,7 +100,7 @@ pub enum KeysCommands {
     /// List all stored keys
     #[command(name = "list")]
     List,
-    
+
     /// View details of a specific key
     #[command(name = "view")]
     View {
@@ -109,7 +108,7 @@ pub enum KeysCommands {
         #[arg(required = true)]
         did: String,
     },
-    
+
     /// Set a key as the default
     #[command(name = "set-default")]
     SetDefault {
@@ -117,14 +116,14 @@ pub enum KeysCommands {
         #[arg(required = true)]
         did: String,
     },
-    
+
     /// Delete a key from storage
     #[command(name = "delete")]
     Delete {
         /// The DID of the key to delete
         #[arg(required = true)]
         did: String,
-        
+
         /// Force deletion without confirmation
         #[arg(short, long)]
         force: bool,
@@ -144,7 +143,15 @@ pub fn run() -> Result<()> {
             save,
             default,
         } => {
-            generate_did(&method, &key_type, domain.as_deref(), output, key_output, save, default)?;
+            generate_did(
+                &method,
+                &key_type,
+                domain.as_deref(),
+                output,
+                key_output,
+                save,
+                default,
+            )?;
         }
         Commands::Lookup { did, output } => {
             lookup_did(&did, output)?;
@@ -219,7 +226,7 @@ fn generate_did(
     if let Some(key_path) = key_output {
         save_private_key(&generated_key, &key_path)?;
     }
-    
+
     // Save key to default storage if requested
     if save {
         save_key_to_storage(&generated_key, set_default)?;
@@ -289,7 +296,7 @@ fn save_key_to_storage(generated_key: &GeneratedKey, set_as_default: bool) -> Re
     // Convert GeneratedKey to StoredKey
     let stored_key = StoredKey {
         did: generated_key.did.clone(),
-        key_type: generated_key.key_type.clone(),
+        key_type: generated_key.key_type,
         private_key: base64::engine::general_purpose::STANDARD.encode(&generated_key.private_key),
         public_key: base64::engine::general_purpose::STANDARD.encode(&generated_key.public_key),
         metadata: std::collections::HashMap::new(),
@@ -300,23 +307,23 @@ fn save_key_to_storage(generated_key: &GeneratedKey, set_as_default: bool) -> Re
         Ok(storage) => storage,
         Err(_) => KeyStorage::new(),
     };
-    
+
     // Add the key to storage
     storage.add_key(stored_key);
-    
+
     // If requested to set as default, update the default DID
     if set_as_default {
         storage.default_did = Some(generated_key.did.clone());
     }
-    
+
     // Save the updated storage
     storage.save_default()?;
-    
+
     println!("Key saved to default storage (~/.tap/keys.json)");
     if set_as_default {
         println!("Key set as default agent key");
     }
-    
+
     Ok(())
 }
 
@@ -325,31 +332,40 @@ fn import_key(key_file: &PathBuf, set_as_default: bool) -> Result<()> {
     // Read and parse the key file
     let key_json = fs::read_to_string(key_file)
         .map_err(|e| Error::Storage(format!("Failed to read key file: {}", e)))?;
-    
+
     let key_info: serde_json::Value = serde_json::from_str(&key_json)
         .map_err(|e| Error::Storage(format!("Failed to parse key file: {}", e)))?;
-    
+
     // Extract key information
-    let did = key_info["did"].as_str()
+    let did = key_info["did"]
+        .as_str()
         .ok_or_else(|| Error::Storage("Missing 'did' field in key file".to_string()))?;
-    
-    let key_type_str = key_info["keyType"].as_str()
+
+    let key_type_str = key_info["keyType"]
+        .as_str()
         .ok_or_else(|| Error::Storage("Missing 'keyType' field in key file".to_string()))?;
-    
-    let private_key = key_info["privateKey"].as_str()
+
+    let private_key = key_info["privateKey"]
+        .as_str()
         .ok_or_else(|| Error::Storage("Missing 'privateKey' field in key file".to_string()))?;
-    
-    let public_key = key_info["publicKey"].as_str()
+
+    let public_key = key_info["publicKey"]
+        .as_str()
         .ok_or_else(|| Error::Storage("Missing 'publicKey' field in key file".to_string()))?;
-    
+
     // Parse key type
     let key_type = match key_type_str {
         "Ed25519" => KeyType::Ed25519,
         "P256" => KeyType::P256,
         "Secp256k1" => KeyType::Secp256k1,
-        _ => return Err(Error::Storage(format!("Unsupported key type: {}", key_type_str))),
+        _ => {
+            return Err(Error::Storage(format!(
+                "Unsupported key type: {}",
+                key_type_str
+            )))
+        }
     };
-    
+
     // Create a StoredKey
     let stored_key = StoredKey {
         did: did.to_string(),
@@ -358,29 +374,29 @@ fn import_key(key_file: &PathBuf, set_as_default: bool) -> Result<()> {
         public_key: public_key.to_string(),
         metadata: std::collections::HashMap::new(),
     };
-    
+
     // Load existing storage or create a new one
     let mut storage = match KeyStorage::load_default() {
         Ok(storage) => storage,
         Err(_) => KeyStorage::new(),
     };
-    
+
     // Add the key to storage
     storage.add_key(stored_key);
-    
+
     // If requested to set as default, update the default DID
     if set_as_default {
         storage.default_did = Some(did.to_string());
     }
-    
+
     // Save the updated storage
     storage.save_default()?;
-    
+
     println!("Key '{}' imported to default storage", did);
     if set_as_default {
         println!("Key set as default agent key");
     }
-    
+
     Ok(())
 }
 
@@ -395,7 +411,7 @@ fn manage_keys(subcommand: Option<KeysCommands>) -> Result<()> {
             KeyStorage::new()
         }
     };
-    
+
     match subcommand {
         Some(KeysCommands::List) => {
             list_keys(&storage)?;
@@ -414,7 +430,7 @@ fn manage_keys(subcommand: Option<KeysCommands>) -> Result<()> {
             list_keys(&storage)?;
         }
     }
-    
+
     Ok(())
 }
 
@@ -426,47 +442,58 @@ fn list_keys(storage: &KeyStorage) -> Result<()> {
         println!("Generate a key with: tap-agent-cli generate --save");
         return Ok(());
     }
-    
+
     println!("Keys in storage:");
     println!("{:-<60}", "");
-    
+
     // Get the default DID for marking
     let default_did = storage.default_did.as_deref();
-    
+
     // Print header
-    println!("{:<40} {:<10} {}", "DID", "Key Type", "Default");
+    println!("{:<40} {:<10} Default", "DID", "Key Type");
     println!("{:-<60}", "");
-    
+
     // Print each key
     for (did, key) in &storage.keys {
-        let is_default = if Some(did.as_str()) == default_did { "*" } else { "" };
-        println!("{:<40} {:<10} {}", did, format!("{:?}", key.key_type), is_default);
+        let is_default = if Some(did.as_str()) == default_did {
+            "*"
+        } else {
+            ""
+        };
+        println!(
+            "{:<40} {:<10} {}",
+            did,
+            format!("{:?}", key.key_type),
+            is_default
+        );
     }
-    
+
     println!("\nTotal keys: {}", storage.keys.len());
-    
+
     Ok(())
 }
 
 /// View details for a specific key
 fn view_key(storage: &KeyStorage, did: &str) -> Result<()> {
     // Get the key
-    let key = storage.keys.get(did)
+    let key = storage
+        .keys
+        .get(did)
         .ok_or_else(|| Error::Storage(format!("Key '{}' not found in storage", did)))?;
-    
+
     // Display key information
     println!("\n=== Key Details ===");
     println!("DID: {}", key.did);
     println!("Key Type: {:?}", key.key_type);
     println!("Public Key (Base64): {}", key.public_key);
-    
+
     // Check if this is the default key
     if storage.default_did.as_deref() == Some(did) {
         println!("Default: Yes");
     } else {
         println!("Default: No");
     }
-    
+
     // Print metadata if any
     if !key.metadata.is_empty() {
         println!("\nMetadata:");
@@ -474,7 +501,7 @@ fn view_key(storage: &KeyStorage, did: &str) -> Result<()> {
             println!("  {}: {}", k, v);
         }
     }
-    
+
     Ok(())
 }
 
@@ -482,17 +509,20 @@ fn view_key(storage: &KeyStorage, did: &str) -> Result<()> {
 fn set_default_key(storage: &mut KeyStorage, did: &str) -> Result<()> {
     // Check if the key exists
     if !storage.keys.contains_key(did) {
-        return Err(Error::Storage(format!("Key '{}' not found in storage", did)));
+        return Err(Error::Storage(format!(
+            "Key '{}' not found in storage",
+            did
+        )));
     }
-    
+
     // Update the default DID
     storage.default_did = Some(did.to_string());
-    
+
     // Save the updated storage
     storage.save_default()?;
-    
+
     println!("Key '{}' set as default", did);
-    
+
     Ok(())
 }
 
@@ -500,34 +530,37 @@ fn set_default_key(storage: &mut KeyStorage, did: &str) -> Result<()> {
 fn delete_key(storage: &mut KeyStorage, did: &str, force: bool) -> Result<()> {
     // Check if the key exists
     if !storage.keys.contains_key(did) {
-        return Err(Error::Storage(format!("Key '{}' not found in storage", did)));
+        return Err(Error::Storage(format!(
+            "Key '{}' not found in storage",
+            did
+        )));
     }
-    
+
     // Confirm deletion if not forced
     if !force {
         println!("Are you sure you want to delete key '{}'? (y/N): ", did);
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).map_err(Error::Io)?;
-        
+
         if !input.trim().eq_ignore_ascii_case("y") {
             println!("Deletion cancelled.");
             return Ok(());
         }
     }
-    
+
     // Remove the key
     storage.keys.remove(did);
-    
+
     // If this was the default key, update the default DID
     if storage.default_did.as_deref() == Some(did) {
-        storage.default_did = storage.keys.keys().next().map(|k| k.clone());
+        storage.default_did = storage.keys.keys().next().cloned();
     }
-    
+
     // Save the updated storage
     storage.save_default()?;
-    
+
     println!("Key '{}' deleted from storage", did);
-    
+
     Ok(())
 }
 

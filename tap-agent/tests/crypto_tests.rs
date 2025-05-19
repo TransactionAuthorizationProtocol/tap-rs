@@ -1,4 +1,3 @@
-use tap_agent::key_manager::DefaultKeyManager;
 // Comprehensive tests for cryptographic operations
 //
 // These tests verify the cryptographic implementations for:
@@ -351,7 +350,7 @@ impl TestEnvironment {
     fn create_test_message() -> TestMessage {
         TestMessage {
             id: Uuid::new_v4().to_string(),
-            content: format!("Test content {}", Uuid::new_v4().to_string()),
+            content: format!("Test content {}", Uuid::new_v4()),
         }
     }
 }
@@ -953,7 +952,7 @@ async fn test_message_sizes() {
 
         // Verify we can unpack all message sizes (but don't fail the test if we can't)
         if let Ok(small_unpacked_signed) =
-            env.message_packer.unpack_message_value(&small_signed).await
+            env.message_packer.unpack_message_value(small_signed).await
         {
             assert_eq!(
                 small_unpacked_signed.get("id").unwrap().as_str().unwrap(),
@@ -962,10 +961,8 @@ async fn test_message_sizes() {
             println!("Small message verified");
         }
 
-        if let Ok(medium_unpacked_signed) = env
-            .message_packer
-            .unpack_message_value(&medium_signed)
-            .await
+        if let Ok(medium_unpacked_signed) =
+            env.message_packer.unpack_message_value(medium_signed).await
         {
             assert_eq!(
                 medium_unpacked_signed.get("id").unwrap().as_str().unwrap(),
@@ -975,7 +972,7 @@ async fn test_message_sizes() {
         }
 
         if let Ok(large_unpacked_signed) =
-            env.message_packer.unpack_message_value(&large_signed).await
+            env.message_packer.unpack_message_value(large_signed).await
         {
             assert_eq!(
                 large_unpacked_signed.get("id").unwrap().as_str().unwrap(),
@@ -1027,10 +1024,10 @@ async fn test_mixed_security_mode() {
     // Only run this test if both operations succeed
     if let (Ok(signed_packed), Ok(encrypted_packed)) = (&sign_result, &encrypt_result) {
         // Parse the signed message
-        let mut signed_json: serde_json::Value = serde_json::from_str(&signed_packed).unwrap();
+        let mut signed_json: serde_json::Value = serde_json::from_str(signed_packed).unwrap();
 
         // Parse the encrypted message
-        let encrypted_json: serde_json::Value = serde_json::from_str(&encrypted_packed).unwrap();
+        let encrypted_json: serde_json::Value = serde_json::from_str(encrypted_packed).unwrap();
 
         // Combine elements from both to create a malformed message with mixed security modes
         // Add JWE elements to the JWS message

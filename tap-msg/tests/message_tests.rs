@@ -104,15 +104,13 @@ mod payment_tests {
         let merchant = create_participant(merchant_did);
         let customer = create_participant(customer_did);
 
-        let payment = PaymentBuilder::default()
+        PaymentBuilder::default()
             .transaction_id("pay_123".to_string())
             .merchant(merchant.clone())
             .customer(customer.clone())
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("100.50".to_string())
-            .build();
-
-        payment
+            .build()
     }
 
     #[test]
