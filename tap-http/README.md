@@ -1,6 +1,6 @@
 # TAP HTTP
 
-HTTP DIDComm server implementation for the Transaction Authorization Protocol (TAP).
+HTTP DIDComm server implementation for the Transaction Authorization Protocol (TAP), providing secure message exchange via standard HTTP endpoints.
 
 ## Features
 
@@ -20,19 +20,24 @@ HTTP DIDComm server implementation for the Transaction Authorization Protocol (T
 ```rust
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
+use tap_agent::DefaultAgent;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a TAP Agent - either load from stored keys or create ephemeral
+    let agent = DefaultAgent::from_stored_or_ephemeral(None, true);
+    println!("Server using agent with DID: {}", agent.get_agent_did());
+    
     // Create a TAP Node for message processing
-    let node = TapNode::new(NodeConfig::default());
+    let node = TapNode::new(NodeConfig::default().with_agent(agent));
     
     // Configure the HTTP server with custom settings
     let config = TapHttpConfig {
-        host: "0.0.0.0".to_string(),    // Listen on all interfaces
-        port: 8080,                     // Custom port
-        didcomm_endpoint: "/api/didcomm".to_string(),  // Custom endpoint path
-        request_timeout_secs: 60,       // 60-second timeout for outbound requests
+        host: "0.0.0.0".to_string(),                  // Listen on all interfaces
+        port: 8080,                                   // Custom port
+        didcomm_endpoint: "/api/didcomm".to_string(), // Custom endpoint path
+        request_timeout_secs: 60,                     // 60-second timeout for requests
         ..TapHttpConfig::default()
     };
     
@@ -59,8 +64,14 @@ The main endpoint for receiving DIDComm messages. The endpoint path is configura
 ```http
 POST /didcomm HTTP/1.1
 Host: example.com
-Content-Type: application/didcomm-message+json
+Content-Type: application/didcomm-encrypted+json
 
+eyJhbGciOiJFQ0RILUVTK0EyNTZLVyIsImFwdiI6InpRbFpBQ0pZVFpnZUNidFhvd0xkX18zdWNmQmstLW0za2NXekQyQ0kiLCJlbmMiOiJBMjU2R0NNIiwiZXBrIjp7ImNydiI6IlAtMjU2Iiwia3R5IjoiRUMiLCJ4IjoiZ1RxS2ZaQk45bXpLNHZhX1l2TXQ2c0VkNEw0X1Q3aS1PVmtvMGFaVHUwZyIsInkiOiJQOHdyeFFDYmFZckdPdTRXWGM0R05WdWkyLWVpbEhYNUNHZXo5dk9FX2ZrIn0sInByb3RlY3RlZCI6ImV5SmtjeUk2ZXlKQmJXRjZiMjVCZEhSeWFXSmhkR1ZVWVdkZmMxOGdUVVZCTUZVMVRFMVlXRkF5UmtkRWFEVmFkejA5SW4xOSIsInR5cCI6ImFwcGxpY2F0aW9uL2RpZGNvbW0tZW5jcnlwdGVkK2pzb24ifQ...
+```
+
+When unpacked, the above message would contain a TAP protocol message like:
+
+```json
 {
   "id": "1234567890",
   "type": "https://tap.rsvp/schema/1.0#transfer",
@@ -96,7 +107,7 @@ Content-Type: application/json
 }
 ```
 
-## Response Formats
+## Response Formats and Status Codes
 
 ### Success Response
 
@@ -129,21 +140,29 @@ Content-Type: application/json
 }
 ```
 
-## Message Validation
+## Message Validation and Processing
 
 The server performs several validation steps on incoming messages:
 
-1. **Basic Format Validation**:
-   - Ensures the message has required fields (id, type, from, to)
-   - Validates message timestamps
+1. **Message Unpacking**:
+   - Decrypts and verifies message signatures using the TAP Agent
+   - Handles different security modes (Plain, Signed, AuthCrypt)
+   - Validates cryptographic integrity
 
-2. **Protocol Validation**:
-   - Checks that the message type is a valid TAP protocol message
-   - Validates sender and recipient information
+2. **DID Verification**:
+   - Resolves DIDs using the TAP Agent's resolver
+   - Validates sender's verification methods
+   - Checks service endpoints for routing
 
-3. **TAP Node Validation**:
-   - Messages are forwarded to the TAP Node for further validation
-   - Authentication and signature verification is performed
+3. **Protocol Validation**:
+   - Validates message types against TAP protocol schemas
+   - Verifies required fields (id, type, from, to)
+   - Validates message timestamps and sequence
+
+4. **TAP Node Processing**:
+   - Forwards valid messages to the TAP Node for business logic processing
+   - Returns responses from the node to the sender
+   - Logs process events and errors
 
 ## Configuration Options
 
@@ -168,6 +187,12 @@ pub struct TapHttpConfig {
 
     /// Default timeout for outbound HTTP requests in seconds.
     pub request_timeout_secs: u64,
+    
+    /// Event logger configuration (for tracking server events).
+    pub event_logger: Option<EventLoggerConfig>,
+    
+    /// CORS configuration for cross-origin requests.
+    pub cors: Option<CorsConfig>,
 }
 ```
 
@@ -203,6 +228,7 @@ let config = TapHttpConfig {
         },
         structured: true,      // Use JSON format
         log_level: log::Level::Info,
+        include_payloads: false, // Don't log sensitive message payloads
     }),
     // ...
 };
@@ -251,18 +277,53 @@ let config = TapHttpConfig {
 };
 ```
 
-## Client
+## DIDComm Client
 
-The package also includes an HTTP client for sending DIDComm messages to other endpoints:
+The package includes an HTTP client for sending DIDComm messages to other endpoints:
 
 ```rust
 use tap_http::DIDCommClient;
+use tap_agent::{Agent, DefaultAgent};
+use tap_msg::message::Transfer;
 
-// Create client with default timeout
-let client = DIDCommClient::default();
+// Create a TAP Agent
+let (agent, agent_did) = DefaultAgent::new_ephemeral()?;
 
-// Send a DIDComm message
-client.deliver_message("https://recipient.example.com/didcomm", packed_message).await?;
+// Create client with custom timeout
+let client = DIDCommClient::new(std::time::Duration::from_secs(30));
+
+// Create a message
+let transfer = Transfer {
+    // Message fields...
+    transaction_id: uuid::Uuid::new_v4().to_string(),
+};
+
+// Pack a message using the agent
+let recipient_did = "did:web:example.com";
+let (packed_message, _) = agent.send_message(&transfer, vec![recipient_did], false).await?;
+
+// Send the packed message to a recipient's endpoint
+let response = client.deliver_message(
+    "https://recipient.example.com/didcomm",
+    &packed_message
+).await?;
+
+// Process the response
+println!("Delivery status: {}", response.status());
+```
+
+You can also use the built-in delivery functionality of the TAP Agent:
+
+```rust
+// The third parameter (true) enables automatic delivery
+let (_, delivery_results) = agent.send_message(&transfer, vec![recipient_did], true).await?;
+
+// Check delivery results
+for result in delivery_results {
+    if let Some(status) = result.status {
+        println!("Delivery status: {}", status);
+    }
+}
 ```
 
 ## Security Considerations
@@ -298,8 +359,11 @@ tap-http
 # Run with custom options
 tap-http --host 0.0.0.0 --port 8080 --endpoint /api/didcomm
 
-# Run with custom agent DID and key (when implemented)
-tap-http --agent-did did:key:z6Mk... --agent-key ed25519:...
+# Run with stored key (uses default from ~/.tap/keys.json)
+tap-http --use-stored-key
+
+# Run with a specific stored key by its DID
+tap-http --use-stored-key --agent-did did:key:z6Mk...
 
 # Run with custom logging options
 tap-http --logs-dir /var/log/tap --structured-logs
@@ -316,10 +380,15 @@ OPTIONS:
     -p, --port <PORT>            Port to listen on [default: 8000]
     -e, --endpoint <ENDPOINT>    Path for the DIDComm endpoint [default: /didcomm]
     -t, --timeout <SECONDS>      Request timeout in seconds [default: 30]
-    --agent-did <DID>            DID for the TAP agent (optional, will create ephemeral if not provided)
-    --agent-key <KEY>            Private key for the TAP agent (required if agent-did is provided)
+    --use-stored-key             Use a key from the local key store (~/.tap/keys.json)
+    --agent-did <DID>            Specific DID to use from key store (when --use-stored-key is set)
+    --generate-key               Generate a new key and save it to the key store
+    --key-type <TYPE>            Key type for generation [default: ed25519] [possible values: ed25519, p256, secp256k1]
     --logs-dir <DIR>             Directory for event logs [default: ./logs]
     --structured-logs            Use structured JSON logging [default: true]
+    --rate-limit <RATE>          Rate limit in requests per minute [default: 60]
+    --tls-cert <PATH>            Path to TLS certificate file
+    --tls-key <PATH>             Path to TLS private key file
     -v, --verbose                Enable verbose logging
     --help                       Print help information
     --version                    Print version information
@@ -330,15 +399,27 @@ OPTIONS:
 You can also configure the server using environment variables:
 
 ```bash
-# Set configuration options
+# Server configuration
 export TAP_HTTP_HOST=0.0.0.0
 export TAP_HTTP_PORT=8080
 export TAP_HTTP_DIDCOMM_ENDPOINT=/api/didcomm
 export TAP_HTTP_TIMEOUT=60
+
+# Agent configuration
+export TAP_USE_STORED_KEY=true
 export TAP_AGENT_DID=did:key:z6Mk...
-export TAP_AGENT_KEY=ed25519:...
+export TAP_GENERATE_KEY=false
+export TAP_KEY_TYPE=ed25519
+
+# Logging configuration
 export TAP_LOGS_DIR=/var/log/tap
 export TAP_STRUCTURED_LOGS=true
+export TAP_LOG_LEVEL=info
+
+# Security configuration
+export TAP_RATE_LIMIT=100
+export TAP_TLS_CERT=/path/to/cert.pem
+export TAP_TLS_KEY=/path/to/key.pem
 
 # Run the server (will use environment variables)
 tap-http
@@ -430,3 +511,55 @@ Using the tap-payment-simulator tool, you can easily test a complete TAP payment
    ```
 
 This simulates a complete payment flow between two agents, demonstrating how the TAP protocol works in practice.
+
+## Integration with tap-agent Features
+
+The TAP HTTP server leverages all the key features of the TAP Agent:
+
+### Key Management
+
+The server can use any of the TAP Agent's key management approaches:
+
+- **Ephemeral keys** for testing and development (default)
+- **Stored keys** from the local key store (`~/.tap/keys.json`)
+- **Generated keys** created at startup and optionally saved
+
+### DID Resolution
+
+The server uses the TAP Agent's DID resolution capabilities:
+
+- Support for `did:key` and `did:web` by default
+- Custom DID method resolvers can be added
+- Automatic endpoint discovery for message routing
+
+### Secure Messaging
+
+All security modes from the TAP Agent are supported:
+
+- **Plain** - No security (for testing)
+- **Signed** - Digital signatures for integrity
+- **AuthCrypt** - Encrypted messages for confidentiality
+
+### Service Endpoint Handling
+
+The server acts as a service endpoint for incoming messages:
+
+1. Configure the URL in your DID document's service section
+2. Other agents can discover this endpoint via DID resolution
+3. Messages will be automatically routed to your endpoint
+
+## Performance and Scaling
+
+The TAP HTTP server is designed for performance:
+
+- **Async Processing** - Uses Tokio runtime for efficient concurrency
+- **Connection Pooling** - Reuses connections for outgoing requests
+- **Minimal Copies** - Efficient handling of message payloads
+- **Horizontal Scaling** - Can be deployed across multiple instances
+
+For high-volume deployments, consider:
+
+- Running behind a load balancer
+- Using a Redis-backed rate limiter
+- Implementing a message queue for async processing
+- Setting up proper monitoring and alerts
