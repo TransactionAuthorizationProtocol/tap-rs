@@ -6,17 +6,20 @@ use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 
 // Test secrets resolver for use in tests
 #[derive(Debug)]
+#[allow(dead_code)]
 struct TestSecretsResolver {
     secrets: HashMap<String, Secret>,
 }
 
 impl TestSecretsResolver {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             secrets: HashMap::new(),
         }
     }
 
+    #[allow(dead_code)]
     fn with_test_secret(mut self, did: &str) -> Self {
         let secret = Secret {
             id: did.to_string(),

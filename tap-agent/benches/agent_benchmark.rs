@@ -7,9 +7,11 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tap_agent::did::MultiResolver;
-use tap_agent::{Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker, SyncDIDResolver};
-use tap_caip::AssetId;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_agent::{
+    Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker, SyncDIDResolver,
+};
+use tap_caip::AssetId;
 use tap_msg::{message::Transfer, Participant};
 
 /// Create a test agent with known key material for benchmarking
@@ -32,7 +34,7 @@ fn create_test_agent() -> (Arc<DefaultAgent>, String) {
                 "kty": "OKP",
                 "kid": format!("{}#keys-1", did),
                 "crv": "Ed25519",
-                "x": "F74Yk9BrwnXVJUEKwDxBfNjOElv1eIHr9QypeZ2DQQg", 
+                "x": "F74Yk9BrwnXVJUEKwDxBfNjOElv1eIHr9QypeZ2DQQg",
                 "d": "9kVnxrZlZW6V2MrNfcXUL8sAle/XX9XBbOxmHKFbvs4="
             }),
         },
@@ -47,7 +49,7 @@ fn create_test_agent() -> (Arc<DefaultAgent>, String) {
     let message_packer = Arc::new(DefaultMessagePacker::new(
         did_resolver,
         Arc::new(secret_resolver),
-        false
+        false,
     ));
 
     // Create agent
@@ -96,9 +98,7 @@ fn bench_send_message(c: &mut Criterion) {
 
     // Create the test agent once, outside the benchmark loop
     let (agent, did) = create_test_agent();
-    let transfer = rt.block_on(async {
-        create_transfer_message(&did, &did)
-    });
+    let transfer = rt.block_on(async { create_transfer_message(&did, &did) });
 
     group.bench_function(BenchmarkId::new("send", "transfer"), |b| {
         b.iter(|| {

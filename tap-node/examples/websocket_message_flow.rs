@@ -1,6 +1,5 @@
 //! Example of using WebSocket messaging with TAP
 
-use base64;
 use std::sync::Arc;
 use std::time::Duration;
 use tap_agent::agent::DefaultAgent;

@@ -10,11 +10,13 @@ use tap_node::{EventSubscriber, NodeEvent};
 
 /// A simplified test secrets resolver
 #[derive(Debug)]
+#[allow(dead_code)]
 struct TestSecretsResolver {
     secrets: HashMap<String, Secret>,
 }
 
 impl TestSecretsResolver {
+    #[allow(dead_code)]
     fn new() -> Self {
         Self {
             secrets: HashMap::new(),

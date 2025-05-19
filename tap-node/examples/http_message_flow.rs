@@ -12,6 +12,7 @@ use tokio::time::sleep;
 
 /// A test resolver that resolves DIDs to predefined DID documents
 #[derive(Debug)]
+#[allow(dead_code)]
 struct TestDIDResolver;
 
 #[tokio::main]

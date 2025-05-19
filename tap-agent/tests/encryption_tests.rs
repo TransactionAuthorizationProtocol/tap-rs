@@ -1,4 +1,3 @@
-use tap_agent::key_manager::DefaultKeyManager;
 // Tests specifically focused on encryption/decryption functionality
 //
 // These tests verify the encryption and decryption functionality:
@@ -435,10 +434,7 @@ async fn test_basic_authcrypt() {
 
             // Verify metadata was also preserved
             let metadata = unpacked.get("metadata").unwrap();
-            assert_eq!(
-                metadata.get("encryption_test").unwrap().as_bool().unwrap(),
-                true
-            );
+            assert!(metadata.get("encryption_test").unwrap().as_bool().unwrap());
 
             println!("✅ Full AuthCrypt encryption/decryption test passed");
         } else {
@@ -714,9 +710,9 @@ async fn test_authcrypt_structured_data() {
 
             let booleans = metadata.get("booleans").unwrap().as_array().unwrap();
             assert_eq!(booleans.len(), 3, "Booleans array should have 3 elements");
-            assert_eq!(booleans[0].as_bool().unwrap(), true);
-            assert_eq!(booleans[1].as_bool().unwrap(), false);
-            assert_eq!(booleans[2].as_bool().unwrap(), true);
+            assert!(booleans[0].as_bool().unwrap());
+            assert!(!booleans[1].as_bool().unwrap());
+            assert!(booleans[2].as_bool().unwrap());
 
             println!(
                 "✅ AuthCrypt with structured data: full encryption and decryption test passed"
