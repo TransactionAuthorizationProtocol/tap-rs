@@ -167,8 +167,8 @@ fn test_payment_request_with_invoice() {
     let mut payment_request = PaymentBuilder::default()
         .currency_code("USD".to_string())
         .amount("100.0".to_string())
-        .originator(merchant.clone())
-        .beneficiary(agent.clone()) // Using agent as beneficiary
+        .merchant(merchant.clone())
+        .customer(agent.clone()) // Using agent as customer
         .asset(asset)
         .transaction_id("payment-001".to_string())
         .build();
@@ -176,11 +176,8 @@ fn test_payment_request_with_invoice() {
     // Add agents
     payment_request.agents = vec![agent.clone()];
 
-    // Add invoice to metadata since there's no dedicated field for it
-    payment_request.metadata.insert(
-        "invoice".to_string(),
-        serde_json::to_value(invoice.clone()).unwrap(),
-    );
+    // Add invoice directly to payment
+    payment_request.invoice = Some(invoice.clone());
 
     // This should validate correctly
     assert!(payment_request.validate().is_ok());
@@ -210,13 +207,13 @@ fn test_payment_request_with_invoice() {
     assert_eq!(extracted.amount, "100.0");
     assert_eq!(extracted.currency_code, Some("USD".to_string()));
 
-    // Get invoice from metadata
-    let invoice_value = extracted.metadata.get("invoice");
-    assert!(invoice_value.is_some());
+    // Get invoice directly from the payment
+    let extracted_invoice = extracted.invoice;
+    assert!(extracted_invoice.is_some());
 
-    let extracted_invoice: Invoice = serde_json::from_value(invoice_value.unwrap().clone())
-        .expect("Failed to deserialize invoice from metadata");
-    assert_eq!(extracted_invoice.id, "INV001");
-    assert_eq!(extracted_invoice.currency_code, "USD");
-    assert_eq!(extracted_invoice.total, 100.0);
+    // Check the invoice details
+    let invoice_unwrapped = extracted_invoice.unwrap();
+    assert_eq!(invoice_unwrapped.id, "INV001");
+    assert_eq!(invoice_unwrapped.currency_code, "USD");
+    assert_eq!(invoice_unwrapped.total, 100.0);
 }

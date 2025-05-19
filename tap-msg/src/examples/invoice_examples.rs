@@ -1,7 +1,7 @@
 //! Examples for using the Invoice and Payment functionality.
 
 use crate::didcomm::PlainMessage;
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use crate::message::payment::PaymentBuilder;
 use crate::message::tap_message_trait::TapMessageBody;
@@ -130,7 +130,7 @@ pub fn create_payment_request_with_invoice_example(
     customer_did: Option<&str>,
 ) -> Result<PlainMessage> {
     // Create merchant participant
-    let _merchant = Participant {
+    let merchant = Participant {
         id: merchant_did.to_string(),
         role: Some("merchant".to_string()),
         policies: None,
@@ -138,7 +138,7 @@ pub fn create_payment_request_with_invoice_example(
     };
 
     // Create a merchant agent (e.g., a payment processor)
-    let _agent = Participant {
+    let agent = Participant {
         id: "did:example:payment_processor".to_string(),
         role: Some("agent".to_string()),
         policies: None,
@@ -151,64 +151,36 @@ pub fn create_payment_request_with_invoice_example(
     // Create a Payment using the new API
     let asset =
         AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
+
     // Create transaction ID
     let transaction_id = uuid::Uuid::new_v4().to_string();
 
-    // Create a new dummy merchant and customer participants
-    let originator = Participant {
-        id: merchant_did.to_string(),
-        role: Some("originator".to_string()),
+    // Create a customer participant if provided
+    let customer = customer_did.map(|cust_did| Participant {
+        id: cust_did.to_string(),
+        role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
-    };
-
-    let beneficiary = Participant {
-        id: customer_did
-            .unwrap_or("did:example:beneficiary")
-            .to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-    };
+    });
 
     // Use the builder pattern to create the payment
     let mut payment_request = PaymentBuilder::default()
         .transaction_id(transaction_id)
         .asset(asset)
         .amount(format!("{:.2}", invoice.total))
-        .originator(originator)
-        .beneficiary(beneficiary)
+        .currency_code(invoice.currency_code.clone())
+        .merchant(merchant.clone())
+        .add_agent(agent)
         .build();
 
-    // Add currency code if available
-    payment_request.currency_code = Some(invoice.currency_code.clone());
+    // Set customer if provided
+    payment_request.customer = customer;
 
-    // We can't add agents directly to Payment as it doesn't have an agents field
-
-    // Add the invoice to metadata
-    payment_request.metadata.insert(
-        "invoice".to_string(),
-        serde_json::to_value(&invoice).unwrap(),
-    );
-
-    // Add customer information if provided
-    if let Some(cust_did) = customer_did {
-        let customer = Participant {
-            id: cust_did.to_string(),
-            role: Some("customer".to_string()),
-            policies: None,
-            leiCode: None,
-        };
-
-        // Also add to metadata for reference
-        payment_request.metadata.insert(
-            "customer".to_string(),
-            serde_json::to_value(&customer).unwrap(),
-        );
-    }
+    // Add the invoice directly to the payment
+    payment_request.invoice = Some(invoice);
 
     // Add expiry (e.g., 30 days)
-    payment_request.expires = Some("2023-10-01T00:00:00Z".to_string());
+    payment_request.expiry = Some("2023-10-01T00:00:00Z".to_string());
 
     // Convert to a DIDComm message
     let recipients = if let Some(cust_did) = customer_did {
@@ -231,12 +203,28 @@ pub fn process_payment_request_with_invoice_example(message: &PlainMessage) -> R
     // Validate the Payment
     payment_request.validate()?;
 
-    // Check if it has an invoice in metadata
-    if let Some(invoice_value) = payment_request.metadata.get("invoice") {
-        // Convert from JSON value to Invoice
-        let invoice: crate::message::Invoice = serde_json::from_value(invoice_value.clone())
-            .map_err(|e| Error::SerializationError(format!("Failed to parse invoice: {}", e)))?;
+    // Print merchant information
+    println!("Merchant: {}", payment_request.merchant.id);
 
+    // Print customer information if present
+    if let Some(customer) = &payment_request.customer {
+        println!("Customer: {}", customer.id);
+    } else {
+        println!("Customer: Not specified");
+    }
+
+    println!("Amount: {}", payment_request.amount);
+
+    if let Some(currency) = &payment_request.currency_code {
+        println!("Currency: {}", currency);
+    }
+
+    if let Some(asset) = &payment_request.asset {
+        println!("Asset: {}", asset);
+    }
+
+    // Check if it has an invoice directly in the payment
+    if let Some(invoice) = &payment_request.invoice {
         println!("Invoice ID: {}", invoice.id);
         println!("Currency: {}", invoice.currency_code);
         println!("Total amount: {:.2}", invoice.total);
@@ -278,6 +266,11 @@ pub fn process_payment_request_with_invoice_example(message: &PlainMessage) -> R
         );
     } else {
         println!("Payment request does not contain an invoice");
+    }
+
+    // Print expiry if present
+    if let Some(expiry) = &payment_request.expiry {
+        println!("Expires: {}", expiry);
     }
 
     Ok(())

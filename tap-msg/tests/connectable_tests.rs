@@ -218,30 +218,32 @@ fn create_test_payment_request() -> Payment {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
+    let merchant = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
+        role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
     };
 
-    let beneficiary = Participant {
+    let customer = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
+        role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
     };
 
     Payment {
-        asset,
+        asset: Some(asset),
         amount: "100.0".to_string(),
         currency_code: Some("USD".to_string()),
+        supported_assets: None,
         transaction_id: uuid::Uuid::new_v4().to_string(),
         memo: None,
-        expires: None,
+        expiry: None,
+        invoice: None,
         metadata: HashMap::new(),
-        originator,
-        beneficiary,
+        merchant,
+        customer: Some(customer),
         agents: vec![],
     }
 }

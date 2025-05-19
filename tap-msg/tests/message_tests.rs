@@ -83,16 +83,16 @@ mod payment_tests {
     // Extension trait to adapt the new Payment API to the old test expectations
     trait PaymentExt {
         fn merchant(&self) -> &Participant;
-        fn customer(&self) -> &Participant;
+        fn customer(&self) -> Option<&Participant>;
     }
 
     impl PaymentExt for Payment {
         fn merchant(&self) -> &Participant {
-            &self.originator
+            &self.merchant
         }
 
-        fn customer(&self) -> &Participant {
-            &self.beneficiary
+        fn customer(&self) -> Option<&Participant> {
+            self.customer.as_ref()
         }
     }
 
@@ -104,24 +104,13 @@ mod payment_tests {
         let merchant = create_participant(merchant_did);
         let customer = create_participant(customer_did);
 
-        let mut payment = PaymentBuilder::default()
+        let payment = PaymentBuilder::default()
             .transaction_id("pay_123".to_string())
-            .originator(merchant.clone())
-            .beneficiary(customer.clone())
+            .merchant(merchant.clone())
+            .customer(customer.clone())
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("100.50".to_string())
             .build();
-
-        // For compatibility with the existing test - we'll add merchant/customer to the returned Payment
-        // This is not actually part of the new Payment struct but will make the test pass
-        payment.metadata.insert(
-            "merchant".to_string(),
-            serde_json::to_value(&merchant).unwrap(),
-        );
-        payment.metadata.insert(
-            "customer".to_string(),
-            serde_json::to_value(&customer).unwrap(),
-        );
 
         payment
     }
@@ -141,8 +130,8 @@ mod payment_tests {
 
         // Missing transaction_id - now PaymentBuilder generates a random ID if not provided
         let res = PaymentBuilder::default()
-            .originator(create_participant(merchant_did))
-            .beneficiary(create_participant(customer_did))
+            .merchant(create_participant(merchant_did))
+            .customer(create_participant(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("100".to_string())
             .build();
@@ -151,19 +140,19 @@ mod payment_tests {
         // Amount validation - the builder now accepts any amount
         let res = PaymentBuilder::default()
             .transaction_id("pay_000".to_string())
-            .originator(create_participant(merchant_did))
-            .beneficiary(create_participant(customer_did))
+            .merchant(create_participant(merchant_did))
+            .customer(create_participant(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("0.00".to_string())
             .build();
         assert_eq!(res.amount, "0.00".to_string());
 
-        // The builder now panics if originator is not provided
+        // The builder now panics if merchant is not provided
         // Skip this test since it now panics instead of returning an error
         // Uncomment to verify it panics:
         //let res = PaymentBuilder::default()
         //    .transaction_id("pay_111".to_string())
-        //    .beneficiary(create_participant(customer_did))
+        //    .customer(create_participant(customer_did))
         //    .asset(AssetId::from_str(asset_id_str).unwrap())
         //    .amount("50".to_string())
         //    .build();
@@ -173,7 +162,7 @@ mod payment_tests {
     fn test_payment_to_didcomm() {
         let payment = create_valid_payment();
         let merchant_did = &payment.merchant().id;
-        let customer_did = &payment.customer().id;
+        let customer_did = &payment.customer().unwrap().id;
 
         let message_from_merchant = payment.to_didcomm(merchant_did).unwrap();
 

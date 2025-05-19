@@ -38,8 +38,8 @@ fn test_payment_request_with_asset() {
         .transaction_id(transaction_id)
         .asset(asset)
         .amount("100000000".to_string())
-        .originator(merchant.clone())
-        .beneficiary(agent.clone())
+        .merchant(merchant.clone())
+        .customer(agent.clone())
         .add_agent(agent.clone())
         .build();
 
@@ -95,8 +95,8 @@ fn test_payment_request_with_currency() {
         .currency_code("USD".to_string())
         .amount("100.00".to_string())
         .transaction_id(uuid::Uuid::new_v4().to_string())
-        .originator(merchant.clone())
-        .beneficiary(agent.clone())
+        .merchant(merchant.clone())
+        .customer(agent.clone())
         .add_agent(agent.clone())
         .build();
 
@@ -121,8 +121,8 @@ fn test_payment_request_with_currency() {
         .asset(invalid_asset)
         .amount("".to_string()) // Empty amount should fail validation
         .transaction_id(uuid::Uuid::new_v4().to_string())
-        .originator(merchant.clone())
-        .beneficiary(agent.clone())
+        .merchant(merchant.clone())
+        .customer(agent.clone())
         .build();
     assert!(invalid_body.validate().is_err());
 }
@@ -393,8 +393,8 @@ fn test_payment_request_message() {
         .asset(asset)
         .amount("1000000000000000000".to_string()) // 1 ETH
         .transaction_id(uuid::Uuid::new_v4().to_string())
-        .originator(Participant::new("did:example:merchant"))
-        .beneficiary(Participant::new("did:example:customer"))
+        .merchant(Participant::new("did:example:merchant"))
+        .customer(Participant::new("did:example:customer"))
         .add_agent(Participant::new("did:example:agent1"))
         .build();
 

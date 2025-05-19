@@ -473,16 +473,16 @@ fn create_test_transfer() -> Transfer {
 fn create_test_payment_request() -> Payment {
     let transaction_id = uuid::Uuid::new_v4().to_string();
 
-    let originator = Participant {
+    let merchant = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
+        role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
     };
 
-    let beneficiary = Participant {
+    let customer = Participant {
         id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
+        role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
     };
@@ -501,12 +501,12 @@ fn create_test_payment_request() -> Payment {
         .transaction_id(transaction_id)
         .asset(asset)
         .amount("100.0".to_string())
-        .originator(originator)
-        .beneficiary(beneficiary)
+        .merchant(merchant)
+        .customer(customer)
         .agents(agents)
         .build();
 
     payment.currency_code = Some("USD".to_string());
-    payment.expires = Some("2023-12-31T23:59:59Z".to_string());
+    payment.expiry = Some("2023-12-31T23:59:59Z".to_string());
     payment
 }
