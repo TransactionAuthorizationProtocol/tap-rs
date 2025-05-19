@@ -1,7 +1,7 @@
 // use serde_json; // Redundant import
 
-// use didcomm::did::DIDResolver; // Unused import
-use didcomm::did::resolvers::ExampleDIDResolver; // Use resolver from didcomm crate
+// Removing external didcomm dependency as we don't really need it for these tests
+// Creating a simple mock resolver for testing purposes
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -9,7 +9,7 @@ use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
 use tap_msg::message::{
     Authorize, Connect, ConnectionConstraints, Participant, Payment, PaymentBuilder, Reject, Settle,
-    Transfer, UpdateParty, AddAgents, RemoveAgent, ReplaceAgent, TransactionLimits,
+    Transfer, UpdateParty, TransactionLimits,
 };
 use tap_msg::Result;
 
@@ -20,7 +20,7 @@ use tap_msg::Result;
 /// 4. Settle the Transfer
 #[test]
 fn test_full_tap_flow() -> Result<()> {
-    let _resolver = ExampleDIDResolver::new(vec![]);
+    // We don't need an actual DID resolver for these tests
 
     // Step 1: Create a Connect message
     let connect = create_test_connect();
@@ -83,7 +83,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut authorize_message = authorize_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -106,7 +106,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Convert to DIDComm message
     let settle_message = settle_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -174,7 +174,7 @@ fn test_payment_flow() {
     // Convert to DIDComm message
     let mut authorize_message = authorize_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -216,8 +216,8 @@ fn test_payment_flow() {
     // Convert reject body to DIDComm message
     let mut reject_message = reject_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"), // Rejector's DID
-            [payment_message2.from.as_deref().unwrap_or_default()], // Send back to Payment sender
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6", // Rejector's DID
+            [payment_message2.from.as_str()], // Send back to Payment sender
         )
         .expect("Failed to convert Reject to DIDComm");
 
@@ -234,7 +234,7 @@ fn test_payment_flow() {
 /// 3. Authorize some and reject others
 #[test]
 fn test_complex_message_flow() -> Result<()> {
-    let _resolver = ExampleDIDResolver::new(vec![]);
+    // We don't need an actual DID resolver for these tests
 
     // Step 1: Create a Connect message
     let connect = create_test_connect();
@@ -263,7 +263,7 @@ fn test_complex_message_flow() -> Result<()> {
 
         let transfer_message = transfer
             .to_didcomm_with_route(
-                Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
                 ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                     .iter()
                     .copied(),
@@ -300,7 +300,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut authorize_message = authorize_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -326,7 +326,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut reject_message = reject
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -353,7 +353,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let settle_message = settle_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -376,7 +376,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut update_party_message = update_party
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),

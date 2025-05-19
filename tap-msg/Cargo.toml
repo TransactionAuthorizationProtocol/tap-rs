@@ -16,9 +16,6 @@ serde_json = { workspace = true }
 # Chain Agnostic Identifiers
 tap-caip = { version = "0.1.0", path = "../tap-caip" }
 
-# DIDComm
-didcomm = { workspace = true }
-
 # Date and time
 chrono = { workspace = true }
 
@@ -34,7 +31,7 @@ uuid = { version = "=0.8.2", features = ["v4"] }
 # Tracing
 tracing = { workspace = true }
 
-# WASM support 
+# WASM support
 wasm-bindgen = { workspace = true, optional = true }
 console_error_panic_hook = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
@@ -53,5 +50,11 @@ harness = false
 
 [features]
 default = []
-wasm = ["wasm-bindgen", "js-sys", "web-sys", "getrandom/js", "console_error_panic_hook"]
+wasm = [
+    "wasm-bindgen",
+    "js-sys",
+    "web-sys",
+    "getrandom/js",
+    "console_error_panic_hook",
+]
 examples = []

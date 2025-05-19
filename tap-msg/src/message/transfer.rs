@@ -11,8 +11,8 @@ use tap_caip::AssetId;
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
-use crate::message::tap_message_trait::{Connectable, TapMessageBody};
-use crate::message::Participant;
+use crate::message::tap_message_trait::{Authorizable, Connectable, TapMessageBody};
+use crate::message::{Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, UpdatePolicies};
 
 /// Transfer message body (TAIP-3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -380,6 +380,7 @@ impl TapMessageBody for Transfer {
             expires_time: None,
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
+            attachments: None,
         };
 
         Ok(message)
@@ -404,6 +405,42 @@ impl TapMessageBody for Transfer {
         }
 
         Ok(message)
+    }
+}
+
+impl Authorizable for Transfer {
+    fn authorize(&self, note: Option<String>) -> Authorize {
+        Authorize {
+            transaction_id: self.transaction_id.clone(),
+            note,
+        }
+    }
+
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies {
+        UpdatePolicies {
+            transaction_id,
+            policies,
+        }
+    }
+
+    fn replace_agent(
+        &self,
+        transaction_id: String,
+        original_agent: String,
+        replacement: Participant,
+    ) -> ReplaceAgent {
+        ReplaceAgent {
+            transaction_id,
+            original: original_agent,
+            replacement,
+        }
+    }
+
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
+        RemoveAgent {
+            transaction_id,
+            agent,
+        }
     }
 }
 

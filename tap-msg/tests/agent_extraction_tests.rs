@@ -2,7 +2,7 @@ extern crate tap_msg;
 
 use std::collections::HashMap;
 use tap_caip::AssetId;
-use tap_msg::didcomm::PlainMessage;
+// Removed unused import: PlainMessage
 use tap_msg::message::tap_message_trait::{create_tap_message, TapMessageBody, TapMessage};
 use tap_msg::message::{Participant, Transfer};
 

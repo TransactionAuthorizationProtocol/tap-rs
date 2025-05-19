@@ -5,9 +5,10 @@ use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::{Error, Result};
 use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
 use tap_msg::message::{
-    AddAgents, Authorizable, Authorize, ConfirmRelationship, Participant, RemoveAgent,
+    AddAgents, Authorize, ConfirmRelationship, Participant, RemoveAgent,
     ReplaceAgent, Transfer,
 };
+// Removed unused import: Authorizable
 use uuid::Uuid;
 
 #[test]
@@ -94,6 +95,7 @@ fn test_add_agents() -> Result<()> {
     // Set the thread ID
     let message_with_thread = PlainMessage {
         thid: Some(transfer_id.to_string()),
+        attachments: message.attachments.clone(),
         ..message
     };
 
@@ -142,6 +144,7 @@ fn test_replace_agent() -> Result<()> {
     // Set the thread ID
     let message_with_thread = PlainMessage {
         thid: Some(transfer_id.to_string()),
+        attachments: message.attachments.clone(),
         ..message
     };
 
@@ -183,6 +186,7 @@ fn test_remove_agent() -> Result<()> {
     // Set the thread ID
     let message_with_thread = PlainMessage {
         thid: Some(transfer_id.to_string()),
+        attachments: message.attachments.clone(),
         ..message
     };
 
@@ -225,6 +229,7 @@ fn test_confirm_relationship() -> Result<()> {
     // Set the thread ID
     let message_with_thread = PlainMessage {
         thid: Some(transfer_id.to_string()),
+        attachments: message.attachments.clone(),
         ..message
     };
 
@@ -271,7 +276,7 @@ fn test_confirm_relationship() -> Result<()> {
         ));
     }
 
-    let transfer_body: Transfer = serde_json::from_value(transfer_body_json.clone())?;
+    let _transfer_body: Transfer = serde_json::from_value(transfer_body_json.clone())?;
 
     // Create a ConfirmRelationship message (can be simplified if trait method is added to Transfer)
     let confirm_relationship = ConfirmRelationship {
@@ -288,8 +293,8 @@ fn test_confirm_relationship() -> Result<()> {
     assert_eq!(confirm_message.from, _alice_did.to_string());
     assert!(confirm_message.to.is_empty()); // No recipients yet, would be set later
 
-    // The thid should be None until set (or come from transaction_id in future implementation)
-    assert_eq!(confirm_message.thid, None);
+    // The thid should be set to the transaction_id
+    assert_eq!(confirm_message.thid, Some(transfer_id.to_string()));
 
     // Check body content (role)
     assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian");
@@ -317,6 +322,7 @@ fn test_get_all_participants() -> Result<()> {
         created_time: Some(1645556488),
         expires_time: None,
         from_prior: None,
+        attachments: None,
     };
 
     // Get all participants (we need to implement this method on PlainMessage)

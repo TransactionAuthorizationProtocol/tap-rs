@@ -578,6 +578,7 @@ impl Agent for DefaultAgent {
                 created_time: None,
                 expires_time: None,
                 from_prior: None,
+                attachments: None,
             };
 
             // Convert to the requested type using the TapMessageBody trait

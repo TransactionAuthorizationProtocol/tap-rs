@@ -218,6 +218,20 @@ fn create_test_payment_request() -> Payment {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
+    let originator = Participant {
+        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+        role: Some("originator".to_string()),
+        policies: None,
+        leiCode: None,
+    };
+
+    let beneficiary = Participant {
+        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
+        role: Some("beneficiary".to_string()),
+        policies: None,
+        leiCode: None,
+    };
+
     Payment {
         asset,
         amount: "100.0".to_string(),
@@ -226,5 +240,8 @@ fn create_test_payment_request() -> Payment {
         memo: None,
         expires: None,
         metadata: HashMap::new(),
+        originator,
+        beneficiary,
+        agents: vec![],
     }
 }

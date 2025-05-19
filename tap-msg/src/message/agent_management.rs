@@ -98,6 +98,7 @@ impl TapMessageBody for AddAgents {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
+            attachments: None,
         };
 
         Ok(message)
@@ -191,6 +192,7 @@ impl TapMessageBody for ReplaceAgent {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
+            attachments: None,
         };
 
         Ok(message)
@@ -274,6 +276,7 @@ impl TapMessageBody for RemoveAgent {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
+            attachments: None,
         };
 
         Ok(message)

@@ -5,8 +5,8 @@
 //!
 //! Run with: cargo bench --bench message_benchmark
 
+use tap_msg::didcomm::PlainMessage;
 use criterion::{criterion_group, criterion_main, Criterion};
-use didcomm::Message;
 use std::collections::HashMap;
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
@@ -87,7 +87,7 @@ fn create_settle_body() -> Settle {
 /// Benchmark converting TAP message bodies to DIDComm messages
 fn bench_to_didcomm(c: &mut Criterion) {
     let mut group = c.benchmark_group("message_to_didcomm");
-
+    let did = "did:example:bob";
     // Create test message bodies
     let transfer_body = create_transfer_body();
     let authorize_body = create_authorize_body();
@@ -97,28 +97,28 @@ fn bench_to_didcomm(c: &mut Criterion) {
     // Benchmark Transfer messages
     group.bench_function("transfer", |b| {
         b.iter(|| {
-            let _: Message = transfer_body.to_didcomm(None).unwrap();
+            let _: PlainMessage = transfer_body.to_didcomm(&did).unwrap();
         })
     });
 
     // Benchmark Authorize messages
     group.bench_function("authorize", |b| {
         b.iter(|| {
-            let _: Message = authorize_body.to_didcomm(None).unwrap();
+            let _: PlainMessage = authorize_body.to_didcomm(&did).unwrap();
         })
     });
 
     // Benchmark Reject messages
     group.bench_function("reject", |b| {
         b.iter(|| {
-            let _: Message = reject_body.to_didcomm(None).unwrap();
+            let _: PlainMessage = reject_body.to_didcomm(&did).unwrap();
         })
     });
 
     // Benchmark Settle messages
     group.bench_function("settle", |b| {
         b.iter(|| {
-            let _: Message = settle_body.to_didcomm(None).unwrap();
+            let _: PlainMessage = settle_body.to_didcomm(&did).unwrap();
         })
     });
 
@@ -128,19 +128,20 @@ fn bench_to_didcomm(c: &mut Criterion) {
 /// Benchmark converting DIDComm messages to TAP message bodies
 fn bench_from_didcomm(c: &mut Criterion) {
     let mut group = c.benchmark_group("message_from_didcomm");
+    let did = "did:example:bob";
 
     // Create test message bodies and convert to DIDComm messages
     let transfer_body = create_transfer_body();
-    let transfer_message = transfer_body.to_didcomm(None).unwrap();
+    let transfer_message = transfer_body.to_didcomm(&did).unwrap();
 
     let authorize_body = create_authorize_body();
-    let authorize_message = authorize_body.to_didcomm(None).unwrap();
+    let authorize_message = authorize_body.to_didcomm(&did).unwrap();
 
     let reject_body = create_reject_body();
-    let reject_message = reject_body.to_didcomm(None).unwrap();
+    let reject_message = reject_body.to_didcomm(&did).unwrap();
 
     let settle_body = create_settle_body();
-    let settle_message = settle_body.to_didcomm(None).unwrap();
+    let settle_message = settle_body.to_didcomm(&did).unwrap();
 
     // Benchmark Transfer messages
     group.bench_function("transfer", |b| {

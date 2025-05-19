@@ -5,8 +5,6 @@
 
 // Import all message modules
 pub mod agent_management;
-pub mod attachment;
-pub mod authorizable;
 pub mod authorize;
 pub mod cancel;
 pub mod connection;
@@ -31,7 +29,7 @@ pub mod validation;
 pub use agent_management::{AddAgents, RemoveAgent, ReplaceAgent};
 
 // Re-export attachment types
-pub use attachment::{Attachment, AttachmentData, AttachmentFormat};
+pub use crate::didcomm::{Attachment, AttachmentData, SimpleAttachmentData};
 
 // Re-export authorization types
 pub use authorize::Authorize;

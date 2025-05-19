@@ -118,6 +118,7 @@ impl TapMessageBody for Settle {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
+            attachments: None,
         };
 
         Ok(message)

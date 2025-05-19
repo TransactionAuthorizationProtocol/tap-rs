@@ -50,7 +50,7 @@ fn test_update_party_creation() {
 
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 
     // Convert to DIDComm
@@ -60,7 +60,7 @@ fn test_update_party_creation() {
 
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 }
 
@@ -131,7 +131,7 @@ fn test_update_party_didcomm_conversion() {
     // Verify fields
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 
     // Test from_didcomm

@@ -98,6 +98,7 @@ impl TapMessageBody for Cancel {
             expires_time: None,
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
+            attachments: None,
         };
 
         Ok(message)

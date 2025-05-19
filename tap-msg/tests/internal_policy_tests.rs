@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::error::Result;
-use tap_msg::message::authorizable::Authorizable;
+use tap_msg::message::tap_message_trait::Authorizable;
 use tap_msg::message::{
     Participant, Transfer,
     AddAgents, Authorize, Policy as TapPolicy, RequireAuthorization, RequireProofOfControl,

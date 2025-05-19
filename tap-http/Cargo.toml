@@ -32,7 +32,6 @@ uuid = { version = "1", features = ["v4"] }
 hyper = { version = "0.14", features = ["full", "server", "http1"] }
 base64 = { workspace = true }
 multibase = { workspace = true }
-didcomm = { workspace = true }
 
 [dev-dependencies]
 mockito = "1.0"

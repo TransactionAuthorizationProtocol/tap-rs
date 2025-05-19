@@ -2,13 +2,10 @@
 
 use crate::error::{Error, Result};
 use crate::message::policy::{Policy, RequireProofOfControl};
-use crate::message::tap_message_trait::TapMessageBody;
+use crate::message::tap_message_trait::{Authorizable, TapMessageBody};
 use crate::message::{
     AddAgents, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
 };
-
-// Import the Authorizable trait
-use crate::message::authorizable::Authorizable;
 
 use crate::didcomm::PlainMessage;
 use serde_json;

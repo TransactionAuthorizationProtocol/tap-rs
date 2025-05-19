@@ -4,11 +4,10 @@ use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::{
     policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl},
-    tap_message_trait::TapMessageBody,
+    tap_message_trait::{Authorizable, TapMessageBody},
     Authorize, Participant, Transfer, UpdatePolicies,
 };
 
-use crate::message::authorizable::Authorizable;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;

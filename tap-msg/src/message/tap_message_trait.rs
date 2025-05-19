@@ -5,6 +5,8 @@
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
+use crate::message::policy::Policy;
+use crate::message::{Authorize, Participant, RemoveAgent, ReplaceAgent, UpdatePolicies};
 use chrono::Utc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -110,6 +112,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
+            attachments: None,
         };
 
         Ok(message)
@@ -485,4 +488,27 @@ pub fn create_tap_message<T: TapMessageBody>(
     }
 
     Ok(message)
+}
+
+/// Authorizable trait implementation for various TAP message types.
+/// This module defines the Authorizable trait, which allows message types
+/// to be authorized, and implementations for relevant TAP message types.
+/// Authorizable trait for types that can be authorized or can generate authorization-related messages.
+pub trait Authorizable {
+    /// Create an Authorize message for this object.
+    fn authorize(&self, note: Option<String>) -> Authorize;
+
+    /// Create an UpdatePolicies message for this object.
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies;
+
+    /// Create a ReplaceAgent message for this object.
+    fn replace_agent(
+        &self,
+        transaction_id: String,
+        original_agent: String,
+        replacement: Participant,
+    ) -> ReplaceAgent;
+
+    /// Create a RemoveAgent message for this object.
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
 }

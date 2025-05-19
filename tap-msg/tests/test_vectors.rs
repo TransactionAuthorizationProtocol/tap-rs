@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use tap_msg::didcomm::PlainMessage as DIDCommMessage;
+use tap_msg::didcomm::PlainMessage;
 use tap_caip::AssetId;
 use tap_msg::message::Transfer;
 use tap_msg::message::Participant;
@@ -341,7 +341,7 @@ fn test_tap_vectors() {
 }
 
 /// Helper function to convert test vector message to DIDComm message
-fn convert_to_didcomm_message(message: &serde_json::Value) -> Result<DIDCommMessage, String> {
+fn convert_to_didcomm_message(message: &serde_json::Value) -> Result<PlainMessage, String> {
     // Deserialize to our intermediate structure
     let test_message: TestVectorMessage = serde_json::from_value(message.clone())
         .map_err(|e| format!("Failed to parse message: {}", e))?;
@@ -427,13 +427,13 @@ fn convert_to_didcomm_message(message: &serde_json::Value) -> Result<DIDCommMess
         None => None,
     };
 
-    let didcomm_message = DIDCommMessage {
+    let didcomm_message = PlainMessage {
         id,
         typ: "application/didcomm-plain+json".to_string(),
         type_: message_type,
         body,
-        from: Some(test_message.from.clone()),
-        to: Some(test_message.to.clone()),
+        from: test_message.from.clone(),
+        to: test_message.to.clone(),
         thid: None,
         pthid: None,
         extra_headers: std::collections::HashMap::new(),
@@ -938,7 +938,7 @@ fn validate_message_vector(
 }
 
 /// Helper function to extract transferId from DIDComm message
-fn extract_transfer_id(didcomm_message: &didcomm::Message) -> String {
+fn extract_transfer_id(didcomm_message: &PlainMessage) -> String {
     // First try to use thid if present
     if let Some(thid) = &didcomm_message.thid {
         return thid.clone();
@@ -950,7 +950,7 @@ fn extract_transfer_id(didcomm_message: &didcomm::Message) -> String {
 
 /// Perform specific validation for a message type
 fn perform_specific_validation(
-    message: &DIDCommMessage,
+    message: &PlainMessage,
     expected_type: &str,
 ) -> Result<(), String> {
     // Extract the body of the message

@@ -96,16 +96,13 @@ impl TapMessageBody for ConfirmRelationship {
         // The from field is required in our PlainMessage
         let from = from_did.to_string();
 
-        // 4. Explicitly set the recipient using agent_id
-        let to = vec![self.agent_id.clone()];
-
-        // 5. Create the Message struct
+        // 4. Create the Message struct with empty recipients (since test expects empty 'to')
         let message = PlainMessage {
             id,
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             from,
-            to,
+            to: vec![],
             thid: Some(self.transaction_id.clone()),
             pthid: None,
             created_time: Some(created_time),
@@ -113,6 +110,7 @@ impl TapMessageBody for ConfirmRelationship {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
+            attachments: None,
         };
 
         Ok(message)

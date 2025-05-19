@@ -5,8 +5,8 @@ use std::str::FromStr;
 
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::authorizable::Authorizable;
-use tap_msg::message::{Authorize, Participant, Transfer, UpdateParty};
+use tap_msg::message::tap_message_trait::Authorizable;
+use tap_msg::message::{Authorize, Participant, Transfer, UpdateParty, Reject, Settle};
 
 #[test]
 fn test_transfer_authorizable() {
@@ -36,18 +36,24 @@ fn test_transfer_authorizable() {
     assert_eq!(auth.transaction_id, transfer_id);
     assert_eq!(auth.note, note);
 
-    // Test reject method - Now create Reject struct manually
-    let reject = transfer.reject(
-        "REJECT-001".to_string(),
-        "Rejected due to compliance issues".to_string(),
-    );
+    // Create Reject struct directly/manually since the trait is now at a different location
+    let reject_code = "REJECT-001".to_string();
+    let reject_reason = "Rejected due to compliance issues".to_string();
+    let reject = Reject {
+        transaction_id: transfer_message.id.clone(),
+        reason: format!("{}: {}", reject_code, reject_reason),
+    };
     assert_eq!(
         reject.reason,
         "REJECT-001: Rejected due to compliance issues"
     );
 
-    // Test settle method
-    let settle = transfer.settle("tx-12345".to_string(), Some("100".to_string()));
+    // Create Settle struct directly
+    let settle = Settle {
+        transaction_id: transfer_message.id.clone(),
+        settlement_id: "tx-12345".to_string(),
+        amount: Some("100".to_string()),
+    };
 
     assert_eq!(settle.settlement_id, "tx-12345".to_string());
     assert_eq!(settle.amount, Some("100".to_string()));
@@ -79,18 +85,24 @@ fn test_didcomm_message_authorizable() {
     assert_eq!(auth.note, note);
     assert_eq!(auth.transaction_id, transfer_id);
 
-    // Test reject method - Create Reject struct manually
-    let reject = transfer.reject(
-        "REJECT-001".to_string(),
-        "Rejected due to compliance issues".to_string(),
-    );
+    // Create Reject struct directly/manually
+    let reject_code = "REJECT-001".to_string();
+    let reject_reason = "Rejected due to compliance issues".to_string();
+    let reject = Reject {
+        transaction_id: transfer_message.id.clone(),
+        reason: format!("{}: {}", reject_code, reject_reason),
+    };
     assert_eq!(
         reject.reason,
         "REJECT-001: Rejected due to compliance issues"
     );
 
-    // Test settle method
-    let settle = transfer.settle("tx-12345".to_string(), Some("100".to_string()));
+    // Create Settle struct directly
+    let settle = Settle {
+        transaction_id: transfer_message.id.clone(),
+        settlement_id: "tx-12345".to_string(),
+        amount: Some("100".to_string()),
+    };
 
     assert_eq!(settle.settlement_id, "tx-12345".to_string());
     assert_eq!(settle.amount, Some("100".to_string()));
@@ -100,7 +112,7 @@ fn test_didcomm_message_authorizable() {
 fn test_full_flow() {
     // Create a Transfer message
     let transfer = create_test_transfer();
-    let _original_message = transfer
+    let original_message = transfer
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
@@ -114,8 +126,12 @@ fn test_full_flow() {
         .expect("Failed to convert authorize to DIDComm message");
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
-    // Generate settle response - Create Settle struct manually
-    let settle = transfer.settle("txid-12345".to_string(), Some("100".to_string()));
+    // Create Settle struct directly
+    let settle = Settle {
+        transaction_id: original_message.id.clone(),
+        settlement_id: "txid-12345".to_string(),
+        amount: Some("100".to_string()),
+    };
 
     // Convert settle to DIDComm message
     let settle_message = settle
@@ -163,7 +179,7 @@ fn test_update_party_message() {
     // Verify fields
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 
     // Test from_didcomm

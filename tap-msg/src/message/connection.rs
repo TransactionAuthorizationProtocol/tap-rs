@@ -141,6 +141,7 @@ impl TapMessageBody for Connect {
             extra_headers: std::collections::HashMap::new(),
             from_prior: None,
             body: body_json,
+            attachments: None,
         };
 
         Ok(message)
@@ -201,6 +202,82 @@ impl TapMessageBody for Connect {
 
 impl_tap_message!(Connect);
 
+impl TapMessageBody for AuthorizationRequired {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#authorizationrequired"
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.url.is_empty() {
+            return Err(Error::Validation("Authorization URL is required".to_string()));
+        }
+
+        // Validate expiry date if present
+        if let Some(expires) = self.metadata.get("expires") {
+            if let Some(expires_str) = expires.as_str() {
+                // Simple format check
+                if !expires_str.contains('T') || !expires_str.contains(':') {
+                    return Err(Error::Validation("Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string()));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
+        // Serialize to JSON
+        let mut body_json = serde_json::to_value(self)
+            .map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        let now = Utc::now().timestamp() as u64;
+
+        // Create a new Message with required fields
+        let message = PlainMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: from.to_string(),
+            to: Vec::new(), // Recipients will be set separately
+            thid: None,
+            pthid: None,
+            created_time: Some(now),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
+
+    fn from_didcomm(message: &PlainMessage) -> Result<Self> {
+        // Validate message type
+        if message.type_ != Self::message_type() {
+            return Err(Error::InvalidMessageType(format!(
+                "Expected {} but got {}",
+                Self::message_type(),
+                message.type_
+            )));
+        }
+
+        // Extract fields from message body
+        let auth_req: AuthorizationRequired = serde_json::from_value(message.body.clone())
+            .map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        Ok(auth_req)
+    }
+}
+
 /// Out of Band invitation for TAP connections.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OutOfBand {
@@ -213,9 +290,101 @@ pub struct OutOfBand {
     /// The public DID or endpoint URL for the inviter.
     pub service: String,
 
+    /// Accept media types.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accept: Option<Vec<String>>,
+
+    /// Handshake protocols supported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub handshake_protocols: Option<Vec<String>>,
+
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl OutOfBand {
+    /// Create a new OutOfBand message.
+    pub fn new(goal_code: String, goal: String, service: String) -> Self {
+        Self {
+            goal_code,
+            goal,
+            service,
+            accept: None,
+            handshake_protocols: None,
+            metadata: HashMap::new(),
+        }
+    }
+}
+
+impl TapMessageBody for OutOfBand {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#outofband"
+    }
+
+    fn validate(&self) -> Result<()> {
+        if self.goal_code.is_empty() {
+            return Err(Error::Validation("Goal code is required".to_string()));
+        }
+
+        if self.service.is_empty() {
+            return Err(Error::Validation("Service is required".to_string()));
+        }
+
+        Ok(())
+    }
+
+    fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
+        // Serialize to JSON
+        let mut body_json = serde_json::to_value(self)
+            .map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        let now = Utc::now().timestamp() as u64;
+
+        // Create a new Message with required fields
+        let message = PlainMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: from.to_string(),
+            to: Vec::new(), // Recipients will be set separately
+            thid: None,
+            pthid: None,
+            created_time: Some(now),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            attachments: None,
+        };
+
+        Ok(message)
+    }
+
+    fn from_didcomm(message: &PlainMessage) -> Result<Self> {
+        // Validate message type
+        if message.type_ != Self::message_type() {
+            return Err(Error::InvalidMessageType(format!(
+                "Expected {} but got {}",
+                Self::message_type(),
+                message.type_
+            )));
+        }
+
+        // Extract fields from message body
+        let oob: OutOfBand = serde_json::from_value(message.body.clone())
+            .map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        Ok(oob)
+    }
 }
 
 /// Authorization Required message body.
@@ -231,10 +400,13 @@ pub struct AuthorizationRequired {
 
 impl AuthorizationRequired {
     /// Create a new AuthorizationRequired message.
-    pub fn new(url: &str) -> Self {
+    pub fn new(url: String, expires: String) -> Self {
+        let mut metadata = HashMap::new();
+        metadata.insert("expires".to_string(), serde_json::Value::String(expires));
+        
         Self {
-            url: url.to_string(),
-            metadata: HashMap::new(),
+            url,
+            metadata,
         }
     }
 

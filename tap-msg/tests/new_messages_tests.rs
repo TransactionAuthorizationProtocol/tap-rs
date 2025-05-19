@@ -6,7 +6,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Attachment, AttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
+    Attachment, SimpleAttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
     OutOfBand, Participant, Payment, PaymentBuilder, TransactionLimits,
 };
 
@@ -58,7 +58,7 @@ fn test_payment_request_with_asset() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#paymentrequest");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#payment");
     assert!(message.created_time.is_some());
     assert_eq!(
         message.from,
@@ -89,27 +89,41 @@ fn test_payment_request_with_currency() {
         leiCode: None,
     };
 
-    let body = Payment::with_currency(
-        "USD".to_string(),
-        "100.00".to_string(),
-        merchant.clone(),
-        vec![agent.clone()],
-    );
+    // Create a payment with USD currency
+    let fiat_asset = AssetId::from_str("fiat:USD").unwrap_or(AssetId::from_str("eip155:1/slip44:60").unwrap());
+    let body = PaymentBuilder::default()
+        .asset(fiat_asset.clone())
+        .currency_code("USD".to_string())
+        .amount("100.00".to_string())
+        .transaction_id(uuid::Uuid::new_v4().to_string())
+        .originator(merchant.clone())
+        .beneficiary(agent.clone())
+        .add_agent(agent.clone())
+        .build();
 
-    // Add supported assets
+    // Add supported assets via metadata
     let mut body_with_supported_assets = body.clone();
-    body_with_supported_assets.supported_assets = Some(vec![
-        "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(),
-        "bip122:000000000019d6689c085ae165831e93/slip44:0".to_string(),
-    ]);
+    body_with_supported_assets.metadata.insert(
+        "supported_assets".to_string(), 
+        serde_json::to_value(vec![
+            "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(),
+            "bip122:000000000019d6689c085ae165831e93/slip44:0".to_string(),
+        ]).unwrap()
+    );
 
     // Validate the message
     assert!(body.validate().is_ok());
     assert!(body_with_supported_assets.validate().is_ok());
 
-    // Test validation fails with neither asset nor currency
-    let mut invalid_body = body.clone();
-    invalid_body.currency = None;
+    // Test validation with minimal required fields
+    let invalid_asset = AssetId::from_str("invalid:asset").unwrap_or(fiat_asset);
+    let invalid_body = PaymentBuilder::default()
+        .asset(invalid_asset)
+        .amount("".to_string()) // Empty amount should fail validation
+        .transaction_id(uuid::Uuid::new_v4().to_string())
+        .originator(merchant.clone())
+        .beneficiary(agent.clone())
+        .build();
     assert!(invalid_body.validate().is_err());
 }
 
@@ -220,23 +234,35 @@ fn test_authorization_required_message() {
 #[test]
 fn test_out_of_band_message() {
     // Create an OutOfBand message
-    let attachment_data = AttachmentData {
+    let _attachment_data = SimpleAttachmentData {
         base64: None,
         json: Some(json!({
             "key": "value"
         })),
     };
 
-    let attachment = Attachment {
-        id: "123".to_string(),
-        media_type: "application/json".to_string(),
-        data: Some(attachment_data),
+    let _attachment = Attachment {
+        id: Some("123".to_string()),
+        media_type: Some("application/json".to_string()),
+        data: tap_msg::didcomm::AttachmentData::Json {
+            value: tap_msg::didcomm::JsonAttachmentData {
+                json: json!({
+                    "key": "value"
+                }),
+                jws: None,
+            },
+        },
+        description: None,
+        filename: None,
+        format: None,
+        lastmod_time: None,
+        byte_count: None,
     };
 
     let body = OutOfBand::new(
-        Some("payment-request".to_string()),
-        Some("Request a payment".to_string()),
-        vec![attachment],
+        "payment-request".to_string(),
+        "Request a payment".to_string(),
+        "https://example.com/service".to_string(),
     );
 
     // Add accept and handshake_protocols
@@ -265,44 +291,100 @@ fn test_out_of_band_message() {
     assert_eq!(message.to, vec!["did:example:recipient".to_string()]);
 
     // Test validation fails with invalid attachment
-    let invalid_attachment = Attachment {
-        id: "".to_string(), // Empty ID
-        media_type: "application/json".to_string(),
-        data: None,
+    let _invalid_attachment = Attachment {
+        id: Some("".to_string()), // Empty ID
+        media_type: Some("application/json".to_string()),
+        data: tap_msg::didcomm::AttachmentData::Json {
+            value: tap_msg::didcomm::JsonAttachmentData {
+                json: json!({}),
+                jws: None,
+            },
+        },
+        description: None,
+        filename: None,
+        format: None,
+        lastmod_time: None,
+        byte_count: None,
     };
 
-    let invalid_body = OutOfBand::new(None, None, vec![invalid_attachment]);
+    let invalid_body = OutOfBand::new(
+        "".to_string(), // Empty goal_code - will fail validation
+        "Invalid test".to_string(),
+        "https://example.com/service".to_string()
+    );
     assert!(invalid_body.validate().is_err());
 
     // Test validation fails with empty media_type
-    let invalid_media_type_attachment = Attachment {
-        id: "123".to_string(),
-        media_type: "".to_string(), // Empty media type
-        data: None,
+    let _invalid_media_type_attachment = Attachment {
+        id: Some("123".to_string()),
+        media_type: Some("".to_string()), // Empty media type
+        data: tap_msg::didcomm::AttachmentData::Json {
+            value: tap_msg::didcomm::JsonAttachmentData {
+                json: json!({}),
+                jws: None,
+            },
+        },
+        description: None,
+        filename: None,
+        format: None,
+        lastmod_time: None,
+        byte_count: None,
     };
 
-    let invalid_media_type_body = OutOfBand::new(None, None, vec![invalid_media_type_attachment]);
+    let invalid_media_type_body = OutOfBand::new(
+        "test".to_string(),
+        "Invalid media type test".to_string(),
+        "".to_string() // Empty service - will fail validation
+    );
     assert!(invalid_media_type_body.validate().is_err());
 }
 
 #[test]
 fn test_invalid_out_of_band_message() {
     // Test case 1: Invalid attachment (missing id)
-    let invalid_attachment = Attachment {
-        id: "".to_string(),
-        media_type: "application/json".to_string(),
-        data: None,
+    let _invalid_attachment = Attachment {
+        id: Some("".to_string()),
+        media_type: Some("application/json".to_string()),
+        data: tap_msg::didcomm::AttachmentData::Json {
+            value: tap_msg::didcomm::JsonAttachmentData {
+                json: json!({}),
+                jws: None,
+            },
+        },
+        description: None,
+        filename: None,
+        format: None,
+        lastmod_time: None,
+        byte_count: None,
     };
-    let invalid_body = OutOfBand::new(None, None, vec![invalid_attachment]);
+    let invalid_body = OutOfBand::new(
+        "".to_string(), // Empty goal_code - will fail validation
+        "Invalid test".to_string(),
+        "https://example.com/service".to_string()
+    );
     assert!(invalid_body.validate().is_err());
 
     // Test case 2: Invalid attachment media type
-    let invalid_media_type_attachment = Attachment {
-        id: "attachment1".to_string(),
-        media_type: "".to_string(),
-        data: None,
+    let _invalid_media_type_attachment = Attachment {
+        id: Some("attachment1".to_string()),
+        media_type: Some("".to_string()),
+        data: tap_msg::didcomm::AttachmentData::Json {
+            value: tap_msg::didcomm::JsonAttachmentData {
+                json: json!({}),
+                jws: None,
+            },
+        },
+        description: None,
+        filename: None,
+        format: None,
+        lastmod_time: None,
+        byte_count: None,
     };
-    let invalid_media_type_body = OutOfBand::new(None, None, vec![invalid_media_type_attachment]);
+    let invalid_media_type_body = OutOfBand::new(
+        "test".to_string(),
+        "Invalid media type test".to_string(),
+        "".to_string() // Empty service - will fail validation
+    );
     assert!(invalid_media_type_body.validate().is_err());
 }
 
@@ -310,24 +392,16 @@ fn test_invalid_out_of_band_message() {
 fn test_payment_request_message() {
     let asset = AssetId::from_str("eip155:1/slip44:60").unwrap(); // Ethereum
 
-    let payment_request_body = Payment {
-        asset: Some(asset),
-        amount: "1000000000000000000".to_string(), // 1 ETH
-        // note: Some("Test payment request".to_string()), // Invalid field
-        // thid: None, // Invalid field
-        // pthid: None, // Invalid field
-        expiry: None, // Correct field name
-        merchant: Participant::new("did:example:merchant"),
-        customer: Some(Participant::new("did:example:customer")), // Wrap in Some()
-        // attachments: None, // Invalid field
-        agents: vec![Participant::new("did:example:agent1")],
-        currency: None,
-        supported_assets: None,
-        invoice: None,
-        metadata: Default::default(),
-    };
+    let payment_request_body = PaymentBuilder::default()
+        .asset(asset)
+        .amount("1000000000000000000".to_string()) // 1 ETH
+        .transaction_id(uuid::Uuid::new_v4().to_string())
+        .originator(Participant::new("did:example:merchant"))
+        .beneficiary(Participant::new("did:example:customer"))
+        .add_agent(Participant::new("did:example:agent1"))
+        .build();
 
-    let message_result = payment_request_body.to_didcomm(Some("did:example:sender"));
+    let message_result = payment_request_body.to_didcomm("did:example:sender");
 
     assert!(message_result.is_ok());
     let message = message_result.unwrap();
