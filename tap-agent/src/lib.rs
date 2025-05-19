@@ -28,6 +28,9 @@ pub mod key_manager;
 /// Message types and utilities
 pub mod message;
 
+/// Key storage utilities
+pub mod storage;
+
 /// A trait for types that can be serialized to JSON in an type-erased way
 pub trait ErasedSerialize {
     /// Serialize to JSON string
@@ -48,7 +51,8 @@ pub use did::{
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
-pub use key_manager::{KeyManager, Secret};
+pub use key_manager::{DefaultKeyManager, KeyManager, Secret, SecretMaterial, SecretType};
+pub use storage::{KeyStorage, StoredKey};
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]

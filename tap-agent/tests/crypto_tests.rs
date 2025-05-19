@@ -127,6 +127,9 @@ impl TestDIDResolver {
             verification_method: vec![verification_method.clone()],
             authentication: vec![key_id.clone()],
             key_agreement: vec![key_id],
+            assertion_method: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
             service: vec![],
         }
     }
@@ -154,6 +157,9 @@ impl TestDIDResolver {
             verification_method: vec![verification_method.clone()],
             authentication: vec![key_id.clone()],
             key_agreement: vec![key_id],
+            assertion_method: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
             service: vec![],
         }
     }
@@ -181,6 +187,9 @@ impl TestDIDResolver {
             verification_method: vec![verification_method.clone()],
             authentication: vec![key_id.clone()],
             key_agreement: vec![key_id],
+            assertion_method: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
             service: vec![],
         }
     }
