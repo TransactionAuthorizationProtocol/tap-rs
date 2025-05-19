@@ -114,7 +114,7 @@ pub trait DebugSecretsResolver: Debug + Send + Sync + AsAny {
 ///
 /// This implementation provides a simple in-memory store for cryptographic secrets
 /// used by the TAP Agent for DIDComm operations.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct BasicSecretResolver {
     /// Maps DIDs to their associated secrets
     secrets: std::collections::HashMap<String, Secret>,
@@ -160,12 +160,14 @@ pub struct DefaultMessagePacker {
     /// Secrets resolver
     secrets_resolver: Arc<dyn DebugSecretsResolver>,
     /// Enable debug logging
+    #[allow(dead_code)]
     debug: bool,
 }
 
 #[cfg(target_arch = "wasm32")]
 pub struct DefaultMessagePacker {
     /// Enable debug logging
+    #[allow(dead_code)]
     debug: bool,
 }
 

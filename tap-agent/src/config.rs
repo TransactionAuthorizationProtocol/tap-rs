@@ -50,6 +50,12 @@ impl AgentConfig {
         self.security_mode = Some(mode.to_string());
         self
     }
+
+    /// Sets the debug mode
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
+        self
+    }
 }
 
 impl Default for AgentConfig {

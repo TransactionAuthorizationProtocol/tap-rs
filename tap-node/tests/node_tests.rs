@@ -1,11 +1,13 @@
 //! Tests for the TAP Node
 
+use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tap_agent::crypto::DebugSecretsResolver;
-use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
-use tap_node::event::logger::{EventLogger, EventSubscriber};
-use tap_node::event::Event;
+use tap_agent::key_manager::Secret;
+use tap_node::event::logger::{EventLogger, EventLoggerConfig, LogDestination};
+use tap_node::event::EventBus;
+use tap_node::{EventSubscriber, NodeEvent};
 
 /// A simplified test secrets resolver
 #[derive(Debug)]
@@ -37,8 +39,9 @@ struct TestEventSubscriber {
     count: std::sync::atomic::AtomicUsize,
 }
 
+#[async_trait::async_trait]
 impl EventSubscriber for TestEventSubscriber {
-    fn on_event(&self, _event: &Event) {
+    async fn handle_event(&self, _event: NodeEvent) {
         self.count.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 }
@@ -50,57 +53,69 @@ impl TestEventSubscriber {
 }
 
 /// Test that the event logger can be created and events can be logged
-#[test]
-fn test_event_logger_creation() {
+#[tokio::test]
+async fn test_event_logger_creation() {
+    // Create an event bus
+    let event_bus = Arc::new(EventBus::new());
+
+    // Create a logger config
+    let logger_config = EventLoggerConfig {
+        destination: LogDestination::Console,
+        structured: false,
+        log_level: log::Level::Info,
+    };
+
     // Create an event logger
-    let event_logger = EventLogger::new();
+    let event_logger = Arc::new(EventLogger::new(logger_config));
 
     // Create a test subscriber
     let subscriber = Arc::new(TestEventSubscriber::default());
-    let subscriber_clone = subscriber.clone();
 
-    // Register the subscriber
-    event_logger.register_subscriber(Box::new(move |event| {
-        subscriber_clone.on_event(event);
-    }));
+    // Register the subscribers with the event bus
+    event_bus.subscribe(subscriber.clone()).await;
+    event_bus.subscribe(event_logger.clone()).await;
 
-    // Log an event
-    event_logger.log_event(Event::MessageReceived {
-        from: Some("did:example:alice".to_string()),
-        to: "did:example:bob".to_string(),
-        message_id: "msg-123".to_string(),
-        message_type: "test.message".to_string(),
-        timestamp: chrono::Utc::now(),
-    });
+    // Publish a message received event
+    event_bus
+        .publish_agent_registered("did:example:alice".to_string())
+        .await;
 
     // Verify that the subscriber received the event
     assert_eq!(subscriber.get_count(), 1);
 }
 
 /// Test that multiple events can be logged
-#[test]
-fn test_multiple_events() {
+#[tokio::test]
+async fn test_multiple_events() {
+    // Create an event bus
+    let event_bus = Arc::new(EventBus::new());
+
+    // Create a logger config
+    let logger_config = EventLoggerConfig {
+        destination: LogDestination::Console,
+        structured: false,
+        log_level: log::Level::Info,
+    };
+
     // Create an event logger
-    let event_logger = EventLogger::new();
+    let event_logger = Arc::new(EventLogger::new(logger_config));
 
     // Create a test subscriber
     let subscriber = Arc::new(TestEventSubscriber::default());
-    let subscriber_clone = subscriber.clone();
 
-    // Register the subscriber
-    event_logger.register_subscriber(Box::new(move |event| {
-        subscriber_clone.on_event(event);
-    }));
+    // Register the subscribers with the event bus
+    event_bus.subscribe(subscriber.clone()).await;
+    event_bus.subscribe(event_logger.clone()).await;
 
-    // Log multiple events
+    // Publish multiple events
     for i in 0..5 {
-        event_logger.log_event(Event::MessageSent {
-            from: "did:example:alice".to_string(),
-            to: vec!["did:example:bob".to_string()],
-            message_id: format!("msg-{}", i),
-            message_type: "test.message".to_string(),
-            timestamp: chrono::Utc::now(),
-        });
+        // Create a test message
+        let test_message = format!("Test message {}", i);
+
+        // Publish a message
+        event_bus
+            .publish_agent_message(format!("did:example:bob{}", i), test_message.into_bytes())
+            .await;
     }
 
     // Verify that the subscriber received all events

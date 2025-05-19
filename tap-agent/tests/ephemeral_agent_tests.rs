@@ -5,7 +5,6 @@ use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{DIDGenerationOptions, KeyType, MultiResolver};
 use tap_agent::key_manager::{DefaultKeyManager, KeyManager, Secret, SecretMaterial, SecretType};
-use tap_agent::message::EmptyMessage; // Add this struct if needed
 use tokio::test;
 
 #[derive(Debug)]
@@ -60,8 +59,12 @@ impl tap_agent::did::DIDMethodResolver for TestDIDResolver {
 pub struct EmptyMessage {}
 
 impl tap_msg::TapMessageBody for EmptyMessage {
-    fn get_type(&self) -> &'static str {
+    fn message_type() -> &'static str {
         "test.empty"
+    }
+
+    fn validate(&self) -> Result<(), tap_msg::error::Error> {
+        Ok(())
     }
 }
 

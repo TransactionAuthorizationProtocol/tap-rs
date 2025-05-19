@@ -94,6 +94,12 @@ impl DefaultKeyManager {
     }
 }
 
+impl Default for DefaultKeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyManager for DefaultKeyManager {
     fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey, JsValue> {
         self.generator.generate_key(options.key_type)
@@ -119,7 +125,15 @@ impl DIDKeyGenerator {
     pub fn new() -> Self {
         Self {}
     }
+}
 
+impl Default for DIDKeyGenerator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DIDKeyGenerator {
     pub fn generate_key(&self, key_type: KeyType) -> Result<GeneratedKey, JsValue> {
         match key_type {
             KeyType::Ed25519 => {
@@ -193,6 +207,7 @@ impl DIDKeyGenerator {
     }
 }
 
+#[derive(Clone)]
 pub struct BasicSecretResolver {
     secrets: HashMap<String, Secret>,
 }
@@ -203,9 +218,17 @@ impl BasicSecretResolver {
             secrets: HashMap::new(),
         }
     }
+}
 
-    pub fn add_secret(&mut self, did: &str, secret: Secret) {
-        self.secrets.insert(did.to_string(), secret);
+impl Default for BasicSecretResolver {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl BasicSecretResolver {
+    pub fn add_secret(&mut self, did: impl AsRef<str>, secret: Secret) {
+        self.secrets.insert(did.as_ref().to_string(), secret);
     }
 
     pub fn get_secrets_map(&self) -> &HashMap<String, Secret> {
@@ -2163,7 +2186,7 @@ impl TapAgent {
                         };
 
                         // Add the secret to the resolver
-                        new_secrets_resolver.add_secret(&did, secret);
+                        new_secrets_resolver.add_secret(did, secret);
 
                         if self.debug {
                             console::log_1(&JsValue::from_str(&format!(
@@ -2200,7 +2223,7 @@ impl TapAgent {
                             };
 
                             // Add the secret to the resolver
-                            new_secrets_resolver.add_secret(&did, secret);
+                            new_secrets_resolver.add_secret(did, secret);
 
                             if self.debug {
                                 console::log_1(&JsValue::from_str(&format!(
@@ -2238,7 +2261,7 @@ impl TapAgent {
                             };
 
                             // Add the secret to the resolver
-                            new_secrets_resolver.add_secret(&did, secret);
+                            new_secrets_resolver.add_secret(did, secret);
 
                             if self.debug {
                                 console::log_1(&JsValue::from_str(&format!(

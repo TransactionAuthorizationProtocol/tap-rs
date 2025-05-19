@@ -1,7 +1,6 @@
-use tap_agent::key_manager::DefaultKeyManager;
-//! Tests for signing and verifying messages with different key types
-
+/// Tests for signing and verifying messages with different key types
 use tap_agent::did::{DIDGenerationOptions, KeyType};
+use tap_agent::key_manager::DefaultKeyManager;
 use tap_agent::key_manager::KeyManager;
 
 // Test that we can generate keys and sign/verify messages

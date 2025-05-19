@@ -18,7 +18,7 @@ mod websocket_tests {
         // The get_endpoint_url method is private, but we can indirectly test it
         // by checking the debug output which should contain the URL
         let sender_debug = format!("{:?}", sender);
-        assert!(sender_debug.contains("WebSocketMessageSender"));
+        assert!(sender_debug.contains("WebSocketPlainMessageSender"));
 
         // Since we're not actually connecting, we can test the send function
         // which will fail due to connection issues, but should attempt to connect

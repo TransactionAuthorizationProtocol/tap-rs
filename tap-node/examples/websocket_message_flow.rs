@@ -1,14 +1,17 @@
 //! Example of using WebSocket messaging with TAP
 
+use base64;
 use std::sync::Arc;
 use std::time::Duration;
-use tap_agent::agent::{DefaultAgent, DefaultAgentBuilder};
+use tap_agent::agent::DefaultAgent;
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{DIDKeyGenerator, MultiResolver};
-use tap_agent::key_manager::{DefaultKeyManager, Secret, SecretMaterial, SecretType};
-use tap_node::message::router::MessageRouter;
-use tap_node::message::sender::MessageSender;
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_node::message::sender::{
+    HttpPlainMessageSender, PlainMessageSender, WebSocketPlainMessageSender,
+};
+use tap_node::message::{DefaultPlainMessageRouter, PlainMessageRouter};
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -40,8 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             private_key_jwk: serde_json::json!({
                 "kty": "OKP",
                 "crv": "Ed25519",
-                "x": base64::engine::general_purpose::STANDARD.encode(&alice_key.public_key),
-                "d": base64::engine::general_purpose::STANDARD.encode(&alice_key.private_key)
+                "x": base64::encode(&alice_key.public_key),
+                "d": base64::encode(&alice_key.private_key)
             }),
         },
     };
@@ -54,8 +57,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             private_key_jwk: serde_json::json!({
                 "kty": "OKP",
                 "crv": "Ed25519",
-                "x": base64::engine::general_purpose::STANDARD.encode(&bob_key.public_key),
-                "d": base64::engine::general_purpose::STANDARD.encode(&bob_key.private_key)
+                "x": base64::encode(&bob_key.public_key),
+                "d": base64::encode(&bob_key.private_key)
             }),
         },
     };
@@ -84,12 +87,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create WebSocket message routers
     println!("2. Creating message routers...");
 
-    let alice_router = MessageRouter::new(alice.clone());
-    let bob_router = MessageRouter::new(bob.clone());
+    // Create a router config
+    let alice_router = tap_node::message::DefaultPlainMessageRouter::new();
+    let bob_router = tap_node::message::DefaultPlainMessageRouter::new();
 
-    // Create message senders
-    let alice_sender = MessageSender::new("ws://localhost:3001/ws");
-    let bob_sender = MessageSender::new("ws://localhost:3002/ws");
+    // Create message senders (simplified here - would need actual endpoints)
+    let alice_sender =
+        tap_node::WebSocketPlainMessageSender::new("ws://localhost:3001/ws".to_string());
+    let bob_sender =
+        tap_node::WebSocketPlainMessageSender::new("ws://localhost:3002/ws".to_string());
 
     // Start the WebSocket servers (would usually be in separate processes)
     println!("3. Starting WebSocket servers...");

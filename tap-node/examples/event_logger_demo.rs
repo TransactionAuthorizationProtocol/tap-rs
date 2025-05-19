@@ -1,61 +1,77 @@
 //! Example of using the TAP event logger
 
+use async_trait::async_trait;
+use log;
+use serde_json::json;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use tap_agent::crypto::DebugSecretsResolver;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
-use tap_node::event::logger::{EventLogger, EventSubscriber};
-use tap_node::event::Event;
+use tap_node::event::logger::EventLogger;
+use tap_node::event::EventBus;
+use tap_node::{EventSubscriber, NodeEvent};
 
 /// Subscriber that prints events to the console
 #[derive(Debug)]
 struct ConsoleSubscriber;
 
+#[async_trait::async_trait]
 impl EventSubscriber for ConsoleSubscriber {
-    fn on_event(&self, event: &Event) {
+    async fn handle_event(&self, event: NodeEvent) {
         println!("Event: {:?}", event);
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create an event bus
+    let event_bus = Arc::new(tap_node::event::EventBus::new());
+
+    // Configure the event logger
+    let logger_config = tap_node::event::logger::EventLoggerConfig {
+        destination: tap_node::event::logger::LogDestination::Console,
+        structured: false,
+        log_level: log::Level::Info,
+    };
+
     // Create an event logger
-    let event_logger = EventLogger::new();
+    let event_logger = Arc::new(EventLogger::new(logger_config));
 
     // Create an event subscriber
-    let console_subscriber = ConsoleSubscriber;
+    let console_subscriber = Arc::new(ConsoleSubscriber);
 
-    // Register the subscriber with the logger
-    event_logger.register_subscriber(Box::new(console_subscriber));
+    // Subscribe to the event bus
+    event_bus.subscribe(console_subscriber).await;
+    event_bus.subscribe(event_logger.clone()).await;
 
     // Let's simulate some TAP events
 
-    // Message received event
-    let message_received = Event::MessageReceived {
-        from: Some("did:example:alice".to_string()),
-        to: "did:example:bob".to_string(),
-        message_id: "msg-123".to_string(),
-        message_type: "tap.transfer".to_string(),
-        timestamp: chrono::Utc::now(),
-    };
+    // Use one of the provided event publishing methods
+    event_bus
+        .publish_agent_registered("did:example:alice".to_string())
+        .await;
 
-    // Log the event
-    event_logger.log_event(message_received);
+    // Create a DID resolved event
+    event_bus
+        .publish_did_resolved("did:example:bob".to_string(), true)
+        .await;
 
-    // Message sent event
-    let message_sent = Event::MessageSent {
-        from: "did:example:bob".to_string(),
-        to: vec!["did:example:alice".to_string()],
-        message_id: "msg-456".to_string(),
-        message_type: "tap.transfer.reply".to_string(),
-        timestamp: chrono::Utc::now(),
-    };
+    // Create an agent message event
+    let message_bytes = serde_json::to_string(&json!({
+        "id": "msg-456",
+        "type": "tap.transfer.reply",
+        "from": "did:example:bob",
+        "to": "did:example:alice"
+    }))
+    .unwrap()
+    .into_bytes();
 
-    // Log the event
-    event_logger.log_event(message_sent);
+    event_bus
+        .publish_agent_message("did:example:bob".to_string(), message_bytes)
+        .await;
 
     // Simulate setting up TAP agents with an event logger
-    simulate_agent_setup(&event_logger);
+    simulate_agent_setup(&event_logger).await;
 
     // Wait a bit to let the logs print
     tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
@@ -64,12 +80,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Simulate setting up TAP agents with event logging
-fn simulate_agent_setup(event_logger: &EventLogger) {
+async fn simulate_agent_setup(event_logger: &Arc<EventLogger>) {
     // First, create mocked crypto components
 
     // TestDIDResolver - a mock DID resolver
     #[derive(Debug)]
     struct TestDIDResolver;
+
+    // Replace TestDIDResolver with MultiResolver
+    // which already implements SyncDIDResolver
+    let did_resolver = Arc::new(tap_agent::did::MultiResolver::default());
 
     // TestSecretsResolver - a mock secrets resolver
     #[derive(Debug)]
@@ -112,8 +132,7 @@ fn simulate_agent_setup(event_logger: &EventLogger) {
     }
 
     // In a real implementation, we would:
-    // 1. Create a DID resolver
-    let did_resolver = Arc::new(TestDIDResolver);
+    // 1. We already created a DID resolver above
 
     // 2. Create a secrets resolver
     let secrets_resolver = Arc::new(TestSecretsResolver::new());
@@ -134,11 +153,14 @@ fn simulate_agent_setup(event_logger: &EventLogger) {
     // In a real implementation, we would:
     // let agent = tap_agent::agent::DefaultAgent::new(config, message_packer);
 
-    // Log agent creation event
-    event_logger.log_event(Event::AgentCreated {
-        did: "did:example:alice".to_string(),
-        timestamp: chrono::Utc::now(),
-    });
+    // Use the event bus to publish an agent registered event
+    let event_bus = Arc::new(EventBus::new());
+    event_bus.subscribe(event_logger.clone()).await;
+
+    // Log agent creation by publishing an agent registered event
+    event_bus
+        .publish_agent_registered("did:example:alice".to_string())
+        .await;
 
     println!("Agent setup simulation completed");
 }

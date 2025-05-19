@@ -19,7 +19,7 @@
 //! async fn example() {
 //!     // Create a new TAP node
 //!     let node = TapNode::new(NodeConfig::default());
-//!     
+//!
 //!     // Configure the event logger
 //!     let logger_config = EventLoggerConfig {
 //!         destination: LogDestination::File {
@@ -30,11 +30,11 @@
 //!         structured: true, // Use JSON format
 //!         log_level: log::Level::Info,
 //!     };
-//!     
+//!
 //!     // Create and subscribe the event logger
 //!     let event_logger = Arc::new(EventLogger::new(logger_config));
 //!     node.get_event_bus().subscribe(event_logger).await;
-//!     
+//!
 //!     // The event logger will now receive and log all events
 //! }
 //! ```

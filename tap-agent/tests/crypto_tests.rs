@@ -1,10 +1,10 @@
 use tap_agent::key_manager::DefaultKeyManager;
-//! Comprehensive tests for cryptographic operations
-//!
-//! These tests verify the cryptographic implementations for:
-//! - Signing and signature verification with different key types
-//! - Encryption and decryption with different key types
-//! - Handling of invalid cryptographic materials
+// Comprehensive tests for cryptographic operations
+//
+// These tests verify the cryptographic implementations for:
+// - Signing and signature verification with different key types
+// - Encryption and decryption with different key types
+// - Handling of invalid cryptographic materials
 
 use async_trait::async_trait;
 use base64::Engine;

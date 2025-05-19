@@ -103,6 +103,8 @@ pub mod message;
 pub mod resolver;
 
 pub use error::{Error, Result};
+pub use event::logger::{EventLogger, EventLoggerConfig, LogDestination};
+pub use event::{EventSubscriber, NodeEvent};
 pub use message::sender::{
     HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender, WebSocketPlainMessageSender,
 };
@@ -233,7 +235,8 @@ impl DefaultAgentExt for DefaultAgent {
     }
 }
 
-use event::logger::{EventLogger, EventLoggerConfig};
+// Already imported as public at the top
+// use event::logger::{EventLogger, EventLoggerConfig};
 
 /// Configuration for a TAP Node
 #[derive(Debug, Clone, Default)]

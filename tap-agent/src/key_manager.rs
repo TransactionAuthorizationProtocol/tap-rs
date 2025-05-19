@@ -227,7 +227,7 @@ impl DebugSecretsResolver for KeyManagerSecretResolver {
 
         // Return a reference to a static empty HashMap
         static EMPTY_MAP: once_cell::sync::Lazy<std::collections::HashMap<String, Secret>> =
-            once_cell::sync::Lazy::new(|| std::collections::HashMap::new());
+            once_cell::sync::Lazy::new(std::collections::HashMap::new);
 
         &EMPTY_MAP
     }

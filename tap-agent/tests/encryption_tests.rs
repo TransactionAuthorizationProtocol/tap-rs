@@ -1,10 +1,10 @@
 use tap_agent::key_manager::DefaultKeyManager;
-//! Tests specifically focused on encryption/decryption functionality
-//!
-//! These tests verify the encryption and decryption functionality:
-//! - Testing AuthCrypt mode with different key types
-//! - Testing encryption with various payload sizes
-//! - Verifying JWE format compliance
+// Tests specifically focused on encryption/decryption functionality
+//
+// These tests verify the encryption and decryption functionality:
+// - Testing AuthCrypt mode with different key types
+// - Testing encryption with various payload sizes
+// - Verifying JWE format compliance
 
 use async_trait::async_trait;
 use base64::Engine;

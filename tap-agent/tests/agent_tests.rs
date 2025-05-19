@@ -8,8 +8,7 @@ use tap_agent::config::AgentConfig;
 
 use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver, DefaultMessagePacker};
 use tap_agent::did::{
-    DIDDoc, DIDGenerationOptions, DIDMethodResolver, GeneratedKey, KeyType, MultiResolver, Service,
-    SyncDIDResolver, VerificationMethod,
+    DIDDoc, DIDMethodResolver, MultiResolver, Service, VerificationMethod, VerificationMethodType,
 };
 use tap_agent::key_manager::{DefaultKeyManager, KeyManager, Secret, SecretMaterial, SecretType};
 use tap_agent::message::SecurityMode;
@@ -22,8 +21,12 @@ struct TestMessage {
 }
 
 impl TapMessageBody for TestMessage {
-    fn get_type(&self) -> &'static str {
+    fn message_type() -> &'static str {
         "test.message.type"
+    }
+
+    fn validate(&self) -> Result<(), tap_msg::error::Error> {
+        Ok(())
     }
 }
 
@@ -51,7 +54,7 @@ impl DIDMethodResolver for TestDIDResolver {
                     id: did.to_string(),
                     verification_method: vec![VerificationMethod {
                         id: format!("{}#key-1", did),
-                        type_: "Ed25519VerificationKey2018".to_string(),
+                        type_: VerificationMethodType::Ed25519VerificationKey2018,
                         controller: did.to_string(),
                         verification_material: tap_agent::did::VerificationMaterial::Base58 {
                             public_key_base58: "test1234".to_string(),
@@ -68,7 +71,7 @@ impl DIDMethodResolver for TestDIDResolver {
                     id: did.to_string(),
                     verification_method: vec![VerificationMethod {
                         id: format!("{}#key-1", did),
-                        type_: "Ed25519VerificationKey2018".to_string(),
+                        type_: VerificationMethodType::Ed25519VerificationKey2018,
                         controller: did.to_string(),
                         verification_material: tap_agent::did::VerificationMaterial::Base58 {
                             public_key_base58: "test1234".to_string(),
@@ -90,7 +93,7 @@ impl DIDMethodResolver for TestDIDResolver {
                     id: did.to_string(),
                     verification_method: vec![VerificationMethod {
                         id: format!("{}#key-1", did),
-                        type_: "Ed25519VerificationKey2018".to_string(),
+                        type_: VerificationMethodType::Ed25519VerificationKey2018,
                         controller: did.to_string(),
                         verification_material: tap_agent::did::VerificationMaterial::Base58 {
                             public_key_base58: "test1234".to_string(),
@@ -243,7 +246,7 @@ async fn test_send_message_to_multiple_recipients() {
 
     // Check the delivery results
     for result in &delivery_results {
-        assert_eq!(result.recipient, "did:example:456");
+        assert_eq!(result.did, "did:example:456");
         assert!(result.status.is_none()); // No actual delivery with deliver=false
         assert!(result.error.is_none()); // No error expected
     }
