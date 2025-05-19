@@ -5,9 +5,9 @@
 
 use crate::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey};
 use crate::error::{Error, Result};
-use tap_msg::didcomm::Secret;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
+use tap_msg::didcomm::Secret;
 
 /// A key manager for storing and retrieving keys.
 #[derive(Debug, Clone)]

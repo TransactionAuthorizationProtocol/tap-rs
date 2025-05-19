@@ -86,6 +86,8 @@ pub struct JweRecipient {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JweHeader {
     pub kid: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_kid: Option<String>,
 }
 
 // Structure for decoded JWE protected field

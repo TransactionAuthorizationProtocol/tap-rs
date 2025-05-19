@@ -309,9 +309,7 @@ impl Agent for DefaultAgent {
         if let Some(doc) = did_doc {
             // First pass: Look for DIDCommMessaging services specifically
             // Try to find a DIDCommMessaging service first
-            if let Some(service) = doc.service.iter().find(|s| {
-                s.type_ == "DIDCommMessaging"
-            }) {
+            if let Some(service) = doc.service.iter().find(|s| s.type_ == "DIDCommMessaging") {
                 // For DIDCommMessaging, return the service_endpoint directly
                 return Ok(Some(service.service_endpoint.clone()));
             }

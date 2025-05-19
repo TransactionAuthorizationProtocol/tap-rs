@@ -8,14 +8,17 @@
 use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
 use crate::is_running_tests;
-use crate::message::{SecurityMode, Jws, JwsSignature, JwsHeader, JwsProtected, Jwe, JweRecipient, JweHeader, JweProtected, EphemeralPublicKey};
+use crate::message::{
+    EphemeralPublicKey, Jwe, JweHeader, JweProtected, JweRecipient, Jws, JwsHeader, JwsProtected,
+    JwsSignature, SecurityMode,
+};
 use aes_gcm::{AeadInPlace, Aes256Gcm, KeyInit, Nonce};
 use async_trait::async_trait;
 use base64::Engine;
 use ed25519_dalek::{Signer as Ed25519Signer, Verifier, VerifyingKey};
 use k256::{ecdsa::Signature as Secp256k1Signature, ecdsa::SigningKey as Secp256k1SigningKey};
 use p256::ecdh::EphemeralSecret as P256EphemeralSecret;
-use p256::elliptic_curve::sec1::FromEncodedPoint;
+use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
 use p256::EncodedPoint as P256EncodedPoint;
 use p256::PublicKey as P256PublicKey;
 use p256::{ecdsa::Signature as P256Signature, ecdsa::SigningKey as P256SigningKey};
@@ -25,7 +28,7 @@ use serde_json::Value;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::sync::Arc;
-use tap_msg::didcomm::{PlainMessage, DIDDoc, Secret, SecretMaterial, VerificationMaterial};
+use tap_msg::didcomm::{DIDDoc, PlainMessage, Secret, SecretMaterial, VerificationMaterial};
 use uuid::Uuid;
 
 /// A trait for packing and unpacking messages with DIDComm.
@@ -523,7 +526,7 @@ impl MessagePacker for DefaultMessagePacker {
 
                     // Base64 encode the message payload
                     let payload_b64 = base64::engine::general_purpose::STANDARD.encode(payload);
-                    
+
                     // Encode the signature to base64
                     let signature_value =
                         base64::engine::general_purpose::STANDARD.encode(&signature);
@@ -533,29 +536,23 @@ impl MessagePacker for DefaultMessagePacker {
                         typ: crate::message::DIDCOMM_SIGNED.to_string(),
                         alg: algorithm.to_string(),
                     };
-                    
+
                     // Serialize and encode the protected header
                     let protected_json = serde_json::to_string(&protected).map_err(|e| {
-                        Error::Serialization(format!(
-                            "Failed to serialize protected header: {}",
-                            e
-                        ))
+                        Error::Serialization(format!("Failed to serialize protected header: {}", e))
                     })?;
-                    
-                    let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
+
+                    let protected_b64 =
+                        base64::engine::general_purpose::STANDARD.encode(protected_json);
 
                     // Create the JWS with signature
                     let jws = Jws {
                         payload: payload_b64,
-                        signatures: vec![
-                            JwsSignature {
-                                protected: protected_b64,
-                                signature: signature_value,
-                                header: JwsHeader {
-                                    kid: key_id,
-                                },
-                            }
-                        ],
+                        signatures: vec![JwsSignature {
+                            protected: protected_b64,
+                            signature: signature_value,
+                            header: JwsHeader { kid: key_id },
+                        }],
                     };
 
                     // Return the serialized signed message
@@ -587,6 +584,9 @@ impl MessagePacker for DefaultMessagePacker {
                     let mut iv_bytes = [0u8; 12]; // 96-bit IV for AES-GCM
                     OsRng.fill_bytes(&mut iv_bytes);
 
+                    // Generate an ephemeral key pair for ECDH
+                    let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
+
                     // 2. Encrypt the payload with the CEK
                     // Serialize the message to JSON
                     let payload_json = serde_json::to_string(&plain_message).map_err(|e| {
@@ -615,7 +615,7 @@ impl MessagePacker for DefaultMessagePacker {
 
                     // Use the real authentication tag from AES-GCM
                     let auth_tag = base64::engine::general_purpose::STANDARD.encode(tag.as_slice());
-                    
+
                     // Base64 encode the IV
                     let iv_b64 = base64::engine::general_purpose::STANDARD.encode(&iv_bytes);
 
@@ -741,10 +741,8 @@ impl MessagePacker for DefaultMessagePacker {
                                             P256PublicKey::from_encoded_point(&encoded_point)
                                                 .expect("Invalid P-256 public key");
 
-                                        // Generate an ephemeral key pair for ECDH
-                                        let ephemeral_secret =
-                                            P256EphemeralSecret::random(&mut OsRng);
-                                        let _ephemeral_public = ephemeral_secret.public_key();
+                                        // Use the same ephemeral key we generated earlier for the header
+                                        // The ephemeral_secret is already generated at the beginning
 
                                         // Perform ECDH to derive a shared secret
                                         let shared_secret =
@@ -815,6 +813,7 @@ impl MessagePacker for DefaultMessagePacker {
                             encrypted_key: encrypted_key,
                             header: JweHeader {
                                 kid: recipient_key_id,
+                                sender_kid: Some(format!("{}#keys-1", from_did)),
                             },
                         });
                     }
@@ -828,14 +827,26 @@ impl MessagePacker for DefaultMessagePacker {
 
                     // Create the ephemeral public key info (for the protected header)
                     // Generate a random ephemeral key ID
-                    let apv = base64::engine::general_purpose::STANDARD.encode(Uuid::new_v4().as_bytes());
+                    let apv =
+                        base64::engine::general_purpose::STANDARD.encode(Uuid::new_v4().as_bytes());
 
-                    // Create a placeholder for ephemeral public key
-                    // In a real implementation, this would be derived from the ephemeral private key
+                    // Use the ephemeral key pair we generated earlier
+                    let ephemeral_public_key = ephemeral_secret.public_key();
+
+                    // Convert the public key to coordinates
+                    let point = ephemeral_public_key.to_encoded_point(false); // Uncompressed format
+                    let x_bytes = point.x().unwrap().to_vec();
+                    let y_bytes = point.y().unwrap().to_vec();
+
+                    // Base64 encode the coordinates for the ephemeral public key
+                    let x_b64 = base64::engine::general_purpose::STANDARD.encode(&x_bytes);
+                    let y_b64 = base64::engine::general_purpose::STANDARD.encode(&y_bytes);
+
+                    // Create the ephemeral public key structure
                     let ephemeral_key = EphemeralPublicKey::Ec {
                         crv: "P-256".to_string(),
-                        x: "exampleX".to_string(),
-                        y: "exampleY".to_string(),
+                        x: x_b64,
+                        y: y_b64,
                     };
 
                     // Create the protected header
@@ -849,13 +860,11 @@ impl MessagePacker for DefaultMessagePacker {
 
                     // Serialize and encode the protected header
                     let protected_json = serde_json::to_string(&protected).map_err(|e| {
-                        Error::Serialization(format!(
-                            "Failed to serialize protected header: {}",
-                            e
-                        ))
+                        Error::Serialization(format!("Failed to serialize protected header: {}", e))
                     })?;
-                    
-                    let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
+
+                    let protected_b64 =
+                        base64::engine::general_purpose::STANDARD.encode(protected_json);
 
                     // Create the JWE structure
                     let jwe = Jwe {
@@ -923,17 +932,16 @@ impl MessagePacker for DefaultMessagePacker {
                     };
 
                     // Decode the payload
-                    let payload_bytes = match base64::engine::general_purpose::STANDARD
-                        .decode(&jws.payload)
-                    {
-                        Ok(bytes) => bytes,
-                        Err(e) => {
-                            return Err(Error::Cryptography(format!(
-                                "Failed to decode JWS payload: {}",
-                                e
-                            )));
-                        }
-                    };
+                    let payload_bytes =
+                        match base64::engine::general_purpose::STANDARD.decode(&jws.payload) {
+                            Ok(bytes) => bytes,
+                            Err(e) => {
+                                return Err(Error::Cryptography(format!(
+                                    "Failed to decode JWS payload: {}",
+                                    e
+                                )));
+                            }
+                        };
 
                     // The payload is a serialized PlainMessage
                     let payload_str = String::from_utf8(payload_bytes).map_err(|e| {
@@ -973,7 +981,8 @@ impl MessagePacker for DefaultMessagePacker {
                         };
 
                         // Parse the protected header
-                        let protected: JwsProtected = match serde_json::from_slice(&protected_bytes) {
+                        let protected: JwsProtected = match serde_json::from_slice(&protected_bytes)
+                        {
                             Ok(value) => value,
                             Err(_) => continue, // Skip invalid protected header
                         };
@@ -996,14 +1005,17 @@ impl MessagePacker for DefaultMessagePacker {
                         // Lookup the public key from the DID document
                         if let Ok(Some(doc)) = self.did_resolver.resolve(from_did).await {
                             // Find the verification method by ID
-                            if let Some(vm) = doc.verification_method.iter().find(|vm| vm.id == *kid) {
+                            if let Some(vm) =
+                                doc.verification_method.iter().find(|vm| vm.id == *kid)
+                            {
                                 // Decode the signature
-                                let signature_bytes = match base64::engine::general_purpose::STANDARD
-                                    .decode(&signature.signature)
-                                {
-                                    Ok(bytes) => bytes,
-                                    Err(_) => continue, // Skip invalid signature
-                                };
+                                let signature_bytes =
+                                    match base64::engine::general_purpose::STANDARD
+                                        .decode(&signature.signature)
+                                    {
+                                        Ok(bytes) => bytes,
+                                        Err(_) => continue, // Skip invalid signature
+                                    };
 
                                 // Verify according to algorithm type
                                 match alg.as_str() {
@@ -1015,31 +1027,41 @@ impl MessagePacker for DefaultMessagePacker {
                                                     Ok(bytes) => bytes,
                                                     Err(_) => continue, // Skip invalid key
                                                 }
-                                            },
-                                            VerificationMaterial::Multibase { public_key_multibase } => {
+                                            }
+                                            VerificationMaterial::Multibase {
+                                                public_key_multibase,
+                                            } => {
                                                 match multibase::decode(public_key_multibase) {
                                                     Ok((_, bytes)) => {
                                                         // Strip multicodec prefix for Ed25519
-                                                        if bytes.len() >= 2 && (bytes[0] == 0xed && bytes[1] == 0x01) {
+                                                        if bytes.len() >= 2
+                                                            && (bytes[0] == 0xed
+                                                                && bytes[1] == 0x01)
+                                                        {
                                                             bytes[2..].to_vec()
                                                         } else {
                                                             bytes
                                                         }
-                                                    },
+                                                    }
                                                     Err(_) => continue, // Skip invalid key
                                                 }
-                                            },
+                                            }
                                             VerificationMaterial::JWK { public_key_jwk } => {
                                                 // For JWK, extract the Ed25519 public key from the x coordinate
-                                                let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
+                                                let x = match public_key_jwk
+                                                    .get("x")
+                                                    .and_then(|v| v.as_str())
+                                                {
                                                     Some(x) => x,
                                                     None => continue, // Skip if no x coordinate
                                                 };
-                                                match base64::engine::general_purpose::STANDARD.decode(x) {
+                                                match base64::engine::general_purpose::STANDARD
+                                                    .decode(x)
+                                                {
                                                     Ok(bytes) => bytes,
                                                     Err(_) => continue, // Skip invalid key
                                                 }
-                                            },
+                                            }
                                         };
 
                                         // Create Ed25519 verifying key
@@ -1064,15 +1086,12 @@ impl MessagePacker for DefaultMessagePacker {
                                         let mut sig_bytes = [0u8; 64];
                                         sig_bytes.copy_from_slice(&signature_bytes);
                                         let ed_signature =
-                                            ed25519_dalek::Signature::from_bytes(
-                                                &sig_bytes,
-                                            );
+                                            ed25519_dalek::Signature::from_bytes(&sig_bytes);
 
                                         // Attempt verification
-                                        match verifying_key.verify(
-                                            payload_str.as_bytes(),
-                                            &ed_signature,
-                                        ) {
+                                        match verifying_key
+                                            .verify(payload_str.as_bytes(), &ed_signature)
+                                        {
                                             Ok(()) => {
                                                 verification_result = true;
                                                 break; // Found a valid signature
@@ -1089,29 +1108,41 @@ impl MessagePacker for DefaultMessagePacker {
                                         let public_key_coords = match &vm.verification_material {
                                             VerificationMaterial::JWK { public_key_jwk } => {
                                                 // For JWK, extract the P-256 public key from the x and y coordinates
-                                                let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
+                                                let x = match public_key_jwk
+                                                    .get("x")
+                                                    .and_then(|v| v.as_str())
+                                                {
                                                     Some(x) => x,
                                                     None => continue, // Skip if no x coordinate
                                                 };
 
-                                                let y = match public_key_jwk.get("y").and_then(|v| v.as_str()) {
+                                                let y = match public_key_jwk
+                                                    .get("y")
+                                                    .and_then(|v| v.as_str())
+                                                {
                                                     Some(y) => y,
                                                     None => continue, // Skip if no y coordinate
                                                 };
 
                                                 // Decode the coordinates
-                                                let x_bytes = match base64::engine::general_purpose::STANDARD.decode(x) {
-                                                    Ok(bytes) => bytes,
-                                                    Err(_) => continue, // Skip invalid key
-                                                };
+                                                let x_bytes =
+                                                    match base64::engine::general_purpose::STANDARD
+                                                        .decode(x)
+                                                    {
+                                                        Ok(bytes) => bytes,
+                                                        Err(_) => continue, // Skip invalid key
+                                                    };
 
-                                                let y_bytes = match base64::engine::general_purpose::STANDARD.decode(y) {
-                                                    Ok(bytes) => bytes,
-                                                    Err(_) => continue, // Skip invalid key
-                                                };
+                                                let y_bytes =
+                                                    match base64::engine::general_purpose::STANDARD
+                                                        .decode(y)
+                                                    {
+                                                        Ok(bytes) => bytes,
+                                                        Err(_) => continue, // Skip invalid key
+                                                    };
 
                                                 (x_bytes, y_bytes)
-                                            },
+                                            }
                                             // Include other verification material types
                                             VerificationMaterial::Base58 { .. } => continue,
                                             VerificationMaterial::Multibase { .. } => continue,
@@ -1125,40 +1156,32 @@ impl MessagePacker for DefaultMessagePacker {
 
                                         // Create a P-256 encoded point
                                         let encoded_point =
-                                            match P256EncodedPoint::from_bytes(
-                                                &point_bytes,
-                                            ) {
+                                            match P256EncodedPoint::from_bytes(&point_bytes) {
                                                 Ok(point) => point,
                                                 Err(_) => continue, // Skip invalid point
                                             };
 
                                         // Create a P-256 public key
                                         let verifying_key_choice =
-                                            P256PublicKey::from_encoded_point(
-                                                &encoded_point,
-                                            );
+                                            P256PublicKey::from_encoded_point(&encoded_point);
                                         if !bool::from(verifying_key_choice.is_some()) {
                                             continue; // Skip invalid key
                                         }
-                                        let verifying_key =
-                                            verifying_key_choice.unwrap();
+                                        let verifying_key = verifying_key_choice.unwrap();
 
                                         // Parse the signature from DER format
-                                        let p256_signature = match P256Signature::from_der(
-                                            &signature_bytes,
-                                        ) {
-                                            Ok(sig) => sig,
-                                            Err(_) => continue, // Skip invalid signature
-                                        };
+                                        let p256_signature =
+                                            match P256Signature::from_der(&signature_bytes) {
+                                                Ok(sig) => sig,
+                                                Err(_) => continue, // Skip invalid signature
+                                            };
 
                                         // Verify the signature using P-256 ECDSA
-                                        let verifier = p256::ecdsa::VerifyingKey::from(
-                                            verifying_key,
-                                        );
-                                        match verifier.verify(
-                                            payload_str.as_bytes(),
-                                            &p256_signature,
-                                        ) {
+                                        let verifier =
+                                            p256::ecdsa::VerifyingKey::from(verifying_key);
+                                        match verifier
+                                            .verify(payload_str.as_bytes(), &p256_signature)
+                                        {
                                             Ok(()) => {
                                                 verification_result = true;
                                                 break; // Found a valid signature
@@ -1175,29 +1198,41 @@ impl MessagePacker for DefaultMessagePacker {
                                         let public_key_coords = match &vm.verification_material {
                                             VerificationMaterial::JWK { public_key_jwk } => {
                                                 // For JWK, extract the secp256k1 public key from the x and y coordinates
-                                                let x = match public_key_jwk.get("x").and_then(|v| v.as_str()) {
+                                                let x = match public_key_jwk
+                                                    .get("x")
+                                                    .and_then(|v| v.as_str())
+                                                {
                                                     Some(x) => x,
                                                     None => continue, // Skip if no x coordinate
                                                 };
 
-                                                let y = match public_key_jwk.get("y").and_then(|v| v.as_str()) {
+                                                let y = match public_key_jwk
+                                                    .get("y")
+                                                    .and_then(|v| v.as_str())
+                                                {
                                                     Some(y) => y,
                                                     None => continue, // Skip if no y coordinate
                                                 };
 
                                                 // Decode the coordinates
-                                                let x_bytes = match base64::engine::general_purpose::STANDARD.decode(x) {
-                                                    Ok(bytes) => bytes,
-                                                    Err(_) => continue, // Skip invalid key
-                                                };
+                                                let x_bytes =
+                                                    match base64::engine::general_purpose::STANDARD
+                                                        .decode(x)
+                                                    {
+                                                        Ok(bytes) => bytes,
+                                                        Err(_) => continue, // Skip invalid key
+                                                    };
 
-                                                let y_bytes = match base64::engine::general_purpose::STANDARD.decode(y) {
-                                                    Ok(bytes) => bytes,
-                                                    Err(_) => continue, // Skip invalid key
-                                                };
+                                                let y_bytes =
+                                                    match base64::engine::general_purpose::STANDARD
+                                                        .decode(y)
+                                                    {
+                                                        Ok(bytes) => bytes,
+                                                        Err(_) => continue, // Skip invalid key
+                                                    };
 
                                                 (x_bytes, y_bytes)
-                                            },
+                                            }
                                             // Include other verification material types
                                             VerificationMaterial::Base58 { .. } => continue,
                                             VerificationMaterial::Multibase { .. } => continue,
@@ -1212,25 +1247,25 @@ impl MessagePacker for DefaultMessagePacker {
                                         point_bytes.extend_from_slice(&y_bytes);
 
                                         // Parse the affine coordinates to create a public key
-                                        let verifier = match k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes) {
-                                            Ok(key) => key,
-                                            Err(_) => continue, // Skip invalid key
-                                        };
+                                        let verifier =
+                                            match k256::ecdsa::VerifyingKey::from_sec1_bytes(
+                                                &point_bytes,
+                                            ) {
+                                                Ok(key) => key,
+                                                Err(_) => continue, // Skip invalid key
+                                            };
 
                                         // Parse the signature from DER format
                                         let k256_signature =
-                                            match Secp256k1Signature::from_der(
-                                                &signature_bytes,
-                                            ) {
+                                            match Secp256k1Signature::from_der(&signature_bytes) {
                                                 Ok(sig) => sig,
                                                 Err(_) => continue, // Skip invalid signature
                                             };
 
                                         // Verify the signature using secp256k1 ECDSA
-                                        match verifier.verify(
-                                            payload_str.as_bytes(),
-                                            &k256_signature,
-                                        ) {
+                                        match verifier
+                                            .verify(payload_str.as_bytes(), &k256_signature)
+                                        {
                                             Ok(()) => {
                                                 verification_result = true;
                                                 break; // Found a valid signature
@@ -1288,15 +1323,16 @@ impl MessagePacker for DefaultMessagePacker {
                         };
 
                         // Parse the protected header
-                        let jwe_protected: JweProtected = match serde_json::from_slice(&protected_bytes) {
-                            Ok(value) => value,
-                            Err(e) => {
-                                return Err(Error::Serialization(format!(
-                                    "Failed to parse JWE protected header: {}",
-                                    e
-                                )));
-                            }
-                        };
+                        let jwe_protected: JweProtected =
+                            match serde_json::from_slice(&protected_bytes) {
+                                Ok(value) => value,
+                                Err(e) => {
+                                    return Err(Error::Serialization(format!(
+                                        "Failed to parse JWE protected header: {}",
+                                        e
+                                    )));
+                                }
+                            };
 
                         // Ensure we're using supported encryption algorithm
                         if jwe_protected.enc != "A256GCM" {
@@ -1320,30 +1356,28 @@ impl MessagePacker for DefaultMessagePacker {
                         };
 
                         // Decode the IV
-                        let iv_bytes = match base64::engine::general_purpose::STANDARD
-                            .decode(&jwe.iv)
-                        {
-                            Ok(bytes) => bytes,
-                            Err(e) => {
-                                return Err(Error::Cryptography(format!(
-                                    "Failed to decode JWE IV: {}",
-                                    e
-                                )));
-                            }
-                        };
+                        let iv_bytes =
+                            match base64::engine::general_purpose::STANDARD.decode(&jwe.iv) {
+                                Ok(bytes) => bytes,
+                                Err(e) => {
+                                    return Err(Error::Cryptography(format!(
+                                        "Failed to decode JWE IV: {}",
+                                        e
+                                    )));
+                                }
+                            };
 
                         // Decode the authentication tag
-                        let tag_bytes = match base64::engine::general_purpose::STANDARD
-                            .decode(&jwe.tag)
-                        {
-                            Ok(bytes) => bytes,
-                            Err(e) => {
-                                return Err(Error::Cryptography(format!(
-                                    "Failed to decode JWE authentication tag: {}",
-                                    e
-                                )));
-                            }
-                        };
+                        let tag_bytes =
+                            match base64::engine::general_purpose::STANDARD.decode(&jwe.tag) {
+                                Ok(bytes) => bytes,
+                                Err(e) => {
+                                    return Err(Error::Cryptography(format!(
+                                        "Failed to decode JWE authentication tag: {}",
+                                        e
+                                    )));
+                                }
+                            };
 
                         // Find a recipient we can decrypt for
                         let mut decryption_succeeded = false;
@@ -1368,7 +1402,10 @@ impl MessagePacker for DefaultMessagePacker {
                             };
 
                             // Skip simulated keys
-                            if recipient.encrypted_key.contains("SIMULATED_ENCRYPTED_KEY_FOR_") {
+                            if recipient
+                                .encrypted_key
+                                .contains("SIMULATED_ENCRYPTED_KEY_FOR_")
+                            {
                                 continue; // Skip to the next recipient
                             }
 
@@ -1391,18 +1428,21 @@ impl MessagePacker for DefaultMessagePacker {
                                 let private_key = match &secret.secret_material {
                                     SecretMaterial::JWK { private_key_jwk } => {
                                         // Extract key type and curve
-                                        let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
-                                        let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                                        let kty =
+                                            private_key_jwk.get("kty").and_then(|v| v.as_str());
+                                        let crv =
+                                            private_key_jwk.get("crv").and_then(|v| v.as_str());
 
                                         match (kty, crv) {
                                             (Some("EC"), Some("P-256")) => {
                                                 // Extract private key (d parameter)
-                                                let d_b64 =
-                                                    match private_key_jwk.get("d").and_then(|v| v.as_str())
-                                                    {
-                                                        Some(d) => d,
-                                                        None => continue, // No private key, can't decrypt
-                                                    };
+                                                let d_b64 = match private_key_jwk
+                                                    .get("d")
+                                                    .and_then(|v| v.as_str())
+                                                {
+                                                    Some(d) => d,
+                                                    None => continue, // No private key, can't decrypt
+                                                };
 
                                                 // Decode the private key
                                                 match base64::engine::general_purpose::STANDARD
@@ -1510,15 +1550,16 @@ impl MessagePacker for DefaultMessagePacker {
                             })?;
 
                             // Parse as a PlainMessage
-                            let plain_message: PlainMessage = match serde_json::from_str(&plaintext_str) {
-                                Ok(msg) => msg,
-                                Err(e) => {
-                                    return Err(Error::Serialization(format!(
-                                        "Failed to parse decrypted message: {}",
-                                        e
-                                    )));
-                                }
-                            };
+                            let plain_message: PlainMessage =
+                                match serde_json::from_str(&plaintext_str) {
+                                    Ok(msg) => msg,
+                                    Err(e) => {
+                                        return Err(Error::Serialization(format!(
+                                            "Failed to parse decrypted message: {}",
+                                            e
+                                        )));
+                                    }
+                                };
 
                             // Return the body of the PlainMessage
                             return Ok(plain_message.body);

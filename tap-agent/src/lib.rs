@@ -48,10 +48,10 @@ pub use did::{
     DIDGenerationOptions, DIDKeyGenerator, DIDMethodResolver, GeneratedKey, KeyResolver, KeyType,
     MultiResolver, SyncDIDResolver,
 };
-pub use tap_msg::didcomm::{DIDDoc, Secret};
 pub use error::{Error, Result};
 pub use key_manager::{KeyManager, KeyManagerSecretResolver};
 pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
+pub use tap_msg::didcomm::{DIDDoc, Secret};
 
 /// Version of the TAP Agent
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

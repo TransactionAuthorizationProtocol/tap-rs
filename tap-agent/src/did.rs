@@ -10,15 +10,15 @@
 use async_trait::async_trait;
 use base64::Engine;
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use tap_msg::didcomm::{
-    DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType,
-    Secret, SecretMaterial, SecretType
-};
 use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
 use k256::ecdsa::SigningKey as Secp256k1SigningKey;
 use multibase::{decode, encode, Base};
 use p256::ecdsa::SigningKey as P256SigningKey;
 use rand::rngs::OsRng;
+use tap_msg::didcomm::{
+    DIDDoc, Secret, SecretMaterial, SecretType, VerificationMaterial, VerificationMethod,
+    VerificationMethodType,
+};
 
 use std::collections::HashMap;
 use std::fmt::Debug;
