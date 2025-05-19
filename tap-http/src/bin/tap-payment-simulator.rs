@@ -225,8 +225,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .amount(amount.to_string())
         .transaction_id(transaction_id.clone())
         .memo("Payment simulator payment request".to_string())
-        .originator(sender_agent.clone())
-        .beneficiary(recipient_agent.clone())
+        .merchant(sender_agent.clone())
+        .customer(recipient_agent.clone())
         .build();
 
     // Add currency code

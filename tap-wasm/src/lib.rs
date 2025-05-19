@@ -1,6 +1,6 @@
 use base64::Engine;
-use didcomm::secrets::{SecretMaterial, SecretType};
-use didcomm::Message as DIDCommMessage;
+use tap_msg::didcomm::{SecretMaterial, SecretType, Secret};
+use tap_msg::didcomm::PlainMessage as DIDCommMessage;
 use ed25519_dalek::{self, Signer, SigningKey, VerifyingKey};
 use js_sys::{Array, Object, Promise, Reflect};
 use serde::{Deserialize, Serialize};
@@ -1373,7 +1373,7 @@ impl TapAgent {
                     }
                     Err(_) => {
                         // Fallback to a random DID if key generation fails
-                        format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
+                        format!("did:key:z6Mk{}", uuid::Uuid::new_v4().simple())
                     }
                 }
             }
@@ -1398,7 +1398,7 @@ impl TapAgent {
                 }
                 Err(_) => {
                     // Fallback to a random DID if key generation fails
-                    format!("did:key:z6Mk{}", uuid::Uuid::new_v4().to_simple())
+                    format!("did:key:z6Mk{}", uuid::Uuid::new_v4().simple())
                 }
             }
         };
@@ -1537,7 +1537,7 @@ impl TapAgent {
                         key_type,
                         public_key,
                         private_key,
-                        did_doc: didcomm::did::DIDDoc {
+                        did_doc: tap_msg::didcomm::DIDDoc {
                             id: did.to_string(),
                             verification_method: vec![],
                             authentication: vec![],
@@ -1660,7 +1660,7 @@ impl TapAgent {
 
             // Generate a signature based on the secret type
             match &secret.secret_material {
-                didcomm::secrets::SecretMaterial::JWK { private_key_jwk } => {
+                SecretMaterial::JWK { private_key_jwk } => {
                     // Extract the key type and curve
                     let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                     let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
@@ -1916,10 +1916,10 @@ impl TapAgent {
                         });
 
                         // Create a DIDComm secret with correct SecretType
-                        let secret = didcomm::secrets::Secret {
+                        let secret = Secret {
                             type_: SecretType::JsonWebKey2020,
                             id: format!("{}#keys-1", did),
-                            secret_material: didcomm::secrets::SecretMaterial::JWK {
+                            secret_material: SecretMaterial::JWK {
                                 private_key_jwk,
                             },
                         };
@@ -1955,10 +1955,10 @@ impl TapAgent {
                             });
 
                             // Create a DIDComm secret with correct SecretType
-                            let secret = didcomm::secrets::Secret {
+                            let secret = Secret {
                                 type_: SecretType::JsonWebKey2020,
                                 id: format!("{}#keys-1", did),
-                                secret_material: didcomm::secrets::SecretMaterial::JWK {
+                                secret_material: SecretMaterial::JWK {
                                     private_key_jwk,
                                 },
                             };
@@ -1995,10 +1995,10 @@ impl TapAgent {
                             });
 
                             // Create a DIDComm secret with correct SecretType
-                            let secret = didcomm::secrets::Secret {
+                            let secret = Secret {
                                 type_: SecretType::JsonWebKey2020,
                                 id: format!("{}#keys-1", did),
-                                secret_material: didcomm::secrets::SecretMaterial::JWK {
+                                secret_material: SecretMaterial::JWK {
                                     private_key_jwk,
                                 },
                             };
@@ -2122,7 +2122,7 @@ impl TapAgent {
             key_type,
             public_key,
             private_key,
-            did_doc: didcomm::did::DIDDoc {
+            did_doc: tap_msg::didcomm::DIDDoc {
                 id: did.clone(),
                 verification_method: vec![],
                 authentication: vec![],
@@ -2161,10 +2161,10 @@ impl TapAgent {
                 });
 
                 // Create a DIDComm secret with correct SecretType
-                let secret = didcomm::secrets::Secret {
+                let secret = Secret {
                     type_: SecretType::JsonWebKey2020,
                     id: format!("{}#keys-1", did),
-                    secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                    secret_material: SecretMaterial::JWK { private_key_jwk },
                 };
 
                 // Add the secret to the resolver
@@ -2187,10 +2187,10 @@ impl TapAgent {
                     });
 
                     // Create a DIDComm secret with correct SecretType
-                    let secret = didcomm::secrets::Secret {
+                    let secret = Secret {
                         type_: SecretType::JsonWebKey2020,
                         id: format!("{}#keys-1", did),
-                        secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                        secret_material: SecretMaterial::JWK { private_key_jwk },
                     };
 
                     // Add the secret to the resolver
@@ -2216,10 +2216,10 @@ impl TapAgent {
                     });
 
                     // Create a DIDComm secret with correct SecretType
-                    let secret = didcomm::secrets::Secret {
+                    let secret = Secret {
                         type_: SecretType::JsonWebKey2020,
                         id: format!("{}#keys-1", did),
-                        secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                        secret_material: SecretMaterial::JWK { private_key_jwk },
                     };
 
                     // Add the secret to the resolver

@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
 use tap_agent::DefaultAgent;
+use tap_msg::didcomm::{Secret, SecretMaterial, SecretType};
 use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
@@ -174,10 +175,10 @@ fn create_agent(
                     let private_key_jwk = jwk.clone();
 
                     // Create a DIDComm secret
-                    didcomm::secrets::Secret {
-                        type_: didcomm::secrets::SecretType::JsonWebKey2020, // Use the correct variant for all key types
+                    Secret {
+                        type_: SecretType::JsonWebKey2020, // Use the correct variant for all key types
                         id: format!("{}#keys-1", did),
-                        secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                        secret_material: SecretMaterial::JWK { private_key_jwk },
                     }
                 } else if key.trim().contains(':') {
                     // The key might be a multibase encoded key
@@ -214,10 +215,10 @@ fn create_agent(
                         });
 
                         // Create a DIDComm secret
-                        didcomm::secrets::Secret {
-                            type_: didcomm::secrets::SecretType::JsonWebKey2020,
+                        Secret {
+                            type_: SecretType::JsonWebKey2020,
                             id: format!("{}#keys-1", did),
-                            secret_material: didcomm::secrets::SecretMaterial::JWK {
+                            secret_material: SecretMaterial::JWK {
                                 private_key_jwk,
                             },
                         }
@@ -262,10 +263,10 @@ fn create_agent(
                     };
 
                     // Create a DIDComm secret
-                    didcomm::secrets::Secret {
-                        type_: didcomm::secrets::SecretType::JsonWebKey2020,
+                    Secret {
+                        type_: SecretType::JsonWebKey2020,
                         id: format!("{}#keys-1", did),
-                        secret_material: didcomm::secrets::SecretMaterial::JWK { private_key_jwk },
+                        secret_material: SecretMaterial::JWK { private_key_jwk },
                     }
                 },
             );
