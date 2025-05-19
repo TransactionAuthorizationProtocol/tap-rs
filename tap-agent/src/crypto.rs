@@ -97,13 +97,16 @@ impl<T: 'static> AsAny for T {
     }
 }
 
-/// A trait for resolving secrets for use with DIDComm.
+/// A trait for resolving secrets for cryptographic operations.
 ///
-/// This trait extends the built-in secrets resolver functionality from the DIDComm crate
-/// to provide additional functionality needed by the TAP Agent.
+/// This trait provides access to cryptographic secrets needed by the TAP Agent
+/// for signing, encryption, and other security operations.
 pub trait DebugSecretsResolver: Debug + Send + Sync + AsAny {
     /// Get a reference to the secrets map for debugging purposes
     fn get_secrets_map(&self) -> &std::collections::HashMap<String, Secret>;
+    
+    /// Get a secret by ID
+    fn get_secret_by_id(&self, id: &str) -> Option<Secret>;
 }
 
 /// A basic implementation of DebugSecretsResolver.
@@ -138,19 +141,24 @@ impl DebugSecretsResolver for BasicSecretResolver {
     fn get_secrets_map(&self) -> &std::collections::HashMap<String, Secret> {
         &self.secrets
     }
+    
+    fn get_secret_by_id(&self, id: &str) -> Option<Secret> {
+        self.secrets.get(id).cloned()
+    }
 }
 
 /// Default implementation of the MessagePacker trait.
 ///
-/// This implementation uses DIDComm for message packing and unpacking,
-/// providing secure communications with support for the different
-/// security modes defined in the TAP protocol.
+/// This implementation provides secure communications with support for the different
+/// security modes defined in the TAP protocol, without relying on any external DIDComm libraries.
 #[derive(Debug)]
 pub struct DefaultMessagePacker {
     /// DID resolver
     did_resolver: Arc<dyn SyncDIDResolver>,
     /// Secrets resolver
     secrets_resolver: Arc<dyn DebugSecretsResolver>,
+    /// Enable debug logging
+    debug: bool,
 }
 
 impl DefaultMessagePacker {
@@ -159,13 +167,35 @@ impl DefaultMessagePacker {
     /// # Parameters
     /// * `did_resolver` - The DID resolver to use for resolving DIDs
     /// * `secrets_resolver` - The secrets resolver to use for cryptographic operations
+    /// * `debug` - Whether to enable debug logging
     pub fn new(
         did_resolver: Arc<dyn SyncDIDResolver>,
         secrets_resolver: Arc<dyn DebugSecretsResolver>,
+        debug: bool,
     ) -> Self {
         Self {
             did_resolver,
             secrets_resolver,
+            debug,
+        }
+    }
+    
+    /// Create a new DefaultMessagePacker with a default DID resolver
+    ///
+    /// # Parameters
+    /// * `secrets_resolver` - The secrets resolver to use for cryptographic operations
+    /// * `debug` - Whether to enable debug logging
+    pub fn new_with_default_resolver(
+        secrets_resolver: Arc<dyn DebugSecretsResolver>,
+        debug: bool,
+    ) -> Self {
+        // Create a default MultiResolver for DIDs
+        let did_resolver = Arc::new(crate::did::MultiResolver::default());
+        
+        Self {
+            did_resolver,
+            secrets_resolver,
+            debug,
         }
     }
 

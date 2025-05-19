@@ -146,9 +146,6 @@ fn create_agent(
                 return Err("Invalid DID format. DID must start with 'did:'".into());
             }
 
-            // Create a key manager (not used directly yet, but kept for future extensions)
-            let _key_manager = tap_agent::key_manager::KeyManager::new();
-
             // Create a DID resolver
             let did_resolver = std::sync::Arc::new(tap_agent::did::MultiResolver::default());
 
@@ -270,16 +267,19 @@ fn create_agent(
             );
 
             // Create a message packer
-            let message_packer = std::sync::Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
+            let message_packer = tap_agent::crypto::DefaultMessagePacker::new(
                 did_resolver,
                 std::sync::Arc::new(secret_resolver),
-            ));
+                true, // debug mode
+            );
 
             // Create agent configuration
             let config = tap_agent::config::AgentConfig {
                 agent_did: did.clone(),
                 parameters: std::collections::HashMap::new(),
                 security_mode: Some("SIGNED".to_string()),
+                debug: true,
+                timeout_seconds: Some(30),
             };
 
             // Create the agent
@@ -290,7 +290,7 @@ fn create_agent(
         (None, None) => {
             // Create an ephemeral agent
             info!("Creating ephemeral agent");
-            let (agent, did) = DefaultAgent::new_ephemeral()?;
+            let (agent, did) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
             Ok((agent, did))
         }
     }
@@ -313,8 +313,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Verify random number generator by creating two agents and comparing DIDs
     // Only in verbose mode to not spam normal output
     if args.verbose {
-        let (_test_agent1, test_did1) = DefaultAgent::new_ephemeral()?;
-        let (_test_agent2, test_did2) = DefaultAgent::new_ephemeral()?;
+        let (_test_agent1, test_did1) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
+        let (_test_agent2, test_did2) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
         info!("Test DID 1: {}", test_did1);
         info!("Test DID 2: {}", test_did2);
         if test_did1 == test_did2 {

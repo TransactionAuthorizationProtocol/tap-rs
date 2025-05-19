@@ -151,7 +151,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Creating ephemeral agent for payment simulation");
 
     // Create multiple agents to verify they get different DIDs
-    let (agent, agent_did) = DefaultAgent::new_ephemeral()?;
+    let (agent, agent_did) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
 
     info!("Using agent with DID: {}", agent_did);
 

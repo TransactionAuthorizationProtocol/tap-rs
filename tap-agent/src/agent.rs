@@ -1,62 +1,39 @@
-//! TAP Agent implementation.
-//!
-//! This module provides the core Agent functionality for the TAP Protocol:
-//! - The `Agent` trait defining core capabilities
-//! - The `DefaultAgent` implementation of the trait
-//! - Functions for sending and receiving TAP messages with DIDComm
-
 use crate::config::AgentConfig;
 use crate::crypto::MessagePacker;
 use crate::error::{Error, Result};
+use crate::key_manager::KeyManager;
 use crate::message::SecurityMode;
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
-use std::fmt::Debug;
 use std::sync::Arc;
-use tap_msg::message::tap_message_trait::TapMessageBody;
+use std::time::Duration;
+use tap_msg::TapMessageBody;
 
-/// Result of a message delivery attempt to a service endpoint
+/// Result of a message delivery attempt
 #[derive(Debug, Clone)]
 pub struct DeliveryResult {
-    /// The DID that was the target of the delivery
+    /// The DID of the recipient
     pub did: String,
     /// The service endpoint URL that was used for delivery
     pub endpoint: String,
-    /// The HTTP status code of the delivery
+    /// HTTP status code if the delivery was successful
     pub status: Option<u16>,
-    /// Error message, if the delivery failed
+    /// Error message if the delivery failed
     pub error: Option<String>,
 }
 
-/// A trait for agents that can send and receive TAP messages
-///
-/// This trait defines the core capabilities of a TAP Agent, including
-/// managing identity, sending messages, and receiving messages.
+/// The Agent trait defines the interface for all TAP agents
 #[async_trait]
-pub trait Agent: Debug + Sync + Send {
-    /// Get the agent's DID
-    ///
-    /// Returns the Decentralized Identifier (DID) that identifies this agent
+pub trait Agent {
+    /// Gets the agent's DID
     fn get_agent_did(&self) -> &str;
 
-    /// Send a TAP message to one or more recipients
-    ///
-    /// This unified method handles:
-    /// 1. Serializing the message
-    /// 2. Determining appropriate security mode
-    /// 3. Packing the message with DIDComm for all recipients
-    /// 4. Optionally delivering the message to recipients' service endpoints
-    /// 5. Logging the plaintext and packed messages
-    ///
-    /// # Parameters
-    /// * `message` - The message to send, implementing TapMessageBody
-    /// * `to` - A vector of recipient DIDs
-    /// * `deliver` - Whether to automatically deliver the message to service endpoints
-    ///
-    /// # Returns
-    /// A result containing the packed message and delivery results (if requested)
+    /// Gets the service endpoint URL for a recipient
+    async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>>;
+
+    /// Sends a message to one or more recipients
     async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
         &self,
         message: &T,
@@ -64,182 +41,101 @@ pub trait Agent: Debug + Sync + Send {
         deliver: bool,
     ) -> Result<(String, Vec<DeliveryResult>)>;
 
-    /// Find the service endpoint for a recipient DID
-    ///
-    /// This method looks up the DID document for the recipient and
-    /// extracts the DIDCommMessaging service endpoint if available
-    ///
-    /// # Parameters
-    /// * `to` - The DID of the recipient
-    ///
-    /// # Returns
-    /// The service endpoint URL or None if not found
-    async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>>;
-
-    /// Receive and unpack a TAP message
-    ///
-    /// This method handles:
-    /// 1. Unpacking the DIDComm message
-    /// 2. Validating the message type
-    /// 3. Deserializing to the requested type
-    ///
-    /// # Parameters
-    /// * `packed_message` - The packed message as received
-    ///
-    /// # Returns
-    /// The unpacked message deserialized to type T
+    /// Receives a message
     async fn receive_message<T: TapMessageBody + DeserializeOwned + Send>(
         &self,
         packed_message: &str,
     ) -> Result<T>;
 }
 
-// Add a compatibility shim for existing code
-#[async_trait]
-impl<T: Agent + ?Sized> Agent for Arc<T> {
-    fn get_agent_did(&self) -> &str {
-        (**self).get_agent_did()
-    }
-
-    async fn send_message<U: TapMessageBody + serde::Serialize + Send + Sync>(
-        &self,
-        message: &U,
-        to: Vec<&str>,
-        deliver: bool,
-    ) -> Result<(String, Vec<DeliveryResult>)> {
-        (**self).send_message(message, to, deliver).await
-    }
-
-    async fn receive_message<U: TapMessageBody + DeserializeOwned + Send>(
-        &self,
-        packed_message: &str,
-    ) -> Result<U> {
-        (**self).receive_message(packed_message).await
-    }
-
-    async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>> {
-        (**self).get_service_endpoint(to).await
-    }
-}
-
-/// Default implementation of the Agent trait
-///
-/// This implementation provides the standard TAP Agent functionality
-/// using DIDComm for secure message exchange.
+/// The DefaultAgent is a concrete implementation of the Agent trait
+/// that uses a configurable message packer for cryptographic operations.
 #[derive(Debug)]
 pub struct DefaultAgent {
     /// Configuration for the agent
-    config: AgentConfig,
-    /// Message packer for handling DIDComm message packing/unpacking
+    pub config: AgentConfig,
+    /// Message packer for cryptographic operations
+    #[allow(dead_code)]
     message_packer: Arc<dyn MessagePacker>,
-    /// HTTP client for sending messages to endpoints
+    /// HTTP client for sending requests
+    #[allow(dead_code)]
     http_client: Client,
 }
 
 impl DefaultAgent {
-    /// Create a new DefaultAgent with the given configuration and message packer
-    ///
-    /// # Parameters
-    /// * `config` - The agent configuration
-    /// * `message_packer` - The message packer for DIDComm operations
-    ///
-    /// # Returns
-    /// A new DefaultAgent instance
-    pub fn new(config: AgentConfig, message_packer: Arc<dyn MessagePacker>) -> Self {
-        Self {
-            config,
-            message_packer,
-            http_client: Client::new(),
-        }
-    }
-
-    /// Create a new DefaultAgent with a specific HTTP client
-    ///
-    /// # Parameters
-    /// * `config` - The agent configuration
-    /// * `message_packer` - The message packer for DIDComm operations
-    /// * `http_client` - HTTP client to use for sending messages
-    ///
-    /// # Returns
-    /// A new DefaultAgent instance
-    pub fn new_with_client(
+    /// Creates a new DefaultAgent with the given configuration and message packer
+    pub fn new(
         config: AgentConfig,
-        message_packer: Arc<dyn MessagePacker>,
-        http_client: Client,
-    ) -> Self {
-        Self {
+        message_packer: impl MessagePacker + 'static,
+    ) -> DefaultAgent {
+        let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
+        let client = Client::builder()
+            .timeout(timeout)
+            .build()
+            .unwrap_or_else(|_| Client::new());
+
+        DefaultAgent {
             config,
-            message_packer,
-            http_client,
+            message_packer: Arc::new(message_packer),
+            http_client: client,
         }
     }
 
-    /// Convenience method to get a service endpoint for a DID
-    ///
-    /// This is a public wrapper around the get_service_endpoint trait method
-    ///
-    /// # Parameters
-    /// * `did` - The DID to look up the service endpoint for
-    ///
-    /// # Returns
-    /// The service endpoint URL or None if not found
-    pub async fn get_did_service_endpoint(&self, did: &str) -> Result<Option<String>> {
-        self.get_service_endpoint(did).await
+    /// Creates a new DefaultAgent with the given configuration and a default message packer
+    pub fn new_with_default_packer(
+        config: AgentConfig,
+        key_manager: Arc<dyn crate::key_manager::KeyManager>,
+    ) -> DefaultAgent {
+        let resolver = key_manager.secret_resolver();
+        let message_packer =
+            crate::crypto::DefaultMessagePacker::new_with_default_resolver(Arc::new(resolver), config.debug);
+        DefaultAgent::new(config, message_packer)
     }
 
-    /// Create a new DefaultAgent with ephemeral did:key and default message packer
-    ///
-    /// This creates an agent with an Ed25519 did:key that is not persisted.
-    /// Useful for testing or short-lived agents.
-    ///
-    /// # Returns
-    /// A tuple containing the new DefaultAgent instance and the generated DID
-    pub fn new_ephemeral() -> crate::error::Result<(Self, String)> {
-        // Create a key manager
-        let key_manager = crate::key_manager::KeyManager::new();
-
-        // Generate an Ed25519 key
-        let options = crate::did::DIDGenerationOptions {
+    /// Creates a new DefaultAgent builder with the given agent DID
+    pub fn builder(agent_did: impl Into<String>) -> DefaultAgentBuilder {
+        DefaultAgentBuilder::new(agent_did.into())
+    }
+    
+    /// Creates a new ephemeral agent with a randomly generated DID
+    /// 
+    /// This is a helper method to aid with migration from the old API.
+    pub fn new_ephemeral() -> Result<(Self, String)> {
+        // Create a new key manager
+        let key_manager = Arc::new(crate::key_manager::DefaultKeyManager::new());
+        
+        // Generate a random Ed25519 key
+        let key = key_manager.generate_key(crate::did::DIDGenerationOptions {
             key_type: crate::did::KeyType::Ed25519,
-        };
-
-        let key = key_manager.generate_key(options)?;
-
-        // Create a DID resolver
-        let did_resolver = Arc::new(crate::did::MultiResolver::default());
-
-        // Create a basic secret resolver for the key
-        let mut secret_resolver = crate::crypto::BasicSecretResolver::new();
-        let secret = key_manager.generator.create_secret_from_key(&key);
-        secret_resolver.add_secret(&key.did, secret);
-
-        // Create a message packer
-        let message_packer = Arc::new(crate::crypto::DefaultMessagePacker::new(
-            did_resolver,
-            Arc::new(secret_resolver),
-        ));
-
-        // Create agent configuration with empty parameters
-        let config = AgentConfig {
-            agent_did: key.did.clone(),
-            parameters: std::collections::HashMap::new(),
+        })?;
+        
+        // Get the DID from the key
+        let did = key.did.clone();
+        
+        // Create a config with the DID
+        let config = crate::config::AgentConfig {
+            agent_did: did.clone(),
             security_mode: Some("SIGNED".to_string()),
+            debug: true,
+            timeout_seconds: Some(30),
+            parameters: std::collections::HashMap::new(),
         };
-
-        // Create the agent
-        let agent = Self::new(config, message_packer);
-
-        Ok((agent, key.did))
+        
+        // Create a new agent
+        let agent = Self::new_with_default_packer(config, key_manager);
+        
+        Ok((agent, did))
     }
 
-    /// Send a packed message to a service endpoint via HTTP POST
+    /// Send a message to a specific endpoint
     ///
     /// # Parameters
-    /// * `packed_message` - The packed DIDComm message
-    /// * `endpoint` - The service endpoint URL
+    /// * `packed_message` - The packed message to send
+    /// * `endpoint` - The endpoint URL to send the message to
     ///
     /// # Returns
     /// The HTTP response status code, or error if the request failed
+    #[cfg(not(target_arch = "wasm32"))]
     pub async fn send_to_endpoint(&self, packed_message: &str, endpoint: &str) -> Result<u16> {
         // Send the message to the endpoint via HTTP POST
         let response = self
@@ -257,6 +153,47 @@ impl DefaultAgent {
         // Log the response status
         println!("Message sent to endpoint {}, status: {}", endpoint, status);
 
+        Ok(status)
+    }
+    
+    #[cfg(target_arch = "wasm32")]
+    pub async fn send_to_endpoint(&self, packed_message: &str, endpoint: &str) -> Result<u16> {
+        use wasm_bindgen::prelude::*;
+        use wasm_bindgen_futures::JsFuture;
+        use web_sys::{Request, RequestInit, RequestMode, Response};
+        
+        // Create request options
+        let mut opts = RequestInit::new();
+        opts.method("POST");
+        opts.mode(RequestMode::Cors);
+        opts.body(Some(&JsValue::from_str(packed_message)));
+        
+        // Create the request
+        let request = Request::new_with_str_and_init(endpoint, &opts)
+            .map_err(|e| Error::Networking(format!("Failed to create request: {:?}", e)))?;
+            
+        request.headers().set("Content-Type", "application/didcomm-encrypted+json")
+            .map_err(|e| Error::Networking(format!("Failed to set headers: {:?}", e)))?;
+            
+        // Get the window object
+        let window = web_sys::window()
+            .ok_or_else(|| Error::Networking("No window object available".to_string()))?;
+            
+        // Send the request
+        let resp_value = JsFuture::from(window.fetch_with_request(&request))
+            .await
+            .map_err(|e| Error::Networking(format!("Failed to fetch: {:?}", e)))?;
+            
+        // Convert response to Response object
+        let resp: Response = resp_value.dyn_into()
+            .map_err(|_| Error::Networking("Failed to convert response".to_string()))?;
+            
+        // Get status code
+        let status = resp.status();
+        
+        // Log the response
+        web_sys::console::log_1(&JsValue::from_str(&format!("Message sent to endpoint {}, status: {}", endpoint, status)));
+        
         Ok(status)
     }
 
@@ -301,6 +238,7 @@ impl Agent for DefaultAgent {
         &self.config.agent_did
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>> {
         // Get the recipient's DID document
         let did_doc = self.message_packer.resolve_did_doc(to).await?;
@@ -325,7 +263,34 @@ impl Agent for DefaultAgent {
         // No service endpoint found
         Ok(None)
     }
+    
+    #[cfg(target_arch = "wasm32")]
+    async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>> {
+        // WASM-specific implementation for DID resolution
+        // This simplified version just returns the DID as an endpoint for testing purposes
+        // In a real implementation, this would call into JavaScript to resolve the DID
+        
+        // For WASM, we'll create a mock endpoint for now
+        if to.starts_with("did:") {
+            // Create a mock endpoint URL for testing
+            // In a real implementation, this would call the resolver
+            let endpoint = format!("https://example.com/agents/{}", to.replace(":", "-"));
+            web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
+                &format!("Mock endpoint for {}: {}", to, endpoint)
+            ));
+            return Ok(Some(endpoint));
+        }
+        
+        // If not a DID, might be a direct URL
+        if to.starts_with("http://") || to.starts_with("https://") {
+            return Ok(Some(to.to_string()));
+        }
+        
+        // No endpoint found
+        Ok(None)
+    }
 
+    #[cfg(not(target_arch = "wasm32"))]
     async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
         &self,
         message: &T,
@@ -473,9 +438,156 @@ impl Agent for DefaultAgent {
 
         Ok((packed, delivery_results))
     }
+    
+    #[cfg(target_arch = "wasm32")]
+    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
+        &self,
+        message: &T,
+        to: Vec<&str>,
+        deliver: bool,
+    ) -> Result<(String, Vec<DeliveryResult>)> {
+        use wasm_bindgen::JsValue;
+        use web_sys::console;
+        
+        if to.is_empty() {
+            return Err(Error::Validation("No recipients specified".to_string()));
+        }
 
-    // Main send_message implementation handles all cases
+        // Create the message object with proper type
+        let mut message_obj = serde_json::to_value(message)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize message: {}", e)))?;
 
+        // Ensure message has a type field
+        if message_obj.get("type").is_none() {
+            if let serde_json::Value::Object(ref mut obj) = message_obj {
+                obj.insert(
+                    "type".to_string(),
+                    serde_json::Value::String(T::message_type().to_string()),
+                );
+            }
+        }
+
+        // Log the plaintext message
+        console::log_1(&JsValue::from_str("==== SENDING TAP MESSAGE ===="));
+        console::log_1(&JsValue::from_str(&format!("Message Type: {}", T::message_type())));
+        console::log_1(&JsValue::from_str(&format!("Recipients: {:?}", to)));
+        console::log_1(&JsValue::from_str(&format!(
+            "PLAINTEXT CONTENT: {}",
+            serde_json::to_string_pretty(&message_obj).unwrap_or_else(|_| message_obj.to_string())
+        )));
+
+        // Validate the message
+        message.validate().map_err(|e| {
+            Error::Validation(format!(
+                "Message validation failed for type {}: {}",
+                T::message_type(),
+                e
+            ))
+        })?;
+
+        // Determine the appropriate security mode
+        let security_mode = self.determine_security_mode::<T>();
+        console::log_1(&JsValue::from_str(&format!("Security Mode: {:?}", security_mode)));
+
+        // For each recipient, look up service endpoint before sending
+        for recipient in &to {
+            if let Ok(Some(endpoint)) = self.get_service_endpoint(recipient).await {
+                console::log_1(&JsValue::from_str(
+                    &format!("Found service endpoint for {}: {}", recipient, endpoint)
+                ));
+            }
+        }
+
+        // Use message packer to pack the message for all recipients
+        let packed = self
+            .message_packer
+            .pack_message(&message_obj, &to, Some(self.get_agent_did()), security_mode)
+            .await?;
+
+        // Log the packed message with clear separation and formatting
+        console::log_1(&JsValue::from_str("--- PACKED MESSAGE ---"));
+        let formatted_msg = serde_json::from_str::<serde_json::Value>(&packed)
+            .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed.clone()))
+            .unwrap_or(packed.clone());
+        console::log_1(&JsValue::from_str(&formatted_msg));
+
+        // If delivery is not requested, just return the packed message
+        if !deliver {
+            return Ok((packed, Vec::new()));
+        }
+
+        // Try to deliver the message to each recipient's service endpoint
+        let mut delivery_results = Vec::new();
+
+        for recipient in &to {
+            match self.get_service_endpoint(recipient).await {
+                Ok(Some(endpoint)) => {
+                    console::log_1(&JsValue::from_str(
+                        &format!("Delivering message to {} at {}", recipient, endpoint)
+                    ));
+
+                    // Extract message ID for logging
+                    let message_id = match serde_json::from_str::<serde_json::Value>(&packed) {
+                        Ok(json) => json
+                            .get("id")
+                            .and_then(|id| id.as_str())
+                            .map(String::from)
+                            .unwrap_or_else(|| "unknown".to_string()),
+                        Err(_) => "unknown".to_string(),
+                    };
+
+                    // Attempt to deliver the message
+                    match self.send_to_endpoint(&packed, &endpoint).await {
+                        Ok(status) => {
+                            // Log success
+                            console::log_1(&JsValue::from_str(
+                                &format!("✅ Delivered message {} to {} at {}", message_id, recipient, endpoint)
+                            ));
+
+                            delivery_results.push(DeliveryResult {
+                                did: recipient.to_string(),
+                                endpoint: endpoint.clone(),
+                                status: Some(status),
+                                error: None,
+                            });
+                        }
+                        Err(e) => {
+                            // Log error but don't fail
+                            let error_msg = format!(
+                                "Failed to deliver message {} to {} at {}: {}",
+                                message_id, recipient, endpoint, e
+                            );
+                            console::log_1(&JsValue::from_str(&format!("❌ {}", error_msg)));
+
+                            delivery_results.push(DeliveryResult {
+                                did: recipient.to_string(),
+                                endpoint: endpoint.clone(),
+                                status: None,
+                                error: Some(error_msg),
+                            });
+                        }
+                    }
+                }
+                Ok(None) => {
+                    console::log_1(&JsValue::from_str(
+                        &format!("⚠️ No service endpoint found for {}, skipping delivery", recipient)
+                    ));
+                }
+                Err(e) => {
+                    // Log error but don't fail
+                    let error_msg = format!(
+                        "Failed to resolve service endpoint for {}: {}",
+                        recipient, e
+                    );
+                    console::log_1(&JsValue::from_str(&format!("❌ {}", error_msg)));
+                }
+            }
+        }
+
+        Ok((packed, delivery_results))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
     async fn receive_message<T: TapMessageBody + DeserializeOwned + Send>(
         &self,
         packed_message: &str,
@@ -527,81 +639,115 @@ impl Agent for DefaultAgent {
         }
         println!("✅ Message type validation passed: {}", message_type);
 
-        // Check if we need to convert to a DIDComm message first
-        if let Some(id) = message_value.get("id") {
-            // This appears to be a proper DIDComm message already
-            // Create a DIDComm message with the required fields
-            let didcomm_message = tap_msg::didcomm::PlainMessage {
-                id: id.as_str().unwrap_or("").to_string(),
-                typ: "application/didcomm-plain+json".to_string(),
-                type_: message_type.to_string(),
-                // Use the entire message as the body, not just the "body" field
-                body: message_value.clone(),
-                from: message_value
-                    .get("from")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
-                    .unwrap_or_default(),
-                to: message_value
-                    .get("to")
-                    .and_then(|v| v.as_array())
-                    .map(|arr| {
-                        arr.iter()
-                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                            .collect()
-                    })
-                    .unwrap_or_default(),
-                thid: None,
-                pthid: None,
-                extra_headers: Default::default(),
-                created_time: None,
-                expires_time: None,
-                from_prior: None,
-                attachments: None,
-            };
+        // Deserialize the message into the expected type
+        serde_json::from_value(message_value.clone())
+            .map_err(|e| Error::Serialization(format!("Failed to deserialize message: {}", e)))
+    }
+    
+    #[cfg(target_arch = "wasm32")]
+    async fn receive_message<T: TapMessageBody + DeserializeOwned + Send>(
+        &self,
+        packed_message: &str,
+    ) -> Result<T> {
+        use wasm_bindgen::JsValue;
+        use web_sys::console;
+        
+        // Log the received packed message
+        console::log_1(&JsValue::from_str("==== RECEIVING TAP MESSAGE ===="));
+        console::log_1(&JsValue::from_str("--- PACKED MESSAGE ---"));
+        
+        let formatted_msg = serde_json::from_str::<serde_json::Value>(packed_message)
+            .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed_message.to_string()))
+            .unwrap_or(packed_message.to_string());
+        console::log_1(&JsValue::from_str(&formatted_msg));
 
-            // Convert to the requested type using the TapMessageBody trait
-            let message = T::from_didcomm(&didcomm_message)
-                .map_err(|e| Error::Validation(format!("Failed to convert message: {}", e)))?;
+        // Unpack the message
+        let message_value: Value = self
+            .message_packer
+            .unpack_message_value(packed_message)
+            .await?;
 
-            // Validate the message
-            match message.validate() {
-                Ok(_) => {
-                    println!("✅ Message content validation passed");
-                    println!("==== MESSAGE PROCESSING COMPLETE ====\n");
-                    Ok(message)
-                }
-                Err(e) => {
-                    println!("❌ Message content validation failed: {}", e);
-                    Err(Error::Validation(format!(
-                        "Message validation failed for type {}: {}",
-                        T::message_type(),
-                        e
-                    )))
-                }
-            }
-        } else {
-            // This might be just the message body directly, try to deserialize
-            let message = serde_json::from_value::<T>(message_value).map_err(|e| {
-                Error::Serialization(format!("Failed to deserialize message: {}", e))
-            })?;
+        // Log the unpacked message value
+        console::log_1(&JsValue::from_str("--- UNPACKED CONTENT ---"));
+        let pretty_value = serde_json::to_string_pretty(&message_value)
+            .unwrap_or_else(|_| message_value.to_string());
+        console::log_1(&JsValue::from_str(&pretty_value));
 
-            // Validate the message
-            match message.validate() {
-                Ok(_) => {
-                    println!("✅ Message content validation passed");
-                    println!("==== MESSAGE PROCESSING COMPLETE ====\n");
-                    Ok(message)
-                }
-                Err(e) => {
-                    println!("❌ Message content validation failed: {}", e);
-                    Err(Error::Validation(format!(
-                        "Message validation failed for type {}: {}",
-                        T::message_type(),
-                        e
-                    )))
-                }
-            }
+        // Get the message type from the unpacked message
+        let message_type = message_value
+            .get("type")
+            .and_then(|t| t.as_str())
+            .ok_or_else(|| Error::Validation("Message missing 'type' field".to_string()))?;
+
+        // Validate the message type
+        if message_type != T::message_type() {
+            console::log_1(&JsValue::from_str(&format!(
+                "❌ Message type validation failed: expected {}, got {}",
+                T::message_type(),
+                message_type
+            )));
+            return Err(Error::Validation(format!(
+                "Expected message type {} but got {}",
+                T::message_type(),
+                message_type
+            )));
         }
+        console::log_1(&JsValue::from_str(&format!("✅ Message type validation passed: {}", message_type)));
+
+        // Deserialize the message into the expected type
+        serde_json::from_value(message_value.clone())
+            .map_err(|e| Error::Serialization(format!("Failed to deserialize message: {}", e)))
+    }
+}
+
+/// Builder for DefaultAgent instance
+#[derive(Debug, Clone)]
+pub struct DefaultAgentBuilder {
+    agent_did: String,
+    debug: bool,
+    timeout_seconds: Option<u64>,
+    security_mode: Option<String>,
+}
+
+impl DefaultAgentBuilder {
+    /// Creates a new DefaultAgentBuilder with the given agent DID
+    pub fn new(agent_did: String) -> Self {
+        DefaultAgentBuilder {
+            agent_did,
+            debug: false,
+            timeout_seconds: None,
+            security_mode: None,
+        }
+    }
+
+    /// Sets the debug flag
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
+        self
+    }
+
+    /// Sets the timeout in seconds
+    pub fn with_timeout(mut self, timeout_seconds: u64) -> Self {
+        self.timeout_seconds = Some(timeout_seconds);
+        self
+    }
+
+    /// Sets the security mode
+    pub fn with_security_mode(mut self, security_mode: String) -> Self {
+        self.security_mode = Some(security_mode);
+        self
+    }
+
+    /// Builds a DefaultAgent with the given key manager
+    pub fn build(self, key_manager: Arc<dyn crate::key_manager::KeyManager>) -> DefaultAgent {
+        let config = AgentConfig {
+            agent_did: self.agent_did,
+            debug: self.debug,
+            timeout_seconds: self.timeout_seconds,
+            security_mode: self.security_mode,
+            parameters: std::collections::HashMap::new(),
+        };
+
+        DefaultAgent::new_with_default_packer(config, key_manager)
     }
 }

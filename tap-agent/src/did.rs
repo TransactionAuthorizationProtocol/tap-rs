@@ -594,10 +594,256 @@ impl DIDMethodResolver for WebResolver {
             }
         }
 
-        #[cfg(not(feature = "native"))]
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::JsValue;
+            use wasm_bindgen_futures::JsFuture;
+            use web_sys::{Request, RequestInit, RequestMode, Response, Headers};
+
+            // Create request options
+            let mut opts = RequestInit::new();
+            opts.method("GET");
+            opts.mode(RequestMode::Cors);
+            
+            // Create the request
+            let request = match Request::new_with_str_and_init(&url, &opts) {
+                Ok(req) => req,
+                Err(e) => {
+                    return Err(Error::DIDResolution(format!(
+                        "Failed to create request for {}: {:?}", url, e
+                    )));
+                }
+            };
+            
+            // Add Accept header
+            let headers = match Headers::new() {
+                Ok(h) => h,
+                Err(e) => {
+                    return Err(Error::DIDResolution(format!(
+                        "Failed to create headers: {:?}", e
+                    )));
+                }
+            };
+            
+            if let Err(e) = headers.set("Accept", "application/json") {
+                return Err(Error::DIDResolution(format!(
+                    "Failed to set Accept header: {:?}", e
+                )));
+            }
+            
+            if let Err(e) = request.headers().set("Accept", "application/json") {
+                return Err(Error::DIDResolution(format!(
+                    "Failed to set Accept header: {:?}", e
+                )));
+            }
+            
+            // Get the window object
+            let window = match web_sys::window() {
+                Some(w) => w,
+                None => {
+                    return Err(Error::DIDResolution(
+                        "No window object available".to_string()
+                    ));
+                }
+            };
+            
+            // Send the request
+            let resp_value = match JsFuture::from(window.fetch_with_request(&request)).await {
+                Ok(response) => response,
+                Err(e) => {
+                    return Err(Error::DIDResolution(format!(
+                        "Failed to fetch DID document from {}: {:?}", url, e
+                    )));
+                }
+            };
+            
+            // Convert response to Response object
+            let resp: Response = match resp_value.dyn_into() {
+                Ok(r) => r,
+                Err(_) => {
+                    return Err(Error::DIDResolution(
+                        "Failed to convert response".to_string()
+                    ));
+                }
+            };
+            
+            // Check if successful
+            if resp.ok() {
+                // Get the text content
+                let text_promise = match resp.text() {
+                    Ok(t) => t,
+                    Err(e) => {
+                        return Err(Error::DIDResolution(format!(
+                            "Failed to get text from response: {:?}", e
+                        )));
+                    }
+                };
+                
+                let text_jsval = match JsFuture::from(text_promise).await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        return Err(Error::DIDResolution(format!(
+                            "Failed to await text promise: {:?}", e
+                        )));
+                    }
+                };
+                
+                let text = match text_jsval.as_string() {
+                    Some(t) => t,
+                    None => {
+                        return Err(Error::DIDResolution(
+                            "Response is not a string".to_string()
+                        ));
+                    }
+                };
+                
+                // Parse the DID document
+                match serde_json::from_str::<DIDDoc>(&text) {
+                    Ok(doc) => {
+                        // Validate that the document ID matches the requested DID
+                        if doc.id != did {
+                            return Err(Error::DIDResolution(format!(
+                                "DID Document ID ({}) does not match requested DID ({})",
+                                doc.id, did
+                            )));
+                        }
+                        Ok(Some(doc))
+                    },
+                    Err(parse_error) => {
+                        // If normal parsing fails, try to parse as a generic JSON Value
+                        // and manually construct a DIDDoc with the essential fields
+                        match serde_json::from_str::<serde_json::Value>(&text) {
+                            Ok(json_value) => {
+                                let doc_id = match json_value.get("id") {
+                                    Some(id) => match id.as_str() {
+                                        Some(id_str) => id_str.to_string(),
+                                        None => return Err(Error::DIDResolution(
+                                            "DID Document has invalid 'id' field".to_string(),
+                                        )),
+                                    },
+                                    None => {
+                                        return Err(Error::DIDResolution(
+                                            "DID Document missing 'id' field".to_string(),
+                                        ))
+                                    }
+                                };
+
+                                // Validate ID
+                                if doc_id != did {
+                                    return Err(Error::DIDResolution(format!(
+                                        "DID Document ID ({}) does not match requested DID ({})",
+                                        doc_id, did
+                                    )));
+                                }
+
+                                // Try to extract verification methods and other fields
+                                web_sys::console::log_1(&JsValue::from_str(
+                                    &format!("WARNING: Using partial DID document parsing due to format issues\nOriginal parse error: {}", parse_error)
+                                ));
+
+                                // Extract verification methods if present
+                                // Create a longer-lived empty vec to handle the None case
+                                let empty_vec = Vec::new();
+                                let vm_array = json_value
+                                    .get("verificationMethod")
+                                    .and_then(|v| v.as_array())
+                                    .unwrap_or(&empty_vec);
+
+                                // Attempt to parse each verification method
+                                let mut verification_methods = Vec::new();
+                                for vm_value in vm_array {
+                                    if let Ok(vm) = serde_json::from_value::<
+                                        VerificationMethod,
+                                    >(
+                                        vm_value.clone()
+                                    ) {
+                                        verification_methods.push(vm);
+                                    }
+                                }
+
+                                // Extract authentication references
+                                let authentication = json_value
+                                    .get("authentication")
+                                    .and_then(|v| v.as_array())
+                                    .unwrap_or(&empty_vec)
+                                    .iter()
+                                    .filter_map(|v| {
+                                        v.as_str().map(|s| s.to_string())
+                                    })
+                                    .collect();
+
+                                // Extract key agreement references
+                                let key_agreement = json_value
+                                    .get("keyAgreement")
+                                    .and_then(|v| v.as_array())
+                                    .unwrap_or(&empty_vec)
+                                    .iter()
+                                    .filter_map(|v| {
+                                        v.as_str().map(|s| s.to_string())
+                                    })
+                                    .collect();
+
+                                // Create an empty services list for the DIDDoc
+                                let services = Vec::new();
+
+                                // Extract raw service information for console logging
+                                if let Some(svc_array) = json_value
+                                    .get("service")
+                                    .and_then(|v| v.as_array())
+                                {
+                                    web_sys::console::log_1(&JsValue::from_str("Service endpoints (extracted from JSON):"));
+                                    for (i, svc_value) in svc_array.iter().enumerate() {
+                                        if let (Some(id), Some(endpoint)) = (
+                                            svc_value.get("id").and_then(|v| v.as_str()),
+                                            svc_value.get("serviceEndpoint").and_then(|v| v.as_str()),
+                                        ) {
+                                            let type_value = svc_value
+                                                .get("type")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("Unknown");
+                                                
+                                            web_sys::console::log_1(&JsValue::from_str(
+                                                &format!("[{}] ID: {}\nType: {}\nEndpoint: {}", 
+                                                    i + 1, id, type_value, endpoint)
+                                            ));
+                                        }
+                                    }
+                                }
+
+                                // Create a simplified DID document with whatever we could extract
+                                let simplified_doc = DIDDoc {
+                                    id: doc_id,
+                                    verification_method: verification_methods,
+                                    authentication,
+                                    key_agreement,
+                                    service: services,
+                                };
+
+                                Ok(Some(simplified_doc))
+                            }
+                            Err(_) => Err(Error::DIDResolution(format!(
+                                "Failed to parse DID document from {}: {}",
+                                url, parse_error
+                            ))),
+                        }
+                    }
+                }
+            } else if resp.status() == 404 {
+                // Not found is a valid response, just return None
+                Ok(None)
+            } else {
+                Err(Error::DIDResolution(format!(
+                    "HTTP error fetching DID document from {}: {}",
+                    url,
+                    resp.status()
+                )))
+            }
+        }
+
+        #[cfg(all(not(target_arch = "wasm32"), not(feature = "native")))]
         {
             Err(Error::DIDResolution(
-                "Web DID resolution requires the 'native' feature".to_string(),
+                "Web DID resolution requires the 'native' feature or WASM".to_string(),
             ))
         }
     }

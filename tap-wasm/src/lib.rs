@@ -7,7 +7,7 @@ use std::fmt;
 use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver};
 use tap_agent::did::{DIDDoc, DIDGenerationOptions, GeneratedKey, KeyType};
-use tap_agent::key_manager::KeyManager;
+use tap_agent::key_manager::{DefaultKeyManager, KeyManager};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::PlainMessage;
 use wasm_bindgen::prelude::*;
@@ -1324,7 +1324,7 @@ pub struct TapAgent {
     message_handlers: HashMap<String, js_sys::Function>,
     message_subscribers: Vec<js_sys::Function>,
     secrets_resolver: Arc<BasicSecretResolver>,
-    key_manager: Arc<KeyManager>,
+    key_manager: Arc<dyn KeyManager>,
 }
 
 #[wasm_bindgen]
@@ -1346,7 +1346,7 @@ impl TapAgent {
         };
 
         // Initialize the key manager
-        let key_manager = KeyManager::new();
+        let key_manager = DefaultKeyManager::new();
 
         // Create a secret resolver
         let mut secrets_resolver = BasicSecretResolver::new();
@@ -1882,9 +1882,9 @@ impl TapAgent {
         }
 
         // For each key, create a corresponding secret in the resolver
-        for did in dids {
+        for did in &dids {
             // Get the key from the key manager
-            if let Ok(Some(key)) = self.get_key(&did) {
+            if let Ok(Some(key)) = self.get_key(did) {
                 // Create a DIDComm secret based on the key type
                 match key.key_type {
                     tap_agent::did::KeyType::Ed25519 => {
@@ -2118,14 +2118,10 @@ impl TapAgent {
             new_secrets_resolver.add_secret(existing_did, existing_secret.clone());
         }
 
-        // Create a new key manager
-        let new_key_manager = match Arc::try_unwrap(self.key_manager.clone()) {
-            Ok(km) => km,
-            Err(_) => KeyManager::new(),
-        };
-
         // Add the key to the key manager
-        let _ = new_key_manager.add_key(&generated_key);
+        // Note: We can't unwrap the Arc<dyn KeyManager> directly,
+        // so we'll just clone the reference and use it directly
+        let _ = self.key_manager.add_key(&generated_key);
 
         // Create a secret from the key and add it to the resolver
         match key_type {
@@ -2209,8 +2205,7 @@ impl TapAgent {
             }
         }
 
-        // Update the agent's key manager and secrets resolver
-        self.key_manager = Arc::new(new_key_manager);
+        // Update the secrets resolver
         self.secrets_resolver = Arc::new(new_secrets_resolver);
 
         if self.debug {
@@ -2534,7 +2529,7 @@ impl TapNode {
 #[wasm_bindgen]
 pub fn create_did_key(key_type_str: Option<String>) -> Result<JsValue, JsValue> {
     // Create a key manager
-    let key_manager = KeyManager::new();
+    let key_manager = DefaultKeyManager::new();
 
     // Convert key type string to KeyType enum
     let key_type = match key_type_str {

@@ -31,7 +31,7 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Async runtime - minimal features for WASM compatibility
-tokio = { version = "1.32.0", default-features = false, features = ["rt", "sync", "macros"] }
+tokio = { version = "1.32.0", default-features = false, features = ["sync", "macros", "io-util", "rt", "time"] }
 
 # Error handling
 thiserror = "1.0"

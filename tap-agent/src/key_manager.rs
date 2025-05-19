@@ -44,16 +44,43 @@ pub struct Secret {
     pub secret_material: SecretMaterial,
 }
 
-/// A key manager for storing and retrieving keys.
+/// Trait defining the interface for a key manager component
+pub trait KeyManager: Send + Sync + std::fmt::Debug + 'static {
+    /// Generate a new key with the specified options
+    fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey>;
+    
+    /// Generate a new web DID with the specified domain and options
+    fn generate_web_did(&self, domain: &str, options: DIDGenerationOptions) -> Result<GeneratedKey>;
+    
+    /// Add an existing key to the key manager
+    fn add_key(&self, key: &GeneratedKey) -> Result<()>;
+    
+    /// Remove a key from the key manager
+    fn remove_key(&self, did: &str) -> Result<()>;
+    
+    /// Check if the key manager has a key for the given DID
+    fn has_key(&self, did: &str) -> Result<bool>;
+    
+    /// Get a list of all DIDs in the key manager
+    fn list_keys(&self) -> Result<Vec<String>>;
+    
+    /// Get access to the secrets storage
+    fn get_secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>>;
+    
+    /// Get a secret resolver for use with cryptographic operations
+    fn secret_resolver(&self) -> KeyManagerSecretResolver;
+}
+
+/// A default implementation of the KeyManager trait.
 #[derive(Debug, Clone)]
-pub struct KeyManager {
+pub struct DefaultKeyManager {
     /// The DID key generator
     pub generator: DIDKeyGenerator,
     /// The secret storage
     pub secrets: Arc<RwLock<HashMap<String, Secret>>>,
 }
 
-impl KeyManager {
+impl DefaultKeyManager {
     /// Create a new key manager
     pub fn new() -> Self {
         Self {
@@ -61,9 +88,17 @@ impl KeyManager {
             secrets: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+}
 
+impl Default for DefaultKeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl KeyManager for DefaultKeyManager {
     /// Generate a new key with the specified options
-    pub fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
+    fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
         // Generate the key
         let key = self.generator.generate_did(options)?;
 
@@ -81,7 +116,7 @@ impl KeyManager {
     }
 
     /// Generate a new web DID with the specified domain and options
-    pub fn generate_web_did(
+    fn generate_web_did(
         &self,
         domain: &str,
         options: DIDGenerationOptions,
@@ -103,7 +138,7 @@ impl KeyManager {
     }
 
     /// Add an existing key to the key manager
-    pub fn add_key(&self, key: &GeneratedKey) -> Result<()> {
+    fn add_key(&self, key: &GeneratedKey) -> Result<()> {
         // Create a secret for the key
         let secret = self.generator.create_secret_from_key(key);
 
@@ -117,7 +152,7 @@ impl KeyManager {
     }
 
     /// Remove a key from the key manager
-    pub fn remove_key(&self, did: &str) -> Result<()> {
+    fn remove_key(&self, did: &str) -> Result<()> {
         // Remove the secret
         if let Ok(mut secrets) = self.secrets.write() {
             secrets.remove(did);
@@ -128,7 +163,7 @@ impl KeyManager {
     }
 
     /// Check if the key manager has a key for the given DID
-    pub fn has_key(&self, did: &str) -> Result<bool> {
+    fn has_key(&self, did: &str) -> Result<bool> {
         // Check if the secret exists
         if let Ok(secrets) = self.secrets.read() {
             Ok(secrets.contains_key(did))
@@ -138,7 +173,7 @@ impl KeyManager {
     }
 
     /// Get a list of all DIDs in the key manager
-    pub fn list_keys(&self) -> Result<Vec<String>> {
+    fn list_keys(&self) -> Result<Vec<String>> {
         // Get all DIDs
         if let Ok(secrets) = self.secrets.read() {
             Ok(secrets.keys().cloned().collect())
@@ -146,18 +181,17 @@ impl KeyManager {
             Err(Error::FailedToAcquireResolverReadLock)
         }
     }
+    
+    /// Get access to the secrets storage
+    fn get_secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>> {
+        Arc::clone(&self.secrets)
+    }
 
-    /// Get a secret resolver implementation for use with DIDComm
-    pub fn secret_resolver(&self) -> KeyManagerSecretResolver {
+    /// Get a secret resolver implementation for use with cryptographic operations
+    fn secret_resolver(&self) -> KeyManagerSecretResolver {
         KeyManagerSecretResolver {
             secrets: Arc::clone(&self.secrets),
         }
-    }
-}
-
-impl Default for KeyManager {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -168,10 +202,34 @@ pub struct KeyManagerSecretResolver {
     secrets: Arc<RwLock<HashMap<String, Secret>>>,
 }
 
-// Let's implement a custom method to get a secret without using the trait
 impl KeyManagerSecretResolver {
+    /// Create a new KeyManagerSecretResolver
+    pub fn new(key_manager: Arc<dyn KeyManager>) -> Self {
+        Self {
+            secrets: Arc::clone(&key_manager.get_secrets()),
+        }
+    }
+}
+
+impl crate::crypto::DebugSecretsResolver for KeyManagerSecretResolver {
+    /// Get a reference to the secrets map for debugging purposes
+    fn get_secrets_map(&self) -> &std::collections::HashMap<String, Secret> {
+        // This is not a suitable pattern for a shared reference return type
+        // Instead, we'll use a static empty HashMap with a 'static lifetime
+        
+        // NOTE: This implementation is only for debugging and diagnostics purposes
+        // It does not provide access to the actual secrets, which should be accessed
+        // using the get_secret_by_id method instead
+        
+        // Return a reference to a static empty HashMap
+        static EMPTY_MAP: once_cell::sync::Lazy<std::collections::HashMap<String, Secret>> = 
+            once_cell::sync::Lazy::new(|| std::collections::HashMap::new());
+            
+        &EMPTY_MAP
+    }
+    
     /// Get a secret by ID
-    pub fn get_secret_by_id(&self, secret_id: &str) -> Option<Secret> {
+    fn get_secret_by_id(&self, secret_id: &str) -> Option<Secret> {
         if let Ok(secrets) = self.secrets.read() {
             if let Some(secret) = secrets.get(secret_id) {
                 return Some(secret.clone());
@@ -181,9 +239,7 @@ impl KeyManagerSecretResolver {
     }
 }
 
-// We won't implement the didcomm SecretsResolver trait directly to avoid
-// compatibility issues. Instead, we'll implement our own methods and
-// use a compatibility adapter in the tests.
+// The KeyManagerSecretResolver already implements AsAny through the blanket implementation
 
 #[cfg(test)]
 mod tests {
@@ -191,7 +247,7 @@ mod tests {
 
     #[test]
     fn test_key_manager() {
-        let manager = KeyManager::new();
+        let manager = DefaultKeyManager::new();
 
         // Generate an Ed25519 key
         let options = DIDGenerationOptions {
@@ -219,7 +275,7 @@ mod tests {
 
     #[test]
     fn test_secret_resolver() {
-        let manager = KeyManager::new();
+        let manager = DefaultKeyManager::new();
 
         // Generate keys of different types
         let ed25519_key = manager
@@ -257,7 +313,7 @@ mod tests {
 
     #[test]
     fn test_web_did_generation() {
-        let manager = KeyManager::new();
+        let manager = DefaultKeyManager::new();
 
         // Generate a web DID
         let domain = "example.com";
