@@ -8,11 +8,12 @@ use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_agent::storage::KeyStorage;
 use tap_agent::DefaultAgent;
 use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 // For command line argument parsing
 struct Args {
@@ -107,7 +108,7 @@ fn print_help() {
     println!("    -p, --port <PORT>            Port to listen on [default: 8000]");
     println!("    -e, --endpoint <ENDPOINT>    Path for the DIDComm endpoint [default: /didcomm]");
     println!("    -t, --timeout <SECONDS>      Request timeout in seconds [default: 30]");
-    println!("    --agent-did <DID>            DID for the TAP agent (optional, will create ephemeral if not provided)");
+    println!("    --agent-did <DID>            DID for the TAP agent (optional)");
     println!("    --agent-key <KEY>            Private key for the TAP agent (required if agent-did is provided)");
     println!("    --logs-dir <DIR>             Directory for event logs [default: ./logs]");
     println!("    --structured-logs            Use structured JSON logging [default: true]");
@@ -124,13 +125,19 @@ fn print_help() {
     println!("    TAP_AGENT_KEY                Private key for the TAP agent");
     println!("    TAP_LOGS_DIR                 Directory for event logs");
     println!("    TAP_STRUCTURED_LOGS          Use structured JSON logging");
+    println!();
+    println!("NOTES:");
+    println!("    - If no agent DID and key are provided, the server will:");
+    println!("      1. Try to load keys from ~/.tap/keys.json (created by 'tap-agent-cli generate --save')");
+    println!("      2. Fall back to an ephemeral agent if no stored keys exist");
 }
 
 /// Create an agent for the server
 ///
-/// This will either:
-/// - Create an ephemeral agent with a new DID:key
-/// - Use the provided agent DID and key
+/// This will try in the following order:
+/// 1. Use the provided agent DID and key from arguments or environment variables
+/// 2. Load keys from the stored keys in ~/.tap/keys.json
+/// 3. Create an ephemeral agent with a new DID:key
 fn create_agent(
     agent_did: Option<String>,
     agent_key: Option<String>,
@@ -288,7 +295,46 @@ fn create_agent(
             Ok((agent, did))
         }
         (None, None) => {
-            // Create an ephemeral agent
+            // Try to load agent from stored keys
+            info!("Attempting to load agent from stored keys");
+
+            match tap_agent::storage::KeyStorage::load_default() {
+                Ok(key_storage) if !key_storage.keys.is_empty() => {
+                    // We found stored keys, use them
+                    let did = match &key_storage.default_did {
+                        Some(default_did) => default_did.clone(),
+                        None => {
+                            // No default DID set, use the first key
+                            key_storage.keys.keys().next().unwrap().clone()
+                        }
+                    };
+
+                    info!("Found stored key with DID: {}", did);
+
+                    // Create agent from stored key
+                    match DefaultAgent::from_stored_keys(Some(did.clone()), true) {
+                        Ok(agent) => {
+                            info!("Successfully loaded agent from stored keys");
+                            return Ok((agent, did));
+                        }
+                        Err(e) => {
+                            // Log error but continue to fallback to ephemeral
+                            warn!("Failed to create agent from stored keys: {}, falling back to ephemeral agent", e);
+                        }
+                    }
+                }
+                Ok(_) => {
+                    info!("No stored keys found, falling back to ephemeral agent");
+                }
+                Err(e) => {
+                    warn!(
+                        "Failed to load stored keys: {}, falling back to ephemeral agent",
+                        e
+                    );
+                }
+            }
+
+            // Create an ephemeral agent as fallback
             info!("Creating ephemeral agent");
             let (agent, did) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
             Ok((agent, did))
@@ -333,6 +379,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Print the DID to stdout for easy copying
     println!("TAP HTTP Server started with agent DID: {}", agent_did);
+
+    // If using ephemeral agent, print a note that it's not persistent
+    if args.agent_did.is_none() && args.agent_key.is_none() {
+        match KeyStorage::default_key_path() {
+            Some(path) if !path.exists() => {
+                println!("Note: Using an ephemeral agent that won't persist across restarts.");
+                println!("To create a persistent agent, run: `tap-agent-cli generate --save`");
+                println!("Or provide --agent-did and --agent-key arguments");
+            }
+            _ => {}
+        }
+    }
 
     // Create config from parsed arguments
     let mut config = TapHttpConfig {
