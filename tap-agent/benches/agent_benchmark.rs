@@ -7,14 +7,14 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tap_agent::did::MultiResolver;
-use tap_agent::{Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker};
+use tap_agent::{Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker, SyncDIDResolver};
 use tap_caip::AssetId;
-use tap_msg::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::{message::Transfer, Participant};
 
-/// Create a test agent with a fresh keypair
-async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
-    // Create a test DID
+/// Create a test agent with known key material for benchmarking
+fn create_test_agent() -> (Arc<DefaultAgent>, String) {
+    // Create a DID for the agent - using a fixed DID for predictability
     let did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
 
     // Create agent config
@@ -32,7 +32,7 @@ async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
                 "kty": "OKP",
                 "kid": format!("{}#keys-1", did),
                 "crv": "Ed25519",
-                "x": "F74Yk9BrwnXVJUEKwDxBfNjOElv1eIHr9QypeZ2DQQg",
+                "x": "F74Yk9BrwnXVJUEKwDxBfNjOElv1eIHr9QypeZ2DQQg", 
                 "d": "9kVnxrZlZW6V2MrNfcXUL8sAle/XX9XBbOxmHKFbvs4="
             }),
         },
@@ -41,12 +41,13 @@ async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
     secret_resolver.add_secret(&did, secret);
 
     // Create DID resolver
-    let did_resolver = Arc::new(MultiResolver::default());
+    let did_resolver: Arc<dyn SyncDIDResolver> = Arc::new(MultiResolver::default());
 
     // Create message packer
     let message_packer = Arc::new(DefaultMessagePacker::new(
         did_resolver,
         Arc::new(secret_resolver),
+        false
     ));
 
     // Create agent
@@ -56,7 +57,7 @@ async fn create_test_agent() -> (Arc<DefaultAgent>, String) {
 }
 
 /// Create a test transfer message
-async fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
+fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
     // Create originator and beneficiary participants
     let originator = Participant {
         id: from_did.to_string(),
@@ -89,26 +90,22 @@ async fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
 
 /// Benchmark message sending
 fn bench_send_message(c: &mut Criterion) {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+    let rt = tokio::runtime::Runtime::new().unwrap();
 
     let mut group = c.benchmark_group("agent_send_message");
+
+    // Create the test agent once, outside the benchmark loop
+    let (agent, did) = create_test_agent();
+    let transfer = rt.block_on(async {
+        create_transfer_message(&did, &did)
+    });
 
     group.bench_function(BenchmarkId::new("send", "transfer"), |b| {
         b.iter(|| {
             rt.block_on(async {
-                // Create agents
-                let (agent1, did1) = create_test_agent().await;
-                let (_, did2) = create_test_agent().await;
-
-                // Create transfer message
-                let transfer = create_transfer_message(&did1, &did2).await;
-
                 // Send message
-                let (_, _) = agent1
-                    .send_message(&transfer, vec![&did2], false)
+                let (_, _) = agent
+                    .send_message(&transfer, vec![&did], false)
                     .await
                     .unwrap();
             });
@@ -118,37 +115,5 @@ fn bench_send_message(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark message packing
-fn bench_message_packing(c: &mut Criterion) {
-    let rt = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap();
-
-    let mut group = c.benchmark_group("agent_message_packing");
-
-    group.bench_function(BenchmarkId::new("pack", "transfer"), |b| {
-        b.iter(|| {
-            rt.block_on(async {
-                // Create agents
-                let (agent1, did1) = create_test_agent().await;
-                let (agent2, did2) = create_test_agent().await;
-
-                // Create transfer message
-                let transfer = create_transfer_message(&did1, &did2).await;
-
-                // Send and receive message
-                let (packed, _) = agent1
-                    .send_message(&transfer, vec![&did2], false)
-                    .await
-                    .unwrap();
-                let _: Transfer = agent2.receive_message(&packed).await.unwrap();
-            });
-        });
-    });
-
-    group.finish();
-}
-
-criterion_group!(agent_benches, bench_send_message, bench_message_packing);
+criterion_group!(agent_benches, bench_send_message);
 criterion_main!(agent_benches);
