@@ -39,6 +39,18 @@ pub struct DIDDoc {
     /// List of key agreement verification method references (id strings)
     pub key_agreement: Vec<String>,
 
+    /// List of assertion method verification method references (id strings)
+    #[serde(default)]
+    pub assertion_method: Vec<String>,
+
+    /// List of capability invocation verification method references (id strings)
+    #[serde(default)]
+    pub capability_invocation: Vec<String>,
+
+    /// List of capability delegation verification method references (id strings)
+    #[serde(default)]
+    pub capability_delegation: Vec<String>,
+
     /// List of services
     pub service: Vec<Service>,
 }
@@ -346,6 +358,9 @@ impl WasmDIDMethodResolver for KeyResolver {
             verification_method: verification_methods,
             authentication: vec![ed_vm_id],
             key_agreement,
+            assertion_method: Vec::new(),
+            capability_invocation: Vec::new(),
+            capability_delegation: Vec::new(),
             service: Vec::new(),
         };
 
@@ -435,6 +450,9 @@ impl DIDMethodResolver for KeyResolver {
             verification_method: verification_methods,
             authentication: vec![ed_vm_id],
             key_agreement,
+            assertion_method: Vec::new(),
+            capability_invocation: Vec::new(),
+            capability_delegation: Vec::new(),
             service: Vec::new(),
         };
 
@@ -535,6 +553,9 @@ impl WasmDIDMethodResolver for WebResolver {
             verification_method: vec![verification_method.clone()],
             authentication: vec![verification_method.id.clone()],
             key_agreement: Vec::new(),
+            assertion_method: Vec::new(),
+            capability_invocation: Vec::new(),
+            capability_delegation: Vec::new(),
             service: Vec::new(),
         };
 
@@ -716,6 +737,9 @@ impl DIDMethodResolver for WebResolver {
                                                     verification_method: verification_methods,
                                                     authentication,
                                                     key_agreement,
+                                                    assertion_method: Vec::new(),
+                                                    capability_invocation: Vec::new(),
+                                                    capability_delegation: Vec::new(),
                                                     service: services,
                                                 };
 
@@ -981,6 +1005,9 @@ impl DIDMethodResolver for WebResolver {
                                     verification_method: verification_methods,
                                     authentication,
                                     key_agreement,
+                                    assertion_method: Vec::new(),
+                                    capability_invocation: Vec::new(),
+                                    capability_delegation: Vec::new(),
                                     service: services,
                                 };
 
@@ -1231,6 +1258,9 @@ impl DIDKeyGenerator {
                 .map(|vm| vm.id.clone())
                 .collect(),
             key_agreement: key_did.did_doc.key_agreement,
+            assertion_method: Vec::new(),
+            capability_invocation: Vec::new(),
+            capability_delegation: Vec::new(),
             service: vec![],
         };
 
@@ -1313,6 +1343,9 @@ impl DIDKeyGenerator {
             verification_method: verification_methods,
             authentication: vec![vm_id.clone()],
             key_agreement,
+            assertion_method: Vec::new(),
+            capability_invocation: Vec::new(),
+            capability_delegation: Vec::new(),
             service: vec![],
         };
 

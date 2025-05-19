@@ -1,62 +1,144 @@
 # TAP Agent CLI
 
-A command-line tool for working with Decentralized Identifiers (DIDs) in the TAP ecosystem.
+A command-line tool for managing Decentralized Identifiers (DIDs) and cryptographic keys in the TAP ecosystem.
 
 ## Features
 
-- Generate DIDs with different key types (Ed25519, P256, Secp256k1)
+- Generate DIDs with different key types (Ed25519, P-256, Secp256k1)
 - Support for different DID methods (did:key, did:web)
-- Save DID documents and private keys to files
-- Simple interface for managing DIDs and keys
+- Save and manage DIDs and keys in a local key store
+- Import and export keys for backup or transfer
+- Resolve DIDs to display their DID documents
+- Integration with the TAP Agent library
 
-## Usage
+## Installation
 
-### Generating a DID
+From the TAP repository:
+```bash
+cargo install --path tap-agent
+```
+
+From crates.io:
+```bash
+cargo install tap-agent
+```
+
+## Commands
+
+### Generate
+
+Creates a new DID with the specified method and key type:
 
 ```bash
-# Generate a did:key with Ed25519
+# Basic usage
+tap-agent-cli generate
+
+# Specify method and key type
 tap-agent-cli generate --method key --key-type ed25519
-
-# Generate a did:key with P-256
 tap-agent-cli generate --method key --key-type p256
-
-# Generate a did:key with Secp256k1
 tap-agent-cli generate --method key --key-type secp256k1
-
-# Generate a did:web for a domain
 tap-agent-cli generate --method web --domain example.com
+
+# Save outputs
+tap-agent-cli generate --output did.json --key-output key.json
+tap-agent-cli generate --save --default
 ```
 
-### Saving Output to Files
+Options:
+- `--method, -m`: DID method to use (`key` or `web`, default: `key`)
+- `--key-type, -t`: Key type to generate (`ed25519`, `p256`, or `secp256k1`, default: `ed25519`)
+- `--domain, -d`: Domain for did:web (required when method is `web`)
+- `--output, -o`: Output file path for the DID document
+- `--key-output, -k`: Output file path for the private key
+- `--save, -s`: Save key to default location (~/.tap/keys.json)
+- `--default`: Set as default key when saving
+
+### Lookup
+
+Resolves a DID to its DID document:
 
 ```bash
-# Save DID document to did.json and key to key.json
-tap-agent-cli generate --output did.json --key-output key.json
+# Basic lookup
+tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 
-# Save did:web document (to be placed at /.well-known/did.json on the domain)
-tap-agent-cli generate --method web --domain example.com --output did.json
+# Save to file
+tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --output doc.json
+
+# Look up WebDIDs
+tap-agent-cli lookup did:web:example.com
+tap-agent-cli lookup did:web:example.com:path:to:resource
 ```
+
+Options:
+- `--output, -o`: Output file path for the resolved DID document
+
+### Keys
+
+Manages stored keys in the local key store:
+
+```bash
+# List all keys
+tap-agent-cli keys list
+
+# View a specific key
+tap-agent-cli keys view did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Set a key as default
+tap-agent-cli keys set-default did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Delete a key
+tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --force
+```
+
+### Import
+
+Imports an existing key into the key store:
+
+```bash
+# Basic import
+tap-agent-cli import key.json
+
+# Import and set as default
+tap-agent-cli import key.json --default
+```
+
+Options:
+- `--default`: Set the imported key as the default key
 
 ## DID Methods
 
 ### did:key
 
-The `did:key` method generates a self-contained DID that includes the public key material in the identifier itself. This is useful for situations where simplicity and portability are important, as it doesn't require any external resolution infrastructure.
+The `did:key` method generates self-contained DIDs that include the public key material directly in the identifier. These DIDs are portable and don't require external infrastructure for resolution.
+
+Prefix encodings:
+- Ed25519: `0xed01`
+- P-256: `0x1200`
+- Secp256k1: `0xe701`
 
 ### did:web
 
-The `did:web` method creates a DID that is associated with a domain name. To use this DID, you need to host the DID document at a specific URL on your domain:
+The `did:web` method creates DIDs associated with domain names. To use this method:
 
-```
-https://yourdomain.com/.well-known/did.json
-```
+1. Generate a did:web DID with your domain
+2. Host the DID document at the appropriate location:
+   - `did:web:example.com` → `https://example.com/.well-known/did.json`
+   - `did:web:example.com:path:to:resource` → `https://example.com/path/to/resource/did.json`
 
-This method allows for DID ownership to be linked to domain ownership, and the DID document can be updated by modifying the file on the web server.
+## Key Storage
+
+Keys are stored locally in `~/.tap/keys.json`. This file contains:
+- A collection of all your DIDs and their associated key material
+- Information about the default DID (if set)
+- Metadata about each key
+
+The storage format is JSON-based and can be backed up or transferred between systems.
 
 ## Key Types
 
 The CLI supports three key types:
 
-- **Ed25519**: A fast and secure digital signature algorithm designed for high-speed signature verification
-- **P-256**: An elliptic curve digital signature algorithm that follows NIST standards
-- **Secp256k1**: The curve used by Bitcoin, Ethereum, and many other blockchain systems
+- **Ed25519**: A fast and secure digital signature algorithm with small signatures
+- **P-256**: An NIST standardized elliptic curve algorithm (also known as secp256r1)
+- **Secp256k1**: The elliptic curve used by Bitcoin, Ethereum, and many other blockchain systems

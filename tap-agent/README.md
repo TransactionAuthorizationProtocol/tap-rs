@@ -6,11 +6,13 @@ The `tap-agent` crate implements the agent functionality for the Transaction Aut
 
 The TAP Agent serves as the foundation for secure communication in the TAP ecosystem, enabling entities to:
 
-- Establish and verify identities using DIDs
-- Exchange secure messages with cryptographic guarantees
-- Process and validate TAP protocol messages
-- Manage cryptographic keys and operations
-- Integrate with various DID methods and resolvers
+- **Establish secure identities** using Decentralized Identifiers (DIDs)
+- **Exchange authenticated and encrypted messages** with strong cryptographic guarantees 
+- **Process and validate** TAP protocol messages for compliant transfers and payments
+- **Manage cryptographic keys** with support for multiple key types and algorithms
+- **Resolve DIDs** across different methods with a pluggable resolver architecture
+- **Automatically deliver messages** to service endpoints defined in DID documents
+- **Generate, store, and retrieve** cryptographic keys for long-term use
 
 ## Architecture
 
@@ -19,13 +21,21 @@ The `tap-agent` crate is designed with a modular architecture that separates con
 ```
 tap-agent
 ├── agent       - Core agent implementation and traits
-├── config      - Agent configuration
-├── cli         - Command-line interface for DID generation
+├── config      - Agent configuration parameters
+├── cli         - Command-line interface for DID and key management
 ├── crypto      - Cryptographic operations and message security
-├── did         - DID resolution and management
+├── did         - DID resolution, generation, and validation
 ├── error       - Error types and handling
-├── message     - Message processing utilities
+├── message     - Message formatting and processing
+├── key_manager - Key generation and management
+├── storage     - Persistent storage for keys and DIDs
 ```
+
+This architecture follows clean separation of concerns principles:
+- Core agent functionality is independent from specific cryptographic implementations
+- DID resolution is pluggable with support for multiple methods
+- Key management is abstracted to support different security approaches
+- CLI tools provide user-friendly access to core functionality
 
 ### Key Components
 
@@ -39,7 +49,12 @@ The `Agent` trait defines the core interface for TAP agents, with methods for:
 - Receiving and unpacking messages
 - Validating message contents
 
-The `DefaultAgent` implementation provides a standard implementation of this trait, using native cryptographic operations for secure message exchange. It automatically checks for service endpoints when sending messages to help with message routing.
+The `DefaultAgent` implementation provides a production-ready implementation of this trait with:
+- Multiple creation methods (builder pattern, from stored keys, ephemeral)
+- Automatic service endpoint discovery and message delivery
+- Configurable timeout and security settings
+- Comprehensive logging for debugging
+- Support for both native and WASM environments
 
 #### DID Resolution
 
@@ -47,27 +62,39 @@ The DID resolution system supports multiple DID methods through a pluggable arch
 
 - `SyncDIDResolver` - A trait for resolving DIDs to DID documents
 - `DIDMethodResolver` - A trait for method-specific resolvers
-- `KeyResolver` - A resolver for the `did:key` method
+- `KeyResolver` - A resolver for the `did:key` method (Ed25519, P-256, Secp256k1)
+- `WebResolver` - A resolver for the `did:web` method with HTTP resolution
 - `MultiResolver` - A resolver that manages multiple method-specific resolvers
 
-The system supports conversion between Ed25519 verification keys and X25519 key agreement keys, enabling the same keypair to be used for both signing and encryption.
+The system includes advanced features like:
+- Automatic conversion between Ed25519 verification keys and X25519 key agreement keys
+- Support for JWK, Multibase, and Base58 key formats
+- Integration with W3C compliant DID Document formats
+- Caching for improved performance
 
 #### Cryptographic Operations
 
 The cryptographic system provides:
 
 - `MessagePacker` - A trait for packing and unpacking secure messages
-- `DefaultMessagePacker` - An implementation supporting various security modes
+- `DefaultMessagePacker` - Standards-compliant implementation of JWS/JWE formats
 - `DebugSecretsResolver` - A trait for resolving cryptographic secrets
 - `BasicSecretResolver` - A simple in-memory implementation for development
+- `KeyManager` - A component for generating and managing cryptographic keys
+- `KeyStorage` - Persistent storage for cryptographic keys and metadata
 
 #### Security Modes
 
 The agent supports different security modes for messages:
 
 - `Plain` - No security (for testing only)
-- `Signed` - Messages are digitally signed but not encrypted
-- `AuthCrypt` - Messages are both signed and encrypted (authenticated encryption)
+- `Signed` - Messages are digitally signed but not encrypted (integrity protection)
+- `AuthCrypt` - Messages are authenticated and encrypted (confidentiality + integrity)
+
+Each security mode uses standards-compliant cryptographic approaches:
+- Signing uses JSON Web Signatures (JWS) with algorithm selection based on key type
+- Encryption uses JSON Web Encryption (JWE) with AES-GCM and ECDH-ES key agreement
+- Message formats are compatible with broader DIDComm ecosystem standards
 
 ## Features
 
@@ -75,36 +102,99 @@ The agent supports different security modes for messages:
 - **Message Processing**: Handle TAP message flows with proper validation
 - **DID Resolution**: Resolve DIDs for message routing, key discovery, and service endpoints
 - **Cryptographic Operations**: Sign, verify, encrypt, and decrypt messages
-- **Key Management**: Securely manage cryptographic keys
-- **DID Generation CLI**: Create DIDs and keys using a command-line interface
+- **Key Management**: Generate, store, and retrieve cryptographic keys
+- **Message Delivery**: Automatically deliver messages to service endpoints
+- **DID Generation CLI**: Command-line tools for creating and managing DIDs and keys
 - **Ephemeral DIDs**: Create temporary DIDs for testing or short-lived processes
 - **Asynchronous Processing**: Process messages concurrently using Tokio
 - **WASM Support**: Run in browser environments with WebAssembly
 - **Extensible DID Methods**: Support for did:key and did:web, with architecture for adding more methods
 - **Performance Optimized**: Benchmarked for high-throughput scenarios
 - **Native Cryptography**: Direct implementation of cryptographic operations without external DIDComm dependencies
+- **Persistent Storage**: Store keys securely for long-term use
+- **Multiple Key Types**: Support for Ed25519, P-256, and Secp256k1 keys
+- **Standards-Compliant**: Implementation follows W3C DID and IETF JWS/JWE standards
 
 ## Usage Examples
 
-### Basic Agent Setup
+### Agent Creation
+
+The TAP Agent can be created in multiple ways depending on your needs. Here are the main approaches:
+
+#### 1. Using Agent Builder (Recommended)
+
+The builder pattern provides a clean, fluent interface for creating agents:
 
 ```rust
-use tap_agent::agent::{Agent, DefaultAgent};
-use tap_agent::config::AgentConfig;
-use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
-use tap_agent::did::{MultiResolver, KeyResolver};
-use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_agent::{DefaultAgent, DefaultKeyManager};
 use std::sync::Arc;
 
-// Create agent configuration with a DID
+// Create a key manager
+let key_manager = Arc::new(DefaultKeyManager::new());
+
+// Generate a new key or load an existing one
+let key = key_manager.generate_key(DIDGenerationOptions {
+    key_type: KeyType::Ed25519,
+})?;
+
+// Build the agent with the generated key
+let agent = DefaultAgent::builder(key.did)
+    .with_debug(true)
+    .with_timeout(30)
+    .with_security_mode("SIGNED".to_string())
+    .build(key_manager);
+```
+
+#### 2. Using Stored Keys
+
+Load keys from the default storage location (~/.tap/keys.json):
+
+```rust
+use tap_agent::DefaultAgent;
+
+// Use a stored key with a specific DID
+let agent = DefaultAgent::from_stored_keys(
+    Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
+    true
+)?;
+
+// Or use the default key from storage
+let agent = DefaultAgent::from_stored_keys(None, true)?;
+
+// If no keys exist, create a new ephemeral agent as fallback
+let agent = DefaultAgent::from_stored_or_ephemeral(None, true);
+```
+
+#### 3. Using Ephemeral Keys
+
+Create an agent with a temporary key that is not persisted:
+
+```rust
+use tap_agent::DefaultAgent;
+
+// Create an ephemeral agent with a new key
+let (agent, did) = DefaultAgent::new_ephemeral()?;
+println!("Created ephemeral agent with DID: {}", did);
+```
+
+#### 4. Manual Creation (Advanced)
+
+For complete control over the agent configuration:
+
+```rust
+use tap_agent::{Agent, DefaultAgent, AgentConfig, MultiResolver, KeyResolver};
+use tap_agent::{DefaultMessagePacker, BasicSecretResolver, Secret, SecretMaterial, SecretType};
+use std::sync::Arc;
+
+// Create agent configuration
 let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
 
-// Set up DID resolver with support for did:key
+// Set up DID resolver
 let mut did_resolver = MultiResolver::new();
 did_resolver.register_method("key", KeyResolver::new());
 let did_resolver = Arc::new(did_resolver);
 
-// Set up secret resolver with the agent's key
+// Set up secret resolver
 let mut secret_resolver = BasicSecretResolver::new();
 let secret = Secret {
     id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK#keys-1".to_string(),
@@ -122,22 +212,27 @@ secret_resolver.add_secret("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta
 let secret_resolver = Arc::new(secret_resolver);
 
 // Create message packer
-let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver, true));
 
 // Create the agent
 let agent = DefaultAgent::new(config, message_packer);
 ```
 
-### Sending a Message
+### Sending Messages
+
+The agent provides a flexible API for sending messages to one or more recipients:
 
 ```rust
+use tap_agent::Agent;
 use tap_msg::message::Transfer;
 use tap_caip::AssetId;
+use tap_msg::Participant;
 use std::str::FromStr;
 use std::collections::HashMap;
 
 // Create a transfer message
 let transfer = Transfer {
+    transaction_id: uuid::Uuid::new_v4().to_string(),
     asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
     originator: Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
@@ -158,19 +253,21 @@ let transfer = Transfer {
     metadata: HashMap::new(),
 };
 
-// Look up the recipient's service endpoint (for DIDs with service endpoints like did:web or did:key)
+// Option 1: Pack a message without delivery (for manual handling)
 let recipient_did = "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k";
+let (packed_message, _) = agent.send_message(&transfer, vec![recipient_did], false).await?;
 
-// Method 1: Use the convenience method to get the service endpoint directly
-if let Ok(Some(endpoint)) = agent.get_did_service_endpoint(recipient_did).await {
-    println!("Found service endpoint: {}", endpoint);
-    // In a complete implementation, you would send the packed message to this endpoint
-}
+// You can now manually send the packed message however you want
 
-// Method 2: Use send_message with delivery parameter for automatic delivery
-// This will automatically send the message to the service endpoint if found
-// The third parameter (true) indicates to deliver the message automatically
+// Option 2: Automatic delivery to service endpoints
 let (packed_message, delivery_results) = agent.send_message(&transfer, vec![recipient_did], true).await?;
+
+// Option 3: Send to multiple recipients
+let recipients = vec![
+    "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k",
+    "did:web:example.com"
+];
+let (packed_message, delivery_results) = agent.send_message(&transfer, recipients, true).await?;
 
 // Check delivery results
 for result in delivery_results {
@@ -182,64 +279,143 @@ for result in delivery_results {
     }
 }
 
-// The packed_message is also returned and can be used for other purposes
+// You can also look up service endpoints manually
+if let Ok(Some(endpoint)) = agent.get_service_endpoint(recipient_did).await {
+    println!("Found service endpoint: {}", endpoint);
+    // Use the endpoint for custom delivery logic
+}
 ```
 
-### Receiving a Message
+The `send_message` method provides flexibility with three parameters:
+1. The message to send (any type implementing `TapMessageBody`)
+2. A list of recipient DIDs
+3. A boolean indicating whether to attempt automatic delivery
+
+The method returns:
+1. The packed message as a string (ready for transport)
+2. A vector of delivery results (when automatic delivery is requested)
+
+### Receiving Messages
+
+The agent provides a simple API for unpacking and validating received messages:
 
 ```rust
-// Receive and process an incoming message
-let packed_message = "..."; // Received from network/transport
+use tap_agent::Agent;
+use tap_msg::message::Transfer;
+
+// Receive a message from some transport mechanism
+let packed_message = "..."; // Received from HTTP, WebSockets, etc.
+
+// Unpack and validate the message, converting to the expected type
 let transfer: Transfer = agent.receive_message(packed_message).await?;
 
-// Now you can access the transfer details
-println!("Received transfer of {} {}", transfer.amount, transfer.asset);
+// Now you can access the typed message content
+println!("Received transfer:");
+println!("  Transaction ID: {}", transfer.transaction_id);
+println!("  Asset: {}", transfer.asset);
+println!("  Amount: {}", transfer.amount);
+println!("  From: {}", transfer.originator.id);
+if let Some(beneficiary) = &transfer.beneficiary {
+    println!("  To: {}", beneficiary.id);
+}
+
+// The agent automatically:
+// 1. Verifies signatures (if the message is signed)
+// 2. Decrypts content (if the message is encrypted)
+// 3. Verifies the message is valid according to its type
+// 4. Converts the message to the requested type
 ```
 
-### Using the Built-in Resolvers
+The agent handles the entire verification and decryption process, allowing you to focus on processing the message content rather than worrying about cryptographic details.
+
+### Using DID Resolvers
+
+The agent provides flexible DID resolution capabilities:
 
 ```rust
 use tap_agent::did::MultiResolver;
 use std::sync::Arc;
 
-// Create a default resolver with built-in support for did:key and did:web
+// Create a resolver with built-in support for did:key and did:web
 let resolver = MultiResolver::default();
 let resolver = Arc::new(resolver);
 
-// Use the resolver to resolve DIDs
-let rt = tokio::runtime::Runtime::new()?;
-let did_doc = rt.block_on(async {
-    resolver.resolve("did:web:example.com").await
-})?;
+// Resolve any supported DID to its DID document
+let did_doc = resolver.resolve("did:web:example.com").await?;
 
 if let Some(doc) = did_doc {
     println!("Resolved DID: {}", doc.id);
     
-    // Check for service endpoints
-    if !doc.service.is_empty() {
-        println!("Service endpoints found:");
-        for (i, service) in doc.service.iter().enumerate() {
-            println!("  [{}] ID: {}", i+1, service.id);
-            println!("      Endpoint: {:?}", service.service_endpoint);
+    // Check verification methods
+    for vm in &doc.verification_method {
+        println!("Verification method: {}", vm.id);
+        println!("  Type: {:?}", vm.type_);
+        println!("  Controller: {}", vm.controller);
+    }
+    
+    // Check authentication methods
+    if !doc.authentication.is_empty() {
+        println!("Authentication methods:");
+        for auth in &doc.authentication {
+            println!("  {}", auth);
         }
     }
     
-    // Process the DID document...
+    // Check key agreement methods
+    if !doc.key_agreement.is_empty() {
+        println!("Key agreement methods:");
+        for ka in &doc.key_agreement {
+            println!("  {}", ka);
+        }
+    }
+    
+    // Check service endpoints
+    if !doc.service.is_empty() {
+        println!("Service endpoints:");
+        for (i, service) in doc.service.iter().enumerate() {
+            println!("  [{}] ID: {}", i+1, service.id);
+            println!("      Type: {}", service.type_);
+            println!("      Endpoint: {}", service.service_endpoint);
+        }
+    }
 }
 ```
 
+#### Supported DID Methods
+
+The default resolver supports:
+
+1. **did:key** - Self-contained DIDs with embedded public keys
+   ```
+   did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+   ```
+
+2. **did:web** - DIDs associated with web domains
+   ```
+   did:web:example.com
+   did:web:example.com:path:to:resource
+   ```
+
+You can extend the resolver with custom DID methods as shown in the next section.
+
 ### Custom DID Method Resolver
 
-You can also implement and add your own DID method resolver:
+You can implement and register custom DID method resolvers to extend the agent's capabilities:
 
 ```rust
-use tap_agent::did::{DIDMethodResolver, MultiResolver};
-use tap_agent::did::DIDDoc;
+use tap_agent::did::{DIDMethodResolver, MultiResolver, DIDDoc, VerificationMethod};
+use tap_agent::did::{VerificationMethodType, VerificationMaterial};
 use async_trait::async_trait;
 use tap_agent::error::Result;
 
 #[derive(Debug)]
 struct CustomResolver;
+
+impl CustomResolver {
+    fn new() -> Self {
+        Self
+    }
+}
 
 #[async_trait]
 impl DIDMethodResolver for CustomResolver {
@@ -248,8 +424,38 @@ impl DIDMethodResolver for CustomResolver {
     }
 
     async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
-        // Implementation for resolving custom DID method
-        // ...
+        // Validate DID format
+        if !did.starts_with("did:example:") {
+            return Ok(None);
+        }
+        
+        // Extract ID portion
+        let id_part = &did[12..]; // Skip "did:example:"
+        
+        // Create a simple verification method
+        let vm_id = format!("{}#keys-1", did);
+        let vm = VerificationMethod {
+            id: vm_id.clone(),
+            type_: VerificationMethodType::Ed25519VerificationKey2018,
+            controller: did.to_string(),
+            verification_material: VerificationMaterial::Base58 {
+                public_key_base58: format!("custom-key-for-{}", id_part),
+            },
+        };
+        
+        // Create a DID document
+        let doc = DIDDoc {
+            id: did.to_string(),
+            verification_method: vec![vm],
+            authentication: vec![vm_id.clone()],
+            key_agreement: vec![],
+            assertion_method: vec![],
+            capability_invocation: vec![],
+            capability_delegation: vec![],
+            service: vec![],
+        };
+        
+        Ok(Some(doc))
     }
 }
 
@@ -258,7 +464,17 @@ let mut resolver = MultiResolver::default();
 
 // Register the custom resolver
 resolver.register_method("example", CustomResolver::new());
+
+// Now you can resolve did:example: DIDs
+let doc = resolver.resolve("did:example:123").await?;
 ```
+
+You can implement resolvers for any DID method, including:
+- Blockchain-based DIDs (did:ethr, did:sol, etc.)
+- Registry-based DIDs (did:ion, did:factom, etc.)
+- Custom protocol DIDs for specific use cases
+
+The resolver will automatically route DID resolution requests to the appropriate method resolver based on the DID prefix.
 
 ## Security Considerations
 
@@ -315,9 +531,15 @@ If you have the tap-rs repository cloned:
 cargo install --path tap-agent
 ```
 
-### Usage
+Or from crates.io:
 
-#### Generating a DID
+```bash
+cargo install tap-agent
+```
+
+### Generate Command
+
+The `generate` command creates new DIDs with different key types and methods:
 
 ```bash
 # Generate a did:key with Ed25519
@@ -331,75 +553,94 @@ tap-agent-cli generate --method key --key-type secp256k1
 
 # Generate a did:web for a domain
 tap-agent-cli generate --method web --domain example.com
-```
 
-#### Saving Output to Files
-
-```bash
 # Save DID document to did.json and key to key.json
 tap-agent-cli generate --output did.json --key-output key.json
 
-# Save did:web document (to be placed at /.well-known/did.json on the domain)
-tap-agent-cli generate --method web --domain example.com --output did.json
+# Save key to default storage and set as default
+tap-agent-cli generate --save --default
 ```
 
-#### Looking up a DID Document
+### Lookup Command
+
+The `lookup` command resolves DIDs to their DID documents:
 
 ```bash
-# Look up a DID and display its DID Document
+# Look up a DID and display its DID document
 tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 
-# Look up a DID and save the DID Document to a file
+# Look up a DID and save the document to a file
 tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --output did-document.json
+
+# Look up WebDIDs
+tap-agent-cli lookup did:web:example.com
+tap-agent-cli lookup did:web:example.com:path:to:resource
 ```
 
-The `lookup` command resolves a DID to its DID document and displays detailed information about:
-- Verification methods (with key material)
-- Authentication methods
-- Key agreement methods
-- Services (with their endpoints, useful for message routing)
-
 The resolver supports the following DID methods by default:
-- `did:key` - Resolves DIDs based on Ed25519 public keys 
-- `did:web` - Resolves DIDs from web domains according to the [DID Web Method Specification](https://w3c-ccg.github.io/did-method-web/)
+- `did:key` - Resolves DIDs based on public keys
+- `did:web` - Resolves DIDs from web domains
 
-Additional DID methods can be added by implementing custom resolvers.
+### Keys Command
+
+The `keys` command manages stored keys:
+
+```bash
+# List all stored keys
+tap-agent-cli keys list
+
+# View details for a specific key
+tap-agent-cli keys view did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Set a key as the default
+tap-agent-cli keys set-default did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Delete a key (with confirmation)
+tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Delete a key (without confirmation)
+tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --force
+```
+
+Keys are stored in `~/.tap/keys.json` by default.
+
+### Import Command
+
+The `import` command imports existing keys:
+
+```bash
+# Import a key from a file
+tap-agent-cli import key.json
+
+# Import and set as default
+tap-agent-cli import key.json --default
+```
 
 ### Using Generated DIDs
 
 For `did:web`, you'll need to:
 1. Generate the DID using the CLI: `tap-agent-cli generate --method web --domain yourdomain.com --output did.json`
-2. Place the generated DID document at one of these locations based on your DID format:
-   - For `did:web:example.com`: Place at `https://example.com/.well-known/did.json`
-   - For `did:web:example.com:path:to:resource`: Place at `https://example.com/path/to/resource/did.json`
-
-#### Looking up WebDIDs
-```bash
-# Look up a simple WebDID
-tap-agent-cli lookup did:web:example.com
-
-# Look up a WebDID with a path
-tap-agent-cli lookup did:web:example.com:path:to:resource
-```
-
-The resolver will automatically fetch the DID document from the appropriate URL based on the DID format.
+2. Place the generated DID document at:
+   - For `did:web:example.com`: `https://example.com/.well-known/did.json`
+   - For `did:web:example.com:path:to:resource`: `https://example.com/path/to/resource/did.json`
 
 ## Working with Service Endpoints
 
-Service endpoints in DID documents provide URLs where the DID subject can receive messages. The `tap-agent` crate makes it easy to work with service endpoints:
+Service endpoints in DID documents provide URLs where the DID subject can receive messages. TAP Agents can automatically discover and use these endpoints for message delivery.
 
 ```rust
-// Get a service endpoint for a DID
-async fn get_service_endpoint(agent: &DefaultAgent, did: &str) -> Result<()> {
-    // Look up the service endpoint
-    match agent.get_did_service_endpoint(did).await? {
+// Example: Find and use a service endpoint for a DID
+async fn work_with_service_endpoint(agent: &DefaultAgent, did: &str, message: &Transfer) -> Result<()> {
+    // Method 1: Get the service endpoint URL directly
+    match agent.get_service_endpoint(did).await? {
         Some(endpoint) => {
             println!("Found service endpoint for {}: {}", did, endpoint);
             
-            // Use the endpoint for sending messages
-            // For example, with an HTTP client:
+            // Pack the message first (if you want to handle delivery manually)
+            let (packed_message, _) = agent.send_message(message, vec![did], false).await?;
+            
+            // Now you can manually send to the endpoint:
             // let client = reqwest::Client::new();
-            // let packed_message = agent.send_message(&message, did).await?;
             // let response = client.post(endpoint)
             //     .header("Content-Type", "application/didcomm-encrypted+json")
             //     .body(packed_message)
@@ -409,15 +650,28 @@ async fn get_service_endpoint(agent: &DefaultAgent, did: &str) -> Result<()> {
         None => println!("No service endpoint found for {}", did),
     }
     
+    // Method 2: Let the agent handle delivery automatically
+    // The boolean parameter (true) tells the agent to attempt automatic delivery
+    let (_, delivery_results) = agent.send_message(message, vec![did], true).await?;
+    
+    // Check the delivery results
+    for result in delivery_results {
+        if let Some(status) = result.status {
+            println!("Delivery to {} resulted in status: {}", result.did, status);
+        } else if let Some(error) = &result.error {
+            println!("Delivery to {} failed: {}", result.did, error);
+        }
+    }
+    
     Ok(())
 }
 ```
 
 ### Service Endpoint Types and Message Delivery
 
-The `tap-agent` crate can work with different types of service endpoints defined in DID documents and automatically deliver messages to them:
+The TAP Agent can work with different types of service endpoints defined in DID documents:
 
-1. **DIDCommMessaging** endpoints - Specifically designed for secure message exchange:
+1. **DIDCommMessaging** endpoints (prioritized) - Specifically designed for secure message exchange:
    ```json
    {
      "service": [{
@@ -432,7 +686,7 @@ The `tap-agent` crate can work with different types of service endpoints defined
    }
    ```
 
-2. **Other** types of endpoints - General purpose service endpoints:
+2. **Other** endpoint types - Any service endpoint type that provides a URL:
    ```json
    {
      "service": [{
@@ -443,19 +697,46 @@ The `tap-agent` crate can work with different types of service endpoints defined
    }
    ```
 
-The `get_service_endpoint` method will prioritize DIDCommMessaging endpoints but will fall back to other types if needed.
+3. **Simple string endpoints** - Basic URL string endpoints:
+   ```json
+   {
+     "service": [{
+       "id": "did:example:123#messaging",
+       "type": "MessagingService", 
+       "serviceEndpoint": "https://example.com/messages"
+     }]
+   }
+   ```
+
+The agent supports multiple endpoint formats and follows these resolution rules:
+
+1. Look for a service with `type = "DIDCommMessaging"` first
+2. Fall back to the first available service endpoint if no DIDCommMessaging endpoint is found
+3. Handle both object-style and string-style service endpoints
 
 ### Automatic Message Delivery
 
-The agent can automatically deliver messages to service endpoints using HTTP POST requests:
+The TAP Agent provides a seamless way to automatically deliver messages to service endpoints:
 
 ```rust
-// Send a message to a single recipient with automatic delivery
-let (packed_message, delivery_results) = agent.send_message(&message, vec![recipient_did], true).await?;
+// Example 1: Send a message to a single recipient with automatic delivery
+let transfer = Transfer {
+    asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+    originator: create_originator(),
+    beneficiary: Some(create_beneficiary()),
+    amount: "100.0".to_string(),
+    // Other fields...
+    transaction_id: uuid::Uuid::new_v4().to_string(),
+};
 
-// Send a message to multiple DIDs with automatic delivery
+// The third parameter (true) enables automatic delivery
+let (packed_message, delivery_results) = 
+    agent.send_message(&transfer, vec![recipient_did], true).await?;
+
+// Example 2: Send to multiple recipients
 let recipients = vec!["did:web:example.com", "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"];
-let (packed_message, delivery_results) = agent.send_message(&message, recipients, true).await?;
+let (packed_message, delivery_results) = 
+    agent.send_message(&transfer, recipients, true).await?;
 
 // Process delivery results
 for result in &delivery_results {
@@ -471,26 +752,26 @@ for result in &delivery_results {
 }
 ```
 
-The delivery process:
-1. Resolves each recipient's DID to find service endpoints
-2. For each recipient with a service endpoint:
-   - Logs "Found service endpoint for [DID]: [endpoint]"
-   - Sends the packed message via HTTP POST with Content-Type: application/didcomm-encrypted+json
-   - On success: Logs "Delivered message [ID] to [DID] at [endpoint]"
-   - On failure: Logs error but continues without failing
-3. For recipients without a service endpoint:
-   - Logs "No service endpoint found for [DID], skipping delivery" and continues
-4. Returns delivery results for recipients where delivery was attempted in a `DeliveryResult` structure:
-   - `did`: The DID that was the target of the delivery
-   - `endpoint`: The service endpoint URL that was used
-   - `status`: HTTP status code if successful
-   - `error`: Error message if delivery failed
+#### Delivery Process
 
-The agent is designed to be resilient - it will log issues but won't fail the operation if service endpoints can't be found or messages can't be delivered.
+When automatic delivery is enabled, the agent follows this process:
+
+1. **Endpoint Resolution**: Resolves each recipient's DID document to find service endpoints
+2. **Message Packing**: Packs the message with appropriate security for all recipients
+3. **Delivery Attempts**: For each recipient with a service endpoint:
+   - Sends the packed message via HTTP POST with `Content-Type: application/didcomm-encrypted+json`
+   - Records success (with HTTP status) or failure (with error message)
+4. **Result Collection**: Returns a vector of `DeliveryResult` structures containing:
+   - `did`: The recipient DID
+   - `endpoint`: The service endpoint URL used
+   - `status`: HTTP status code (if successful)
+   - `error`: Error message (if failed)
+
+The delivery mechanism is designed to be resilient - failures with one recipient won't prevent delivery attempts to others, and the operation won't fail even if no service endpoints are found.
 
 ## Creating Ephemeral DIDs
 
-For testing or short-lived processes, the `DefaultAgent` can create ephemeral DIDs:
+For testing or short-lived processes, the `DefaultAgent` can create ephemeral DIDs that exist only in memory:
 
 ```rust
 // Create an agent with an ephemeral did:key (Ed25519)
@@ -498,28 +779,69 @@ let (agent, did) = DefaultAgent::new_ephemeral()?;
 
 // The agent is ready to use with the generated did:key
 println!("Agent DID: {}", did);
+
+// This agent has a fully functional private key and can be used immediately
+// for sending and receiving messages without any persistence
+let (packed_message, _) = agent
+    .send_message(&transfer, vec!["did:example:recipient"], false)
+    .await?;
 ```
+
+Ephemeral DIDs are useful for:
+- Test environments where persistence isn't needed
+- Short-lived agent instances that don't need to maintain state
+- Situations where you want to minimize key management overhead
+- Temporary identities for one-time operations
 
 ## Feature Flags
 
 The crate provides several feature flags to customize functionality:
 
-- **native** (default): Enables native platform features using Tokio and HTTP support for did:web resolution
-- **wasm**: Enables WebAssembly support for browser environments
+- **native** (default): Enables native platform features including:
+  - Tokio runtime for async functionality
+  - HTTP support for service endpoint delivery
+  - Complete DID resolution with HTTP requests for did:web
+  - File system access for key storage
+  
+- **wasm**: Enables WebAssembly support for browser environments:
+  - Browser-compatible cryptography
+  - JavaScript integration
+  - Web-based service endpoint delivery
+  - Browser storage for keys
+
+When working with different environments:
+- For server applications: Use the default **native** feature
+- For browser applications: Use the **wasm** feature
+- For CLI tools: Use the default **native** feature
 
 Note that did:web resolution requires the **native** feature to be enabled, as it depends on HTTP requests to fetch DID documents.
 
 ## Cryptographic Support
 
-The `tap-agent` crate now implements direct cryptographic operations without external DIDComm libraries, supporting:
+The `tap-agent` crate implements comprehensive cryptographic operations with support for:
 
-- **Ed25519** - For digital signatures (EdDSA)
-- **P-256** - For ECDSA signatures and ECDH key agreement
-- **secp256k1** - For ECDSA signatures with blockchain compatibility
-- **AES-GCM** - For authenticated encryption (A256GCM)
-- **ECDH-ES+A256KW** - For key agreement and key wrapping
+### Key Types
+- **Ed25519** - Fast digital signatures with small signatures (128 bits of security)
+- **P-256** - NIST standardized elliptic curve for ECDSA signatures and ECDH
+- **secp256k1** - Blockchain-compatible ECDSA signatures (used in Ethereum, Bitcoin)
 
-The implementation follows the JWS (JSON Web Signature) and JWE (JSON Web Encryption) formats for secure messaging, ensuring compatibility with standards-based secure messaging systems.
+### Encryption & Signing
+- **JWS (JSON Web Signatures)** - Standards-compliant digital signatures:
+  - EdDSA algorithm for Ed25519 keys
+  - ES256 algorithm for P-256 keys
+  - ES256K algorithm for secp256k1 keys
+  
+- **JWE (JSON Web Encryption)** - Standards-compliant encryption:
+  - AES-GCM (A256GCM) for authenticated encryption
+  - ECDH-ES+A256KW for key agreement and key wrapping
+  - Per-recipient encrypted content encryption keys (CEKs)
+
+### Security Modes
+- **Plain** - No security (for testing only)
+- **Signed** - Digital signatures without encryption (integrity protection)
+- **AuthCrypt** - Authenticated encryption (confidentiality + integrity)
+
+The cryptographic implementations align with industry standards, allowing interoperability with other systems that support JWS and JWE formats.
 
 ## License
 

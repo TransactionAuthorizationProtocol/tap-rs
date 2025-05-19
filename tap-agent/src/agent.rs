@@ -149,6 +149,175 @@ impl DefaultAgent {
         DefaultAgent::new(config, message_packer)
     }
 
+    /// Creates a new DefaultAgent from stored keys
+    ///
+    /// This function checks for stored keys in the default location (~/.tap/keys.json)
+    /// and creates an agent using the default key if available.
+    ///
+    /// # Arguments
+    ///
+    /// * `did` - Optional DID to use. If None, the default DID from storage is used.
+    /// * `debug` - Whether to enable debug mode
+    ///
+    /// # Returns
+    ///
+    /// A Result containing either the created agent or an error if no keys are available
+    pub fn from_stored_keys(did: Option<String>, debug: bool) -> Result<Self> {
+        use crate::storage::KeyStorage;
+
+        // Try to load key storage
+        let storage = match KeyStorage::load_default() {
+            Ok(storage) => storage,
+            Err(e) => {
+                return Err(Error::Storage(format!(
+                    "Failed to load keys from storage: {}",
+                    e
+                )));
+            }
+        };
+
+        // Check if storage has any keys
+        if storage.keys.is_empty() {
+            return Err(Error::Storage(
+                "No keys found in storage. Generate keys first with 'tap-agent-cli generate --save'".to_string(),
+            ));
+        }
+
+        // Get the key to use (either specified DID or default)
+        let key_did = match did {
+            Some(d) => {
+                if !storage.keys.contains_key(&d) {
+                    return Err(Error::Storage(format!(
+                        "Key with DID '{}' not found in storage",
+                        d
+                    )));
+                }
+                d
+            }
+            None => {
+                // Use default key or first available
+                match &storage.default_did {
+                    Some(d) => d.clone(),
+                    None => {
+                        // Use the first key in storage
+                        storage.keys.keys().next().unwrap().clone()
+                    }
+                }
+            }
+        };
+
+        // Get the key
+        let stored_key = storage.keys.get(&key_did).unwrap();
+
+        // Create a BasicSecretResolver with the key
+        let mut secret_resolver = crate::crypto::BasicSecretResolver::new();
+        let secret = KeyStorage::to_secret(stored_key);
+        secret_resolver.add_secret(&key_did, secret);
+
+        // Create agent config
+        let config = AgentConfig::new(key_did).with_debug(debug);
+
+        // Create a message packer with the secret resolver
+        let did_resolver = Arc::new(crate::did::MultiResolver::default());
+        let message_packer = crate::crypto::DefaultMessagePacker::new(
+            did_resolver,
+            Arc::new(secret_resolver),
+            debug,
+        );
+
+        // Create and return the agent
+        Ok(DefaultAgent::new(config, message_packer))
+    }
+
+    /// Tries to create an agent from stored keys, or creates an ephemeral agent if none are available
+    ///
+    /// This function first attempts to create an agent using stored keys.
+    /// If that fails, it creates a new ephemeral agent with a generated key.
+    ///
+    /// # Arguments
+    ///
+    /// * `did` - Optional DID to use. If None, the default DID from storage is used.
+    /// * `debug` - Whether to enable debug mode
+    ///
+    /// # Returns
+    ///
+    /// The created agent, either from storage or as a new ephemeral agent
+    pub fn from_stored_or_ephemeral(did: Option<String>, debug: bool) -> Self {
+        use base64::Engine;
+
+        match Self::from_stored_keys(did, debug) {
+            Ok(agent) => agent,
+            Err(_) => {
+                // Create an ephemeral agent
+                let generator = crate::did::DIDKeyGenerator::new();
+                let options = crate::did::DIDGenerationOptions::default();
+
+                // Generate a new key
+                let key = match generator.generate_did(options) {
+                    Ok(k) => k,
+                    Err(e) => {
+                        // This should rarely happen, but log it
+                        eprintln!("Warning: Failed to generate ephemeral key: {}", e);
+                        // Use a hardcoded key for emergency fallback
+                        crate::did::GeneratedKey {
+                            did: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+                                .to_string(),
+                            key_type: crate::did::KeyType::Ed25519,
+                            private_key: vec![],
+                            public_key: vec![],
+                            did_doc: crate::did::DIDDoc {
+                                id: "".to_string(),
+                                verification_method: vec![],
+                                authentication: vec![],
+                                key_agreement: vec![],
+                                assertion_method: vec![],
+                                capability_invocation: vec![],
+                                capability_delegation: vec![],
+                                service: vec![],
+                            },
+                        }
+                    }
+                };
+
+                // Create a BasicSecretResolver with the key
+                let mut secret_resolver = crate::crypto::BasicSecretResolver::new();
+
+                // Create a JWK secret
+                let secret_material = crate::key_manager::SecretMaterial::JWK {
+                    private_key_jwk: serde_json::json!({
+                        "kty": "OKP",
+                        "crv": "Ed25519",
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key),
+                        "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key),
+                        "kid": format!("{}#keys-1", key.did)
+                    }),
+                };
+
+                let secret = crate::key_manager::Secret {
+                    id: key.did.clone(),
+                    type_: crate::key_manager::SecretType::JsonWebKey2020,
+                    secret_material,
+                };
+
+                secret_resolver.add_secret(&key.did, secret);
+
+                // Create agent config
+                let config = AgentConfig::new(key.did).with_debug(debug);
+
+                // Create a message packer with the secret resolver
+                let did_resolver = Arc::new(crate::did::MultiResolver::default());
+                let message_packer = crate::crypto::DefaultMessagePacker::new(
+                    did_resolver,
+                    Arc::new(secret_resolver),
+                    debug,
+                );
+
+                // Create and return the agent
+                DefaultAgent::new(config, message_packer)
+            }
+        }
+    }
+
     /// Creates a new DefaultAgent builder with the given agent DID
     pub fn builder(agent_did: impl Into<String>) -> DefaultAgentBuilder {
         DefaultAgentBuilder::new(agent_did.into())

@@ -61,6 +61,9 @@ impl DIDMethodResolver for TestDIDResolver {
                     }],
                     authentication: vec![format!("{}#key-1", did)],
                     key_agreement: vec![],
+                    assertion_method: vec![],
+                    capability_invocation: vec![],
+                    capability_delegation: vec![],
                     service: vec![],
                 }))
             }
@@ -78,6 +81,9 @@ impl DIDMethodResolver for TestDIDResolver {
                     }],
                     authentication: vec![format!("{}#key-1", did)],
                     key_agreement: vec![],
+                    assertion_method: vec![],
+                    capability_invocation: vec![],
+                    capability_delegation: vec![],
                     service: vec![Service {
                         id: format!("{}#didcomm-1", did),
                         type_: "DIDCommMessaging".to_string(),
@@ -100,6 +106,9 @@ impl DIDMethodResolver for TestDIDResolver {
                     }],
                     authentication: vec![format!("{}#key-1", did)],
                     key_agreement: vec![],
+                    assertion_method: vec![],
+                    capability_invocation: vec![],
+                    capability_delegation: vec![],
                     service: vec![Service {
                         id: format!("{}#service-1", did),
                         type_: "Web".to_string(),
