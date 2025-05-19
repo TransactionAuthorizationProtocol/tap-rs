@@ -46,6 +46,9 @@ impl tap_agent::did::DIDMethodResolver for TestDIDResolver {
                 verification_method: vec![vm],
                 authentication: vec![vm_id.clone()],
                 key_agreement: vec![],
+                assertion_method: vec![],
+                capability_invocation: vec![],
+                capability_delegation: vec![],
                 service: vec![],
             }))
         } else {
