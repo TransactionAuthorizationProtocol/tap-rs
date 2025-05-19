@@ -13,12 +13,12 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_agent::error::Result;
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::types::{AddAgents, Authorize, Reject, Settle, Transfer};
 use tap_msg::Participant;

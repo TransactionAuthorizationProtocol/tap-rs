@@ -1,14 +1,19 @@
 //! Tests for TAP Agent
 
 use async_trait::async_trait;
-use tap_msg::didcomm::{DIDDoc, Secret, SecretMaterial, SecretType, Service, VerificationMaterial, VerificationMethod, VerificationMethodType, PlainMessage};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
+
 use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver, DefaultMessagePacker};
-use tap_agent::did::{DIDMethodResolver, MultiResolver, SyncDIDResolver};
+use tap_agent::did::{
+    DIDDoc, DIDMethodResolver, MultiResolver, Service, SyncDIDResolver, VerificationMaterial,
+    VerificationMethod, VerificationMethodType,
+};
 use tap_agent::error::{Error, Result};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use uuid::Uuid;

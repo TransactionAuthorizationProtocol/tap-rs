@@ -10,7 +10,7 @@ use std::sync::Arc;
 use tap_agent::crypto::BasicSecretResolver;
 use tap_agent::did::MultiResolver;
 use tap_agent::{AgentConfig, DefaultAgent, DefaultMessagePacker};
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use tap_node::{MessageSender, NodeConfig, TapNode, WebSocketMessageSender};
 
 #[tokio::main]

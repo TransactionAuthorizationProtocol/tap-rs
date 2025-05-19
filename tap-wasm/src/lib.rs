@@ -1,6 +1,4 @@
 use base64::Engine;
-use tap_msg::didcomm::{SecretMaterial, SecretType, Secret};
-use tap_msg::didcomm::PlainMessage as DIDCommMessage;
 use ed25519_dalek::{self, Signer, SigningKey, VerifyingKey};
 use js_sys::{Array, Object, Promise, Reflect};
 use serde::{Deserialize, Serialize};
@@ -10,6 +8,8 @@ use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver};
 use tap_agent::did::{DIDGenerationOptions, GeneratedKey, KeyType};
 use tap_agent::key_manager::KeyManager;
+use tap_msg::didcomm::PlainMessage as DIDCommMessage;
+use tap_msg::key_manager::{Secret, SecretMaterial, SecretType};
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
@@ -1919,9 +1919,7 @@ impl TapAgent {
                         let secret = Secret {
                             type_: SecretType::JsonWebKey2020,
                             id: format!("{}#keys-1", did),
-                            secret_material: SecretMaterial::JWK {
-                                private_key_jwk,
-                            },
+                            secret_material: SecretMaterial::JWK { private_key_jwk },
                         };
 
                         // Add the secret to the resolver
@@ -1958,9 +1956,7 @@ impl TapAgent {
                             let secret = Secret {
                                 type_: SecretType::JsonWebKey2020,
                                 id: format!("{}#keys-1", did),
-                                secret_material: SecretMaterial::JWK {
-                                    private_key_jwk,
-                                },
+                                secret_material: SecretMaterial::JWK { private_key_jwk },
                             };
 
                             // Add the secret to the resolver
@@ -1998,9 +1994,7 @@ impl TapAgent {
                             let secret = Secret {
                                 type_: SecretType::JsonWebKey2020,
                                 id: format!("{}#keys-1", did),
-                                secret_material: SecretMaterial::JWK {
-                                    private_key_jwk,
-                                },
+                                secret_material: SecretMaterial::JWK { private_key_jwk },
                             };
 
                             // Add the secret to the resolver

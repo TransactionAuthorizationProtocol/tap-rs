@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use serde_json::Value;
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use tap_node::event::logger::{EventLogger, EventLoggerConfig, LogDestination};
 use tap_node::event::EventBus;
 use tokio::sync::Mutex;

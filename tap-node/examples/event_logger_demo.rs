@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tap_agent::{AgentConfig, DefaultAgent};
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use tap_node::event::logger::{EventLoggerConfig, LogDestination};
 use tap_node::{NodeConfig, TapNode};
 use tokio::time::sleep;

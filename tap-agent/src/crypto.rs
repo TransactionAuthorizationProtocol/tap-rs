@@ -6,8 +6,10 @@
 //! - Security mode handling for different message types
 
 use crate::did::SyncDIDResolver;
+use crate::did::{DIDDoc, VerificationMaterial};
 use crate::error::{Error, Result};
 use crate::is_running_tests;
+use crate::key_manager::{Secret, SecretMaterial};
 use crate::message::{
     EphemeralPublicKey, Jwe, JweHeader, JweProtected, JweRecipient, Jws, JwsHeader, JwsProtected,
     JwsSignature, SecurityMode,
@@ -28,7 +30,8 @@ use serde_json::Value;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::sync::Arc;
-use tap_msg::didcomm::{DIDDoc, PlainMessage, Secret, SecretMaterial, VerificationMaterial};
+use tap_msg::didcomm::PlainMessage;
+
 use uuid::Uuid;
 
 /// A trait for packing and unpacking messages with DIDComm.

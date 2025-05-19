@@ -7,13 +7,13 @@
 
 use async_trait::async_trait;
 use base64::Engine;
-use didcomm::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
+use tap_agent::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
 use tap_agent::did::{DIDMethodResolver, SyncDIDResolver};
 use tap_agent::error::{Error, Result};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::message::SecurityMode;
 use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
 use tap_msg::message::tap_message_trait::TapMessageBody;

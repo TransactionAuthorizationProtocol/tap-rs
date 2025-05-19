@@ -1,12 +1,12 @@
 //! Tests for TAP Node
 
 use async_trait::async_trait;
-use didcomm::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tap_agent::crypto::DebugSecretsResolver;
 use tap_agent::did::SyncDIDResolver;
+use tap_agent::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
 use tap_agent::error::Result as AgentResult;
 use tap_agent::{AgentConfig, DefaultAgent};
 use tap_node::{NodeConfig, TapNode};

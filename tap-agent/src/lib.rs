@@ -45,13 +45,12 @@ pub use agent::{Agent, DefaultAgent, DeliveryResult};
 pub use config::AgentConfig;
 pub use crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
 pub use did::{
-    DIDGenerationOptions, DIDKeyGenerator, DIDMethodResolver, GeneratedKey, KeyResolver, KeyType,
-    MultiResolver, SyncDIDResolver,
+    DIDDoc, DIDGenerationOptions, DIDKeyGenerator, DIDMethodResolver, GeneratedKey, KeyResolver,
+    KeyType, MultiResolver, SyncDIDResolver,
 };
 pub use error::{Error, Result};
-pub use key_manager::{KeyManager, KeyManagerSecretResolver};
+pub use key_manager::{KeyManager, KeyManagerSecretResolver, Secret};
 pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
-pub use tap_msg::didcomm::{DIDDoc, Secret};
 
 /// Version of the TAP Agent
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

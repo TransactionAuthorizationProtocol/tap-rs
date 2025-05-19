@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tap_agent::did::MultiResolver;
 use tap_agent::{Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker};
 use tap_caip::AssetId;
-use tap_msg::didcomm::{Secret, SecretMaterial, SecretType};
+use tap_msg::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::{message::Transfer, Participant};
 
 /// Create a test agent with a fresh keypair

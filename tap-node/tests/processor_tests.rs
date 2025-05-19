@@ -3,7 +3,7 @@
 //! This file contains integration tests for message processors in the TAP Node.
 
 use serde_json::json;
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use tap_node::message::processor::{MessageProcessor, ValidationMessageProcessor};
 
 /// Create a valid test message for validation

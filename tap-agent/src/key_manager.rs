@@ -2,12 +2,47 @@
 //!
 //! This module provides a key manager for storing and retrieving
 //! cryptographic keys used by the TAP Agent for DID operations.
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey};
 use crate::error::{Error, Result};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
-use tap_msg::didcomm::Secret;
+
+// Secret key material types
+
+/// Secret key material type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SecretType {
+    /// JSON Web Key 2020
+    JsonWebKey2020,
+}
+
+/// Secret key material
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum SecretMaterial {
+    /// JSON Web Key
+    JWK {
+        /// Private key in JWK format
+        private_key_jwk: Value,
+    },
+}
+
+/// Secret for cryptographic operations
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Secret {
+    /// Secret ID
+    pub id: String,
+
+    /// Secret type
+    pub type_: SecretType,
+
+    /// Secret material
+    pub secret_material: SecretMaterial,
+}
 
 /// A key manager for storing and retrieving keys.
 #[derive(Debug, Clone)]
