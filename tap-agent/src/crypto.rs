@@ -5,6 +5,7 @@
 //! - Secret resolution for cryptographic operations
 //! - Security mode handling for different message types
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::did::SyncDIDResolver;
 use crate::did::{DIDDoc, VerificationMaterial};
 use crate::error::{Error, Result};
@@ -152,6 +153,7 @@ impl DebugSecretsResolver for BasicSecretResolver {
 /// This implementation provides secure communications with support for the different
 /// security modes defined in the TAP protocol, without relying on any external DIDComm libraries.
 #[derive(Debug)]
+#[cfg(not(target_arch = "wasm32"))]
 pub struct DefaultMessagePacker {
     /// DID resolver
     did_resolver: Arc<dyn SyncDIDResolver>,
@@ -161,6 +163,13 @@ pub struct DefaultMessagePacker {
     debug: bool,
 }
 
+#[cfg(target_arch = "wasm32")]
+pub struct DefaultMessagePacker {
+    /// Enable debug logging
+    debug: bool,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl DefaultMessagePacker {
     /// Create a new DefaultMessagePacker
     ///
@@ -190,6 +199,7 @@ impl DefaultMessagePacker {
         debug: bool,
     ) -> Self {
         // Create a default MultiResolver for DIDs
+        #[cfg(not(target_arch = "wasm32"))]
         let did_resolver = Arc::new(crate::did::MultiResolver::default());
         
         Self {
@@ -1621,5 +1631,30 @@ impl MessagePacker for DefaultMessagePacker {
         Err(Error::Serialization(
             "Failed to parse message as JSON".to_string(),
         ))
+    }
+}
+
+// Implement MessagePacker for Arc<T>
+#[async_trait]
+impl<T> MessagePacker for Arc<T>
+where
+    T: MessagePacker + ?Sized,
+{
+    async fn resolve_did_doc(&self, did: &str) -> Result<Option<DIDDoc>> {
+        (**self).resolve_did_doc(did).await
+    }
+
+    async fn pack_message(
+        &self,
+        message: &(dyn erased_serde::Serialize + Sync),
+        to: &[&str],
+        from: Option<&str>,
+        mode: SecurityMode,
+    ) -> Result<String> {
+        (**self).pack_message(message, to, from, mode).await
+    }
+
+    async fn unpack_message_value(&self, packed: &str) -> Result<Value> {
+        (**self).unpack_message_value(packed).await
     }
 }

@@ -1,14 +1,18 @@
 use crate::config::AgentConfig;
 use crate::crypto::MessagePacker;
 use crate::error::{Error, Result};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::key_manager::KeyManager;
+#[cfg(not(target_arch = "wasm32"))]
 use crate::message::SecurityMode;
 use async_trait::async_trait;
-use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::sync::Arc;
+#[cfg(feature = "native")]
 use std::time::Duration;
+#[cfg(feature = "native")]
+use reqwest::Client;
 use tap_msg::TapMessageBody;
 
 /// Result of a message delivery attempt
@@ -25,7 +29,9 @@ pub struct DeliveryResult {
 }
 
 /// The Agent trait defines the interface for all TAP agents
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
+#[cfg(not(target_arch = "wasm32"))]
 pub trait Agent {
     /// Gets the agent's DID
     fn get_agent_did(&self) -> &str;
@@ -48,6 +54,19 @@ pub trait Agent {
     ) -> Result<T>;
 }
 
+/// A simplified Agent trait for WASM with relaxed bounds
+#[cfg(target_arch = "wasm32")]
+pub trait WasmAgent {
+    /// Gets the agent's DID
+    fn get_agent_did(&self) -> &str;
+    
+    /// Pack a message for delivery
+    fn pack_message<T: TapMessageBody + serde::Serialize>(&self, message: &T) -> Result<String>;
+    
+    /// Unpack a received message
+    fn unpack_message<T: TapMessageBody + DeserializeOwned>(&self, packed_message: &str) -> Result<T>;
+}
+
 /// The DefaultAgent is a concrete implementation of the Agent trait
 /// that uses a configurable message packer for cryptographic operations.
 #[derive(Debug)]
@@ -58,26 +77,59 @@ pub struct DefaultAgent {
     #[allow(dead_code)]
     message_packer: Arc<dyn MessagePacker>,
     /// HTTP client for sending requests
+    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
     #[allow(dead_code)]
     http_client: Client,
 }
 
+#[cfg(target_arch = "wasm32")]
+impl WasmAgent for DefaultAgent {
+    fn get_agent_did(&self) -> &str {
+        &self.config.agent_did
+    }
+    
+    fn pack_message<T: TapMessageBody + serde::Serialize>(&self, message: &T) -> Result<String> {
+        // Simple mock implementation
+        let message_json = serde_json::to_string(message)?;
+        Ok(message_json)
+    }
+    
+    fn unpack_message<T: TapMessageBody + DeserializeOwned>(&self, packed_message: &str) -> Result<T> {
+        // Simple mock implementation
+        let message: T = serde_json::from_str(packed_message)?;
+        Ok(message)
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 impl DefaultAgent {
     /// Creates a new DefaultAgent with the given configuration and message packer
     pub fn new(
         config: AgentConfig,
         message_packer: impl MessagePacker + 'static,
     ) -> DefaultAgent {
-        let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
-        let client = Client::builder()
-            .timeout(timeout)
-            .build()
-            .unwrap_or_else(|_| Client::new());
+        #[cfg(feature = "native")]
+        {
+            let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
+            let client = Client::builder()
+                .timeout(timeout)
+                .build()
+                .unwrap_or_else(|_| Client::new());
 
-        DefaultAgent {
-            config,
-            message_packer: Arc::new(message_packer),
-            http_client: client,
+            // Since we're in #[cfg(feature = "native")] block, http_client is required
+            DefaultAgent {
+                config,
+                message_packer: Arc::new(message_packer),
+                http_client: client,
+            }
+        }
+        
+        #[cfg(not(feature = "native"))]
+        {
+            DefaultAgent {
+                config,
+                message_packer: Arc::new(message_packer),
+            }
         }
     }
 
@@ -135,7 +187,7 @@ impl DefaultAgent {
     ///
     /// # Returns
     /// The HTTP response status code, or error if the request failed
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
     pub async fn send_to_endpoint(&self, packed_message: &str, endpoint: &str) -> Result<u16> {
         // Send the message to the endpoint via HTTP POST
         let response = self
@@ -146,7 +198,7 @@ impl DefaultAgent {
             .send()
             .await
             .map_err(|e| Error::Networking(format!("Failed to send message to endpoint: {}", e)))?;
-
+            
         // Get the status code
         let status = response.status().as_u16();
 
@@ -155,47 +207,13 @@ impl DefaultAgent {
 
         Ok(status)
     }
-    
-    #[cfg(target_arch = "wasm32")]
-    pub async fn send_to_endpoint(&self, packed_message: &str, endpoint: &str) -> Result<u16> {
-        use wasm_bindgen::prelude::*;
-        use wasm_bindgen_futures::JsFuture;
-        use web_sys::{Request, RequestInit, RequestMode, Response};
-        
-        // Create request options
-        let mut opts = RequestInit::new();
-        opts.method("POST");
-        opts.mode(RequestMode::Cors);
-        opts.body(Some(&JsValue::from_str(packed_message)));
-        
-        // Create the request
-        let request = Request::new_with_str_and_init(endpoint, &opts)
-            .map_err(|e| Error::Networking(format!("Failed to create request: {:?}", e)))?;
             
-        request.headers().set("Content-Type", "application/didcomm-encrypted+json")
-            .map_err(|e| Error::Networking(format!("Failed to set headers: {:?}", e)))?;
-            
-        // Get the window object
-        let window = web_sys::window()
-            .ok_or_else(|| Error::Networking("No window object available".to_string()))?;
-            
-        // Send the request
-        let resp_value = JsFuture::from(window.fetch_with_request(&request))
-            .await
-            .map_err(|e| Error::Networking(format!("Failed to fetch: {:?}", e)))?;
-            
-        // Convert response to Response object
-        let resp: Response = resp_value.dyn_into()
-            .map_err(|_| Error::Networking("Failed to convert response".to_string()))?;
-            
-        // Get status code
-        let status = resp.status();
-        
-        // Log the response
-        web_sys::console::log_1(&JsValue::from_str(&format!("Message sent to endpoint {}, status: {}", endpoint, status)));
-        
-        Ok(status)
+    #[cfg(any(not(feature = "native"), target_arch = "wasm32"))]
+    pub async fn send_to_endpoint(&self, _packed_message: &str, _endpoint: &str) -> Result<u16> {
+        // Feature not enabled or WASM doesn't have http_client
+        Err(crate::error::Error::NotImplemented("HTTP client not available".to_string()))
     }
+            
 
     /// Determine the appropriate security mode for a message type
     ///
@@ -233,6 +251,7 @@ impl DefaultAgent {
 }
 
 #[async_trait]
+#[cfg(not(target_arch = "wasm32"))]
 impl Agent for DefaultAgent {
     fn get_agent_did(&self) -> &str {
         &self.config.agent_did

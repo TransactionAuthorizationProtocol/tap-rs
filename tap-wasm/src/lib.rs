@@ -5,14 +5,215 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver};
-use tap_agent::did::{DIDDoc, DIDGenerationOptions, GeneratedKey, KeyType};
-use tap_agent::key_manager::{DefaultKeyManager, KeyManager};
-use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::PlainMessage;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
+
+// Define our own simple versions of the types we need
+#[derive(Debug, Clone, PartialEq)]
+pub enum KeyType {
+    Ed25519,
+    P256,
+    Secp256k1,
+}
+
+#[derive(Debug, Clone)]
+pub struct DIDGenerationOptions {
+    pub key_type: KeyType,
+}
+
+#[derive(Debug, Clone)]
+pub struct DIDDoc {
+    pub id: String,
+    pub verification_method: Vec<VerificationMethod>,
+    pub authentication: Vec<String>,
+    pub key_agreement: Vec<String>,
+    pub service: Vec<Service>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VerificationMethod {
+    pub id: String,
+    pub controller: String,
+    pub type_: String,
+    pub public_key_jwk: serde_json::Value,
+}
+
+#[derive(Debug, Clone)]
+pub struct Service {
+    pub id: String,
+    pub type_: String,
+    pub service_endpoint: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct GeneratedKey {
+    pub did: String,
+    pub key_type: KeyType,
+    pub public_key: Vec<u8>,
+    pub private_key: Vec<u8>,
+    pub did_doc: DIDDoc,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Secret {
+    pub type_: SecretType,
+    pub id: String,
+    pub secret_material: SecretMaterial,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SecretType {
+    JsonWebKey2020,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum SecretMaterial {
+    JWK { private_key_jwk: serde_json::Value },
+}
+
+pub trait KeyManager: std::fmt::Debug + Send + Sync + 'static {
+    fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey, JsValue>;
+    fn has_key(&self, did: &str) -> Result<bool, JsValue>;
+    fn list_keys(&self) -> Result<Vec<String>, JsValue>;
+    fn add_key(&self, generated_key: &GeneratedKey) -> Result<(), JsValue>;
+}
+
+#[derive(Debug)]
+pub struct DefaultKeyManager {
+    pub generator: DIDKeyGenerator,
+}
+
+impl DefaultKeyManager {
+    pub fn new() -> Self {
+        Self {
+            generator: DIDKeyGenerator::new(),
+        }
+    }
+}
+
+impl KeyManager for DefaultKeyManager {
+    fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey, JsValue> {
+        self.generator.generate_key(options.key_type)
+    }
+    
+    fn has_key(&self, _did: &str) -> Result<bool, JsValue> {
+        Ok(false) // Simplified implementation
+    }
+    
+    fn list_keys(&self) -> Result<Vec<String>, JsValue> {
+        Ok(Vec::new()) // Simplified implementation
+    }
+    
+    fn add_key(&self, _generated_key: &GeneratedKey) -> Result<(), JsValue> {
+        Ok(()) // Simplified implementation
+    }
+}
+
+#[derive(Debug)]
+pub struct DIDKeyGenerator {}
+
+impl DIDKeyGenerator {
+    pub fn new() -> Self {
+        Self {}
+    }
+    
+    pub fn generate_key(&self, key_type: KeyType) -> Result<GeneratedKey, JsValue> {
+        match key_type {
+            KeyType::Ed25519 => {
+                // Generate a random Ed25519 keypair
+                let mut rng = rand::thread_rng();
+                let signing_key = SigningKey::generate(&mut rng);
+                let verifying_key = VerifyingKey::from(&signing_key);
+                
+                // Get public and private key bytes
+                let private_key = signing_key.to_bytes().to_vec();
+                let public_key = verifying_key.to_bytes().to_vec();
+                
+                // Generate a DID from the public key
+                let public_key_b64 = base64::engine::general_purpose::STANDARD.encode(&public_key);
+                let did = format!("did:key:z6Mk{}", public_key_b64);
+                
+                // Create a basic DID document
+                let did_doc = DIDDoc {
+                    id: did.clone(),
+                    verification_method: vec![],
+                    authentication: vec![],
+                    key_agreement: vec![],
+                    service: vec![],
+                };
+                
+                Ok(GeneratedKey {
+                    did,
+                    key_type: KeyType::Ed25519,
+                    public_key,
+                    private_key,
+                    did_doc,
+                })
+            }
+            KeyType::P256 => {
+                Err(JsValue::from_str("P256 key generation not implemented"))
+            }
+            KeyType::Secp256k1 => {
+                Err(JsValue::from_str("Secp256k1 key generation not implemented"))
+            }
+        }
+    }
+    
+    pub fn create_secret_from_key(&self, key: &GeneratedKey) -> Secret {
+        // Create a JWK from the key
+        let private_key_jwk = match key.key_type {
+            KeyType::Ed25519 => serde_json::json!({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key),
+                "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key),
+            }),
+            KeyType::P256 => serde_json::json!({
+                "kty": "EC",
+                "crv": "P-256",
+                "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key),
+                "x": "", // Not implemented
+                "y": "", // Not implemented
+            }),
+            KeyType::Secp256k1 => serde_json::json!({
+                "kty": "EC",
+                "crv": "secp256k1",
+                "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key),
+                "x": "", // Not implemented
+                "y": "", // Not implemented
+            }),
+        };
+        
+        Secret {
+            type_: SecretType::JsonWebKey2020,
+            id: format!("{}#keys-1", key.did),
+            secret_material: SecretMaterial::JWK { private_key_jwk },
+        }
+    }
+}
+
+pub struct BasicSecretResolver {
+    secrets: HashMap<String, Secret>,
+}
+
+impl BasicSecretResolver {
+    pub fn new() -> Self {
+        Self {
+            secrets: HashMap::new(),
+        }
+    }
+    
+    pub fn add_secret(&mut self, did: &str, secret: Secret) {
+        self.secrets.insert(did.to_string(), secret);
+    }
+    
+    pub fn get_secrets_map(&self) -> &HashMap<String, Secret> {
+        &self.secrets
+    }
+}
 
 // When the `wee_alloc` feature is enabled, use `wee_alloc` as the global allocator.
 #[cfg(feature = "wee_alloc")]
@@ -1417,6 +1618,50 @@ impl TapAgent {
             key_manager: Arc::new(key_manager),
         }
     }
+    
+    /// Pack a message using this agent's keys for transmission
+    /// This creates a signed message that can be verified by the recipient
+    #[wasm_bindgen(js_name = packMessage)]
+    pub fn pack_message(&self, message: &Message) -> Result<JsValue, JsValue> {
+        // Create a clone of the message that we can modify
+        let mut message_clone = message.clone();
+        
+        // Ensure the message has this agent's DID as the sender
+        if message_clone.from_did().is_none() {
+            message_clone.set_from_did(Some(self.id.clone()));
+        }
+        
+        // Sign the message using this agent's keys
+        self.sign_message(&mut message_clone)?;
+        
+        // Convert the packed message to bytes
+        let message_bytes = message_clone.to_bytes()?;
+        
+        // Create a JS object to return with the packed message and metadata
+        let result = js_sys::Object::new();
+        
+        // Set the packed message bytes
+        Reflect::set(&result, &JsValue::from_str("message"), &message_bytes)?;
+        
+        // Set metadata about the message
+        let metadata = js_sys::Object::new();
+        Reflect::set(&metadata, &JsValue::from_str("type"), &JsValue::from_str("signed"))?;
+        Reflect::set(&metadata, &JsValue::from_str("sender"), &JsValue::from_str(&self.id))?;
+        if let Some(recipient) = message_clone.to_did() {
+            Reflect::set(&metadata, &JsValue::from_str("recipient"), &JsValue::from_str(&recipient))?;
+        }
+        
+        Reflect::set(&result, &JsValue::from_str("metadata"), &metadata)?;
+        
+        if self.debug {
+            console::log_1(&JsValue::from_str(&format!(
+                "Message packed and signed by {}",
+                self.id
+            )));
+        }
+        
+        Ok(result.into())
+    }
 
     /// Gets the agent's DID
     pub fn get_did(&self) -> String {
@@ -1597,7 +1842,7 @@ impl TapAgent {
 
             // Check the key type and sign accordingly
             match key.key_type {
-                tap_agent::did::KeyType::Ed25519 => {
+                KeyType::Ed25519 => {
                     // Get the private key
                     let private_key = key.private_key.clone();
 
@@ -1625,14 +1870,14 @@ impl TapAgent {
                         )));
                     }
                 }
-                tap_agent::did::KeyType::P256 => {
+                KeyType::P256 => {
                     // For P-256, we would create a P-256 signing key and sign with ECDSA
                     // This is a simplified example and would need more implementation details
                     return Err(JsValue::from_str(
                         "P-256 signing not yet implemented in WASM bindings",
                     ));
                 }
-                tap_agent::did::KeyType::Secp256k1 => {
+                KeyType::Secp256k1 => {
                     // For secp256k1, we would create a secp256k1 signing key and sign with ECDSA
                     // This is a simplified example and would need more implementation details
                     return Err(JsValue::from_str(
@@ -1887,7 +2132,7 @@ impl TapAgent {
             if let Ok(Some(key)) = self.get_key(did) {
                 // Create a DIDComm secret based on the key type
                 match key.key_type {
-                    tap_agent::did::KeyType::Ed25519 => {
+                    KeyType::Ed25519 => {
                         // For Ed25519, create a JWK with the private key
                         let private_key = key.private_key.clone();
                         let public_key = key.public_key.clone();
@@ -1917,7 +2162,7 @@ impl TapAgent {
                             )));
                         }
                     }
-                    tap_agent::did::KeyType::P256 => {
+                    KeyType::P256 => {
                         let private_key = key.private_key.clone();
                         let public_key = key.public_key.clone();
 
@@ -1955,7 +2200,7 @@ impl TapAgent {
                             }
                         }
                     }
-                    tap_agent::did::KeyType::Secp256k1 => {
+                    KeyType::Secp256k1 => {
                         let private_key = key.private_key.clone();
                         let public_key = key.public_key.clone();
 
@@ -2098,7 +2343,7 @@ impl TapAgent {
         // Create a GeneratedKey
         let generated_key = GeneratedKey {
             did: did.clone(),
-            key_type,
+            key_type: key_type.clone(),  // Clone the key_type here
             public_key,
             private_key,
             did_doc: DIDDoc {

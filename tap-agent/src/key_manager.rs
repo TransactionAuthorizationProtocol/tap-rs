@@ -211,7 +211,10 @@ impl KeyManagerSecretResolver {
     }
 }
 
-impl crate::crypto::DebugSecretsResolver for KeyManagerSecretResolver {
+// Import the DebugSecretsResolver trait
+use crate::crypto::DebugSecretsResolver;
+
+impl DebugSecretsResolver for KeyManagerSecretResolver {
     /// Get a reference to the secrets map for debugging purposes
     fn get_secrets_map(&self) -> &std::collections::HashMap<String, Secret> {
         // This is not a suitable pattern for a shared reference return type

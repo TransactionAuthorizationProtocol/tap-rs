@@ -16,7 +16,7 @@ authors = ["Pelle Braendgaard <pelle@notabene.id>"]
 description = "Rust implementation of the Transaction Authorization Protocol (TAP)"
 repository = "https://github.com/TransactionAuthorizationProtocol/tap-rs"
 license = "MIT"
-keywords = ["tap", "transaction", "authorization", "didcomm", "caip"]
+keywords = ["tap", "transaction", "authorization", "caip"]
 categories = [
     "protocols",
     "web-programming",
