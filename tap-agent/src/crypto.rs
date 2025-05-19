@@ -620,7 +620,7 @@ impl MessagePacker for DefaultMessagePacker {
                     let auth_tag = base64::engine::general_purpose::STANDARD.encode(tag.as_slice());
 
                     // Base64 encode the IV
-                    let iv_b64 = base64::engine::general_purpose::STANDARD.encode(&iv_bytes);
+                    let iv_b64 = base64::engine::general_purpose::STANDARD.encode(iv_bytes);
 
                     // Prepare recipients array - we'll add an entry for each recipient
                     let mut jwe_recipients = Vec::with_capacity(to.len());
@@ -813,7 +813,7 @@ impl MessagePacker for DefaultMessagePacker {
 
                         // Add this recipient to the jwe_recipients array
                         jwe_recipients.push(JweRecipient {
-                            encrypted_key: encrypted_key,
+                            encrypted_key,
                             header: JweHeader {
                                 kid: recipient_key_id,
                                 sender_kid: Some(format!("{}#keys-1", from_did)),

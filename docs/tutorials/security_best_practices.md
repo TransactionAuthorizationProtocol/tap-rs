@@ -18,14 +18,14 @@ use tap_msg::did::KeyPair;
 async fn secure_key_management() -> Result<KeyPair, Box<dyn std::error::Error>> {
     // Option 1: Generate a new key pair securely
     let new_key = KeyPair::generate_ed25519().await?;
-    
+
     // Option 2: Load from a secure storage system with proper access controls
     // let stored_key = SecureStorage::load_key("agent-key-id").await?;
     // let key_pair = KeyPair::from_stored_key(stored_key)?;
-    
+
     // Always use memory protection when possible
     // (TAP-RS does not expose the key in memory outside the KeyPair struct)
-    
+
     Ok(new_key)
 }
 ```
@@ -43,13 +43,13 @@ Regularly rotating keys is a security best practice:
 async fn rotate_keys(agent: &mut Agent) -> Result<(), Box<dyn std::error::Error>> {
     // Generate a new key pair
     let new_key_pair = KeyPair::generate_ed25519().await?;
-    
+
     // Update the agent's key
     agent.update_key_pair(Arc::new(new_key_pair)).await?;
-    
+
     // Notify your counterparties about the key change
     // ... notification logic ...
-    
+
     Ok(())
 }
 ```
@@ -71,13 +71,13 @@ async fn send_encrypted_message(
         .set_from(Some(agent.did().to_string()))
         .set_to(Some(vec![recipient_did.to_string()]))
         .set_created_time(Some(chrono::Utc::now().to_rfc3339()));
-    
+
     // Encrypt the message using DIDComm encryption
     let encrypted = agent.encrypt_message(didcomm_message, &[recipient_did]).await?;
-    
+
     // Send the encrypted message
     // ... transport logic ...
-    
+
     Ok(())
 }
 ```
@@ -94,28 +94,28 @@ async fn validate_message(
     if message.from.is_none() {
         return Err(ValidationError::MissingField("from".to_string()));
     }
-    
+
     // Validate the message type
     if message.type_.is_none() || !message.type_.as_ref().unwrap().starts_with("TAP_") {
         return Err(ValidationError::InvalidType);
     }
-    
+
     // Verify timestamps to prevent replay attacks
     if let Some(created_time) = &message.created_time {
         let created = chrono::DateTime::parse_from_rfc3339(created_time)
             .map_err(|_| ValidationError::InvalidTimestamp)?;
-        
+
         let now = chrono::Utc::now();
         let time_diff = now.signed_duration_since(created.with_timezone(&chrono::Utc));
-        
+
         // Reject messages older than 15 minutes
         if time_diff > chrono::Duration::minutes(15) {
             return Err(ValidationError::MessageTooOld);
         }
     }
-    
+
     // Additional validation based on message type...
-    
+
     Ok(())
 }
 ```
@@ -138,13 +138,13 @@ impl MessageTracker {
             processed_ids: Mutex::new(HashSet::new()),
         }
     }
-    
+
     fn check_and_mark_processed(&self, message_id: &str) -> bool {
         let mut ids = self.processed_ids.lock().unwrap();
         if ids.contains(message_id) {
             return false; // Already processed
         }
-        
+
         ids.insert(message_id.to_string());
         true // First time seeing this message
     }
@@ -159,7 +159,7 @@ async fn process_message(
     if !tracker.check_and_mark_processed(&message.id) {
         return Err("Message already processed - potential replay attack".into());
     }
-    
+
     // Continue with normal processing...
     Ok(())
 }
@@ -178,10 +178,10 @@ async fn create_secure_server() -> Result<(), Box<dyn std::error::Error>> {
     let config = HttpConfig::new()
         .with_tls_cert_path("/path/to/cert.pem")
         .with_tls_key_path("/path/to/key.pem");
-    
+
     let server = HttpServer::new(config);
     server.start().await?;
-    
+
     Ok(())
 }
 ```
@@ -198,18 +198,18 @@ async fn authenticate_request(
     // Extract authentication information (e.g., from headers or body)
     let auth_token = request.headers().get("Authorization")
         .ok_or("Missing Authorization header")?;
-    
+
     // Validate the token (this is a simplified example)
     // In production, use a proper authentication scheme like OAuth or API keys
     if auth_token.starts_with("Bearer ") {
         let token = &auth_token["Bearer ".len()..];
-        
+
         // Verify the token against your authentication system
         // ...
-        
+
         return Ok(true);
     }
-    
+
     Ok(false)
 }
 ```
@@ -230,17 +230,17 @@ fn validate_transfer_request(
     // Validate Asset ID format
     let asset = AssetId::parse(asset_id)
         .map_err(|_| ValidationError::InvalidAssetId)?;
-    
+
     // Validate amount format
     let amount_value = amount.parse::<f64>()
         .map_err(|_| ValidationError::InvalidAmount)?;
-    
+
     if amount_value <= 0.0 {
         return Err(ValidationError::InvalidAmount);
     }
-    
+
     // Additional validation...
-    
+
     Ok(())
 }
 ```
@@ -255,25 +255,25 @@ use serde_json::Value;
 fn safely_deserialize_message(raw_message: &str) -> Result<Message, Box<dyn std::error::Error>> {
     // First, parse as a generic JSON Value
     let json_value: Value = serde_json::from_str(raw_message)?;
-    
+
     // Validate structure before fully deserializing
     if !json_value.is_object() {
         return Err("Message must be a JSON object".into());
     }
-    
+
     // Check for required fields to avoid panics later
     if !json_value.get("id").is_some() {
         return Err("Message missing required 'id' field".into());
     }
-    
+
     // Check size limits to prevent DoS attacks
     if raw_message.len() > 1_000_000 {  // 1MB limit
         return Err("Message exceeds size limit".into());
     }
-    
+
     // Now deserialize to the actual type
     let message: Message = serde_json::from_value(json_value)?;
-    
+
     Ok(message)
 }
 ```
@@ -293,7 +293,7 @@ fn create_production_node() -> Node {
         .with_max_connections(100)  // Limit connections to prevent DoS
         .with_request_timeout(30)  // Set timeouts to prevent hanging connections
         .with_rate_limiting(true);  // Enable rate limiting
-    
+
     Node::new(config)
 }
 ```
@@ -310,7 +310,7 @@ fn setup_audit_logging() -> AuditLogger {
         .with_file_output("/var/log/tap/audit.log")
         .with_level(LogLevel::Info)
         .with_retention_days(90);  // Keep logs for compliance
-    
+
     logger
 }
 
@@ -325,7 +325,7 @@ async fn log_message_event(
         .with_event_type(event_type)
         .with_message_id(message_id)
         .with_agent_id(agent_id);
-    
+
     logger.log(event).await;
 }
 ```
@@ -342,14 +342,14 @@ async function securelyStoreKey(key: string, name: string) {
     // Use the browser's built-in crypto APIs
     const encoder = new TextEncoder();
     const keyData = encoder.encode(key);
-    
+
     // Get encryption key from password or other secure source
     const encryptionKey = await window.crypto.subtle.generateKey(
         { name: "AES-GCM", length: 256 },
         true,
         ["encrypt", "decrypt"]
     );
-    
+
     // Encrypt the key before storing
     const iv = window.crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await window.crypto.subtle.encrypt(
@@ -357,7 +357,7 @@ async function securelyStoreKey(key: string, name: string) {
         encryptionKey,
         keyData
     );
-    
+
     // Store safely
     localStorage.setItem(`key_${name}_iv`, Array.from(iv).join(','));
     localStorage.setItem(`key_${name}`, Array.from(new Uint8Array(encrypted)).join(','));
@@ -386,7 +386,7 @@ Regularly test your TAP-RS implementation for security vulnerabilities:
 #[fuzz]
 fn fuzz_message_parsing(data: &[u8]) {
     if let Ok(s) = std::str::from_utf8(data) {
-        let _ = didcomm::Message::receive(s);
+        let _ = tap_msg::PlainMessage::receive(s);
     }
 }
 ```

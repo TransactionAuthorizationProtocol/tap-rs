@@ -6,11 +6,11 @@
 //! Run with: cargo bench --bench wasm_binding_benchmark
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use didcomm::Message as DIDCommMessage;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Participant, Reject, TapMessageBody, Transfer};
+use tap_msg::PlainMessage as DIDCommMessage;
 
 /// Create a test transfer message body
 fn create_transfer_body() -> Transfer {

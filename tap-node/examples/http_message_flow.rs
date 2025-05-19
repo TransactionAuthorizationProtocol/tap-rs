@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node.register_agent(agent2).await?;
 
     // Create a test message
-    let message = tap_msg::didcomm::Message {
+    let message = tap_msg::tap_msg::PlainMessage {
         id: uuid::Uuid::new_v4().to_string(),
         typ: "https://tap.rsvp/schema/tap-message-v1".to_string(),
         type_: "".to_string(), // This field is required but unused

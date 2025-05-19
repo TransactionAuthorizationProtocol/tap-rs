@@ -33,7 +33,7 @@ impl TapMessageBody for TestMessage {
         "crypto-test"
     }
 
-    fn from_didcomm(msg: &didcomm::Message) -> TapCoreResult<Self> {
+    fn from_didcomm(msg: &tap_msg::PlainMessage) -> TapCoreResult<Self> {
         // Try to extract fields from the message body
         let id = msg
             .body
@@ -67,9 +67,9 @@ impl TapMessageBody for TestMessage {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> TapCoreResult<didcomm::Message> {
+    fn to_didcomm(&self, from_did: &str) -> TapCoreResult<tap_msg::PlainMessage> {
         // Create a new DIDComm message
-        let msg = didcomm::Message {
+        let msg = tap_msg::PlainMessage {
             id: self.id.clone(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
@@ -77,8 +77,8 @@ impl TapMessageBody for TestMessage {
                 "id": self.id,
                 "content": self.content
             }),
-            from: from_did.map(|did| did.to_string()),
-            to: None,
+            from: from_did.to_string(),
+            to: Vec::new(),
             thid: None,
             pthid: None,
             created_time: None,

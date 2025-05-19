@@ -20,7 +20,7 @@ use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_agent::error::Result;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
-use tap_msg::message::types::{AddAgents, Authorize, Reject, Settle, Transfer};
+use tap_msg::message::{AddAgents, Authorize, Reject, Settle, Transfer};
 use tap_msg::Participant;
 
 fn main() -> Result<()> {

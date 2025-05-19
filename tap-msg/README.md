@@ -1,12 +1,12 @@
 # TAP Message
 
-Core message processing for the Transaction Authorization Protocol (TAP) with integrated DIDComm support.
+Core message processing for the Transaction Authorization Protocol (TAP) providing secure message types and validation.
 
 ## Features
 
 - **TAP Message Types**: Complete implementation of all TAP message types
-- **DIDComm Integration**: Direct conversion between TAP messages and DIDComm messages
-- **Attachments Support**: Full support for DIDComm attachments in Base64, JSON, and Links formats with optional JWS
+- **Message Security**: Support for secure message formats with JWS (signed) and JWE (encrypted) capabilities
+- **Attachments Support**: Full support for message attachments in Base64, JSON, and Links formats with optional JWS
 - **Validation**: Proper validation of all message fields and formats
 - **CAIP Support**: Validation for chain-agnostic identifiers (CAIP-2, CAIP-10, CAIP-19)
 - **Authorization Flows**: Support for authorization, rejection, and settlement flows
@@ -20,8 +20,9 @@ Core message processing for the Transaction Authorization Protocol (TAP) with in
 ### Basic Transfer Message
 
 ```rust
-use tap_msg::message::types::{Transfer, Participant};
-use tap_msg::message::tap_message_trait::{TapMessageBody, TapMessage};
+use tap_msg::message::Transfer;
+use tap_msg::message::Participant;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_caip::AssetId;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -44,7 +45,6 @@ let beneficiary = Participant {
 };
 
 let transfer = Transfer {
-    transaction_id: uuid::Uuid::new_v4().to_string(),
     asset,
     originator,
     beneficiary: Some(beneficiary),
@@ -55,27 +55,17 @@ let transfer = Transfer {
     metadata: HashMap::new(),
 };
 
-// Convert to a DIDComm message
-let message = transfer.to_didcomm("did:example:sender")?;
+// Use the TapMessageBody trait for validation
+transfer.validate()?;
 
-// Or with routing information
-let message_with_route = transfer.to_didcomm_with_route(
-    "did:example:sender",
-    ["did:example:receiver"].iter().copied()
-)?;
-
-// Create a TAP message from a DIDComm message
-let received_transfer = Transfer::from_didcomm(&message)?;
-
-// Using the TapMessage trait for thread correlation
-let thread_id = received_transfer.thread_id(); // Returns the transaction_id
-let message_id = received_transfer.message_id(); // Returns the transaction_id for standard messages
+// In a full implementation, you would use an agent to send this transfer message:
+// let (packed_message, _) = agent.send_message(&transfer, vec![&beneficiary.id], true).await?;
 ```
 
 ### Payment Request with Invoice
 
 ```rust
-use tap_msg::{Payment, Invoice, LineItem, Participant};
+use tap_msg::message::{Payment, Invoice, LineItem, Participant};
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use std::collections::HashMap;
 
@@ -118,18 +108,15 @@ let mut payment_request = Payment::with_currency(
 );
 payment_request.invoice = Some(invoice);
 
-// Send the payment request to a customer
-let message = payment_request.to_didcomm_with_route(
-    "did:example:merchant",
-    ["did:example:customer"].iter().copied()
-)?;
+// Validate the message
+payment_request.validate()?;
 ```
 
 ## Message Types
 
-### PlainMessage
+### Plain Message
 
-The `PlainMessage` struct is the core representation of a DIDComm message in TAP:
+The `PlainMessage` struct is the core representation of a message in TAP:
 
 ```rust
 pub struct PlainMessage {
@@ -149,7 +136,7 @@ pub struct PlainMessage {
 }
 ```
 
-The `attachments` field supports all DIDComm attachment formats and can be used to include additional data with messages.
+The `attachments` field supports all attachment formats and can be used to include additional data with messages.
 
 ### Transfer
 
@@ -157,7 +144,6 @@ The `Transfer` struct represents a TAP transfer message, which is the core messa
 
 ```rust
 pub struct Transfer {
-    pub transaction_id: String,
     pub asset: AssetId,
     pub originator: Participant,
     pub beneficiary: Option<Participant>,
@@ -193,6 +179,7 @@ let participant = Participant {
     id: "did:example:bob".to_string(),
     role: Some("beneficiary".to_string()),
     policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
+    leiCode: None,
 };
 
 // Create an UpdatePolicies message to dynamically update policies
@@ -203,13 +190,7 @@ let update_policies = UpdatePolicies {
 };
 
 // Validate the message
-update_policies.validate().unwrap();
-
-// Convert to DIDComm message and send to all participants
-let didcomm_msg = update_policies.to_didcomm_with_route(
-    "did:example:originator_vasp",
-    ["did:example:beneficiary", "did:example:beneficiary_vasp"].iter().copied()
-).unwrap();
+update_policies.validate()?;
 ```
 
 ### Authorization Messages
@@ -219,14 +200,17 @@ TAP supports various authorization messages for compliance workflows:
 ```rust
 // Authorization message
 pub struct Authorize {
-    pub transaction_id: String,
+    pub transfer_id: String,
     pub note: Option<String>,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 // Rejection message
 pub struct Reject {
     pub transaction_id: String,
     pub reason: String,
+    pub note: Option<String>,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 
 // Settlement message
@@ -234,6 +218,7 @@ pub struct Settle {
     pub transaction_id: String,
     pub settlement_id: String,
     pub amount: Option<String>,
+    pub metadata: HashMap<String, serde_json::Value>,
 }
 ```
 
@@ -257,28 +242,28 @@ pub struct ErrorBody {
 }
 ```
 
-### DIDCommPresentation
+### Presentation
 
-The `DIDCommPresentation` struct represents a DIDComm present-proof presentation message:
+The `Presentation` struct represents a verifiable presentation message:
 
 ```rust
-pub struct DIDCommPresentation {
+pub struct Presentation {
     pub formats: Vec<String>,
     pub attachments: Vec<Attachment>,
     pub thid: Option<String>,
 }
 ```
 
-This structure enables compatibility with the DIDComm present-proof protocol and enforces the requirement for format field and attachments validation. The format field is required for each attachment and must match one of the formats specified in the presentation.
+This structure enables compatibility with the present-proof protocol and enforces the requirement for format field and attachments validation. The format field is required for each attachment and must match one of the formats specified in the presentation.
 
 ### Invoice and Payment Requests (TAIP-14, TAIP-16)
 
 TAP supports structured invoices according to TAIP-16, which can be embedded in payment requests (TAIP-14):
 
 ```rust
-use tap_msg::{Payment, Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
+use tap_msg::message::{Payment, Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::Participant;
+use tap_msg::message::Participant;
 use std::collections::HashMap;
 
 // Create a merchant participant
@@ -336,55 +321,96 @@ let mut payment_request = Payment::with_currency(
 
 // Add the invoice to the payment request
 payment_request.invoice = Some(invoice);
+```
 
-// Convert to DIDComm message to send to the customer
-let message = payment_request.to_didcomm_with_route(
-    "did:example:merchant",
-    ["did:example:customer"].iter().copied()
-).unwrap();
+## Message Security
 
-// When receiving a payment request, extract and validate the invoice
-let received_request = Payment::from_didcomm(&message).unwrap();
-received_request.validate().unwrap();
+The TAP protocol provides several security modes:
 
-if let Some(received_invoice) = received_request.invoice {
-    println!("Invoice ID: {}", received_invoice.id);
-    println!("Total amount: {}", received_invoice.total);
+- **Plain**: No security, for testing only
+- **Signed**: Messages are signed to ensure integrity
+- **AuthCrypt**: Messages are both signed and encrypted for confidentiality
 
-    // Process line items
-    for item in received_invoice.line_items {
-        println!("{} x {} @ ${} = ${}",
-            item.quantity,
-            item.description,
-            item.unit_price,
-            item.line_total
-        );
-    }
+When using the `tap-agent` crate with this message library, you can specify the security mode when sending messages:
+
+```rust
+use tap_agent::agent::Agent;
+use tap_agent::message::SecurityMode;
+use tap_msg::message::Transfer;
+
+async fn send_secure_message(
+    agent: &impl Agent,
+    transfer: &Transfer,
+    recipient: &str,
+) -> Result<String, Box<dyn std::error::Error>> {
+    // Send with authenticated encryption
+    let (packed_message, _) = agent.send_message(
+        transfer,
+        vec![recipient],
+        SecurityMode::AuthCrypt,
+        false, // Don't automatically deliver
+    ).await?;
+    
+    // The packed_message is now a secure JWE format message
+    Ok(packed_message)
 }
 ```
 
-## DIDComm Integration
+## Message Attachments
 
-The `TapMessageBody` trait provides methods for converting between TAP messages and DIDComm messages:
+TAP supports message attachments through the `Attachment` struct and related types:
+
+```rust
+use tap_msg::didcomm::{Attachment, AttachmentData, JsonAttachmentData};
+use serde_json::json;
+
+// Create a JSON attachment
+let attachment = Attachment {
+    id: Some("attachment-1".to_string()),
+    media_type: Some("application/json".to_string()),
+    data: AttachmentData::Json {
+        value: JsonAttachmentData {
+            json: json!({
+                "key": "value",
+                "nested": {
+                    "data": "example"
+                }
+            }),
+            jws: None,
+        },
+    },
+    description: Some("Example attachment".to_string()),
+    filename: None,
+    format: Some("json/schema@v1".to_string()),
+    lastmod_time: None,
+    byte_count: None,
+};
+
+// Create a presentation with attachment
+let presentation = Presentation {
+    formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
+    attachments: vec![attachment],
+    thid: Some("thread-123".to_string()),
+};
+
+// Validate the presentation
+presentation.validate()?;
+```
+
+## Message Validation 
+
+TAP messages implement the `TapMessageBody` trait, which provides a `validate()` method for checking message correctness:
 
 ```rust
 pub trait TapMessageBody: DeserializeOwned + Serialize + Send + Sync {
     /// Gets the message type string for this TAP message type
     fn message_type() -> &'static str;
 
-    /// Converts a DIDComm message to this TAP message type
-    fn from_didcomm(msg: &PlainMessage) -> Result<Self, Error>;
+    /// Converts the message to its wire format representation
+    fn to_wire(&self) -> Result<Value>;
 
     /// Validates the message content
-    fn validate(&self) -> Result<(), Error>;
-
-    /// Converts this TAP message to a DIDComm message
-    fn to_didcomm(&self, from: &str) -> Result<PlainMessage, Error>;
-
-    /// Converts this TAP message to a DIDComm message with routing information
-    fn to_didcomm_with_route<'a, I>(&self, from: &str, to: I) -> Result<PlainMessage, Error>
-    where
-        I: Iterator<Item = &'a str>;
+    fn validate(&self) -> Result<()>;
 }
 ```
 
@@ -401,7 +427,7 @@ pub trait Authorizable {
     fn authorize(&self, note: Option<String>) -> Authorize;
 
     /// Create a rejection message for this message
-    fn reject(&self, code: String, description: String) -> Reject;
+    fn reject(&self, reason: String, note: Option<String>) -> Reject;
 
     /// Create a settlement message for this message
     fn settle(
@@ -432,135 +458,27 @@ pub trait Authorizable {
 }
 ```
 
-## Message Attachments
-
-TAP supports DIDComm message attachments through the `Attachment` struct and related types:
-
-```rust
-use tap_msg::{Attachment, AttachmentData, JsonAttachmentData};
-use serde_json::json;
-
-// Create a JSON attachment
-let attachment = Attachment {
-    id: Some("attachment-1".to_string()),
-    media_type: Some("application/json".to_string()),
-    data: AttachmentData::Json {
-        value: JsonAttachmentData {
-            json: json!({
-                "key": "value",
-                "nested": {
-                    "data": "example"
-                }
-            }),
-            jws: None,
-        },
-    },
-    description: Some("Example attachment".to_string()),
-    filename: None,
-    format: Some("json/schema@v1".to_string()),
-    lastmod_time: None,
-    byte_count: None,
-};
-
-// Create a DIDComm presentation with attachment
-let presentation = DIDCommPresentation {
-    formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
-    attachments: vec![attachment],
-    thid: Some("thread-123".to_string()),
-};
-
-// Convert to DIDComm message
-let message = presentation.to_didcomm("did:example:sender")?;
-
-// Extract presentation from message
-let received = DIDCommPresentation::from_didcomm(&message)?;
-
-// Access attachment data
-if let Some(first_attachment) = received.attachments.first() {
-    match &first_attachment.data {
-        AttachmentData::Json { value } => {
-            println!("JSON data: {}", value.json);
-        },
-        AttachmentData::Base64 { value } => {
-            println!("Base64 data: {}", value.base64);
-        },
-        AttachmentData::Links { value } => {
-            println!("Links: {:?}", value.links);
-        }
-    }
-}
-```
-
-## Message Threading
-
-TAP messages support thread correlation through the `TapMessage` trait, which is implemented for all message types using the `impl_tap_message!` macro. This provides:
-
-1. Thread ID tracking
-2. Parent thread ID tracking
-3. Message correlation
-4. Reply creation
-
-```rust
-pub trait TapMessage {
-    /// Validates the message content
-    fn validate(&self) -> Result<()>;
-
-    /// Checks if this is a TAP message
-    fn is_tap_message(&self) -> bool;
-
-    /// Gets the TAP message type for this message
-    fn get_tap_type(&self) -> Option<String>;
-
-    /// Attempts to convert the message to the specified TAP message type
-    fn body_as<T: TapMessageBody>(&self) -> Result<T>;
-
-    /// Gets all participants involved in this message
-    fn get_all_participants(&self) -> Vec<String>;
-
-    /// Creates a reply to this message with the specified body and creator DID
-    fn create_reply<T: TapMessageBody>(
-        &self,
-        body: &T,
-        creator_did: &str,
-    ) -> Result<Message>;
-
-    /// Gets the message type for this message
-    fn message_type(&self) -> &'static str;
-
-    /// Gets the thread ID for this message, if any
-    fn thread_id(&self) -> Option<&str>;
-
-    /// Gets the parent thread ID for this message, if any
-    fn parent_thread_id(&self) -> Option<&str>;
-
-    /// Gets the unique message ID for this message
-    fn message_id(&self) -> &str;
-}
-```
-
 ## Adding New Message Types
 
 To add a new TAP message type, follow these steps:
 
-1. Define your message struct with required fields (must include `transaction_id: String` for most messages)
+1. Define your message struct with required fields
 2. Implement the `TapMessageBody` trait for your struct
-3. Apply the `impl_tap_message!` macro to implement the `TapMessage` trait
+3. Optional: Implement the `Authorizable` trait for messages that can be authorized
 
 Here's an example:
 
 ```rust
-use tap_msg::message::tap_message_trait::{TapMessageBody, TapMessage};
-use tap_msg::impl_tap_message;
+use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::error::Result;
-use didcomm::Message;
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
 /// Define your new message struct
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MyNewMessage {
-    /// Required transaction ID for most messages
-    pub transaction_id: String,
+    /// Unique identifier for the message
+    pub id: String,
 
     /// Other fields specific to your message
     pub field1: String,
@@ -578,42 +496,25 @@ impl TapMessageBody for MyNewMessage {
         "https://tap.rsvp/schema/1.0#mynewmessage"
     }
 
+    /// Convert to wire format (serialized JSON structure)
+    fn to_wire(&self) -> Result<serde_json::Value> {
+        serde_json::to_value(self).map_err(|e| tap_msg::error::Error::Serialization(e.to_string()))
+    }
+
     /// Implement validation logic for your message fields
     fn validate(&self) -> Result<()> {
-        if self.transaction_id.is_empty() {
-            return Err(Error::Validation("Transaction ID is required".to_string()));
+        if self.id.is_empty() {
+            return Err(tap_msg::error::Error::Validation("ID is required".to_string()));
         }
 
         if self.field1.is_empty() {
-            return Err(Error::Validation("Field1 is required".to_string()));
+            return Err(tap_msg::error::Error::Validation("Field1 is required".to_string()));
         }
 
         Ok(())
     }
-
-    /// Implement conversion to DIDComm message
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
-        // Implement conversion logic
-        // ...
-    }
-
-    /// Optional: Implement conversion from DIDComm message
-    fn from_didcomm(message: &Message) -> Result<Self> {
-        // Implement conversion logic
-        // ...
-    }
 }
-
-/// Apply the impl_tap_message! macro to implement the TapMessage trait
-impl_tap_message!(MyNewMessage);
 ```
-
-For message types with non-standard fields, you can use the specialized variants of the macro:
-
-- `impl_tap_message!(MessageType)` - For standard messages with `transaction_id: String`
-- `impl_tap_message!(MessageType, optional_transaction_id)` - For messages with `transaction_id: Option<String>`
-- `impl_tap_message!(MessageType, thread_based)` - For messages using `thid: Option<String>` instead of transaction_id
-- `impl_tap_message!(MessageType, generated_id)` - For messages with neither transaction_id nor thread_id
 
 ## Examples
 

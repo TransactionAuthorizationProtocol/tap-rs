@@ -2,7 +2,6 @@
 //!
 //! Run with: cargo bench --bench stress_test
 
-use didcomm::Message as DIDCommMessage;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
@@ -11,6 +10,7 @@ use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::{AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker};
 use tap_msg::message::TapMessageBody;
 use tap_msg::message::Transfer;
+use tap_msg::PlainMessage as DIDCommMessage;
 use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
 

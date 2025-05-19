@@ -58,7 +58,7 @@ use tap_node::message::{
 };
 use tap_http::{TapServer, ServerConfig};
 
-use didcomm::Message;
+use tap_msg::PlainMessage;
 use tokio::time::sleep;
 
 #[tokio::main]

@@ -32,7 +32,7 @@ impl TapMessageBody for EncryptionTestMessage {
         "encryption-test"
     }
 
-    fn from_didcomm(msg: &didcomm::Message) -> TapCoreResult<Self> {
+    fn from_didcomm(msg: &tap_msg::PlainMessage) -> TapCoreResult<Self> {
         let id = msg
             .body
             .get("id")
@@ -70,7 +70,7 @@ impl TapMessageBody for EncryptionTestMessage {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> TapCoreResult<didcomm::Message> {
+    fn to_didcomm(&self, from_did: &str) -> TapCoreResult<tap_msg::PlainMessage> {
         let mut body = serde_json::json!({
             "id": self.id,
             "payload": self.payload
@@ -80,13 +80,13 @@ impl TapMessageBody for EncryptionTestMessage {
             body["metadata"] = metadata.clone();
         }
 
-        let msg = didcomm::Message {
+        let msg = tap_msg::PlainMessage {
             id: self.id.clone(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             body,
-            from: from_did.map(|did| did.to_string()),
-            to: None,
+            from: from_did.to_string(),
+            to: Vec::new(),
             thid: None,
             pthid: None,
             created_time: None,
