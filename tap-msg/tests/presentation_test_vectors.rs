@@ -1,9 +1,9 @@
-use tap_msg::didcomm::PlainMessage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
 use std::fs;
 use std::path::Path;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{DIDCommPresentation, TapMessageBody};
 use tap_msg::Result;
 

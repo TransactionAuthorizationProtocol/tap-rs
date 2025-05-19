@@ -9,10 +9,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use tap_msg::didcomm::PlainMessage;
 use tap_caip::AssetId;
-use tap_msg::message::Transfer;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::Participant;
+use tap_msg::message::Transfer;
 
 #[derive(Debug, PartialEq)]
 enum TestResult {
@@ -949,10 +949,7 @@ fn extract_transfer_id(didcomm_message: &PlainMessage) -> String {
 }
 
 /// Perform specific validation for a message type
-fn perform_specific_validation(
-    message: &PlainMessage,
-    expected_type: &str,
-) -> Result<(), String> {
+fn perform_specific_validation(message: &PlainMessage, expected_type: &str) -> Result<(), String> {
     // Extract the body of the message
     let body = match message.body.as_object() {
         Some(obj) => obj,

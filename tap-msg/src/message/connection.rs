@@ -209,7 +209,9 @@ impl TapMessageBody for AuthorizationRequired {
 
     fn validate(&self) -> Result<()> {
         if self.url.is_empty() {
-            return Err(Error::Validation("Authorization URL is required".to_string()));
+            return Err(Error::Validation(
+                "Authorization URL is required".to_string(),
+            ));
         }
 
         // Validate expiry date if present
@@ -217,7 +219,9 @@ impl TapMessageBody for AuthorizationRequired {
             if let Some(expires_str) = expires.as_str() {
                 // Simple format check
                 if !expires_str.contains('T') || !expires_str.contains(':') {
-                    return Err(Error::Validation("Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string()));
+                    return Err(Error::Validation(
+                        "Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string(),
+                    ));
                 }
             }
         }
@@ -227,8 +231,8 @@ impl TapMessageBody for AuthorizationRequired {
 
     fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
         // Serialize to JSON
-        let mut body_json = serde_json::to_value(self)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         // Ensure the @type field is correctly set in the body
         if let Some(body_obj) = body_json.as_object_mut() {
@@ -336,8 +340,8 @@ impl TapMessageBody for OutOfBand {
 
     fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
         // Serialize to JSON
-        let mut body_json = serde_json::to_value(self)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         // Ensure the @type field is correctly set in the body
         if let Some(body_obj) = body_json.as_object_mut() {
@@ -403,11 +407,8 @@ impl AuthorizationRequired {
     pub fn new(url: String, expires: String) -> Self {
         let mut metadata = HashMap::new();
         metadata.insert("expires".to_string(), serde_json::Value::String(expires));
-        
-        Self {
-            url,
-            metadata,
-        }
+
+        Self { url, metadata }
     }
 
     /// Add metadata to the message.

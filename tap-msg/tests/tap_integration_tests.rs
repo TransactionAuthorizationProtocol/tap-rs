@@ -8,8 +8,8 @@ use tap_caip::AssetId;
 use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
 use tap_msg::message::{
-    Authorize, Connect, ConnectionConstraints, Participant, Payment, PaymentBuilder, Reject, Settle,
-    Transfer, UpdateParty, TransactionLimits,
+    Authorize, Connect, ConnectionConstraints, Participant, Payment, PaymentBuilder, Reject,
+    Settle, TransactionLimits, Transfer, UpdateParty,
 };
 use tap_msg::Result;
 
@@ -415,19 +415,19 @@ fn create_test_connect() -> Connect {
     let transaction_id = uuid::Uuid::new_v4().to_string();
     let agent_id = "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string();
     let for_id = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
-    
+
     let mut connect = Connect::new(&transaction_id, &agent_id, &for_id, Some("agent"));
-    
+
     let transaction_limits = TransactionLimits {
         max_amount: Some("1000.0".to_string()),
         max_total_amount: Some("5000.0".to_string()),
         max_transactions: Some(10),
     };
-    
+
     let constraints = ConnectionConstraints {
         transaction_limits: Some(transaction_limits),
     };
-    
+
     connect.constraints = Some(constraints);
     connect
 }
@@ -472,7 +472,7 @@ fn create_test_transfer() -> Transfer {
 
 fn create_test_payment_request() -> Payment {
     let transaction_id = uuid::Uuid::new_v4().to_string();
-    
+
     let originator = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("originator".to_string()),
@@ -494,8 +494,9 @@ fn create_test_payment_request() -> Payment {
         leiCode: None,
     }];
 
-    let asset = AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
-    
+    let asset =
+        AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+
     let mut payment = PaymentBuilder::default()
         .transaction_id(transaction_id)
         .asset(asset)
@@ -504,7 +505,7 @@ fn create_test_payment_request() -> Payment {
         .beneficiary(beneficiary)
         .agents(agents)
         .build();
-        
+
     payment.currency_code = Some("USD".to_string());
     payment.expires = Some("2023-12-31T23:59:59Z".to_string());
     payment

@@ -3,11 +3,9 @@ extern crate tap_msg;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::tap_message_trait::Authorizable;
-use tap_msg::message::{
-    Participant, Payment, PaymentBuilder, Transfer, UpdateParty,
-};
+use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::{Participant, Payment, PaymentBuilder, Transfer, UpdateParty};
 
 // Helper function to create a simple participant
 fn create_participant(did: &str) -> Participant {
@@ -72,9 +70,7 @@ fn test_create_message() {
     );
     assert_eq!(
         message.to,
-        vec![
-            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string()
-        ]
+        vec!["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string()]
     );
 }
 
@@ -89,25 +85,25 @@ mod payment_tests {
         fn merchant(&self) -> &Participant;
         fn customer(&self) -> &Participant;
     }
-    
+
     impl PaymentExt for Payment {
         fn merchant(&self) -> &Participant {
             &self.originator
         }
-        
+
         fn customer(&self) -> &Participant {
             &self.beneficiary
         }
     }
-    
+
     fn create_valid_payment() -> Payment {
         let merchant_did = "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH";
         let customer_did = "did:key:z6MkhTBLxt9a7sWX77zn1GnzYam743kc9HvzA9qnKXqpVmXC";
         let asset_id_str = "eip155:1/slip44:60";
-        
+
         let merchant = create_participant(merchant_did);
         let customer = create_participant(customer_did);
-        
+
         let mut payment = PaymentBuilder::default()
             .transaction_id("pay_123".to_string())
             .originator(merchant.clone())
@@ -115,12 +111,18 @@ mod payment_tests {
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("100.50".to_string())
             .build();
-        
+
         // For compatibility with the existing test - we'll add merchant/customer to the returned Payment
         // This is not actually part of the new Payment struct but will make the test pass
-        payment.metadata.insert("merchant".to_string(), serde_json::to_value(&merchant).unwrap());
-        payment.metadata.insert("customer".to_string(), serde_json::to_value(&customer).unwrap());
-        
+        payment.metadata.insert(
+            "merchant".to_string(),
+            serde_json::to_value(&merchant).unwrap(),
+        );
+        payment.metadata.insert(
+            "customer".to_string(),
+            serde_json::to_value(&customer).unwrap(),
+        );
+
         payment
     }
 
@@ -175,11 +177,11 @@ mod payment_tests {
 
         let message_from_merchant = payment.to_didcomm(merchant_did).unwrap();
 
-        assert_eq!(message_from_merchant.type_, <Payment as TapMessageBody>::message_type());
         assert_eq!(
-            message_from_merchant.from,
-            merchant_did.to_string()
+            message_from_merchant.type_,
+            <Payment as TapMessageBody>::message_type()
         );
+        assert_eq!(message_from_merchant.from, merchant_did.to_string());
         assert!(!message_from_merchant.to.is_empty());
         assert_eq!(message_from_merchant.to.len(), 1); // Only customer should be recipient
         assert!(message_from_merchant.to.contains(customer_did));

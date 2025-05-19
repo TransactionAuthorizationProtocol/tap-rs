@@ -1,10 +1,10 @@
 use std::collections::HashMap;
+use std::str::FromStr;
+use tap_caip::AssetId;
 use tap_msg::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{Payment, PaymentBuilder};
 use tap_msg::Participant;
-use tap_caip::AssetId;
-use std::str::FromStr;
 
 #[test]
 fn test_invoice_creation_and_validation() {
@@ -172,12 +172,15 @@ fn test_payment_request_with_invoice() {
         .asset(asset)
         .transaction_id("payment-001".to_string())
         .build();
-    
+
     // Add agents
     payment_request.agents = vec![agent.clone()];
-    
+
     // Add invoice to metadata since there's no dedicated field for it
-    payment_request.metadata.insert("invoice".to_string(), serde_json::to_value(invoice.clone()).unwrap());
+    payment_request.metadata.insert(
+        "invoice".to_string(),
+        serde_json::to_value(invoice.clone()).unwrap(),
+    );
 
     // This should validate correctly
     assert!(payment_request.validate().is_ok());
@@ -198,22 +201,19 @@ fn test_payment_request_with_invoice() {
         .expect("Failed to convert Payment to DIDComm");
 
     // Verify DIDComm message type
-    assert_eq!(
-        didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#payment"
-    );
+    assert_eq!(didcomm_message.type_, "https://tap.rsvp/schema/1.0#payment");
 
-    // Verify that we can extract the message body 
+    // Verify that we can extract the message body
     let extracted =
         Payment::from_didcomm(&didcomm_message).expect("Failed to extract Payment from DIDComm");
 
     assert_eq!(extracted.amount, "100.0");
     assert_eq!(extracted.currency_code, Some("USD".to_string()));
-    
+
     // Get invoice from metadata
     let invoice_value = extracted.metadata.get("invoice");
     assert!(invoice_value.is_some());
-    
+
     let extracted_invoice: Invoice = serde_json::from_value(invoice_value.unwrap().clone())
         .expect("Failed to deserialize invoice from metadata");
     assert_eq!(extracted_invoice.id, "INV001");

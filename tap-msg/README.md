@@ -6,6 +6,7 @@ Core message processing for the Transaction Authorization Protocol (TAP) with in
 
 - **TAP Message Types**: Complete implementation of all TAP message types
 - **DIDComm Integration**: Direct conversion between TAP messages and DIDComm messages
+- **Attachments Support**: Full support for DIDComm attachments in Base64, JSON, and Links formats with optional JWS
 - **Validation**: Proper validation of all message fields and formats
 - **CAIP Support**: Validation for chain-agnostic identifiers (CAIP-2, CAIP-10, CAIP-19)
 - **Authorization Flows**: Support for authorization, rejection, and settlement flows
@@ -55,11 +56,11 @@ let transfer = Transfer {
 };
 
 // Convert to a DIDComm message
-let message = transfer.to_didcomm(Some("did:example:sender"))?;
+let message = transfer.to_didcomm("did:example:sender")?;
 
 // Or with routing information
 let message_with_route = transfer.to_didcomm_with_route(
-    Some("did:example:sender"),
+    "did:example:sender",
     ["did:example:receiver"].iter().copied()
 )?;
 
@@ -119,12 +120,36 @@ payment_request.invoice = Some(invoice);
 
 // Send the payment request to a customer
 let message = payment_request.to_didcomm_with_route(
-    Some("did:example:merchant"),
+    "did:example:merchant",
     ["did:example:customer"].iter().copied()
 )?;
 ```
 
 ## Message Types
+
+### PlainMessage
+
+The `PlainMessage` struct is the core representation of a DIDComm message in TAP:
+
+```rust
+pub struct PlainMessage {
+    pub id: String,
+    pub typ: String,
+    pub type_: String,
+    pub body: Value,
+    pub from: String,
+    pub to: Vec<String>,
+    pub thid: Option<String>,
+    pub pthid: Option<String>,
+    pub extra_headers: HashMap<String, Value>,
+    pub created_time: Option<u64>,
+    pub expires_time: Option<u64>,
+    pub from_prior: Option<String>,
+    pub attachments: Option<Vec<Attachment>>,
+}
+```
+
+The `attachments` field supports all DIDComm attachment formats and can be used to include additional data with messages.
 
 ### Transfer
 
@@ -182,7 +207,7 @@ update_policies.validate().unwrap();
 
 // Convert to DIDComm message and send to all participants
 let didcomm_msg = update_policies.to_didcomm_with_route(
-    Some("did:example:originator_vasp"),
+    "did:example:originator_vasp",
     ["did:example:beneficiary", "did:example:beneficiary_vasp"].iter().copied()
 ).unwrap();
 ```
@@ -231,6 +256,20 @@ pub struct ErrorBody {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 ```
+
+### DIDCommPresentation
+
+The `DIDCommPresentation` struct represents a DIDComm present-proof presentation message:
+
+```rust
+pub struct DIDCommPresentation {
+    pub formats: Vec<String>,
+    pub attachments: Vec<Attachment>,
+    pub thid: Option<String>,
+}
+```
+
+This structure enables compatibility with the DIDComm present-proof protocol and enforces the requirement for format field and attachments validation. The format field is required for each attachment and must match one of the formats specified in the presentation.
 
 ### Invoice and Payment Requests (TAIP-14, TAIP-16)
 
@@ -300,7 +339,7 @@ payment_request.invoice = Some(invoice);
 
 // Convert to DIDComm message to send to the customer
 let message = payment_request.to_didcomm_with_route(
-    Some("did:example:merchant"),
+    "did:example:merchant",
     ["did:example:customer"].iter().copied()
 ).unwrap();
 
@@ -334,16 +373,16 @@ pub trait TapMessageBody: DeserializeOwned + Serialize + Send + Sync {
     fn message_type() -> &'static str;
 
     /// Converts a DIDComm message to this TAP message type
-    fn from_didcomm(msg: &Message) -> Result<Self, Error>;
+    fn from_didcomm(msg: &PlainMessage) -> Result<Self, Error>;
 
     /// Validates the message content
     fn validate(&self) -> Result<(), Error>;
 
     /// Converts this TAP message to a DIDComm message
-    fn to_didcomm(&self) -> Result<Message, Error>;
+    fn to_didcomm(&self, from: &str) -> Result<PlainMessage, Error>;
 
     /// Converts this TAP message to a DIDComm message with routing information
-    fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message, Error>
+    fn to_didcomm_with_route<'a, I>(&self, from: &str, to: I) -> Result<PlainMessage, Error>
     where
         I: Iterator<Item = &'a str>;
 }
@@ -390,6 +429,65 @@ pub trait Authorizable {
 
     /// Remove an agent from this message, creating a RemoveAgent message as a response
     fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
+}
+```
+
+## Message Attachments
+
+TAP supports DIDComm message attachments through the `Attachment` struct and related types:
+
+```rust
+use tap_msg::{Attachment, AttachmentData, JsonAttachmentData};
+use serde_json::json;
+
+// Create a JSON attachment
+let attachment = Attachment {
+    id: Some("attachment-1".to_string()),
+    media_type: Some("application/json".to_string()),
+    data: AttachmentData::Json {
+        value: JsonAttachmentData {
+            json: json!({
+                "key": "value",
+                "nested": {
+                    "data": "example"
+                }
+            }),
+            jws: None,
+        },
+    },
+    description: Some("Example attachment".to_string()),
+    filename: None,
+    format: Some("json/schema@v1".to_string()),
+    lastmod_time: None,
+    byte_count: None,
+};
+
+// Create a DIDComm presentation with attachment
+let presentation = DIDCommPresentation {
+    formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
+    attachments: vec![attachment],
+    thid: Some("thread-123".to_string()),
+};
+
+// Convert to DIDComm message
+let message = presentation.to_didcomm("did:example:sender")?;
+
+// Extract presentation from message
+let received = DIDCommPresentation::from_didcomm(&message)?;
+
+// Access attachment data
+if let Some(first_attachment) = received.attachments.first() {
+    match &first_attachment.data {
+        AttachmentData::Json { value } => {
+            println!("JSON data: {}", value.json);
+        },
+        AttachmentData::Base64 { value } => {
+            println!("Base64 data: {}", value.base64);
+        },
+        AttachmentData::Links { value } => {
+            println!("Links: {:?}", value.links);
+        }
+    }
 }
 ```
 

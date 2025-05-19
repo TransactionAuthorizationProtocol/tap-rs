@@ -3,13 +3,13 @@
 //! This module defines the UpdateParty message type, which is used to update
 //! party information in an existing transaction.
 
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::Participant;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 /// UpdateParty message body (TAIP-6).
 ///

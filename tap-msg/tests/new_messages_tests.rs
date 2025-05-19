@@ -6,8 +6,8 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Attachment, SimpleAttachmentData, AuthorizationRequired, Connect, ConnectionConstraints,
-    OutOfBand, Participant, Payment, PaymentBuilder, TransactionLimits,
+    Attachment, AuthorizationRequired, Connect, ConnectionConstraints, OutOfBand, Participant,
+    Payment, PaymentBuilder, SimpleAttachmentData, TransactionLimits,
 };
 
 #[test]
@@ -32,7 +32,7 @@ fn test_payment_request_with_asset() {
     };
 
     let transaction_id = uuid::Uuid::new_v4().to_string();
-    
+
     // Create the Payment using the builder pattern
     let body = PaymentBuilder::default()
         .transaction_id(transaction_id)
@@ -66,9 +66,7 @@ fn test_payment_request_with_asset() {
     );
     assert_eq!(
         message.to,
-        vec![
-            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string()
-        ]
+        vec!["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string()]
     );
 }
 
@@ -90,7 +88,8 @@ fn test_payment_request_with_currency() {
     };
 
     // Create a payment with USD currency
-    let fiat_asset = AssetId::from_str("fiat:USD").unwrap_or(AssetId::from_str("eip155:1/slip44:60").unwrap());
+    let fiat_asset =
+        AssetId::from_str("fiat:USD").unwrap_or(AssetId::from_str("eip155:1/slip44:60").unwrap());
     let body = PaymentBuilder::default()
         .asset(fiat_asset.clone())
         .currency_code("USD".to_string())
@@ -104,11 +103,12 @@ fn test_payment_request_with_currency() {
     // Add supported assets via metadata
     let mut body_with_supported_assets = body.clone();
     body_with_supported_assets.metadata.insert(
-        "supported_assets".to_string(), 
+        "supported_assets".to_string(),
         serde_json::to_value(vec![
             "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7".to_string(),
             "bip122:000000000019d6689c085ae165831e93/slip44:0".to_string(),
-        ]).unwrap()
+        ])
+        .unwrap(),
     );
 
     // Validate the message
@@ -134,18 +134,18 @@ fn test_connect_message() {
     let agent_id = "did:example:b2b-service".to_string();
     let for_id = "did:example:business-customer".to_string();
     let role = Some("ServiceAgent");
-    
+
     // Create transaction limits
     let transaction_limits = TransactionLimits {
         max_amount: Some("10000.00".to_string()),
         max_total_amount: Some("50000.00".to_string()),
         max_transactions: Some(100),
     };
-    
+
     let constraints = ConnectionConstraints {
         transaction_limits: Some(transaction_limits),
     };
-    
+
     // Create the Connect message
     let mut body = Connect::new(&transaction_id, &agent_id, &for_id, role);
     body.constraints = Some(constraints);
@@ -178,7 +178,7 @@ fn test_connect_message() {
         "test-transaction-id",
         "did:example:b2b-service",
         "did:example:business-customer",
-        None
+        None,
     );
     assert!(minimal_body.validate().is_ok());
 }
@@ -214,10 +214,7 @@ fn test_authorization_required_message() {
     );
     assert!(message.created_time.is_some());
     assert_eq!(message.from, "did:example:vasp".to_string());
-    assert_eq!(
-        message.to,
-        vec!["did:example:b2b-service".to_string()]
-    );
+    assert_eq!(message.to, vec!["did:example:b2b-service".to_string()]);
 
     // Test validation fails with empty authorization_url
     let invalid_body = AuthorizationRequired::new("".to_string(), expires_str);
@@ -310,7 +307,7 @@ fn test_out_of_band_message() {
     let invalid_body = OutOfBand::new(
         "".to_string(), // Empty goal_code - will fail validation
         "Invalid test".to_string(),
-        "https://example.com/service".to_string()
+        "https://example.com/service".to_string(),
     );
     assert!(invalid_body.validate().is_err());
 
@@ -334,7 +331,7 @@ fn test_out_of_band_message() {
     let invalid_media_type_body = OutOfBand::new(
         "test".to_string(),
         "Invalid media type test".to_string(),
-        "".to_string() // Empty service - will fail validation
+        "".to_string(), // Empty service - will fail validation
     );
     assert!(invalid_media_type_body.validate().is_err());
 }
@@ -360,7 +357,7 @@ fn test_invalid_out_of_band_message() {
     let invalid_body = OutOfBand::new(
         "".to_string(), // Empty goal_code - will fail validation
         "Invalid test".to_string(),
-        "https://example.com/service".to_string()
+        "https://example.com/service".to_string(),
     );
     assert!(invalid_body.validate().is_err());
 
@@ -383,7 +380,7 @@ fn test_invalid_out_of_band_message() {
     let invalid_media_type_body = OutOfBand::new(
         "test".to_string(),
         "Invalid media type test".to_string(),
-        "".to_string() // Empty service - will fail validation
+        "".to_string(), // Empty service - will fail validation
     );
     assert!(invalid_media_type_body.validate().is_err());
 }

@@ -3,13 +3,13 @@
 //! This module defines the UpdatePolicies message type, which is used
 //! to update policies in an existing transaction.
 
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
 use crate::message::policy::Policy;
 use crate::message::tap_message_trait::TapMessageBody;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 /// UpdatePolicies message body (TAIP-7).
 ///

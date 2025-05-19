@@ -4,9 +4,9 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::didcomm::Attachment;
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::didcomm::Attachment;
 use crate::message::tap_message_trait::TapMessageBody;
 use chrono::Utc;
 
@@ -42,12 +42,13 @@ impl TapMessageBody for DIDCommPresentation {
             if let Some(id) = &attachment.id {
                 if id.is_empty() {
                     return Err(Error::Validation(format!(
-                        "Attachment {} has an empty ID", i
+                        "Attachment {} has an empty ID",
+                        i
                     )));
                 }
             }
         }
-        
+
         // Ensure formats are present and not empty
         if self.formats.is_empty() {
             return Err(Error::Validation(
@@ -59,7 +60,8 @@ impl TapMessageBody for DIDCommPresentation {
         for (i, attachment) in self.attachments.iter().enumerate() {
             if attachment.format.is_none() {
                 return Err(Error::Validation(format!(
-                    "Attachment {} is missing the 'format' field", i
+                    "Attachment {} is missing the 'format' field",
+                    i
                 )));
             }
         }
@@ -106,15 +108,16 @@ impl TapMessageBody for DIDCommPresentation {
 
         // Extract fields from message body as Value
         let body = message.body.clone();
-        let mut body_obj = body.as_object().ok_or_else(|| 
-            Error::SerializationError("Body is not a JSON object".to_string())
-        )?.clone();
+        let mut body_obj = body
+            .as_object()
+            .ok_or_else(|| Error::SerializationError("Body is not a JSON object".to_string()))?
+            .clone();
 
         // First make sure any message-level attachments are included
         let mut attachments_in_body = if body_obj.contains_key("attachments") {
             match &body_obj["attachments"] {
                 serde_json::Value::Array(arr) => arr.clone(),
-                _ => Vec::new()
+                _ => Vec::new(),
             }
         } else {
             Vec::new()
@@ -123,15 +126,16 @@ impl TapMessageBody for DIDCommPresentation {
         // Then add any top-level message attachments
         if let Some(msg_attachments) = &message.attachments {
             // Convert message attachments to value and combine with body attachments
-            if let Ok(attachment_values) = serde_json::to_value(msg_attachments) {
-                if let serde_json::Value::Array(arr) = attachment_values {
-                    attachments_in_body.extend(arr);
-                }
+            if let Ok(serde_json::Value::Array(arr)) = serde_json::to_value(msg_attachments) {
+                attachments_in_body.extend(arr);
             }
         }
 
         // Update the body with combined attachments
-        body_obj.insert("attachments".to_string(), serde_json::Value::Array(attachments_in_body.clone()));
+        body_obj.insert(
+            "attachments".to_string(),
+            serde_json::Value::Array(attachments_in_body.clone()),
+        );
 
         // Handle missing formats field for backwards compatibility with test vectors
         if !body_obj.contains_key("formats") {
@@ -144,18 +148,22 @@ impl TapMessageBody for DIDCommPresentation {
                     }
                 }
             }
-            
+
             // If we couldn't extract formats, use a default
             if formats.is_empty() {
                 formats.push("dif/presentation-exchange/submission@v1.0".to_string());
             }
-            
-            body_obj.insert("formats".to_string(), serde_json::to_value(formats).unwrap());
+
+            body_obj.insert(
+                "formats".to_string(),
+                serde_json::to_value(formats).unwrap(),
+            );
         }
 
         // Convert the updated body to DIDCommPresentation
-        let mut presentation: DIDCommPresentation = serde_json::from_value(serde_json::Value::Object(body_obj))
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let mut presentation: DIDCommPresentation =
+            serde_json::from_value(serde_json::Value::Object(body_obj))
+                .map_err(|e| Error::SerializationError(e.to_string()))?;
 
         // Set thid from message if it's not already set in the presentation
         if presentation.thid.is_none() {
@@ -168,11 +176,7 @@ impl TapMessageBody for DIDCommPresentation {
 
 impl DIDCommPresentation {
     /// Create a new DIDCommPresentation message.
-    pub fn new(
-        formats: Vec<String>,
-        attachments: Vec<Attachment>,
-        thid: Option<String>,
-    ) -> Self {
+    pub fn new(formats: Vec<String>, attachments: Vec<Attachment>, thid: Option<String>) -> Self {
         Self {
             formats,
             attachments,

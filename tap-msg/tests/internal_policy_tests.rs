@@ -1,17 +1,16 @@
 //! Integration tests for internal policy functionality
 
-use tap_msg::didcomm::PlainMessage;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::Result;
 use tap_msg::message::tap_message_trait::Authorizable;
-use tap_msg::message::{
-    Participant, Transfer,
-    AddAgents, Authorize, Policy as TapPolicy, RequireAuthorization, RequireProofOfControl,
-    UpdatePolicies,
-};
 use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
+use tap_msg::message::{
+    AddAgents, Authorize, Participant, Policy as TapPolicy, RequireAuthorization,
+    RequireProofOfControl, Transfer, UpdatePolicies,
+};
 
 #[allow(dead_code)]
 const POLICY_ENGINE_DID: &str = "did:policy:engine";
@@ -193,8 +192,11 @@ fn test_authorizable_trait_methods() -> Result<()> {
 
     // Test RemoveAgent
     // Pass transfer_id and agent DID
-    let remove_agent_body =
-        Authorizable::remove_agent(&transfer, "test-transfer-123".to_string(), agent_to_remove.to_string());
+    let remove_agent_body = Authorizable::remove_agent(
+        &transfer,
+        "test-transfer-123".to_string(),
+        agent_to_remove.to_string(),
+    );
 
     // Validate the created message body
     assert_eq!(remove_agent_body.transaction_id, "test-transfer-123"); // Compare with known ID

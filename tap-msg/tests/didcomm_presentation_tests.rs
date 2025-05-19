@@ -1,6 +1,6 @@
-use tap_msg::didcomm::PlainMessage;
 use serde_json::json;
 use std::collections::HashMap;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{Attachment, DIDCommPresentation, TapMessageBody};
 
 #[tokio::test]
@@ -65,7 +65,8 @@ async fn test_didcomm_presentation_deserialization() {
 
     // Convert to a PlainMessage
     let message_str = message_json.to_string();
-    let message: PlainMessage = serde_json::from_str(&message_str).expect("Failed to parse message");
+    let message: PlainMessage =
+        serde_json::from_str(&message_str).expect("Failed to parse message");
 
     // Test deserialization
     let presentation = DIDCommPresentation::from_didcomm(&message)
@@ -79,8 +80,11 @@ async fn test_didcomm_presentation_deserialization() {
 
     // Check that formats field contains the provided formats
     assert_eq!(presentation.formats.len(), 1);
-    assert_eq!(presentation.formats[0], "dif/presentation-exchange/submission@v1.0");
-    
+    assert_eq!(
+        presentation.formats[0],
+        "dif/presentation-exchange/submission@v1.0"
+    );
+
     // The body has empty attachments in the JSON, and the message has external attachments
     // which should be merged in the from_didcomm function
     assert_eq!(presentation.attachments.len(), 1);
@@ -192,17 +196,23 @@ async fn test_didcomm_presentation_to_didcomm() {
 
     // Verify body contains formats
     let body = message.body.as_object().unwrap();
-    
+
     // Check if formats is in the body
     let formats = body.get("formats").unwrap().as_array().unwrap();
     assert_eq!(formats.len(), 1);
-    assert_eq!(formats[0].as_str().unwrap(), "dif/presentation-exchange/submission@v1.0");
+    assert_eq!(
+        formats[0].as_str().unwrap(),
+        "dif/presentation-exchange/submission@v1.0"
+    );
 
     // We can't directly verify attachments since they're encoded in the body
     // Instead, let's convert back to a presentation to check them
     let presentation_after = DIDCommPresentation::from_didcomm(&message).unwrap();
     assert_eq!(presentation_after.attachments.len(), 1);
-    assert_eq!(presentation_after.attachments[0].id, Some("test-attachment-id".to_string()));
+    assert_eq!(
+        presentation_after.attachments[0].id,
+        Some("test-attachment-id".to_string())
+    );
     assert_eq!(
         presentation_after.attachments[0].media_type,
         Some("application/json".to_string())
@@ -249,31 +259,31 @@ async fn test_round_trip_conversion() {
             format: Some("dif/presentation-exchange/submission@v1.0".to_string()),
             lastmod_time: None,
             byte_count: None,
-        }])
+        }]),
     };
-    
+
     // Create a presentation with attachments
     let mut presentation = DIDCommPresentation::from_didcomm(&didcomm_message).unwrap();
     presentation.formats = vec!["dif/presentation-exchange/submission@v1.0".to_string()];
     presentation.attachments = vec![Attachment {
-            id: Some("test-attachment-id".to_string()),
-            description: None,
-            filename: None,
-            media_type: Some("application/json".to_string()),
-            format: Some("dif/presentation-exchange/submission@v1.0".to_string()),
-            data: tap_msg::didcomm::AttachmentData::Json {
-                value: tap_msg::didcomm::JsonAttachmentData {
-                    json: json!({
-                        "@context": ["https://www.w3.org/2018/credentials/v1"],
-                        "type": ["VerifiablePresentation"],
-                        "test": "data"
-                    }),
-                    jws: None,
-                },
+        id: Some("test-attachment-id".to_string()),
+        description: None,
+        filename: None,
+        media_type: Some("application/json".to_string()),
+        format: Some("dif/presentation-exchange/submission@v1.0".to_string()),
+        data: tap_msg::didcomm::AttachmentData::Json {
+            value: tap_msg::didcomm::JsonAttachmentData {
+                json: json!({
+                    "@context": ["https://www.w3.org/2018/credentials/v1"],
+                    "type": ["VerifiablePresentation"],
+                    "test": "data"
+                }),
+                jws: None,
             },
-            lastmod_time: None,
-            byte_count: None,
-        }];
+        },
+        lastmod_time: None,
+        byte_count: None,
+    }];
 
     // Convert DIDComm message to DIDCommPresentation
     let presentation = DIDCommPresentation::from_didcomm(&didcomm_message).unwrap();
@@ -290,10 +300,7 @@ async fn test_round_trip_conversion() {
     let original_body = didcomm_message.body.as_object().unwrap();
 
     // Check formats are preserved
-    assert_eq!(
-        round_trip_body.get("formats"),
-        original_body.get("formats")
-    );
+    assert_eq!(round_trip_body.get("formats"), original_body.get("formats"));
 
     // Can't check attachments directly because the PlainMessage doesn't have attachments field
     // Instead of validating the attachments here, explicitly set up the test with proper attachment data

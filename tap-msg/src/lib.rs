@@ -17,7 +17,10 @@ pub mod message;
 pub mod utils;
 
 // Re-export public types for easier access
-pub use didcomm::{Attachment, OutOfBand, PlainMessage};
+pub use didcomm::{
+    Attachment, AttachmentData, Base64AttachmentData, JsonAttachmentData, LinksAttachmentData,
+    OutOfBand, PlainMessage,
+};
 pub use error::{Error, Result};
 pub use message::{
     create_tap_message, AddAgents, Authorize, DocumentReference, ErrorBody, Invoice, LineItem,

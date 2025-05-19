@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use tap_caip::AssetId;
-use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::tap_message_trait::Authorizable;
-use tap_msg::message::{Authorize, Participant, Transfer, UpdateParty, Reject, Settle};
+use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::{Authorize, Participant, Reject, Settle, Transfer, UpdateParty};
 
 #[test]
 fn test_transfer_authorizable() {

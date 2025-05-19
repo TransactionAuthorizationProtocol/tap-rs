@@ -5,8 +5,7 @@ use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::{Error, Result};
 use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
 use tap_msg::message::{
-    AddAgents, Authorize, ConfirmRelationship, Participant, RemoveAgent,
-    ReplaceAgent, Transfer,
+    AddAgents, Authorize, ConfirmRelationship, Participant, RemoveAgent, ReplaceAgent, Transfer,
 };
 // Removed unused import: Authorizable
 use uuid::Uuid;

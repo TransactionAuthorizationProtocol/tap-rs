@@ -3,12 +3,12 @@
 //! This module defines the ConfirmRelationship message type, which is used to confirm
 //! relationships between agents in the TAP protocol.
 
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 /// ConfirmRelationship message body (TAIP-9).
 ///

@@ -1,8 +1,11 @@
 //! Example usage of the new DIDComm Message approach for TAP messages.
 
-use crate::didcomm::PlainMessage;
+use crate::didcomm::{Attachment, AttachmentData, JsonAttachmentData, PlainMessage};
 use crate::error::Result;
-use crate::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
+use crate::message::{
+    Authorize, DIDCommPresentation, Participant, Reject, Settle, TapMessageBody, Transfer,
+};
+use serde_json::json;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -104,6 +107,52 @@ pub fn create_settle_message_example(transaction_id: &str) -> Result<PlainMessag
     Ok(message)
 }
 
+/// Example function for creating a DIDCommPresentation with attachments.
+pub fn create_presentation_with_attachments_example() -> Result<PlainMessage> {
+    // Create a presentation attachment with required format field
+    let attachment = Attachment {
+        id: Some("test-attachment-id".to_string()),
+        media_type: Some("application/json".to_string()),
+        data: AttachmentData::Json {
+            value: JsonAttachmentData {
+                json: json!({
+                    "@context": ["https://www.w3.org/2018/credentials/v1"],
+                    "type": ["VerifiablePresentation"],
+                    "verifiableCredential": [{
+                        "@context": ["https://www.w3.org/2018/credentials/v1"],
+                        "id": "https://example.com/credentials/1234",
+                        "type": ["VerifiableCredential"],
+                        "issuer": "did:example:issuer",
+                        "issuanceDate": "2023-01-01T12:00:00Z",
+                        "credentialSubject": {
+                            "id": "did:example:subject",
+                            "name": "Test User"
+                        }
+                    }]
+                }),
+                jws: None,
+            },
+        },
+        description: Some("Verifiable Presentation".to_string()),
+        filename: None,
+        format: Some("dif/presentation-exchange/submission@v1.0".to_string()),
+        lastmod_time: None,
+        byte_count: None,
+    };
+
+    // Create a DIDCommPresentation with format and attachment
+    let presentation = DIDCommPresentation {
+        formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
+        attachments: vec![attachment],
+        thid: Some("test-thread-id".to_string()),
+    };
+
+    // Convert to a DIDComm message
+    let message = presentation.to_didcomm("did:example:sender")?;
+
+    Ok(message)
+}
+
 /// This example shows how to use the common interface to work with various TAP message types.
 pub fn process_any_tap_message_example(message: &PlainMessage) -> Result<()> {
     // Get the message type
@@ -141,6 +190,36 @@ pub fn process_any_tap_message_example(message: &PlainMessage) -> Result<()> {
             );
             println!("Settlement ID: {}", settle.settlement_id);
             println!("Amount: {}", settle.amount.unwrap_or_default());
+        }
+        _ if type_str.contains("presentation") => {
+            // Handle DIDCommPresentation message
+            let presentation = DIDCommPresentation::from_didcomm(message)?;
+            println!(
+                "Processing Presentation with {} attachments",
+                presentation.attachments.len()
+            );
+
+            // Process attachments
+            for (i, attachment) in presentation.attachments.iter().enumerate() {
+                println!(
+                    "Attachment {}: Format: {}",
+                    i,
+                    attachment.format.as_ref().unwrap_or(&"unknown".to_string())
+                );
+
+                // Check attachment data type
+                match &attachment.data {
+                    AttachmentData::Json { value } => {
+                        println!("  JSON data: {}", value.json);
+                    }
+                    AttachmentData::Base64 { value } => {
+                        println!("  Base64 data: {} (truncated)", &value.base64[..20]);
+                    }
+                    AttachmentData::Links { value } => {
+                        println!("  Links: {:?}", value.links);
+                    }
+                }
+            }
         }
         _ => {
             println!("Unknown message type");

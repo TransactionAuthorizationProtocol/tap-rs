@@ -3,7 +3,7 @@ extern crate tap_msg;
 use std::collections::HashMap;
 use tap_caip::AssetId;
 // Removed unused import: PlainMessage
-use tap_msg::message::tap_message_trait::{create_tap_message, TapMessageBody, TapMessage};
+use tap_msg::message::tap_message_trait::{create_tap_message, TapMessage, TapMessageBody};
 use tap_msg::message::{Participant, Transfer};
 
 /// Tests that the to_didcomm method automatically extracts all agent DIDs when no sender is specified

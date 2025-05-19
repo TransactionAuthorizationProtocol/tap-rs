@@ -5,10 +5,10 @@
 //!
 //! Run with: cargo bench --bench message_benchmark
 
-use tap_msg::didcomm::PlainMessage;
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::collections::HashMap;
 use tap_caip::AssetId;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
 
 // Configure bench

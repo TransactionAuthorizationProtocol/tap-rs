@@ -3,12 +3,12 @@
 //! This module defines the Settle message type, which is used
 //! for settling transactions in the TAP protocol.
 
-use chrono::Utc;
-use serde::{Deserialize, Serialize};
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use chrono::Utc;
+use serde::{Deserialize, Serialize};
 
 /// Settle message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize)]
