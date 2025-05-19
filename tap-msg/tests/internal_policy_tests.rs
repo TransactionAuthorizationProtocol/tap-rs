@@ -9,8 +9,9 @@ use tap_msg::message::authorizable::Authorizable;
 use tap_msg::message::{
     Participant, Transfer,
     AddAgents, Authorize, Policy as TapPolicy, RequireAuthorization, RequireProofOfControl,
-    TapMessage, TapMessageBody, UpdatePolicies,
+    UpdatePolicies,
 };
+use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
 
 #[allow(dead_code)]
 const POLICY_ENGINE_DID: &str = "did:policy:engine";
@@ -59,7 +60,7 @@ fn create_test_transfer() -> Result<PlainMessage> {
     };
 
     transfer.to_didcomm_with_route(
-        Some(originator_did),
+        originator_did,
         [
             beneficiary_did,
             "did:example:sender_vasp",

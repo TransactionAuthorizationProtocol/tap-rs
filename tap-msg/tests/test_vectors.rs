@@ -9,10 +9,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use didcomm::Message as DIDCommMessage;
+use tap_msg::didcomm::PlainMessage as DIDCommMessage;
 use tap_caip::AssetId;
-use tap_msg::message::types::Transfer;
-use tap_msg::Participant;
+use tap_msg::message::Transfer;
+use tap_msg::message::Participant;
 
 #[derive(Debug, PartialEq)]
 enum TestResult {
