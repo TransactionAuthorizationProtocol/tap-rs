@@ -6,12 +6,11 @@ use std::sync::Arc;
 use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
 
-use tap_agent::crypto::{BasicSecretResolver, DebugSecretsResolver, DefaultMessagePacker};
+use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{
     DIDDoc, DIDMethodResolver, MultiResolver, Service, VerificationMethod, VerificationMethodType,
 };
-use tap_agent::key_manager::{DefaultKeyManager, KeyManager, Secret, SecretMaterial, SecretType};
-use tap_agent::message::SecurityMode;
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::TapMessageBody;
 
 /// A simple test message type

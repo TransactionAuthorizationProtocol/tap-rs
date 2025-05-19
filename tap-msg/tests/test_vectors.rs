@@ -744,7 +744,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                         Err(e) => {
                             if test_vector.should_pass {
                                 // If the test has "missing-required-fields" or similar in the path, we expect it to fail
-                                if vector_has_invalid_path(&test_vector) {
+                                if vector_has_invalid_path(test_vector) {
                                     Ok(TestResult::Success)
                                 } else {
                                     Ok(TestResult::Failure {
@@ -762,7 +762,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                 Err(e) => {
                     if test_vector.should_pass {
                         // Check if this is an expected failure (e.g., "invalid" in path)
-                        if vector_has_invalid_path(&test_vector) {
+                        if vector_has_invalid_path(test_vector) {
                             Ok(TestResult::Success)
                         } else {
                             Ok(TestResult::Failure {
@@ -780,7 +780,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
         Err(e) => {
             if test_vector.should_pass {
                 // If this test has "missing" or "invalid" or similar in the path, it's expected to fail
-                if vector_has_invalid_path(&test_vector) {
+                if vector_has_invalid_path(test_vector) {
                     Ok(TestResult::Success)
                 } else {
                     Ok(TestResult::Failure {
@@ -924,7 +924,7 @@ fn validate_message_vector(
         }
         Err(e) => {
             // If we can't convert to a DIDComm message
-            if test_vector.should_pass && !vector_has_invalid_path(&test_vector) {
+            if test_vector.should_pass && !vector_has_invalid_path(test_vector) {
                 Ok(TestResult::Failure {
                     expected: true,
                     actual: false,
@@ -1617,11 +1617,8 @@ pub fn get_compatibility_status(message_type: &str) -> (usize, usize) {
 
     // Run each test vector
     for vector_path in &vector_files {
-        match run_test_vector(vector_path) {
-            Ok(TestResult::Success) => {
-                success_count += 1;
-            }
-            _ => {}
+        if let Ok(TestResult::Success) = run_test_vector(vector_path) {
+            success_count += 1;
         }
     }
 

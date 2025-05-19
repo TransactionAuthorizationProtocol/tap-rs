@@ -1,6 +1,5 @@
 //! Example of using the TAP event logger
 
-use log;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -84,6 +83,7 @@ async fn simulate_agent_setup(event_logger: &Arc<EventLogger>) {
 
     // TestDIDResolver - a mock DID resolver
     #[derive(Debug)]
+    #[allow(dead_code)]
     struct TestDIDResolver;
 
     // Replace TestDIDResolver with MultiResolver

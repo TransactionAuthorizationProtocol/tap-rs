@@ -97,28 +97,28 @@ fn bench_to_didcomm(c: &mut Criterion) {
     // Benchmark Transfer messages
     group.bench_function("transfer", |b| {
         b.iter(|| {
-            let _: PlainMessage = transfer_body.to_didcomm(&did).unwrap();
+            let _: PlainMessage = transfer_body.to_didcomm(did).unwrap();
         })
     });
 
     // Benchmark Authorize messages
     group.bench_function("authorize", |b| {
         b.iter(|| {
-            let _: PlainMessage = authorize_body.to_didcomm(&did).unwrap();
+            let _: PlainMessage = authorize_body.to_didcomm(did).unwrap();
         })
     });
 
     // Benchmark Reject messages
     group.bench_function("reject", |b| {
         b.iter(|| {
-            let _: PlainMessage = reject_body.to_didcomm(&did).unwrap();
+            let _: PlainMessage = reject_body.to_didcomm(did).unwrap();
         })
     });
 
     // Benchmark Settle messages
     group.bench_function("settle", |b| {
         b.iter(|| {
-            let _: PlainMessage = settle_body.to_didcomm(&did).unwrap();
+            let _: PlainMessage = settle_body.to_didcomm(did).unwrap();
         })
     });
 
@@ -132,16 +132,16 @@ fn bench_from_didcomm(c: &mut Criterion) {
 
     // Create test message bodies and convert to DIDComm messages
     let transfer_body = create_transfer_body();
-    let transfer_message = transfer_body.to_didcomm(&did).unwrap();
+    let transfer_message = transfer_body.to_didcomm(did).unwrap();
 
     let authorize_body = create_authorize_body();
-    let authorize_message = authorize_body.to_didcomm(&did).unwrap();
+    let authorize_message = authorize_body.to_didcomm(did).unwrap();
 
     let reject_body = create_reject_body();
-    let reject_message = reject_body.to_didcomm(&did).unwrap();
+    let reject_message = reject_body.to_didcomm(did).unwrap();
 
     let settle_body = create_settle_body();
-    let settle_message = settle_body.to_didcomm(&did).unwrap();
+    let settle_message = settle_body.to_didcomm(did).unwrap();
 
     // Benchmark Transfer messages
     group.bench_function("transfer", |b| {
