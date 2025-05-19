@@ -30,13 +30,8 @@ base64 = "0.21"
 ed25519-dalek = { version = "2.0.0", features = ["rand_core"] }
 rand = "0.8"
 
-[dependencies.wee_alloc]
-version = "0.4.5"
-optional = true
-
 [features]
 default = ["console_error_panic_hook"]
-wee_alloc = ["dep:wee_alloc"]
 
 [dev-dependencies]
 wasm-bindgen-test = { workspace = true }

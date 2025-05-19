@@ -241,6 +241,7 @@ impl BasicSecretResolver {
 #[global_allocator]
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
+
 /// Set up panic hook for better error messages when debugging in browser
 #[wasm_bindgen(start)]
 pub fn start() -> Result<(), JsValue> {
