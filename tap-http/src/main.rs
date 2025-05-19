@@ -7,10 +7,10 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::DefaultAgent;
 use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
-use tap_msg::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_node::{NodeConfig, TapNode};
 use tracing::{debug, error, info};
 

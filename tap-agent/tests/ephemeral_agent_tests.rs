@@ -85,8 +85,9 @@ async fn test_ephemeral_agent_signing() {
         .unwrap();
 
     // Agent 2 receives and unpacks the message - in a test environment this might fail
-    let unpack_result: Result<TestMessage, tap_agent::error::Error> = agent2.receive_message(&packed_message).await;
-        
+    let unpack_result: Result<TestMessage, tap_agent::error::Error> =
+        agent2.receive_message(&packed_message).await;
+
     if let Ok(received_message) = unpack_result {
         // Verify the message content
         assert_eq!(received_message.message_text, "Hello, World!");
@@ -159,15 +160,18 @@ mod key_type_tests {
             .send_message(&message, vec![&did2], false)
             .await
             .unwrap();
-    
+
         // In test environment, signature verification might fail
         match agent2.receive_message::<TestMessage>(&packed_message).await {
             Ok(received_message) => {
                 assert_eq!(received_message.message_text, "Ed25519 test");
-            },
+            }
             Err(e) => {
                 // If verification fails in the test environment, that's expected
-                println!("Signature verification failed: {:?}, which is expected in test mode", e);
+                println!(
+                    "Signature verification failed: {:?}, which is expected in test mode",
+                    e
+                );
             }
         }
     }

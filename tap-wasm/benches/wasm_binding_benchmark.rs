@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Participant, Reject, TapMessageBody, Transfer};
-use tap_msg::PlainMessage as DIDCommMessage;
+use tap_msg::PlainMessage;
 
 /// Create a test transfer message body
 fn create_transfer_body() -> Transfer {
@@ -45,9 +45,9 @@ fn create_transfer_body() -> Transfer {
 }
 
 /// Create a message for testing
-fn create_test_message() -> DIDCommMessage {
+fn create_test_message() -> PlainMessage {
     let transfer_body = create_transfer_body();
-    transfer_body.to_didcomm(None).unwrap()
+    transfer_body.to_didcomm("did:example:alice").unwrap()
 }
 
 /// Benchmark JSON serialization and deserialization performance
@@ -71,7 +71,7 @@ fn bench_serialization(c: &mut Criterion) {
     // Test JSON deserialization (mimics WASM import)
     group.bench_function("json_to_message", |b| {
         b.iter(|| {
-            let _: DIDCommMessage = serde_json::from_str(&json).unwrap();
+            let _: PlainMessage = serde_json::from_str(&json).unwrap();
         })
     });
 
@@ -84,13 +84,13 @@ fn bench_message_conversion(c: &mut Criterion) {
 
     // Create messages of different types
     let transfer_body = create_transfer_body();
-    let transfer_message = transfer_body.to_didcomm(None).unwrap();
+    let transfer_message = transfer_body.to_didcomm("did:example:alice").unwrap();
 
     let authorize_body = Authorize {
         transaction_id: "test-transfer-id".to_string(),
         note: Some("Transfer authorized".to_string()),
     };
-    let authorize_message = authorize_body.to_didcomm(None).unwrap();
+    let authorize_message = authorize_body.to_didcomm("did:example:alice").unwrap();
 
     let reject_body = Reject {
         transaction_id: "test-transfer-id".to_string(),
@@ -98,7 +98,7 @@ fn bench_message_conversion(c: &mut Criterion) {
             "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Rejected for testing."
                 .to_string(),
     };
-    let reject_message = reject_body.to_didcomm(None).unwrap();
+    let reject_message = reject_body.to_didcomm("did:example:alice").unwrap();
 
     // Serialize messages
     let transfer_json = serde_json::to_string(&transfer_message).unwrap();
@@ -108,21 +108,21 @@ fn bench_message_conversion(c: &mut Criterion) {
     // Benchmark message type detection and conversion
     group.bench_function("detect_transfer", |b| {
         b.iter(|| {
-            let parsed: DIDCommMessage = serde_json::from_str(&transfer_json).unwrap();
+            let parsed: PlainMessage = serde_json::from_str(&transfer_json).unwrap();
             let _: Transfer = Transfer::from_didcomm(&parsed).unwrap();
         })
     });
 
     group.bench_function("detect_authorize", |b| {
         b.iter(|| {
-            let parsed: DIDCommMessage = serde_json::from_str(&authorize_json).unwrap();
+            let parsed: PlainMessage = serde_json::from_str(&authorize_json).unwrap();
             let _: Authorize = Authorize::from_didcomm(&parsed).unwrap();
         })
     });
 
     group.bench_function("detect_reject", |b| {
         b.iter(|| {
-            let parsed: DIDCommMessage = serde_json::from_str(&reject_json).unwrap();
+            let parsed: PlainMessage = serde_json::from_str(&reject_json).unwrap();
             let _: Reject = Reject::from_didcomm(&parsed).unwrap();
         })
     });

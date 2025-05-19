@@ -15,8 +15,8 @@ use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
-use tap_caip::AssetId;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle, Transfer};
 use tap_msg::Participant;
 

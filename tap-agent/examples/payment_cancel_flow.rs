@@ -54,7 +54,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Generate a unique transaction ID
         let transaction_id = uuid::Uuid::new_v4().to_string();
 
-        let payment = create_payment_message(&merchant_did, &customer_did, settlement_address, &transaction_id);
+        let payment = create_payment_message(
+            &merchant_did,
+            &customer_did,
+            settlement_address,
+            &transaction_id,
+        );
         println!("Payment details:");
         println!("  Asset: {}", payment.asset.as_ref().unwrap());
         println!("  Amount: {}", payment.amount);

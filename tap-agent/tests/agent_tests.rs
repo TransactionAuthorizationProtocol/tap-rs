@@ -14,9 +14,8 @@ use tap_agent::did::{
 use tap_agent::error::{Error, Result};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::didcomm::PlainMessage;
-use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
+use tap_msg::error::Result as TapCoreResult;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use uuid::Uuid;
 
 // Test message for agent tests
 #[derive(Debug, Clone, Serialize, Deserialize)]
