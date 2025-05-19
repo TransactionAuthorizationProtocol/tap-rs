@@ -19,7 +19,7 @@
 //! async fn example() {
 //!     // Create a new TAP node
 //!     let node = TapNode::new(NodeConfig::default());
-//!     
+//!
 //!     // Configure the event logger
 //!     let logger_config = EventLoggerConfig {
 //!         destination: LogDestination::File {
@@ -30,11 +30,11 @@
 //!         structured: true, // Use JSON format
 //!         log_level: log::Level::Info,
 //!     };
-//!     
+//!
 //!     // Create and subscribe the event logger
 //!     let event_logger = Arc::new(EventLogger::new(logger_config));
 //!     node.get_event_bus().subscribe(event_logger).await;
-//!     
+//!
 //!     // The event logger will now receive and log all events
 //! }
 //! ```
@@ -216,10 +216,10 @@ impl EventLogger {
         let timestamp = DateTime::<Utc>::from(SystemTime::now()).format("%Y-%m-%dT%H:%M:%S%.3fZ");
 
         match event {
-            NodeEvent::MessageReceived { message } => {
+            NodeEvent::PlainMessageReceived { message } => {
                 format!("[{}] MESSAGE RECEIVED: {}", timestamp, message)
             }
-            NodeEvent::MessageSent { message, from, to } => {
+            NodeEvent::PlainMessageSent { message, from, to } => {
                 format!(
                     "[{}] MESSAGE SENT: from={}, to={}, message={}",
                     timestamp, from, to, message
@@ -237,7 +237,7 @@ impl EventLogger {
                     timestamp, did, success
                 )
             }
-            NodeEvent::AgentMessage { did, message } => {
+            NodeEvent::AgentPlainMessage { did, message } => {
                 format!(
                     "[{}] AGENT MESSAGE: did={}, message_length={}",
                     timestamp,
@@ -255,13 +255,13 @@ impl EventLogger {
 
         // Create event-specific fields
         let (event_type, event_data) = match event {
-            NodeEvent::MessageReceived { message } => (
+            NodeEvent::PlainMessageReceived { message } => (
                 "message_received",
                 json!({
                     "message": message,
                 }),
             ),
-            NodeEvent::MessageSent { message, from, to } => (
+            NodeEvent::PlainMessageSent { message, from, to } => (
                 "message_sent",
                 json!({
                     "from": from,
@@ -288,7 +288,7 @@ impl EventLogger {
                     "success": success,
                 }),
             ),
-            NodeEvent::AgentMessage { did, message } => (
+            NodeEvent::AgentPlainMessage { did, message } => (
                 "agent_message",
                 json!({
                     "did": did,

@@ -9,10 +9,10 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use didcomm::Message as DIDCommMessage;
 use tap_caip::AssetId;
-use tap_msg::message::types::Transfer;
-use tap_msg::Participant;
+use tap_msg::didcomm::PlainMessage;
+use tap_msg::message::Participant;
+use tap_msg::message::Transfer;
 
 #[derive(Debug, PartialEq)]
 enum TestResult {
@@ -341,7 +341,7 @@ fn test_tap_vectors() {
 }
 
 /// Helper function to convert test vector message to DIDComm message
-fn convert_to_didcomm_message(message: &serde_json::Value) -> Result<DIDCommMessage, String> {
+fn convert_to_didcomm_message(message: &serde_json::Value) -> Result<PlainMessage, String> {
     // Deserialize to our intermediate structure
     let test_message: TestVectorMessage = serde_json::from_value(message.clone())
         .map_err(|e| format!("Failed to parse message: {}", e))?;
@@ -427,13 +427,13 @@ fn convert_to_didcomm_message(message: &serde_json::Value) -> Result<DIDCommMess
         None => None,
     };
 
-    let didcomm_message = DIDCommMessage {
+    let didcomm_message = PlainMessage {
         id,
         typ: "application/didcomm-plain+json".to_string(),
         type_: message_type,
         body,
-        from: Some(test_message.from.clone()),
-        to: Some(test_message.to.clone()),
+        from: test_message.from.clone(),
+        to: test_message.to.clone(),
         thid: None,
         pthid: None,
         extra_headers: std::collections::HashMap::new(),
@@ -744,7 +744,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                         Err(e) => {
                             if test_vector.should_pass {
                                 // If the test has "missing-required-fields" or similar in the path, we expect it to fail
-                                if vector_has_invalid_path(&test_vector) {
+                                if vector_has_invalid_path(test_vector) {
                                     Ok(TestResult::Success)
                                 } else {
                                     Ok(TestResult::Failure {
@@ -762,7 +762,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                 Err(e) => {
                     if test_vector.should_pass {
                         // Check if this is an expected failure (e.g., "invalid" in path)
-                        if vector_has_invalid_path(&test_vector) {
+                        if vector_has_invalid_path(test_vector) {
                             Ok(TestResult::Success)
                         } else {
                             Ok(TestResult::Failure {
@@ -780,7 +780,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
         Err(e) => {
             if test_vector.should_pass {
                 // If this test has "missing" or "invalid" or similar in the path, it's expected to fail
-                if vector_has_invalid_path(&test_vector) {
+                if vector_has_invalid_path(test_vector) {
                     Ok(TestResult::Success)
                 } else {
                     Ok(TestResult::Failure {
@@ -924,7 +924,7 @@ fn validate_message_vector(
         }
         Err(e) => {
             // If we can't convert to a DIDComm message
-            if test_vector.should_pass && !vector_has_invalid_path(&test_vector) {
+            if test_vector.should_pass && !vector_has_invalid_path(test_vector) {
                 Ok(TestResult::Failure {
                     expected: true,
                     actual: false,
@@ -938,7 +938,7 @@ fn validate_message_vector(
 }
 
 /// Helper function to extract transferId from DIDComm message
-fn extract_transfer_id(didcomm_message: &didcomm::Message) -> String {
+fn extract_transfer_id(didcomm_message: &PlainMessage) -> String {
     // First try to use thid if present
     if let Some(thid) = &didcomm_message.thid {
         return thid.clone();
@@ -949,10 +949,7 @@ fn extract_transfer_id(didcomm_message: &didcomm::Message) -> String {
 }
 
 /// Perform specific validation for a message type
-fn perform_specific_validation(
-    message: &DIDCommMessage,
-    expected_type: &str,
-) -> Result<(), String> {
+fn perform_specific_validation(message: &PlainMessage, expected_type: &str) -> Result<(), String> {
     // Extract the body of the message
     let body = match message.body.as_object() {
         Some(obj) => obj,
@@ -1620,11 +1617,8 @@ pub fn get_compatibility_status(message_type: &str) -> (usize, usize) {
 
     // Run each test vector
     for vector_path in &vector_files {
-        match run_test_vector(vector_path) {
-            Ok(TestResult::Success) => {
-                success_count += 1;
-            }
-            _ => {}
+        if let Ok(TestResult::Success) = run_test_vector(vector_path) {
+            success_count += 1;
         }
     }
 

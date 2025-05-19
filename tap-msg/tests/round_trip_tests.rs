@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::result::Result;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{Participant, TapMessageBody, Transfer};
 
 /// Test the round-trip conversion between TAP messages and DIDComm messages.
@@ -47,17 +47,17 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
 
     // Pack the message using the direct conversion method
     let to_dids = [to_did];
-    let didcomm_message = body.to_didcomm_with_route(Some(from_did), to_dids.iter().copied())?;
+    let didcomm_message = body.to_didcomm_with_route(from_did, to_dids.iter().copied())?;
 
     // Serialize to JSON string
     let packed_message = serde_json::to_string(&didcomm_message)?;
 
-    // Deserialize back to a DIDComm message
-    let unpacked_message: Message = serde_json::from_str(&packed_message)?;
+    // Deserialize back to a PlainMessage
+    let unpacked_message: PlainMessage = serde_json::from_str(&packed_message)?;
 
     // Extract the message metadata
-    assert_eq!(unpacked_message.from, Some(from_did.to_string()));
-    assert_eq!(unpacked_message.to, Some(vec![to_did.to_string()]));
+    assert_eq!(unpacked_message.from, from_did.to_string());
+    assert_eq!(unpacked_message.to, vec![to_did.to_string()]);
     assert_eq!(unpacked_message.type_, Transfer::message_type());
 
     // Extract the message body

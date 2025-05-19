@@ -2,9 +2,13 @@
 //!
 //! This module provides command-line utilities for creating and managing
 //! Decentralized Identifiers (DIDs) and associated cryptographic keys.
+//!
+//! This module is only available when the `native` feature is enabled.
+#![cfg(feature = "native")]
 
 use crate::did::{
     DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyType, MultiResolver, SyncDIDResolver,
+    VerificationMaterial,
 };
 use crate::error::{Error, Result};
 use base64::Engine;
@@ -230,7 +234,7 @@ fn lookup_did(did: &str, output: Option<PathBuf>) -> Result<()> {
                 println!("      Controller: {}", vm.controller);
 
                 match &vm.verification_material {
-                    didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
+                    VerificationMaterial::JWK { public_key_jwk } => {
                         println!("      Material: JWK");
                         if let Some(kty) = public_key_jwk.get("kty") {
                             println!("        Key Type: {}", kty);
@@ -239,11 +243,11 @@ fn lookup_did(did: &str, output: Option<PathBuf>) -> Result<()> {
                             println!("        Curve: {}", crv);
                         }
                     }
-                    didcomm::did::VerificationMaterial::Base58 { public_key_base58 } => {
+                    VerificationMaterial::Base58 { public_key_base58 } => {
                         println!("      Material: Base58");
                         println!("        Key: {}", public_key_base58);
                     }
-                    didcomm::did::VerificationMaterial::Multibase {
+                    VerificationMaterial::Multibase {
                         public_key_multibase,
                     } => {
                         println!("      Material: Multibase");

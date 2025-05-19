@@ -10,13 +10,12 @@ use crate::error::{Error, Result};
 use crate::event::EventBus;
 use bytes::Bytes;
 use chrono;
-use didcomm::Message;
 use serde::Serialize;
 use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Instant;
-use tap_msg::didcomm;
+use tap_msg::didcomm::PlainMessage;
 use tap_node::TapNode;
 use tracing::{debug, error, info, warn};
 use warp::{self, hyper::StatusCode, reply::json, Reply};
@@ -133,7 +132,7 @@ pub async fn handle_didcomm(
 
     // Parse the DIDComm message
     debug!("Parsing DIDComm message");
-    let didcomm_message: Message = match serde_json::from_str(message_str) {
+    let didcomm_message: PlainMessage = match serde_json::from_str(message_str) {
         Ok(msg) => msg,
         Err(e) => {
             error!("Failed to parse DIDComm message: {}", e);
@@ -167,8 +166,12 @@ pub async fn handle_didcomm(
         .publish_message_received(
             didcomm_message.id.clone(),
             didcomm_message.typ.clone(),
-            didcomm_message.from.clone(),
-            didcomm_message.to.clone().map(|to| to.join(", ")),
+            Some(didcomm_message.from.clone()),
+            if didcomm_message.to.is_empty() {
+                None
+            } else {
+                Some(didcomm_message.to.join(", "))
+            },
         )
         .await;
 
@@ -267,7 +270,7 @@ pub async fn handle_didcomm(
 /// * The message is missing required fields
 /// * The message type is not a valid TAP protocol message
 /// * The TAP Node encounters an error during processing
-async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()> {
+async fn process_tap_message(message: PlainMessage, node: Arc<TapNode>) -> Result<()> {
     // Basic validation for the message
     // Ensure message has required fields
     if message.typ.is_empty() || message.id.is_empty() {
@@ -277,14 +280,14 @@ async fn process_tap_message(message: Message, node: Arc<TapNode>) -> Result<()>
     }
 
     // Check for missing from/to fields if required
-    if message.from.is_none() || message.to.is_none() || message.to.as_ref().unwrap().is_empty() {
+    if message.from.is_empty() || message.to.is_empty() {
         return Err(Error::Validation(
             "Message missing sender or recipient information".to_string(),
         ));
     }
 
     // Log the complete message for debugging (always log this for now)
-    error!("RECEIVED DIDCOMM MESSAGE BEFORE PROCESSING:\n- id: {}\n- typ: {}\n- type_: {}\n- from: {:?}\n- to: {:?}\n- body: {}\n", 
+    error!("RECEIVED DIDCOMM MESSAGE BEFORE PROCESSING:\n- id: {}\n- typ: {}\n- type_: {}\n- from: {}\n- to: {:?}\n- body: {}\n", 
            message.id, message.typ, message.type_, message.from, message.to,
            serde_json::to_string_pretty(&message.body).unwrap_or_default());
 

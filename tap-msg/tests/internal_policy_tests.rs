@@ -1,21 +1,22 @@
 //! Integration tests for internal policy functionality
 
-use didcomm::Message;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::Result;
+use tap_msg::message::tap_message_trait::Authorizable;
+use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
 use tap_msg::message::{
-    types::{Authorizable, Participant, Transfer},
-    AddAgents, Authorize, Policy as TapPolicy, RequireAuthorization, RequireProofOfControl,
-    TapMessage, TapMessageBody, UpdatePolicies,
+    AddAgents, Authorize, Participant, Policy as TapPolicy, RequireAuthorization,
+    RequireProofOfControl, Transfer, UpdatePolicies,
 };
 
 #[allow(dead_code)]
 const POLICY_ENGINE_DID: &str = "did:policy:engine";
 
 // Helper function to create a test transfer message
-fn create_test_transfer() -> Result<Message> {
+fn create_test_transfer() -> Result<PlainMessage> {
     let originator_did = "did:example:originator";
     let beneficiary_did = "did:example:beneficiary";
     let _sender_vasp_did = "did:example:sender_vasp";
@@ -58,7 +59,7 @@ fn create_test_transfer() -> Result<Message> {
     };
 
     transfer.to_didcomm_with_route(
-        Some(originator_did),
+        originator_did,
         [
             beneficiary_did,
             "did:example:sender_vasp",
@@ -104,7 +105,7 @@ fn test_update_policies() -> Result<()> {
     assert_eq!(update_policies.policies.len(), 2);
 
     // Convert to DIDComm message
-    let didcomm_message = update_policies.to_didcomm(Some("did:example:sender_vasp"))?;
+    let didcomm_message = update_policies.to_didcomm("did:example:sender_vasp")?;
 
     // DEBUG: Print the JSON structure of the message body
     println!(
@@ -147,7 +148,7 @@ fn test_add_agents() -> Result<()> {
     assert_eq!(add_agents.agents[0].role, Some("observer".to_string()));
 
     // Convert to DIDComm message and check that it can be properly deserialized
-    let didcomm_message = add_agents.to_didcomm(Some("did:example:sender_vasp"))?;
+    let didcomm_message = add_agents.to_didcomm("did:example:sender_vasp")?;
     let parsed_body = didcomm_message.body_as::<AddAgents>()?;
     assert_eq!(parsed_body.agents.len(), 1);
     assert_eq!(parsed_body.agents[0].id, new_agent_did);
@@ -173,7 +174,8 @@ fn test_authorizable_trait_methods() -> Result<()> {
 
     // Use the Authorizable trait methods on the Transfer struct
     // replace_agent expects transfer_id, original DID, and replacement Participant
-    let replace_agent_body = transfer.replace_agent(
+    let replace_agent_body = Authorizable::replace_agent(
+        &transfer,
         "test-transfer-123".to_string(), // Pass the known transfer_id
         original_agent_did.to_string(),
         replacement.clone(),
@@ -190,8 +192,11 @@ fn test_authorizable_trait_methods() -> Result<()> {
 
     // Test RemoveAgent
     // Pass transfer_id and agent DID
-    let remove_agent_body =
-        transfer.remove_agent("test-transfer-123".to_string(), agent_to_remove.to_string());
+    let remove_agent_body = Authorizable::remove_agent(
+        &transfer,
+        "test-transfer-123".to_string(),
+        agent_to_remove.to_string(),
+    );
 
     // Validate the created message body
     assert_eq!(remove_agent_body.transaction_id, "test-transfer-123"); // Compare with known ID
@@ -229,14 +234,14 @@ fn test_reply_creation_maintains_thread() -> Result<()> {
     };
 
     // Create a reply using the TapMessageBody trait
-    let mut reply = update_policies.to_didcomm(Some("did:example:sender_vasp"))?;
+    let mut reply = update_policies.to_didcomm("did:example:sender_vasp")?;
 
     // Manually set the thread ID for the reply
     reply.thid = Some(transfer_message.id.clone());
 
     // Verify that thread correlation is maintained
     assert_eq!(reply.thid, Some(transfer_message.id.clone()));
-    assert_eq!(reply.from, Some(creator_did.to_string()));
+    assert_eq!(reply.from, creator_did.to_string());
 
     // Verify that the message body contains the right content
     let body = reply.body_as::<UpdatePolicies>()?;
@@ -266,7 +271,7 @@ fn test_reply_chain() -> Result<()> {
         })],
     };
 
-    let mut policies_message = update_policies.to_didcomm(Some("did:example:sender_vasp"))?;
+    let mut policies_message = update_policies.to_didcomm("did:example:sender_vasp")?;
     policies_message.thid = Some(transfer_message.id.clone());
 
     // Step 2: Beneficiary authorizes in response
@@ -276,7 +281,7 @@ fn test_reply_chain() -> Result<()> {
     };
 
     // Pass sender DID as required by compiler here
-    let mut authorize_message = authorize.to_didcomm(Some("did:example:beneficiary"))?;
+    let mut authorize_message = authorize.to_didcomm("did:example:beneficiary")?;
     authorize_message.thid = Some(transfer_message.id.clone());
 
     // Step 3: VASP adds an agent
@@ -291,7 +296,7 @@ fn test_reply_chain() -> Result<()> {
     };
 
     // Pass sender DID as required by compiler here
-    let mut add_agents_message = add_agents.to_didcomm(Some("did:example:sender_vasp"))?;
+    let mut add_agents_message = add_agents.to_didcomm("did:example:sender_vasp")?;
     add_agents_message.thid = Some(transfer_message.id.clone());
 
     // Verify thread correlation is maintained throughout the chain

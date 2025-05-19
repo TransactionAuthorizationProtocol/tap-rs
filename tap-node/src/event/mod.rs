@@ -8,12 +8,12 @@
 //!
 //! The `NodeEvent` enum defines all the possible events that can be emitted by the TAP Node:
 //!
-//! - **MessageReceived**: When a message is received by an agent
-//! - **MessageSent**: When a message is sent from an agent to another
+//! - **PlainMessageReceived**: When a message is received by an agent
+//! - **PlainMessageSent**: When a message is sent from an agent to another
 //! - **AgentRegistered**: When a new agent is registered with the node
 //! - **AgentUnregistered**: When an agent is removed from the node
 //! - **DidResolved**: When a DID is resolved (successfully or not)
-//! - **AgentMessage**: Raw message data intended for an agent
+//! - **AgentPlainMessage**: Raw message data intended for an agent
 //!
 //! ## Subscription Models
 //!
@@ -44,8 +44,8 @@
 //! impl EventSubscriber for LoggingEventHandler {
 //!     async fn handle_event(&self, event: NodeEvent) {
 //!         match event {
-//!             NodeEvent::MessageReceived { message } => {
-//!                 println!("Message received: {:?}", message);
+//!             NodeEvent::PlainMessageReceived { message } => {
+//!                 println!("PlainMessage received: {:?}", message);
 //!             },
 //!             NodeEvent::AgentRegistered { did } => {
 //!                 println!("Agent registered: {}", did);
@@ -77,8 +77,8 @@
 //!     spawn(async move {
 //!         while let Ok(event) = receiver.recv().await {
 //!             match event {
-//!                 NodeEvent::MessageSent { message, from, to } => {
-//!                     println!("Message sent from {} to {}", from, to);
+//!                 NodeEvent::PlainMessageSent { message, from, to } => {
+//!                     println!("PlainMessage sent from {} to {}", from, to);
 //!                 },
 //!                 // Handle other events...
 //!                 _ => {}
@@ -127,7 +127,7 @@ pub mod logger;
 use async_trait::async_trait;
 use serde_json::Value;
 use std::sync::Arc;
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 use tokio::sync::{broadcast, RwLock};
 
 /// Event types that can be emitted by the TAP Node
@@ -140,10 +140,10 @@ use tokio::sync::{broadcast, RwLock};
 ///
 /// Events are broadly categorized into:
 ///
-/// - **Message Events**: Related to message processing and delivery (MessageReceived, MessageSent)
+/// - **PlainMessage Events**: Related to message processing and delivery (PlainMessageReceived, PlainMessageSent)
 /// - **Agent Events**: Related to agent lifecycle management (AgentRegistered, AgentUnregistered)
 /// - **Resolution Events**: Related to DID resolution (DidResolved)
-/// - **Raw Message Events**: Raw binary messages for agents (AgentMessage)
+/// - **Raw PlainMessage Events**: Raw binary messages for agents (AgentPlainMessage)
 ///
 /// # Usage
 ///
@@ -154,8 +154,8 @@ use tokio::sync::{broadcast, RwLock};
 ///
 /// fn process_event(event: NodeEvent) {
 ///     match event {
-///         NodeEvent::MessageReceived { message } => {
-///             println!("Message received: {:?}", message);
+///         NodeEvent::PlainMessageReceived { message } => {
+///             println!("PlainMessage received: {:?}", message);
 ///         },
 ///         NodeEvent::AgentRegistered { did } => {
 ///             println!("Agent registered: {}", did);
@@ -182,7 +182,7 @@ pub enum NodeEvent {
     /// - Monitoring and logging received messages
     /// - Triggering follow-up actions based on message content
     /// - Auditing message flow through the system
-    MessageReceived {
+    PlainMessageReceived {
         /// The received message as a JSON Value
         message: Value,
     },
@@ -203,7 +203,7 @@ pub enum NodeEvent {
     /// - Tracking message delivery
     /// - Analyzing communication patterns
     /// - Generating message delivery receipts
-    MessageSent {
+    PlainMessageSent {
         /// The sent message as a JSON Value
         message: Value,
         /// The DID of the sending agent
@@ -287,7 +287,7 @@ pub enum NodeEvent {
     /// - Direct message delivery to agents
     /// - Integration with transport-specific mechanisms
     /// - Binary protocol support
-    AgentMessage {
+    AgentPlainMessage {
         /// The DID of the target agent
         did: String,
         /// The raw binary message data
@@ -440,16 +440,16 @@ impl EventBus {
     }
 
     /// Publish a message received event
-    pub async fn publish_message_received(&self, message: Message) {
-        let event = NodeEvent::MessageReceived {
+    pub async fn publish_message_received(&self, message: PlainMessage) {
+        let event = NodeEvent::PlainMessageReceived {
             message: serde_json::to_value(message).unwrap(),
         };
         self.publish_event(event).await;
     }
 
     /// Publish a message sent event
-    pub async fn publish_message_sent(&self, message: Message, from: String, to: String) {
-        let event = NodeEvent::MessageSent {
+    pub async fn publish_message_sent(&self, message: PlainMessage, from: String, to: String) {
+        let event = NodeEvent::PlainMessageSent {
             message: serde_json::to_value(message).unwrap(),
             from,
             to,
@@ -471,7 +471,7 @@ impl EventBus {
 
     /// Publish an agent message event
     pub async fn publish_agent_message(&self, did: String, message: Vec<u8>) {
-        let event = NodeEvent::AgentMessage { did, message };
+        let event = NodeEvent::AgentPlainMessage { did, message };
         self.publish_event(event).await;
     }
 

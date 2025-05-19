@@ -1,6 +1,6 @@
 # TAP-WASM
 
-WebAssembly bindings for the Transaction Authorization Protocol (TAP) with DIDComm integration.
+WebAssembly bindings for the Transaction Authorization Protocol (TAP).
 
 ## Features
 

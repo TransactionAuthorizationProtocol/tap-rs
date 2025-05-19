@@ -12,6 +12,12 @@ pub struct AgentConfig {
     /// Security mode for messages
     pub security_mode: Option<String>,
 
+    /// Enable debug mode
+    pub debug: bool,
+
+    /// Timeout in seconds for network operations
+    pub timeout_seconds: Option<u64>,
+
     /// Additional configuration parameters
     pub parameters: HashMap<String, String>,
 }
@@ -23,6 +29,8 @@ impl AgentConfig {
         Self {
             agent_did: did,
             security_mode: Some("SIGNED".to_string()),
+            debug: false,
+            timeout_seconds: Some(30),
             parameters: HashMap::new(),
         }
     }
@@ -40,6 +48,12 @@ impl AgentConfig {
     /// Sets the security mode
     pub fn with_security_mode(mut self, mode: &str) -> Self {
         self.security_mode = Some(mode.to_string());
+        self
+    }
+
+    /// Sets the debug mode
+    pub fn with_debug(mut self, debug: bool) -> Self {
+        self.debug = debug;
         self
     }
 }

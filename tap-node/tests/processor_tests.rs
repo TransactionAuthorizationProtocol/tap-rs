@@ -3,15 +3,24 @@
 //! This file contains integration tests for message processors in the TAP Node.
 
 use serde_json::json;
-use tap_msg::didcomm::Message;
-use tap_node::message::processor::{MessageProcessor, ValidationMessageProcessor};
+use tap_msg::didcomm::PlainMessage;
+use tap_node::message::processor::{PlainMessageProcessor, ValidationPlainMessageProcessor};
 
 /// Create a valid test message for validation
-fn create_test_message(id: &str, typ: &str, from: Option<&str>, to: Option<Vec<&str>>) -> Message {
-    let from_did = from.map(|s| s.to_string());
-    let to_dids = to.map(|v| v.iter().map(|&s| s.to_string()).collect());
+fn create_test_message(
+    id: &str,
+    typ: &str,
+    from: Option<&str>,
+    to: Option<Vec<&str>>,
+) -> PlainMessage {
+    let from_did = from.unwrap_or("did:example:default_sender").to_string();
+    let to_dids = to
+        .unwrap_or_else(|| vec!["did:example:default_recipient"])
+        .iter()
+        .map(|&s| s.to_string())
+        .collect();
 
-    Message {
+    PlainMessage {
         id: id.to_string(),
         typ: typ.to_string(),
         type_: typ.to_string(),
@@ -31,14 +40,14 @@ fn create_test_message(id: &str, typ: &str, from: Option<&str>, to: Option<Vec<&
 #[tokio::test]
 async fn test_validation_processor_accepts_valid_messages() {
     // Create a validator
-    let processor = ValidationMessageProcessor;
+    let processor = ValidationPlainMessageProcessor;
 
     // Create a valid message with all required fields
     let message = create_test_message(
         "test-123",
         "https://tap.rsvp/schema/1.0#transfer",
-        None,
-        None,
+        Some("did:example:sender"),
+        Some(vec!["did:example:recipient"]),
     );
 
     // Process the message
@@ -53,14 +62,14 @@ async fn test_validation_processor_accepts_valid_messages() {
 #[tokio::test]
 async fn test_validation_processor_rejects_empty_id() {
     // Create a validator
-    let processor = ValidationMessageProcessor;
+    let processor = ValidationPlainMessageProcessor;
 
     // Create a message with an empty ID
     let message = create_test_message(
         "", // Empty ID should be rejected
         "https://tap.rsvp/schema/1.0#transfer",
-        None,
-        None,
+        Some("did:example:sender"),
+        Some(vec!["did:example:recipient"]),
     );
 
     // Process the message
@@ -75,12 +84,14 @@ async fn test_validation_processor_rejects_empty_id() {
 #[tokio::test]
 async fn test_validation_processor_rejects_empty_type() {
     // Create a validator
-    let processor = ValidationMessageProcessor;
+    let processor = ValidationPlainMessageProcessor;
 
     // Create a message with an empty type
     let message = create_test_message(
-        "test-123", "", // Empty type should be rejected
-        None, None,
+        "test-123",
+        "", // Empty type should be rejected
+        Some("did:example:sender"),
+        Some(vec!["did:example:recipient"]),
     );
 
     // Process the message
@@ -95,14 +106,14 @@ async fn test_validation_processor_rejects_empty_type() {
 #[tokio::test]
 async fn test_validation_processor_rejects_invalid_from_did() {
     // Create a validator
-    let processor = ValidationMessageProcessor;
+    let processor = ValidationPlainMessageProcessor;
 
     // Create a message with an invalid from DID
     let message = create_test_message(
         "test-123",
         "https://tap.rsvp/schema/1.0#transfer",
         Some("invalid-did-format"), // Invalid DID format
-        None,
+        Some(vec!["did:example:recipient"]),
     );
 
     // Process the message
@@ -117,13 +128,13 @@ async fn test_validation_processor_rejects_invalid_from_did() {
 #[tokio::test]
 async fn test_validation_processor_rejects_invalid_to_did() {
     // Create a validator
-    let processor = ValidationMessageProcessor;
+    let processor = ValidationPlainMessageProcessor;
 
     // Create a message with an invalid to DID
     let message = create_test_message(
         "test-123",
         "https://tap.rsvp/schema/1.0#transfer",
-        None,
+        Some("did:example:sender"),
         Some(vec!["invalid-did-format"]), // Invalid DID format
     );
 
@@ -139,7 +150,7 @@ async fn test_validation_processor_rejects_invalid_to_did() {
 #[tokio::test]
 async fn test_validation_processor_accepts_valid_did_formats() {
     // Create a validator
-    let processor = ValidationMessageProcessor;
+    let processor = ValidationPlainMessageProcessor;
 
     // Create a message with valid DID formats
     let message = create_test_message(

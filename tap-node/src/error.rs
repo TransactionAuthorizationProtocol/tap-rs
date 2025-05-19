@@ -15,7 +15,7 @@ pub enum Error {
 
     /// Invalid TAP message
     #[error("Invalid TAP message: {0}")]
-    InvalidMessage(String),
+    InvalidPlainMessage(String),
 
     /// Error from agent
     #[error("Agent error: {0}")]
@@ -25,16 +25,16 @@ pub enum Error {
     #[error("Serialization error: {0}")]
     Serialization(serde_json::Error),
 
-    /// Message dispatch error
-    #[error("Message dispatch error: {0}")]
+    /// PlainMessage dispatch error
+    #[error("PlainMessage dispatch error: {0}")]
     Dispatch(String),
 
-    /// Message processing error
-    #[error("Message processing error: {0}")]
+    /// PlainMessage processing error
+    #[error("PlainMessage processing error: {0}")]
     Processing(String),
 
-    /// Message routing error
-    #[error("Message routing error: {0}")]
+    /// PlainMessage routing error
+    #[error("PlainMessage routing error: {0}")]
     Routing(String),
 
     /// Resolver error

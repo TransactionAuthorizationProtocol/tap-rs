@@ -9,10 +9,10 @@ description = "HTTP server for the Transaction Authorization Protocol (TAP)"
 readme = "README.md"
 
 [dependencies]
-tap-msg = { version = "0.1.0", path = "../tap-msg" }
-tap-node = { version = "0.1.0", path = "../tap-node" }
-tap-agent = { version = "0.1.0", path = "../tap-agent" }
-tap-caip = { version = "0.1.0", path = "../tap-caip" }
+tap-msg = { version = "0.2.0", path = "../tap-msg" }
+tap-node = { version = "0.2.0", path = "../tap-node" }
+tap-agent = { version = "0.2.0", path = "../tap-agent" }
+tap-caip = { version = "0.2.0", path = "../tap-caip" }
 warp = "0.3"
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }
@@ -32,7 +32,6 @@ uuid = { version = "1", features = ["v4"] }
 hyper = { version = "0.14", features = ["full", "server", "http1"] }
 base64 = { workspace = true }
 multibase = { workspace = true }
-didcomm = { workspace = true }
 
 [dev-dependencies]
 mockito = "1.0"

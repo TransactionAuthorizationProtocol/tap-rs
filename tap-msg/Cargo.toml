@@ -14,10 +14,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 # Chain Agnostic Identifiers
-tap-caip = { version = "0.1.0", path = "../tap-caip" }
-
-# DIDComm
-didcomm = { workspace = true }
+tap-caip = { version = "0.2.0", path = "../tap-caip" }
 
 # Date and time
 chrono = { workspace = true }
@@ -29,16 +26,16 @@ rand = "0.8.5"
 thiserror = { workspace = true }
 
 # UUID generation
-uuid = { version = "=0.8.2", features = ["v4"] }
+uuid = { workspace = true }
 
 # Tracing
 tracing = { workspace = true }
 
-# WASM support 
+# WASM support
 wasm-bindgen = { workspace = true, optional = true }
 console_error_panic_hook = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
-web-sys = { workspace = true, optional = true }
+web-sys = { version = "0.3", features = ["console"], optional = true }
 getrandom = { workspace = true, optional = true }
 
 [dev-dependencies]
@@ -53,5 +50,11 @@ harness = false
 
 [features]
 default = []
-wasm = ["wasm-bindgen", "js-sys", "web-sys", "getrandom/js", "console_error_panic_hook"]
+wasm = [
+    "wasm-bindgen",
+    "js-sys",
+    "web-sys",
+    "getrandom/js",
+    "console_error_panic_hook",
+]
 examples = []

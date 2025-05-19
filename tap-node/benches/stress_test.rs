@@ -2,15 +2,15 @@
 //!
 //! Run with: cargo bench --bench stress_test
 
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
-use didcomm::Message as DIDCommMessage;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Instant;
 use tap_agent::did::MultiResolver;
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::{AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker};
 use tap_msg::message::TapMessageBody;
 use tap_msg::message::Transfer;
+use tap_msg::PlainMessage;
 use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
 
@@ -23,7 +23,7 @@ async fn create_test_message(
     from_did: &str,
     to_did: &str,
     index: usize,
-) -> (DIDCommMessage, Transfer) {
+) -> (PlainMessage, Transfer) {
     // Create a simple transfer message
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -51,7 +51,7 @@ async fn create_test_message(
     };
 
     // Convert to DIDComm message
-    let message = body.to_didcomm(Some(from_did)).unwrap();
+    let message = body.to_didcomm(from_did).unwrap();
     (message, body)
 }
 
@@ -138,6 +138,7 @@ fn stress_test(c: &mut Criterion) {
                     let message_packer1 = Arc::new(DefaultMessagePacker::new(
                         did_resolver1,
                         Arc::new(resolver1),
+                        true,
                     ));
                     let agent1 = Arc::new(DefaultAgent::new(agent1_config, message_packer1));
 
@@ -145,6 +146,7 @@ fn stress_test(c: &mut Criterion) {
                     let message_packer2 = Arc::new(DefaultMessagePacker::new(
                         did_resolver2,
                         Arc::new(resolver2),
+                        true,
                     ));
                     let agent2 = Arc::new(DefaultAgent::new(agent2_config, message_packer2));
 

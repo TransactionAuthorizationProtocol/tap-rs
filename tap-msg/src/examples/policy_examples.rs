@@ -1,12 +1,13 @@
 //! Examples for using policies according to TAIP-7.
 
+use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::{
     policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl},
-    tap_message_trait::TapMessageBody,
-    types::{Authorizable, Authorize, Participant, Transfer, UpdatePolicies},
+    tap_message_trait::{Authorizable, TapMessageBody},
+    Authorize, Participant, Transfer, UpdatePolicies,
 };
-use didcomm::Message;
+
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -56,7 +57,7 @@ pub fn update_policies_example(
     transaction_id: &str,
     creator_did: &str,
     recipients: &[&str],
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Create a proof of control policy
     let proof_policy = RequireProofOfControl {
         from: Some(vec!["did:example:dave".to_string()]),
@@ -78,15 +79,12 @@ pub fn update_policies_example(
         .filter(|&&did| did != creator_did)
         .copied()
         .collect::<Vec<_>>();
-    let message = update.to_didcomm_with_route(Some(creator_did), participants)?;
+    let mut message = update.to_didcomm_with_route(creator_did, participants)?;
 
     // Set the thread ID to link this message to the existing thread
-    let message_with_thread = Message {
-        thid: Some(transaction_id.to_string()),
-        ..message
-    };
+    message.thid = Some(transaction_id.to_string());
 
-    Ok(message_with_thread)
+    Ok(message)
 }
 
 /// This example demonstrates a complete workflow for adding and updating policies
@@ -154,18 +152,12 @@ pub fn policy_workflow_example() -> Result<()> {
         .filter(|&&did| did != sender_vaspd_did)
         .copied()
         .collect::<Vec<_>>();
-    let message = update_message.to_didcomm_with_route(Some(sender_vaspd_did), to)?;
+    let mut message = update_message.to_didcomm_with_route(sender_vaspd_did, to)?;
 
     // Link to our transfer thread
-    let message_with_thread = Message {
-        thid: Some(transfer_id.to_string()),
-        ..message
-    };
+    message.thid = Some(transfer_id.to_string());
 
-    println!(
-        "  Created UpdatePolicies message: {:?}",
-        message_with_thread
-    );
+    println!("  Created UpdatePolicies message: {:?}", message);
     println!("  This message will be routed to all participants");
 
     println!("=== Policy Workflow Example Completed ===");
@@ -174,12 +166,12 @@ pub fn policy_workflow_example() -> Result<()> {
 
 /// This example demonstrates the use of the Authorizable trait's update_policies method
 pub fn create_update_policies_using_authorizable_example(
-    original_message: &Result<Message>,
+    original_message: &Result<PlainMessage>,
     policies: Vec<Policy>,
     _transaction_id: &str,
     creator_did: &str,
     participant_dids: &[String],
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // 1. Extract the body from the original DIDComm message
     let body_json = original_message
         .as_ref()
@@ -192,16 +184,17 @@ pub fn create_update_policies_using_authorizable_example(
     // 3. Call update_policies on the Transfer struct (Authorizable trait impl)
     // Extract or generate a transaction ID
     let transaction_id = transfer_body.transaction_id.clone();
+    // Call update_policies on the Transfer struct (Authorizable trait impl)
     let update_policies_message = transfer_body.update_policies(transaction_id, policies);
 
     // Convert the update to a DIDComm message
-    let mut update_policies_reply = update_policies_message.to_didcomm(Some(creator_did))?;
+    let mut update_policies_reply = update_policies_message.to_didcomm(creator_did)?;
 
     // Set thread ID to maintain conversation
     update_policies_reply.thid = Some(original_message.as_ref().map_err(Clone::clone)?.id.clone());
 
     // Set recipients
-    update_policies_reply.to = Some(participant_dids.iter().map(|s| s.to_string()).collect());
+    update_policies_reply.to = participant_dids.iter().map(|s| s.to_string()).collect();
 
     Ok(update_policies_reply)
 }
@@ -255,7 +248,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 
     // Convert the transfer to a DIDComm message
     let transfer_message = transfer.to_didcomm_with_route(
-        Some(originator_did),
+        originator_did,
         [beneficiary_did, sender_vasp_did, receiver_vasp_did]
             .iter()
             .copied(),
@@ -287,17 +280,18 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
     );
 
     // Step 3: Create an authorization message in response to the updated policies
+    // Use the Authorizable trait's authorize method
     let authorize_body =
         transfer.authorize(Some("Authorization with policy constraints".to_string()));
 
     // Create a reply to the update policies message
-    let mut authorize_reply = authorize_body.to_didcomm(Some(beneficiary_did))?;
+    let mut authorize_reply = authorize_body.to_didcomm(beneficiary_did)?;
 
     // Set thread ID to maintain conversation
     authorize_reply.thid = Some(update_policies_message.id.clone());
 
     // Set recipients
-    authorize_reply.to = Some(participants.iter().map(|s| s.to_string()).collect());
+    authorize_reply.to = participants.iter().map(|s| s.to_string()).collect();
 
     println!("Authorization message created: {:?}", authorize_reply);
 

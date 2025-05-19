@@ -2,16 +2,16 @@
 //!
 //! This module provides functionality to validate TAP messages according to the specification.
 
+use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::types::{
+use crate::message::{
     AddAgents, Authorize, DIDCommPresentation, ErrorBody, Presentation, Reject, Settle, Transfer,
 };
-use didcomm::Message;
 use serde_json::Value;
 
 /// Validate a didcomm message's contents based on its type
-pub fn validate_message(message: &Message) -> Result<()> {
+pub fn validate_message(message: &PlainMessage) -> Result<()> {
     // Basic validation for DIDComm message
     if message.id.is_empty() {
         return Err(Error::Validation("Message ID is required".to_string()));

@@ -1,15 +1,15 @@
 // use serde_json; // Redundant import
 
-// use didcomm::did::DIDResolver; // Unused import
-use didcomm::did::resolvers::ExampleDIDResolver; // Use resolver from didcomm crate
+// Removing external didcomm dependency as we don't really need it for these tests
+// Creating a simple mock resolver for testing purposes
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
-use tap_msg::message::types::{
-    Agent, Authorize, Connect, ConnectionConstraints, Participant, PaymentRequest, Reject, Settle,
-    Transfer, UpdateParty,
+use tap_msg::message::{
+    Authorize, Connect, ConnectionConstraints, Participant, Payment, PaymentBuilder, Reject,
+    Settle, TransactionLimits, Transfer, UpdateParty,
 };
 use tap_msg::Result;
 
@@ -20,12 +20,12 @@ use tap_msg::Result;
 /// 4. Settle the Transfer
 #[test]
 fn test_full_tap_flow() -> Result<()> {
-    let _resolver = ExampleDIDResolver::new(vec![]);
+    // We don't need an actual DID resolver for these tests
 
     // Step 1: Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
     let connect_id = connect_message.id.clone();
 
@@ -48,7 +48,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Convert to DIDComm message
     let transfer_message = transfer
         .to_didcomm_with_route(
-            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                 .iter()
                 .copied(),
@@ -83,7 +83,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut authorize_message = authorize_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -106,7 +106,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Convert to DIDComm message
     let settle_message = settle_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -124,19 +124,19 @@ fn test_full_tap_flow() -> Result<()> {
 
 /// Integration test for the payment flow:
 /// 1. Create a Connect message
-/// 2. Create a PaymentRequest message connected to the Connect message
-/// 3. Authorize the PaymentRequest
-/// 4. Reject a subsequent PaymentRequest
+/// 2. Create a Payment message connected to the Connect message
+/// 3. Authorize the Payment
+/// 4. Reject a subsequent Payment
 #[test]
 fn test_payment_flow() {
     // Step 1: Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
     let connect_id = connect_message.id.clone();
 
-    // Step 2: Create a PaymentRequest message connected to the Connect message
+    // Step 2: Create a Payment message connected to the Connect message
     let mut payment = create_test_payment_request();
     println!(
         "DEBUG: Before with_connection, payment.connection_id() = {:?}",
@@ -155,17 +155,17 @@ fn test_payment_flow() {
     // Convert to DIDComm message
     let payment_message = payment
         .to_didcomm_with_route(
-            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                 .iter()
                 .copied(),
         )
-        .expect("Failed to convert PaymentRequest to DIDComm");
+        .expect("Failed to convert Payment to DIDComm");
 
     // Check that the payment message has the correct pthid (parent thread ID)
     assert_eq!(payment_message.pthid, Some(connect_id.clone()));
 
-    // Step 3: Authorize the PaymentRequest
+    // Step 3: Authorize the Payment
     let authorize_body = Authorize {
         transaction_id: payment_message.id.clone(), // Use the ID of the message being authorized
         note: Some("Payment authorized".to_string()),
@@ -174,7 +174,7 @@ fn test_payment_flow() {
     // Convert to DIDComm message
     let mut authorize_message = authorize_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -187,7 +187,7 @@ fn test_payment_flow() {
     // Verify the authorize message has the correct thread ID (should be the payment ID)
     assert_eq!(authorize_message.thid, Some(payment_message.id.clone()));
 
-    // Step 4: Create a second PaymentRequest and reject it
+    // Step 4: Create a second Payment and reject it
     let mut payment2 = create_test_payment_request();
     println!(
         "DEBUG: Before with_connection, payment2.connection_id() = {:?}",
@@ -200,12 +200,12 @@ fn test_payment_flow() {
     );
     let payment_message2 = payment2
         .to_didcomm_with_route(
-            Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
             ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                 .iter()
                 .copied(),
         )
-        .expect("Failed to convert PaymentRequest to DIDComm");
+        .expect("Failed to convert Payment to DIDComm");
 
     // Reject the payment
     let reject_body = Reject {
@@ -216,8 +216,8 @@ fn test_payment_flow() {
     // Convert reject body to DIDComm message
     let mut reject_message = reject_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"), // Rejector's DID
-            [payment_message2.from.as_deref().unwrap_or_default()], // Send back to PaymentRequest sender
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6", // Rejector's DID
+            [payment_message2.from.as_str()], // Send back to Payment sender
         )
         .expect("Failed to convert Reject to DIDComm");
 
@@ -234,12 +234,12 @@ fn test_payment_flow() {
 /// 3. Authorize some and reject others
 #[test]
 fn test_complex_message_flow() -> Result<()> {
-    let _resolver = ExampleDIDResolver::new(vec![]);
+    // We don't need an actual DID resolver for these tests
 
     // Step 1: Create a Connect message
     let connect = create_test_connect();
     let connect_message = connect
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
     let connect_id = connect_message.id.clone();
 
@@ -263,7 +263,7 @@ fn test_complex_message_flow() -> Result<()> {
 
         let transfer_message = transfer
             .to_didcomm_with_route(
-                Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
                 ["did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"]
                     .iter()
                     .copied(),
@@ -300,7 +300,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut authorize_message = authorize_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -326,7 +326,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut reject_message = reject
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -353,7 +353,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let settle_message = settle_body
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -376,7 +376,7 @@ fn test_complex_message_flow() -> Result<()> {
     // Convert to DIDComm message
     let mut update_party_message = update_party
         .to_didcomm_with_route(
-            Some("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
             ["did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"]
                 .iter()
                 .copied(),
@@ -412,21 +412,24 @@ fn test_complex_message_flow() -> Result<()> {
 // Helper functions to create test messages
 
 fn create_test_connect() -> Connect {
-    Connect {
-        agent: Some(Agent {
-            id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-            name: None,
-            agent_type: None,
-            service_url: None,
-        }),
-        for_id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        constraints: ConnectionConstraints {
-            purposes: None,
-            category_purposes: None,
-            limits: None,
-        },
-        metadata: HashMap::new(),
-    }
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+    let agent_id = "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string();
+    let for_id = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
+
+    let mut connect = Connect::new(&transaction_id, &agent_id, &for_id, Some("agent"));
+
+    let transaction_limits = TransactionLimits {
+        max_amount: Some("1000.0".to_string()),
+        max_total_amount: Some("5000.0".to_string()),
+        max_transactions: Some(10),
+    };
+
+    let constraints = ConnectionConstraints {
+        transaction_limits: Some(transaction_limits),
+    };
+
+    connect.constraints = Some(constraints);
+    connect
 }
 
 fn create_test_transfer() -> Transfer {
@@ -467,7 +470,9 @@ fn create_test_transfer() -> Transfer {
     }
 }
 
-fn create_test_payment_request() -> PaymentRequest {
+fn create_test_payment_request() -> Payment {
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+
     let merchant = Participant {
         id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         role: Some("merchant".to_string()),
@@ -475,23 +480,33 @@ fn create_test_payment_request() -> PaymentRequest {
         leiCode: None,
     };
 
+    let customer = Participant {
+        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
+        role: Some("customer".to_string()),
+        policies: None,
+        leiCode: None,
+    };
+
     let agents = vec![Participant {
         id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
+        role: Some("agent".to_string()),
         policies: None,
         leiCode: None,
     }];
 
-    PaymentRequest {
-        asset: None,
-        currency: Some("USD".to_string()),
-        amount: "100.0".to_string(),
-        supported_assets: None,
-        invoice: None,
-        expiry: None,
-        merchant,
-        customer: None,
-        agents,
-        metadata: HashMap::new(),
-    }
+    let asset =
+        AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
+
+    let mut payment = PaymentBuilder::default()
+        .transaction_id(transaction_id)
+        .asset(asset)
+        .amount("100.0".to_string())
+        .merchant(merchant)
+        .customer(customer)
+        .agents(agents)
+        .build();
+
+    payment.currency_code = Some("USD".to_string());
+    payment.expiry = Some("2023-12-31T23:59:59Z".to_string());
+    payment
 }

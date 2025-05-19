@@ -41,18 +41,36 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 }
 
 // Re-export key types for convenience
-pub use agent::{Agent, DefaultAgent, DeliveryResult};
 pub use config::AgentConfig;
-pub use crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
+pub use crypto::{DefaultMessagePacker, MessagePacker};
 pub use did::{
-    DIDGenerationOptions, DIDKeyGenerator, DIDMethodResolver, GeneratedKey, KeyResolver, KeyType,
-    MultiResolver, SyncDIDResolver,
+    DIDDoc, DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyResolver, KeyType,
+    VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
-pub use didcomm::did::{DIDDoc, DIDResolver};
-pub use didcomm::secrets::Secret;
 pub use error::{Error, Result};
-pub use key_manager::{KeyManager, KeyManagerSecretResolver};
+pub use key_manager::{KeyManager, Secret};
+
+// Native-only DID resolver re-exports
+#[cfg(not(target_arch = "wasm32"))]
+pub use did::MultiResolver;
+
+// Native-only re-exports
+#[cfg(not(target_arch = "wasm32"))]
+pub use agent::{Agent, DefaultAgent, DeliveryResult};
+#[cfg(not(target_arch = "wasm32"))]
+pub use crypto::BasicSecretResolver;
+#[cfg(not(target_arch = "wasm32"))]
+pub use did::{DIDMethodResolver, SyncDIDResolver};
+#[cfg(not(target_arch = "wasm32"))]
+pub use key_manager::KeyManagerSecretResolver;
+#[cfg(not(target_arch = "wasm32"))]
 pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
+
+// WASM-only re-exports
+#[cfg(target_arch = "wasm32")]
+pub use agent::WasmAgent;
+#[cfg(target_arch = "wasm32")]
+pub use did::{WasmDIDMethodResolver, WasmDIDResolver};
 
 /// Version of the TAP Agent
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

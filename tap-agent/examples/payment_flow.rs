@@ -12,14 +12,14 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
-use tap_msg::message::types::{Authorize, Settle};
-use tap_msg::{Participant, PaymentRequest};
+use tap_msg::message::{Authorize, Settle};
+use tap_msg::{Participant, Payment};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -50,10 +50,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 1: Merchant creates and sends a payment request
         println!("Step 1: Merchant creates a payment request");
 
-        // Generate a unique payment ID
-        let payment_id = uuid::Uuid::new_v4().to_string();
+        // Generate a unique transaction ID
+        let transaction_id = uuid::Uuid::new_v4().to_string();
 
-        let payment = create_payment_message(&merchant_did, &customer_did, settlement_address);
+        let payment = create_payment_message(
+            &merchant_did,
+            &customer_did,
+            settlement_address,
+            &transaction_id,
+        );
         println!("Payment details:");
         println!("  Asset: {}", payment.asset.as_ref().unwrap());
         println!("  Amount: {}", payment.amount);
@@ -72,8 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 2: Customer receives and processes the payment request
         println!("Step 2: Customer receives and processes the payment request");
 
-        let received_payment: PaymentRequest =
-            customer_agent.receive_message(&packed_payment).await?;
+        let received_payment: Payment = customer_agent.receive_message(&packed_payment).await?;
         println!("Customer received payment request:");
         println!("  Asset: {}", received_payment.asset.as_ref().unwrap());
         println!("  Amount: {}", received_payment.amount);
@@ -87,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Step 3: Customer authorizes the payment");
 
         let authorize = Authorize {
-            transaction_id: payment_id.clone(),
+            transaction_id: transaction_id.clone(),
             note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
         };
 
@@ -116,7 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
 
         let settle = Settle {
-            transaction_id: payment_id.clone(),
+            transaction_id: transaction_id.clone(),
             settlement_id: settlement_id.to_string(),
             amount: Some(payment.amount.clone()),
         };
@@ -181,7 +185,11 @@ async fn create_agent(
     let secret_resolver = Arc::new(secret_resolver);
 
     // Create message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+    let message_packer = Arc::new(DefaultMessagePacker::new(
+        did_resolver,
+        secret_resolver,
+        true,
+    ));
 
     // Create agent
     let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));
@@ -194,7 +202,8 @@ fn create_payment_message(
     merchant_did: &str,
     customer_did: &str,
     settlement_address: &str,
-) -> PaymentRequest {
+    transaction_id: &str,
+) -> Payment {
     // Create merchant and customer participants
     let merchant = Participant {
         id: merchant_did.to_string(),
@@ -219,11 +228,11 @@ fn create_payment_message(
     };
 
     // Create a payment message
-    PaymentRequest {
+    Payment {
         asset: Some(
             AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
         ),
-        currency: None,
+        currency_code: None,
         amount: "100.0".to_string(),
         supported_assets: None,
         invoice: None,
@@ -232,5 +241,7 @@ fn create_payment_message(
         customer: Some(customer),
         agents: vec![settlement_agent],
         metadata: HashMap::new(),
+        transaction_id: transaction_id.to_string(),
+        memo: Some("Payment for goods or services".to_string()),
     }
 }

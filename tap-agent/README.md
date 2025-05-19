@@ -21,7 +21,7 @@ tap-agent
 ├── agent       - Core agent implementation and traits
 ├── config      - Agent configuration
 ├── cli         - Command-line interface for DID generation
-├── crypto      - Cryptographic operations and message packing
+├── crypto      - Cryptographic operations and message security
 ├── did         - DID resolution and management
 ├── error       - Error types and handling
 ├── message     - Message processing utilities
@@ -39,7 +39,7 @@ The `Agent` trait defines the core interface for TAP agents, with methods for:
 - Receiving and unpacking messages
 - Validating message contents
 
-The `DefaultAgent` implementation provides a standard implementation of this trait, using DIDComm for secure message exchange. It automatically checks for service endpoints when sending messages to help with message routing.
+The `DefaultAgent` implementation provides a standard implementation of this trait, using native cryptographic operations for secure message exchange. It automatically checks for service endpoints when sending messages to help with message routing.
 
 #### DID Resolution
 
@@ -56,8 +56,8 @@ The system supports conversion between Ed25519 verification keys and X25519 key 
 
 The cryptographic system provides:
 
-- `MessagePacker` - A trait for packing and unpacking DIDComm messages
-- `DefaultMessagePacker` - An implementation using DIDComm v2
+- `MessagePacker` - A trait for packing and unpacking secure messages
+- `DefaultMessagePacker` - An implementation supporting various security modes
 - `DebugSecretsResolver` - A trait for resolving cryptographic secrets
 - `BasicSecretResolver` - A simple in-memory implementation for development
 
@@ -82,6 +82,7 @@ The agent supports different security modes for messages:
 - **WASM Support**: Run in browser environments with WebAssembly
 - **Extensible DID Methods**: Support for did:key and did:web, with architecture for adding more methods
 - **Performance Optimized**: Benchmarked for high-throughput scenarios
+- **Native Cryptography**: Direct implementation of cryptographic operations without external DIDComm dependencies
 
 ## Usage Examples
 
@@ -92,7 +93,7 @@ use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
 use tap_agent::did::{MultiResolver, KeyResolver};
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use std::sync::Arc;
 
 // Create agent configuration with a DID
@@ -233,8 +234,9 @@ You can also implement and add your own DID method resolver:
 
 ```rust
 use tap_agent::did::{DIDMethodResolver, MultiResolver};
-use didcomm::did::DIDDoc;
+use tap_agent::did::DIDDoc;
 use async_trait::async_trait;
+use tap_agent::error::Result;
 
 #[derive(Debug)]
 struct CustomResolver;
@@ -267,6 +269,7 @@ The `tap-agent` crate implements several security features:
 - **Key Management**: Proper key handling with separation of concerns
 - **DID Verification**: Validation of DIDs and DID documents
 - **Secure Defaults**: Secure defaults for message security modes
+- **Native Cryptography**: Direct implementation of cryptographic algorithms using well-tested libraries
 
 For production use, it's recommended to:
 
@@ -282,7 +285,7 @@ The `tap-agent` crate integrates with other components in the TAP ecosystem:
 - **tap-msg**: Uses message types and validation from tap-msg
 - **tap-caip**: Validates chain-agnostic identifiers in messages
 - **tap-node**: Provides the agent functionality for tap-node
-- **tap-http**: Can be used with tap-http for HTTP-based DIDComm messaging
+- **tap-http**: Can be used with tap-http for HTTP-based secure messaging
 - **tap-wasm**: Supports WASM bindings for browser environments
 - **tap-ts**: Provides TypeScript bindings for the agent functionality
 
@@ -414,7 +417,7 @@ async fn get_service_endpoint(agent: &DefaultAgent, did: &str) -> Result<()> {
 
 The `tap-agent` crate can work with different types of service endpoints defined in DID documents and automatically deliver messages to them:
 
-1. **DIDCommMessaging** endpoints - Specifically designed for DIDComm message exchange:
+1. **DIDCommMessaging** endpoints - Specifically designed for secure message exchange:
    ```json
    {
      "service": [{
@@ -505,6 +508,18 @@ The crate provides several feature flags to customize functionality:
 - **wasm**: Enables WebAssembly support for browser environments
 
 Note that did:web resolution requires the **native** feature to be enabled, as it depends on HTTP requests to fetch DID documents.
+
+## Cryptographic Support
+
+The `tap-agent` crate now implements direct cryptographic operations without external DIDComm libraries, supporting:
+
+- **Ed25519** - For digital signatures (EdDSA)
+- **P-256** - For ECDSA signatures and ECDH key agreement
+- **secp256k1** - For ECDSA signatures with blockchain compatibility
+- **AES-GCM** - For authenticated encryption (A256GCM)
+- **ECDH-ES+A256KW** - For key agreement and key wrapping
+
+The implementation follows the JWS (JSON Web Signature) and JWE (JSON Web Encryption) formats for secure messaging, ensuring compatibility with standards-based secure messaging systems.
 
 ## License
 

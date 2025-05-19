@@ -67,7 +67,7 @@ fn test_update_policies() {
     // Check the message type
     assert_eq!(
         <UpdatePolicies as TapMessageBody>::message_type(),
-        "https://tap.rsvp/schema/1.0#updatepolicies"
+        "https://tap.rsvp/schema/1.0#update-policies"
     );
 
     // Validate the message
@@ -206,7 +206,7 @@ fn test_update_policies_didcomm_conversion() {
 
     // Convert to DIDComm message
     let didcomm_message = original_update
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm");
 
     // Debug: Print the actual body of the DIDComm message
@@ -218,7 +218,7 @@ fn test_update_policies_didcomm_conversion() {
     // Check that the message type is correctly set
     assert_eq!(
         didcomm_message.get_tap_type(),
-        Some("https://tap.rsvp/schema/1.0#updatepolicies".to_string())
+        Some("https://tap.rsvp/schema/1.0#update-policies".to_string())
     );
 
     // Convert back from DIDComm

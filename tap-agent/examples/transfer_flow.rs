@@ -11,11 +11,11 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use tap_agent::agent::{Agent, DefaultAgent};
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle, Transfer};
 use tap_msg::Participant;
@@ -177,7 +177,11 @@ async fn create_agent(
     let secret_resolver = Arc::new(secret_resolver);
 
     // Create message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+    let message_packer = Arc::new(DefaultMessagePacker::new(
+        did_resolver,
+        secret_resolver,
+        true,
+    ));
 
     // Create agent
     let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));

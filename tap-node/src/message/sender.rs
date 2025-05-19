@@ -1,4 +1,4 @@
-//! Message sender implementations for TAP Node.
+//! PlainMessage sender implementations for TAP Node.
 //!
 //! This module provides functionality for sending TAP messages to recipients
 //! using various transport mechanisms.
@@ -8,12 +8,12 @@
 //! The message sender system in TAP Node implements different strategies for
 //! delivering DIDComm messages to their recipients. The primary implementations are:
 //!
-//! - `NodeMessageSender`: A flexible sender that uses a callback function for delivery
-//! - `HttpMessageSender`: Sends messages over HTTP with robust error handling and retries
+//! - `NodePlainMessageSender`: A flexible sender that uses a callback function for delivery
+//! - `HttpPlainMessageSender`: Sends messages over HTTP with robust error handling and retries
 //!
 //! # Cross-platform Support
 //!
-//! The `HttpMessageSender` implementation supports multiple platforms:
+//! The `HttpPlainMessageSender` implementation supports multiple platforms:
 //!
 //! - Native environments (using reqwest)
 //! - WASM environments (using web-sys)
@@ -23,21 +23,21 @@
 //!
 //! ```no_run
 //! # use std::sync::Arc;
-//! # use tap_node::{NodeConfig, TapNode, HttpMessageSender, MessageSender};
-//! # use tap_msg::didcomm::Message;
+//! # use tap_node::{NodeConfig, TapNode, HttpPlainMessageSender, PlainMessageSender};
+//! # use tap_msg::didcomm::PlainMessage;
 //! # use serde_json::json;
 //! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! // Create a TapNode
 //! let node = TapNode::new(NodeConfig::default());
 //!
 //! // Create a sample message
-//! let message = Message {
+//! let message = PlainMessage {
 //!     id: "test-123".to_string(),
 //!     typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
 //!     type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
 //!     body: json!({"amount": "100.00"}),
-//!     from: Some("did:example:sender".to_string()),
-//!     to: Some(vec!["did:example:recipient".to_string()]),
+//!     from: "did:example:sender".to_string(),
+//!     to: vec!["did:example:recipient".to_string()],
 //!     created_time: Some(chrono::Utc::now().timestamp() as u64),
 //!     expires_time: None,
 //!     thid: None,
@@ -55,7 +55,7 @@
 //! ).await?;
 //!
 //! // Create an HTTP sender for external dispatch
-//! let sender = HttpMessageSender::new("https://recipient-endpoint.example.com".to_string());
+//! let sender = HttpPlainMessageSender::new("https://recipient-endpoint.example.com".to_string());
 //!
 //! // Send the packed message to the recipient node
 //! sender.send(
@@ -74,29 +74,29 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 
-/// Message sender trait for sending packed messages to recipients
+/// PlainMessage sender trait for sending packed messages to recipients
 #[async_trait]
-pub trait MessageSender: Send + Sync + Debug {
+pub trait PlainMessageSender: Send + Sync + Debug {
     /// Send a packed message to one or more recipients
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()>;
 }
 
 /// Node message sender implementation
-pub struct NodeMessageSender {
+pub struct NodePlainMessageSender {
     /// Callback function for sending messages
     send_callback: Arc<dyn Fn(String, Vec<String>) -> Result<()> + Send + Sync>,
 }
 
-impl Debug for NodeMessageSender {
+impl Debug for NodePlainMessageSender {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("NodeMessageSender")
+        f.debug_struct("NodePlainMessageSender")
             .field("send_callback", &"<function>")
             .finish()
     }
 }
 
-impl NodeMessageSender {
-    /// Create a new NodeMessageSender with the given callback
+impl NodePlainMessageSender {
+    /// Create a new NodePlainMessageSender with the given callback
     pub fn new<F>(callback: F) -> Self
     where
         F: Fn(String, Vec<String>) -> Result<()> + Send + Sync + 'static,
@@ -108,7 +108,7 @@ impl NodeMessageSender {
 }
 
 #[async_trait]
-impl MessageSender for NodeMessageSender {
+impl PlainMessageSender for NodePlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         // Call the callback function with the packed message and recipient DIDs
         (self.send_callback)(packed_message, recipient_dids)
@@ -123,7 +123,7 @@ impl MessageSender for NodeMessageSender {
 ///
 /// # HTTP Endpoint Structure
 ///
-/// Messages are sent to endpoints derived from the recipient's DID, using a
+/// PlainMessages are sent to endpoints derived from the recipient's DID, using a
 /// configurable base URL.
 ///
 /// # Error Handling
@@ -141,7 +141,7 @@ impl MessageSender for NodeMessageSender {
 /// - Timeout settings
 /// - Retry policies
 #[derive(Debug)]
-pub struct HttpMessageSender {
+pub struct HttpPlainMessageSender {
     /// Base URL for the HTTP endpoint
     base_url: String,
     /// HTTP client (only in native environments)
@@ -154,13 +154,13 @@ pub struct HttpMessageSender {
     max_retries: u32,
 }
 
-impl HttpMessageSender {
-    /// Create a new HttpMessageSender with the given base URL
+impl HttpPlainMessageSender {
+    /// Create a new HttpPlainMessageSender with the given base URL
     pub fn new(base_url: String) -> Self {
         Self::with_options(base_url, 30000, 3) // Default 30 second timeout, 3 retries
     }
 
-    /// Create a new HttpMessageSender with custom options
+    /// Create a new HttpPlainMessageSender with custom options
     pub fn with_options(base_url: String, timeout_ms: u64, max_retries: u32) -> Self {
         #[cfg(feature = "reqwest")]
         {
@@ -233,7 +233,7 @@ impl HttpMessageSender {
 ///
 /// The sender handles various WebSocket-specific error conditions:
 /// - Connection failures
-/// - Message delivery failures
+/// - PlainMessage delivery failures
 /// - Connection drops and reconnection
 /// - Protocol errors
 ///
@@ -244,7 +244,7 @@ impl HttpMessageSender {
 /// - WASM environments (using web-sys WebSocket API)
 /// - Fallback implementations for environments without these libraries
 #[derive(Debug)]
-pub struct WebSocketMessageSender {
+pub struct WebSocketPlainMessageSender {
     /// Base URL for WebSocket endpoints (ws:// or wss://)
     base_url: String,
     /// Active connections (only in native environments)
@@ -255,13 +255,13 @@ pub struct WebSocketMessageSender {
     task_handles: std::sync::Mutex<HashMap<String, tokio::task::JoinHandle<()>>>,
 }
 
-impl WebSocketMessageSender {
-    /// Create a new WebSocketMessageSender with the given base URL
+impl WebSocketPlainMessageSender {
+    /// Create a new WebSocketPlainMessageSender with the given base URL
     pub fn new(base_url: String) -> Self {
         Self::with_options(base_url)
     }
 
-    /// Create a new WebSocketMessageSender with custom options
+    /// Create a new WebSocketPlainMessageSender with custom options
     pub fn with_options(base_url: String) -> Self {
         #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
         {
@@ -316,7 +316,8 @@ impl WebSocketMessageSender {
     ) -> Result<tokio::sync::mpsc::Sender<String>> {
         use futures::sink::SinkExt;
         use futures::stream::StreamExt;
-        use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+        use tokio_tungstenite::connect_async;
+        use tokio_tungstenite::tungstenite::protocol::Message;
 
         // Check if we already have an active connection and return it if we do
         {
@@ -429,7 +430,7 @@ impl WebSocketMessageSender {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "websocket"))]
 #[async_trait]
-impl MessageSender for WebSocketMessageSender {
+impl PlainMessageSender for WebSocketPlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         if recipient_dids.is_empty() {
             return Err(Error::Dispatch("No recipients specified".to_string()));
@@ -481,7 +482,7 @@ impl MessageSender for WebSocketMessageSender {
 // Specific implementation for WASM environments with web-sys feature
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 #[async_trait(?Send)]
-impl MessageSender for WebSocketMessageSender {
+impl PlainMessageSender for WebSocketPlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         use wasm_bindgen::prelude::*;
         use wasm_bindgen_futures::JsFuture;
@@ -608,7 +609,7 @@ impl MessageSender for WebSocketMessageSender {
     all(target_arch = "wasm32", feature = "wasm")
 )))]
 #[async_trait]
-impl MessageSender for WebSocketMessageSender {
+impl PlainMessageSender for WebSocketPlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         // This is a fallback implementation when neither tokio_tungstenite nor web-sys is available
         for recipient in &recipient_dids {
@@ -618,7 +619,7 @@ impl MessageSender for WebSocketMessageSender {
                 recipient,
                 endpoint
             );
-            log::debug!("Message content: {}", packed_message);
+            log::debug!("PlainMessage content: {}", packed_message);
         }
 
         log::warn!("WebSocket sender is running without WebSocket features enabled. No actual WebSocket connections will be made.");
@@ -628,7 +629,7 @@ impl MessageSender for WebSocketMessageSender {
 
 #[cfg(all(not(target_arch = "wasm32"), feature = "reqwest"))]
 #[async_trait]
-impl MessageSender for HttpMessageSender {
+impl PlainMessageSender for HttpPlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         if recipient_dids.is_empty() {
             return Err(Error::Dispatch("No recipients specified".to_string()));
@@ -731,7 +732,7 @@ impl MessageSender for HttpMessageSender {
 
 #[cfg(all(not(target_arch = "wasm32"), not(feature = "reqwest")))]
 #[async_trait]
-impl MessageSender for HttpMessageSender {
+impl PlainMessageSender for HttpPlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         // This is a fallback implementation when reqwest is not available
         // In a production environment, reqwest should always be available in the native configuration
@@ -743,7 +744,7 @@ impl MessageSender for HttpMessageSender {
                 recipient,
                 endpoint
             );
-            log::debug!("Message content: {}", packed_message);
+            log::debug!("PlainMessage content: {}", packed_message);
         }
 
         log::warn!("HTTP sender is running without reqwest feature enabled. No actual HTTP requests will be made.");
@@ -754,7 +755,7 @@ impl MessageSender for HttpMessageSender {
 // Specific implementation for WASM environments with web-sys feature
 #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
 #[async_trait(?Send)]
-impl MessageSender for HttpMessageSender {
+impl PlainMessageSender for HttpPlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         use wasm_bindgen::prelude::*;
         use wasm_bindgen_futures::JsFuture;
@@ -924,7 +925,7 @@ impl MessageSender for HttpMessageSender {
 // Fallback implementation for WASM environments without web-sys feature
 #[cfg(all(target_arch = "wasm32", not(feature = "wasm")))]
 #[async_trait(?Send)]
-impl MessageSender for HttpMessageSender {
+impl PlainMessageSender for HttpPlainMessageSender {
     async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
         // This is a fallback implementation when web-sys is not available in WASM
         for recipient in &recipient_dids {
@@ -934,7 +935,7 @@ impl MessageSender for HttpMessageSender {
                 recipient,
                 endpoint
             );
-            log::debug!("Message content: {}", packed_message);
+            log::debug!("PlainMessage content: {}", packed_message);
         }
 
         log::warn!("HTTP sender is running in WASM without the web-sys feature enabled. No actual HTTP requests will be made.");

@@ -9,7 +9,11 @@ The TAP implementation uses the [DIDComm Messaging v2](https://identity.foundati
 ### Supported DIDComm Features
 
 - **Plain Messages**: Full support for unencrypted DIDComm messages
-- **Message Attachments**: Support for both base64 and JSON attachment formats
+- **Message Attachments**: Support for all DIDComm attachment formats:
+  - Base64 attachments with optional JWS
+  - JSON attachments with optional JWS
+  - Link-based attachments with hash validation and optional JWS
+  - All attachments support format, media_type and additional metadata fields
 - **Message Headers**: Support for standard DIDComm headers including `id`, `type`, `from`, `to`, `thid`
 - **Routing**: Support for multi-recipient routing with `to` arrays
 
@@ -30,9 +34,9 @@ The following message types are fully supported in our implementation:
 | UpdateParty | `https://tap.rsvp/schema/1.0#UpdateParty` | Full | - |
 | ConfirmRelationship | `https://tap.rsvp/schema/1.0#ConfirmRelationship` | Full | - |
 | OutOfBand | `https://didcomm.org/out-of-band/2.0/invitation` | Full | - |
-| DIDCommPresentation | `https://didcomm.org/present-proof/3.0/presentation` | Full | Fully compliant with standard DIDComm present-proof protocol |
-| PaymentRequest | `https://tap.rsvp/schema/1.0#PaymentRequest` | Full | TAIP-14 support with currency/asset options and embedded invoice |
-| Invoice | Embedded in PaymentRequest | Full | TAIP-16 compliant structured invoice with line items and tax details |
+| DIDCommPresentation | `https://didcomm.org/present-proof/3.0/presentation` | Full | Fully compliant with standard DIDComm present-proof protocol with mandatory format field and attachment validation |
+| Payment | `https://tap.rsvp/schema/1.0#Payment` | Full | TAIP-14 support with currency/asset options and embedded invoice |
+| Invoice | Embedded in Payment | Full | TAIP-16 compliant structured invoice with line items and tax details |
 | AuthorizationRequired | `https://tap.rsvp/schema/1.0#AuthorizationRequired` | Full | - |
 | Connect | `https://tap.rsvp/schema/1.0#Connect` | Full | - |
 

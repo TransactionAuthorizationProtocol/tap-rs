@@ -1,9 +1,9 @@
-use didcomm::Message;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody};
-use tap_msg::message::types::{Connect, Participant, PaymentRequest, Transfer};
+use tap_msg::message::{Connect, Participant, Payment, Transfer};
 
 /// This module contains fuzzing tests for TAP message types.
 /// These tests are designed to ensure that our code handles malformed inputs gracefully.
@@ -77,17 +77,17 @@ fn test_fuzz_connect_deserialization() {
 
 #[test]
 fn test_fuzz_payment_request_deserialization() {
-    // Test with valid JSON but invalid PaymentRequest structure
+    // Test with valid JSON but invalid Payment structure
     let invalid_json = r#"{
         "amount": "not-a-number",
         "merchant": "not-a-valid-participant",
         "agents": "not-an-array"
     }"#;
 
-    let result = serde_json::from_str::<PaymentRequest>(invalid_json);
+    let result = serde_json::from_str::<Payment>(invalid_json);
     assert!(
         result.is_err(),
-        "Should fail to deserialize invalid PaymentRequest JSON"
+        "Should fail to deserialize invalid Payment JSON"
     );
 
     // Test with missing required fields
@@ -96,26 +96,26 @@ fn test_fuzz_payment_request_deserialization() {
         "agents": []
     }"#; // Missing merchant
 
-    let result = serde_json::from_str::<PaymentRequest>(missing_fields_json);
+    let result = serde_json::from_str::<Payment>(missing_fields_json);
     assert!(
         result.is_err(),
-        "Should fail to deserialize PaymentRequest with missing fields"
+        "Should fail to deserialize Payment with missing fields"
     );
 }
 
 #[test]
 fn test_fuzz_message_deserialization() {
-    // Test with valid JSON but invalid Message structure
+    // Test with valid JSON but invalid PlainMessage structure
     let invalid_json = r#"{
         "id": 12345,
         "type": "not-a-valid-type",
         "body": "not-a-valid-body"
     }"#;
 
-    let result = serde_json::from_str::<Message>(invalid_json);
+    let result = serde_json::from_str::<PlainMessage>(invalid_json);
     assert!(
         result.is_err(),
-        "Should fail to deserialize invalid Message JSON"
+        "Should fail to deserialize invalid PlainMessage JSON"
     );
 
     // Test with missing required fields
@@ -123,10 +123,10 @@ fn test_fuzz_message_deserialization() {
         "body": {}
     }"#; // Missing id and type
 
-    let result = serde_json::from_str::<Message>(missing_fields_json);
+    let result = serde_json::from_str::<PlainMessage>(missing_fields_json);
     assert!(
         result.is_err(),
-        "Should fail to deserialize Message with missing fields"
+        "Should fail to deserialize PlainMessage with missing fields"
     );
 }
 
@@ -200,7 +200,7 @@ fn test_fuzz_didcomm_conversion() {
 
     // Convert to DIDComm message
     let didcomm_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm");
 
     // Modify the message to have an invalid type

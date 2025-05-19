@@ -2,19 +2,19 @@
 
 use crate::error::{Error, Result};
 use crate::message::policy::{Policy, RequireProofOfControl};
-use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::types::{
-    AddAgents, Authorizable, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
+use crate::message::tap_message_trait::{Authorizable, TapMessageBody};
+use crate::message::{
+    AddAgents, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
 };
 
-use didcomm::Message;
+use crate::didcomm::PlainMessage;
 use serde_json;
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 
 /// This example demonstrates how to create a reply to a Transfer message
-pub fn create_reply_to_transfer_example() -> Result<Message> {
+pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
     let alice_did = "did:example:alice";
     let bob_did = "did:example:bob";
 
@@ -43,8 +43,7 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
     };
 
     // Create the initial transfer message
-    let transfer_message =
-        transfer.to_didcomm_with_route(Some(alice_did), [bob_did].iter().copied())?;
+    let transfer_message = transfer.to_didcomm_with_route(alice_did, [bob_did].iter().copied())?;
 
     // Create an Authorize message
     let authorize = Authorize {
@@ -53,7 +52,7 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
     };
 
     // Create a reply to the transfer message
-    let mut authorize_reply = authorize.to_didcomm(Some(alice_did))?;
+    let mut authorize_reply = authorize.to_didcomm(alice_did)?;
 
     // Set thread ID to maintain conversation
     authorize_reply.thid = Some(transfer_message.id.clone());
@@ -61,20 +60,20 @@ pub fn create_reply_to_transfer_example() -> Result<Message> {
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = [alice_did, bob_did]
         .iter()
-        .filter(|&did| **did != *alice_did)
+        .filter(|&did| *did != alice_did)
         .map(|s| s.to_string())
         .collect();
 
-    authorize_reply.to = Some(recipients);
+    authorize_reply.to = recipients;
 
     Ok(authorize_reply)
 }
 
 /// This example demonstrates how to create a reply using the Message trait extension
 pub fn create_reply_using_message_trait_example(
-    original_message: &Message,
+    original_message: &PlainMessage,
     creator_did: &str,
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Create an Authorize response
     let authorize = Authorize {
         transaction_id: original_message.id.clone(),
@@ -83,7 +82,7 @@ pub fn create_reply_using_message_trait_example(
 
     // Create a reply using the Message trait extension
     // This will automatically gather all participants from the original message
-    let mut response_message = authorize.to_didcomm(Some(creator_did))?;
+    let mut response_message = authorize.to_didcomm(creator_did)?;
 
     // Set thread ID to maintain conversation
     response_message.thid = original_message.thid.clone();
@@ -91,20 +90,18 @@ pub fn create_reply_using_message_trait_example(
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = original_message
         .to
-        .as_ref()
-        .unwrap()
         .iter()
-        .filter(|did| **did != creator_did)
-        .map(|s| s.to_string())
+        .filter(|did| did.as_str() != creator_did)
+        .cloned()
         .collect();
 
-    response_message.to = Some(recipients);
+    response_message.to = recipients;
 
     Ok(response_message)
 }
 
 /// This example demonstrates adding agents using the Authorizable trait
-pub fn create_add_agents_example() -> Result<Message> {
+pub fn create_add_agents_example() -> Result<PlainMessage> {
     let originator_did = "did:example:originator";
     let beneficiary_did = "did:example:beneficiary";
     let sender_vasp_did = "did:example:sender_vasp";
@@ -150,7 +147,7 @@ pub fn create_add_agents_example() -> Result<Message> {
 
     // Create the initial transfer message
     let transfer_message =
-        transfer.to_didcomm_with_route(Some(originator_did), [beneficiary_did].iter().copied())?;
+        transfer.to_didcomm_with_route(originator_did, [beneficiary_did].iter().copied())?;
 
     // Create an Authorize message first
     let authorize = Authorize {
@@ -159,7 +156,7 @@ pub fn create_add_agents_example() -> Result<Message> {
     };
 
     // Create a reply from the originator to the beneficiary
-    let mut authorize_message = authorize.to_didcomm(Some(originator_did))?;
+    let mut authorize_message = authorize.to_didcomm(originator_did)?;
 
     // Set thread ID to maintain conversation
     authorize_message.thid = Some(transfer_message.id.clone());
@@ -167,11 +164,11 @@ pub fn create_add_agents_example() -> Result<Message> {
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = [originator_did, beneficiary_did]
         .iter()
-        .filter(|did| **did != originator_did)
+        .filter(|&did| *did != originator_did)
         .map(|s| s.to_string())
         .collect();
 
-    authorize_message.to = Some(recipients);
+    authorize_message.to = recipients;
 
     // Create an AddAgents message
     let add_agents = AddAgents {
@@ -185,7 +182,7 @@ pub fn create_add_agents_example() -> Result<Message> {
     };
 
     // Create a reply using the TapMessage trait
-    let mut response = add_agents.to_didcomm(Some(originator_did))?;
+    let mut response = add_agents.to_didcomm(originator_did)?;
 
     // Set thread ID to maintain conversation
     response.thid = Some(transfer_message.id.clone());
@@ -193,23 +190,23 @@ pub fn create_add_agents_example() -> Result<Message> {
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = [originator_did, beneficiary_did, new_agent_did]
         .iter()
-        .filter(|did| **did != originator_did)
+        .filter(|&did| *did != originator_did)
         .map(|s| s.to_string())
         .collect();
 
-    response.to = Some(recipients);
+    response.to = recipients;
 
     Ok(response)
 }
 
 /// This example demonstrates replacing an agent using the Authorizable trait
 pub fn create_replace_agent_example(
-    original_message: &Message,
+    original_message: &PlainMessage,
     creator_did: &str,
     original_agent_id: &str,
     replacement_agent_id: &str,
     replacement_agent_role: Option<&str>,
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Extract body and deserialize to Transfer
     let original_body_json = original_message.body.clone();
     let original_transfer: Transfer = serde_json::from_value(original_body_json)
@@ -231,7 +228,7 @@ pub fn create_replace_agent_example(
     );
 
     // Create a reply using the TapMessage trait
-    let mut response = replace_agent_body.to_didcomm(Some(creator_did))?;
+    let mut response = replace_agent_body.to_didcomm(creator_did)?;
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -239,24 +236,22 @@ pub fn create_replace_agent_example(
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = original_message
         .to
-        .as_ref()
-        .unwrap()
         .iter()
-        .filter(|did| **did != creator_did)
-        .map(|s| s.to_string())
+        .filter(|did| did.as_str() != creator_did)
+        .cloned()
         .collect();
 
-    response.to = Some(recipients);
+    response.to = recipients;
 
     Ok(response)
 }
 
 /// This example demonstrates removing an agent using the Authorizable trait
 pub fn create_remove_agent_example(
-    original_message: &Message,
+    original_message: &PlainMessage,
     creator_did: &str,
     agent_to_remove: &str,
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Extract body and deserialize to Transfer
     let original_body_json = original_message.body.clone();
     let original_transfer: Transfer = serde_json::from_value(original_body_json)
@@ -267,7 +262,7 @@ pub fn create_remove_agent_example(
         original_transfer.remove_agent(original_message.id.clone(), agent_to_remove.to_string());
 
     // Create a reply using the TapMessage trait
-    let mut response = remove_agent_body.to_didcomm(Some(creator_did))?;
+    let mut response = remove_agent_body.to_didcomm(creator_did)?;
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -275,24 +270,22 @@ pub fn create_remove_agent_example(
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = original_message
         .to
-        .as_ref()
-        .unwrap()
         .iter()
-        .filter(|did| **did != creator_did)
-        .map(|s| s.to_string())
+        .filter(|did| did.as_str() != creator_did)
+        .cloned()
         .collect();
 
-    response.to = Some(recipients);
+    response.to = recipients;
 
     Ok(response)
 }
 
 /// This example demonstrates creating an UpdatePolicies message using the Authorizable trait
 pub fn create_update_policies_example(
-    original_message: &Message,
+    original_message: &PlainMessage,
     creator_did: &str,
     _recipients: &[&str],
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Extract body and deserialize to Transfer
     let original_body_json = original_message.body.clone();
     let original_transfer: Transfer = serde_json::from_value(original_body_json)
@@ -314,7 +307,7 @@ pub fn create_update_policies_example(
     );
 
     // Create a reply using the TapMessage trait, which maintains thread correlation
-    let mut response = update_policies_body.to_didcomm(Some(creator_did))?;
+    let mut response = update_policies_body.to_didcomm(creator_did)?;
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -322,14 +315,12 @@ pub fn create_update_policies_example(
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = original_message
         .to
-        .as_ref()
-        .unwrap()
         .iter()
-        .filter(|did| **did != creator_did)
-        .map(|s| s.to_string())
+        .filter(|did| did.as_str() != creator_did)
+        .cloned()
         .collect();
 
-    response.to = Some(recipients);
+    response.to = recipients;
 
     Ok(response)
 }
@@ -349,7 +340,7 @@ pub fn settle_example(
     transaction_id: String,
     settlement_id: String,
     amount: Option<String>,
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Create a Settle message
     let settle = Settle {
         transaction_id,
@@ -358,7 +349,7 @@ pub fn settle_example(
     };
 
     // Convert to DIDComm message
-    let settle_message = settle.to_didcomm(Some("did:example:dave"))?;
+    let settle_message = settle.to_didcomm("did:example:dave")?;
 
     Ok(settle_message)
 }
@@ -396,8 +387,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     };
 
     // Create the initial transfer message
-    let transfer_message =
-        transfer.to_didcomm_with_route(Some(alice_did), [bob_did].iter().copied())?;
+    let transfer_message = transfer.to_didcomm_with_route(alice_did, [bob_did].iter().copied())?;
 
     println!("Created initial transfer message: {:?}", transfer_message);
 
@@ -411,7 +401,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     };
 
     // Create a reply from Bob to Alice
-    let mut authorize_message = authorize.to_didcomm(Some(bob_did))?;
+    let mut authorize_message = authorize.to_didcomm(bob_did)?;
 
     // Set thread ID to maintain conversation
     authorize_message.thid = Some(transfer_message.id.clone());
@@ -419,11 +409,11 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = [alice_did, bob_did]
         .iter()
-        .filter(|did| **did != bob_did)
+        .filter(|&did| *did != bob_did)
         .map(|s| s.to_string())
         .collect();
 
-    authorize_message.to = Some(recipients);
+    authorize_message.to = recipients;
 
     println!("Created authorize message: {:?}", authorize_message);
 
@@ -440,7 +430,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     };
 
     // Create the add agents message
-    let mut add_agents_message = add_agents.to_didcomm(Some(alice_did))?;
+    let mut add_agents_message = add_agents.to_didcomm(alice_did)?;
 
     // Set thread ID to maintain conversation
     add_agents_message.thid = Some(transfer_id.clone());
@@ -448,11 +438,11 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = [alice_did, bob_did, charlie_did]
         .iter()
-        .filter(|did| **did != alice_did)
+        .filter(|&did| *did != alice_did)
         .map(|s| s.to_string())
         .collect();
 
-    add_agents_message.to = Some(recipients);
+    add_agents_message.to = recipients;
 
     println!("Created add agents message: {:?}", add_agents_message);
 
@@ -469,7 +459,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     };
 
     // Create the replace agent message
-    let mut replace_agent_message = replace_agent.to_didcomm(Some(bob_did))?;
+    let mut replace_agent_message = replace_agent.to_didcomm(bob_did)?;
 
     // Set thread ID to maintain conversation
     replace_agent_message.thid = Some(transfer_id.clone());
@@ -477,11 +467,11 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = [alice_did, dave_did, charlie_did]
         .iter()
-        .filter(|did| **did != bob_did)
+        .filter(|&did| *did != bob_did)
         .map(|s| s.to_string())
         .collect();
 
-    replace_agent_message.to = Some(recipients);
+    replace_agent_message.to = recipients;
 
     println!("Created replace agent message: {:?}", replace_agent_message);
 
@@ -492,7 +482,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     };
 
     // Create the remove agent message
-    let mut remove_agent_message = remove_agent.to_didcomm(Some(alice_did))?;
+    let mut remove_agent_message = remove_agent.to_didcomm(alice_did)?;
 
     // Set thread ID to maintain conversation
     remove_agent_message.thid = Some(transfer_id.clone());
@@ -500,11 +490,11 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     // Set recipients to all participants except the creator
     let recipients: Vec<String> = [alice_did, dave_did, charlie_did]
         .iter()
-        .filter(|did| **did != alice_did)
+        .filter(|&did| *did != alice_did)
         .map(|s| s.to_string())
         .collect();
 
-    remove_agent_message.to = Some(recipients);
+    remove_agent_message.to = recipients;
 
     println!("Created remove agent message: {:?}", remove_agent_message);
 
@@ -517,11 +507,9 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     )?;
 
     // Verify that the 'to' field in the settle message includes Alice
-    if let Some(to) = &settle_message.to {
-        assert!(to.contains(&alice_did.to_string()));
-        assert!(!to.contains(&dave_did.to_string())); // Dave is the sender
-        println!("Verified that the settle message is addressed correctly");
-    }
+    assert!(settle_message.to.contains(&alice_did.to_string()));
+    assert!(!settle_message.to.contains(&dave_did.to_string())); // Dave is the sender
+    println!("Verified that the settle message is addressed correctly");
 
     Ok(())
 }

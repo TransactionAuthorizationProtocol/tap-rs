@@ -1,19 +1,21 @@
-//! Comprehensive tests for cryptographic operations
-//!
-//! These tests verify the cryptographic implementations for:
-//! - Signing and signature verification with different key types
-//! - Encryption and decryption with different key types
-//! - Handling of invalid cryptographic materials
+// Comprehensive tests for cryptographic operations
+//
+// These tests verify the cryptographic implementations for:
+// - Signing and signature verification with different key types
+// - Encryption and decryption with different key types
+// - Handling of invalid cryptographic materials
 
 use async_trait::async_trait;
 use base64::Engine;
-use didcomm::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
-use tap_agent::did::{DIDMethodResolver, SyncDIDResolver};
+use tap_agent::did::{
+    DIDDoc, DIDMethodResolver, SyncDIDResolver, VerificationMaterial, VerificationMethod,
+    VerificationMethodType,
+};
 use tap_agent::error::{Error, Result};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::message::SecurityMode;
 use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
 use tap_msg::message::tap_message_trait::TapMessageBody;
@@ -31,7 +33,7 @@ impl TapMessageBody for TestMessage {
         "crypto-test"
     }
 
-    fn from_didcomm(msg: &didcomm::Message) -> TapCoreResult<Self> {
+    fn from_didcomm(msg: &tap_msg::PlainMessage) -> TapCoreResult<Self> {
         // Try to extract fields from the message body
         let id = msg
             .body
@@ -65,9 +67,9 @@ impl TapMessageBody for TestMessage {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> TapCoreResult<didcomm::Message> {
+    fn to_didcomm(&self, from_did: &str) -> TapCoreResult<tap_msg::PlainMessage> {
         // Create a new DIDComm message
-        let msg = didcomm::Message {
+        let msg = tap_msg::PlainMessage {
             id: self.id.clone(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
@@ -75,8 +77,8 @@ impl TapMessageBody for TestMessage {
                 "id": self.id,
                 "content": self.content
             }),
-            from: from_did.map(|did| did.to_string()),
-            to: None,
+            from: from_did.to_string(),
+            to: Vec::new(),
             thid: None,
             pthid: None,
             created_time: None,
@@ -325,7 +327,7 @@ impl TestEnvironment {
 
         // Create a message packer
         let message_packer =
-            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver));
+            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver), true);
 
         Self {
             ed25519_did,
@@ -339,7 +341,7 @@ impl TestEnvironment {
     fn create_test_message() -> TestMessage {
         TestMessage {
             id: Uuid::new_v4().to_string(),
-            content: format!("Test content {}", Uuid::new_v4().to_string()),
+            content: format!("Test content {}", Uuid::new_v4()),
         }
     }
 }
@@ -941,7 +943,7 @@ async fn test_message_sizes() {
 
         // Verify we can unpack all message sizes (but don't fail the test if we can't)
         if let Ok(small_unpacked_signed) =
-            env.message_packer.unpack_message_value(&small_signed).await
+            env.message_packer.unpack_message_value(small_signed).await
         {
             assert_eq!(
                 small_unpacked_signed.get("id").unwrap().as_str().unwrap(),
@@ -950,10 +952,8 @@ async fn test_message_sizes() {
             println!("Small message verified");
         }
 
-        if let Ok(medium_unpacked_signed) = env
-            .message_packer
-            .unpack_message_value(&medium_signed)
-            .await
+        if let Ok(medium_unpacked_signed) =
+            env.message_packer.unpack_message_value(medium_signed).await
         {
             assert_eq!(
                 medium_unpacked_signed.get("id").unwrap().as_str().unwrap(),
@@ -963,7 +963,7 @@ async fn test_message_sizes() {
         }
 
         if let Ok(large_unpacked_signed) =
-            env.message_packer.unpack_message_value(&large_signed).await
+            env.message_packer.unpack_message_value(large_signed).await
         {
             assert_eq!(
                 large_unpacked_signed.get("id").unwrap().as_str().unwrap(),
@@ -1015,10 +1015,10 @@ async fn test_mixed_security_mode() {
     // Only run this test if both operations succeed
     if let (Ok(signed_packed), Ok(encrypted_packed)) = (&sign_result, &encrypt_result) {
         // Parse the signed message
-        let mut signed_json: serde_json::Value = serde_json::from_str(&signed_packed).unwrap();
+        let mut signed_json: serde_json::Value = serde_json::from_str(signed_packed).unwrap();
 
         // Parse the encrypted message
-        let encrypted_json: serde_json::Value = serde_json::from_str(&encrypted_packed).unwrap();
+        let encrypted_json: serde_json::Value = serde_json::from_str(encrypted_packed).unwrap();
 
         // Combine elements from both to create a malformed message with mixed security modes
         // Add JWE elements to the JWS message

@@ -1,10 +1,10 @@
-//! # Message Processor Implementations for TAP Node
+//! # PlainMessage Processor Implementations for TAP Node
 //!
-//! This module provides message processing functionality for TAP Node. Message processors
+//! This module provides message processing functionality for TAP Node. PlainMessage processors
 //! serve as middleware in the message handling pipeline, allowing for validation, transformation,
 //! and filtering of messages as they flow through the system.
 //!
-//! ## Message Processing Pipeline
+//! ## PlainMessage Processing Pipeline
 //!
 //! The TAP Node uses a pipeline architecture for message processing, where messages pass through
 //! a series of processors in sequence. Each processor can:
@@ -18,17 +18,17 @@
 //!
 //! The module provides several built-in processor implementations:
 //!
-//! - `LoggingMessageProcessor`: Logs information about messages passing through the system
-//! - `ValidationMessageProcessor`: Validates message structure and content
-//! - `DefaultMessageProcessor`: A simple pass-through processor with minimal functionality
-//! - `CompositeMessageProcessor`: Combines multiple processors into a processing chain
+//! - `LoggingPlainMessageProcessor`: Logs information about messages passing through the system
+//! - `ValidationPlainMessageProcessor`: Validates message structure and content
+//! - `DefaultPlainMessageProcessor`: A simple pass-through processor with minimal functionality
+//! - `CompositePlainMessageProcessor`: Combines multiple processors into a processing chain
 //!
 //! ## Custom Processors
 //!
-//! You can create custom processors by implementing the `MessageProcessor` trait. This
+//! You can create custom processors by implementing the `PlainMessageProcessor` trait. This
 //! allows for specialized processing such as:
 //!
-//! - Message transformation for protocol version compatibility
+//! - PlainMessage transformation for protocol version compatibility
 //! - Content-based filtering and routing
 //! - Security scanning and anomaly detection
 //! - Metrics collection and performance monitoring
@@ -44,13 +44,13 @@
 
 use async_trait::async_trait;
 use log::{debug, info};
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 
 use crate::error::Result;
 
 /// Trait for processing DIDComm messages in TAP nodes
 ///
-/// The `MessageProcessor` trait defines the interface for message processors
+/// The `PlainMessageProcessor` trait defines the interface for message processors
 /// that handle DIDComm messages flowing through the TAP node. Processors act
 /// as middleware, allowing for validation, transformation, logging, metrics
 /// collection, and other operations on messages.
@@ -83,21 +83,21 @@ use crate::error::Result;
 /// ```
 /// # use async_trait::async_trait;
 /// # use tap_node::error::Result;
-/// # use tap_msg::didcomm::Message;
-/// # use tap_node::message::processor::MessageProcessor;
+/// # use tap_msg::didcomm::PlainMessage;
+/// # use tap_node::message::processor::PlainMessageProcessor;
 /// #
 /// #[derive(Clone, Debug)]
 /// struct MyCustomProcessor;
 ///
 /// #[async_trait]
-/// impl MessageProcessor for MyCustomProcessor {
-///     async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+/// impl PlainMessageProcessor for MyCustomProcessor {
+///     async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
 ///         // Process incoming message - e.g., validate fields, log, transform
 ///         println!("Processing incoming message: {}", message.id);
 ///         Ok(Some(message))  // Pass message along unchanged
 ///     }
 ///
-///     async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+///     async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
 ///         // Process outgoing message
 ///         println!("Processing outgoing message: {}", message.id);
 ///         Ok(Some(message))  // Pass message along unchanged
@@ -105,7 +105,7 @@ use crate::error::Result;
 /// }
 /// ```
 #[async_trait]
-pub trait MessageProcessor: Send + Sync + Clone {
+pub trait PlainMessageProcessor: Send + Sync + Clone {
     /// Process an incoming message received by the node
     ///
     /// This method handles messages that are being received by the TAP node from
@@ -121,7 +121,7 @@ pub trait MessageProcessor: Send + Sync + Clone {
     /// * `Ok(Some(message))` - The message to pass to the next processor
     /// * `Ok(None)` - Drop the message (do not process further)
     /// * `Err(e)` - Processing error
-    async fn process_incoming(&self, message: Message) -> Result<Option<Message>>;
+    async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>>;
 
     /// Process an outgoing message being sent from the node
     ///
@@ -139,24 +139,24 @@ pub trait MessageProcessor: Send + Sync + Clone {
     /// * `Ok(Some(message))` - The message to pass to the next processor
     /// * `Ok(None)` - Drop the message (do not process further)
     /// * `Err(e)` - Processing error
-    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>>;
+    async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>>;
 }
 
 /// A message processor that logs messages
 #[derive(Debug, Clone)]
-pub struct LoggingMessageProcessor;
+pub struct LoggingPlainMessageProcessor;
 
 #[async_trait]
-impl MessageProcessor for LoggingMessageProcessor {
-    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+impl PlainMessageProcessor for LoggingPlainMessageProcessor {
+    async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         info!("Incoming message: {}", message.id);
-        debug!("Message content: {:?}", message);
+        debug!("PlainMessage content: {:?}", message);
         Ok(Some(message))
     }
 
-    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+    async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         info!("Outgoing message: {}", message.id);
-        debug!("Message content: {:?}", message);
+        debug!("PlainMessage content: {:?}", message);
         Ok(Some(message))
     }
 }
@@ -181,47 +181,40 @@ impl MessageProcessor for LoggingMessageProcessor {
 /// - Any 'from' or 'to' DIDs follow the 'did:' prefix format
 /// - Basic protocol-specific requirements based on message type
 ///
-/// # Message Flow
+/// # PlainMessage Flow
 ///
 /// The validator sits in the message processor pipeline and can filter out invalid
 /// messages by returning Ok(None), or let valid messages continue through the
 /// pipeline by returning Ok(Some(message)).
 #[derive(Debug, Clone)]
-pub struct ValidationMessageProcessor;
+pub struct ValidationPlainMessageProcessor;
 
 #[async_trait]
-impl MessageProcessor for ValidationMessageProcessor {
-    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+impl PlainMessageProcessor for ValidationPlainMessageProcessor {
+    async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         debug!("Validating incoming message: {}", message.id);
 
         // Basic validation - ID and type should not be empty
         if message.id.is_empty() {
-            info!("Message has empty ID, rejecting");
+            info!("PlainMessage has empty ID, rejecting");
             return Ok(None);
         }
 
         if message.typ.is_empty() {
-            info!("Message has empty type, rejecting");
+            info!("PlainMessage has empty type, rejecting");
             return Ok(None);
         }
 
         // Validate DID format if present
-        if let Some(from) = &message.from {
-            if !from.starts_with("did:") {
-                info!("Invalid 'from' DID format: {}", from);
-                return Ok(None);
-            }
+        if !message.from.is_empty() && !message.from.starts_with("did:") {
+            info!("Invalid 'from' DID format: {}", message.from);
+            return Ok(None);
         }
 
         // Validate recipient DIDs
-        if let Some(to) = &message.to {
-            if to.is_empty() {
-                info!("Message has empty 'to' field");
-                return Ok(None);
-            }
-
+        if !message.to.is_empty() {
             // All DIDs should have valid format
-            for recipient in to {
+            for recipient in &message.to {
                 if !recipient.starts_with("did:") {
                     info!("Invalid recipient DID format: {}", recipient);
                     return Ok(None);
@@ -231,14 +224,14 @@ impl MessageProcessor for ValidationMessageProcessor {
 
         // Validate body
         if message.body == serde_json::json!(null) {
-            info!("Message has null body, rejecting");
+            info!("PlainMessage has null body, rejecting");
             return Ok(None);
         }
 
         // Validate pthid if present
         if let Some(pthid) = &message.pthid {
             if pthid.is_empty() {
-                info!("Message has empty parent thread ID, rejecting");
+                info!("PlainMessage has empty parent thread ID, rejecting");
                 return Ok(None);
             }
         }
@@ -248,7 +241,7 @@ impl MessageProcessor for ValidationMessageProcessor {
             let now = chrono::Utc::now().timestamp() as u64;
             // Check if the timestamp is more than 5 minutes in the future
             if created_time > now + 300 {
-                info!("Message has future timestamp, rejecting");
+                info!("PlainMessage has future timestamp, rejecting");
                 return Ok(None);
             }
         }
@@ -283,11 +276,11 @@ impl MessageProcessor for ValidationMessageProcessor {
             return Ok(None);
         }
 
-        // Message passed validation
+        // PlainMessage passed validation
         Ok(Some(message))
     }
 
-    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+    async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         debug!("Validating outgoing message: {}", message.id);
 
         // For outgoing messages, apply the same validations as incoming messages
@@ -305,22 +298,18 @@ impl MessageProcessor for ValidationMessageProcessor {
         }
 
         // Validate DID format if present
-        if let Some(from) = &message.from {
-            if !from.starts_with("did:") {
-                info!("Invalid 'from' DID format in outgoing message: {}", from);
-                return Ok(None);
-            }
+        if !message.from.is_empty() && !message.from.starts_with("did:") {
+            info!(
+                "Invalid 'from' DID format in outgoing message: {}",
+                message.from
+            );
+            return Ok(None);
         }
 
         // Validate recipient DIDs
-        if let Some(to) = &message.to {
-            if to.is_empty() {
-                info!("Outgoing message has empty 'to' field");
-                return Ok(None);
-            }
-
+        if !message.to.is_empty() {
             // All DIDs should have valid format
-            for recipient in to {
+            for recipient in &message.to {
                 if !recipient.starts_with("did:") {
                     info!(
                         "Invalid recipient DID format in outgoing message: {}",
@@ -385,23 +374,23 @@ impl MessageProcessor for ValidationMessageProcessor {
             return Ok(None);
         }
 
-        // Message passed validation
+        // PlainMessage passed validation
         Ok(Some(message))
     }
 }
 
 /// Default message processor with core functionality
 #[derive(Debug, Clone)]
-pub struct DefaultMessageProcessor;
+pub struct DefaultPlainMessageProcessor;
 
 #[async_trait]
-impl MessageProcessor for DefaultMessageProcessor {
-    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+impl PlainMessageProcessor for DefaultPlainMessageProcessor {
+    async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         // By default, we just pass the message through
         Ok(Some(message))
     }
 
-    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+    async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         // By default, we just pass the message through
         Ok(Some(message))
     }
@@ -409,56 +398,68 @@ impl MessageProcessor for DefaultMessageProcessor {
 
 /// Default message processor that logs and validates messages
 #[derive(Clone, Debug)]
-pub struct DefaultMessageProcessorImpl {
+pub struct DefaultPlainMessageProcessorImpl {
     /// The internal processor
-    processor: crate::message::MessageProcessorType,
+    processor: crate::message::PlainMessageProcessorType,
 }
 
-impl Default for DefaultMessageProcessorImpl {
+impl Default for DefaultPlainMessageProcessorImpl {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl DefaultMessageProcessorImpl {
+impl DefaultPlainMessageProcessorImpl {
     /// Create a new default message processor
     pub fn new() -> Self {
         let logging_processor =
-            crate::message::MessageProcessorType::Logging(LoggingMessageProcessor);
+            crate::message::PlainMessageProcessorType::Logging(LoggingPlainMessageProcessor);
         let validation_processor =
-            crate::message::MessageProcessorType::Validation(ValidationMessageProcessor);
+            crate::message::PlainMessageProcessorType::Validation(ValidationPlainMessageProcessor);
 
-        let mut processor = crate::message::CompositeMessageProcessor::new(Vec::new());
+        let mut processor = crate::message::CompositePlainMessageProcessor::new(Vec::new());
         processor.add_processor(validation_processor);
         processor.add_processor(logging_processor);
 
-        let processor = crate::message::MessageProcessorType::Composite(processor);
+        let processor = crate::message::PlainMessageProcessorType::Composite(processor);
 
         Self { processor }
     }
 }
 
 #[async_trait]
-impl MessageProcessor for DefaultMessageProcessorImpl {
-    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
+    async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         match &self.processor {
-            crate::message::MessageProcessorType::Default(p) => p.process_incoming(message).await,
-            crate::message::MessageProcessorType::Logging(p) => p.process_incoming(message).await,
-            crate::message::MessageProcessorType::Validation(p) => {
+            crate::message::PlainMessageProcessorType::Default(p) => {
                 p.process_incoming(message).await
             }
-            crate::message::MessageProcessorType::Composite(p) => p.process_incoming(message).await,
+            crate::message::PlainMessageProcessorType::Logging(p) => {
+                p.process_incoming(message).await
+            }
+            crate::message::PlainMessageProcessorType::Validation(p) => {
+                p.process_incoming(message).await
+            }
+            crate::message::PlainMessageProcessorType::Composite(p) => {
+                p.process_incoming(message).await
+            }
         }
     }
 
-    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+    async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         match &self.processor {
-            crate::message::MessageProcessorType::Default(p) => p.process_outgoing(message).await,
-            crate::message::MessageProcessorType::Logging(p) => p.process_outgoing(message).await,
-            crate::message::MessageProcessorType::Validation(p) => {
+            crate::message::PlainMessageProcessorType::Default(p) => {
                 p.process_outgoing(message).await
             }
-            crate::message::MessageProcessorType::Composite(p) => p.process_outgoing(message).await,
+            crate::message::PlainMessageProcessorType::Logging(p) => {
+                p.process_outgoing(message).await
+            }
+            crate::message::PlainMessageProcessorType::Validation(p) => {
+                p.process_outgoing(message).await
+            }
+            crate::message::PlainMessageProcessorType::Composite(p) => {
+                p.process_outgoing(message).await
+            }
         }
     }
 }

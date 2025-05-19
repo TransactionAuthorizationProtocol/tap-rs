@@ -19,9 +19,10 @@ Add TAP-RS dependencies to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-tap-msg = "0.1.0"
-tap-agent = "0.1.0"
-tap-node = "0.1.0"
+tap-msg = "0.2.0"
+tap-agent = "0.2.0"
+tap-node = "0.2.0"
+tap-caip = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
@@ -42,25 +43,69 @@ yarn add @tap-rs/tap-ts
 ### In Rust
 
 ```rust
-use tap_agent::{Agent, AgentConfig};
-use tap_msg::did::KeyPair;
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
+use tap_agent::did::{MultiResolver, KeyResolver};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Generate a DID key pair
-    let key_pair = KeyPair::generate_ed25519().await?;
-    let did = key_pair.get_did_key();
+    // Generate or use a pre-existing DID
+    let did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
     
-    // Create agent configuration
-    let config = AgentConfig::new()
-        .with_did(did.clone())
-        .with_name("My TAP Agent");
+    // Create agent configuration with the DID
+    let config = AgentConfig::new(did.clone());
+    
+    // Set up DID resolver with support for did:key
+    let mut did_resolver = MultiResolver::new();
+    did_resolver.register_method("key", KeyResolver::new());
+    let did_resolver = Arc::new(did_resolver);
+    
+    // Set up secret resolver with the agent's key
+    let mut secret_resolver = BasicSecretResolver::new();
+    let secret = Secret {
+        id: format!("{}#keys-1", did),
+        type_: SecretType::JsonWebKey2020,
+        secret_material: SecretMaterial::JWK {
+            private_key_jwk: serde_json::json!({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
+                "d": "nWGxne_9WmC6hEr-BQh-uDpW6n7dZsN4c4C9rFfIz3Yh"
+            }),
+        },
+    };
+    secret_resolver.add_secret(&did, secret);
+    let secret_resolver = Arc::new(secret_resolver);
+    
+    // Create message packer
+    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
     
     // Create the agent
-    let agent = Agent::new(config, Arc::new(key_pair))?;
+    let agent = DefaultAgent::new(config, message_packer);
     
     println!("Created agent with DID: {}", did);
+    
+    Ok(())
+}
+```
+
+### Creating an Ephemeral Agent (Simplest Approach)
+
+For quick testing or development, you can create an ephemeral agent with a randomly generated DID:
+
+```rust
+use tap_agent::agent::DefaultAgent;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create an agent with an ephemeral did:key (generates a random Ed25519 key)
+    let (agent, did) = DefaultAgent::new_ephemeral()?;
+    
+    println!("Created ephemeral agent with DID: {}", did);
     
     Ok(())
 }
@@ -91,29 +136,34 @@ main().catch(console.error);
 ### In Rust
 
 ```rust
+use tap_agent::agent::Agent;
 use tap_msg::message::{Transfer, TapMessageBody, Participant as MessageParticipant};
-use didcomm::Message;
 use tap_caip::AssetId;
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 
-async fn create_transfer_message(
-    from_did: &str, 
+async fn create_and_send_transfer(
+    agent: &impl Agent,
+    from_did: &str,
     to_did: &str
-) -> Result<Message, tap_msg::error::Error> {
+) -> Result<(), Box<dyn std::error::Error>> {
     // Create originator and beneficiary participants
     let originator = MessageParticipant {
         id: from_did.to_string(),
         role: Some("originator".to_string()),
+        policies: None,
+        leiCode: None,
     };
-    
+
     let beneficiary = MessageParticipant {
         id: to_did.to_string(),
         role: Some("beneficiary".to_string()),
+        policies: None,
+        leiCode: None,
     };
-    
-    // Create a transfer body
-    let transfer_body = Transfer {
-        asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(), // DAI token
+
+    // Create a transfer message
+    let transfer = Transfer {
+        asset: AssetId::from_str("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(), // DAI token
         originator,
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
@@ -122,17 +172,22 @@ async fn create_transfer_message(
         memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),
     };
+
+    // Send the message
+    let recipients = vec![to_did];
+    let (packed_message, delivery_results) = agent.send_message(&transfer, recipients, true).await?;
     
-    // Create a DIDComm message from the transfer body
-    let message = transfer_body.to_didcomm()?;
+    println!("Message sent: {}", packed_message);
     
-    // Set the sender and recipients
-    let message = message
-        .set_from(Some(from_did.to_string()))
-        .set_to(Some(vec![to_did.to_string()]))
-        .set_created_time(Some(chrono::Utc::now().to_rfc3339()));
+    for result in delivery_results {
+        if let Some(status) = result.status {
+            println!("Delivered to {} with status {}", result.did, status);
+        } else if let Some(error) = &result.error {
+            println!("Failed to deliver to {}: {}", result.did, error);
+        }
+    }
     
-    Ok(message)
+    Ok(())
 }
 ```
 
@@ -146,7 +201,7 @@ const createTransferMessage = () => {
     const transfer = new Message({
         type: MessageType.TRANSFER,
     });
-    
+
     // Set transfer data
     transfer.setTransferData({
         asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F", // DAI token
@@ -155,7 +210,7 @@ const createTransferMessage = () => {
         beneficiaryDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
         memo: "Payment for services"
     });
-    
+
     return transfer;
 };
 ```
@@ -171,13 +226,13 @@ use std::sync::Arc;
 async fn create_node() -> Result<Arc<Node>, Box<dyn std::error::Error>> {
     // Create node configuration
     let config = NodeConfig::default();
-    
+
     // Create and start the node
     let node = Arc::new(Node::new(config));
-    
+
     // Register an agent with the node
     // node.register_agent(agent).await?;
-    
+
     Ok(node)
 }
 ```
@@ -214,38 +269,36 @@ const unsubscribe = node.subscribeToMessages((message, metadata) => {
 ### In Rust
 
 ```rust
-use tap_msg::message::{Transfer, Authorize};
-use didcomm::Message;
+use tap_agent::agent::Agent;
+use tap_msg::message::{Transfer, Authorize, TapMessageBody, Participant as MessageParticipant};
 use std::collections::HashMap;
 
-async fn process_transfer_message(
-    message: &Message
-) -> Result<Message, tap_msg::error::Error> {
-    // Extract the transfer body
-    let transfer_body = Transfer::from_didcomm(message)?;
+async fn process_incoming_message(
+    agent: &impl Agent,
+    packed_message: &str
+) -> Result<(), Box<dyn std::error::Error>> {
+    // Receive and unpack the message
+    let transfer: Transfer = agent.receive_message(packed_message).await?;
     
     println!("Received transfer:");
-    println!("  From: {}", transfer_body.originator.id);
-    println!("  Amount: {}", transfer_body.amount);
-    println!("  Asset: {}", transfer_body.asset);
+    println!("  From: {}", transfer.originator.id);
+    println!("  Amount: {}", transfer.amount);
+    println!("  Asset: {}", transfer.asset);
     
     // Create an authorize response
-    let authorize_body = Authorize {
-        transfer_id: message.id.clone(),
+    let authorize = Authorize {
+        transfer_id: "transfer-123".to_string(), // In a real scenario, use the actual transfer ID
         note: Some("Transfer authorized".to_string()),
         metadata: HashMap::new(),
     };
     
-    // Convert to DIDComm message
-    let response = authorize_body.to_didcomm()?;
+    // Send the authorize message back to the originator
+    let recipient_did = &transfer.originator.id;
+    let (packed_response, _) = agent.send_message(&authorize, vec![recipient_did], true).await?;
     
-    // Set sender and recipient
-    let response = response
-        .set_from(Some(transfer_body.beneficiary.as_ref().unwrap().id.clone()))
-        .set_to(Some(vec![transfer_body.originator.id.clone()]))
-        .set_created_time(Some(chrono::Utc::now().to_rfc3339()));
+    println!("Sent authorize response: {}", packed_response);
     
-    Ok(response)
+    Ok(())
 }
 ```
 
@@ -258,22 +311,22 @@ import { Participant, Message, MessageType } from "@tap-rs/tap-ts";
 participant.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => {
     console.log("Received transfer message:");
     console.log("  From:", metadata.fromDid);
-    
+
     const transferData = message.getTransferData();
     console.log("  Amount:", transferData.amount);
     console.log("  Asset:", transferData.asset);
-    
+
     // Create an authorize response
     const authorize = new Message({
         type: MessageType.AUTHORIZE,
         correlation: message.id, // Link to the transfer message
     });
-    
+
     // Set authorize data
     authorize.setAuthorizeData({
         note: "Transfer authorized"
     });
-    
+
     // Send the response
     return participant.sendMessage(metadata.fromDid, authorize);
 });
@@ -284,93 +337,43 @@ participant.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => 
 ### In Rust
 
 ```rust
-use tap_agent::{Agent, AgentConfig};
-use tap_msg::{
-    did::KeyPair,
-    message::{Transfer, Authorize, TapMessageBody, Participant as MessageParticipant},
-};
-use tap_node::{Node, NodeConfig};
-use didcomm::Message;
+use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::config::AgentConfig;
+use tap_agent::crypto::{DefaultMessagePacker, BasicSecretResolver};
+use tap_agent::did::{MultiResolver, KeyResolver};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_msg::message::{Transfer, Authorize, TapMessageBody, Participant as MessageParticipant};
 use tap_caip::AssetId;
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::oneshot;
+use std::{collections::HashMap, sync::Arc, str::FromStr};
+use tokio::time::sleep;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Create key pairs for Alice and Bob
-    let alice_key = KeyPair::generate_ed25519().await?;
-    let bob_key = KeyPair::generate_ed25519().await?;
-    
-    let alice_did = alice_key.get_did_key();
-    let bob_did = bob_key.get_did_key();
+    // Create two ephemeral agents for simplicity
+    let (alice_agent, alice_did) = DefaultAgent::new_ephemeral()?;
+    let (bob_agent, bob_did) = DefaultAgent::new_ephemeral()?;
     
     println!("Alice DID: {}", alice_did);
     println!("Bob DID: {}", bob_did);
     
-    // Create agents for Alice and Bob
-    let alice_agent = Agent::new(
-        AgentConfig::new().with_did(alice_did.clone()).with_name("Alice"),
-        Arc::new(alice_key),
-    )?;
-    
-    let bob_agent = Agent::new(
-        AgentConfig::new().with_did(bob_did.clone()).with_name("Bob"),
-        Arc::new(bob_key),
-    )?;
-    
-    // Create and start a node
-    let node = Arc::new(Node::new(NodeConfig::default()));
-    
-    // Register agents with the node
-    node.register_agent(Arc::new(alice_agent.clone())).await?;
-    node.register_agent(Arc::new(bob_agent.clone())).await?;
-    
-    // Create a channel to signal when Bob receives and processes a message
-    let (tx, rx) = oneshot::channel::<Message>();
-    
-    // Set up a message handler for Bob
-    node.register_message_handler(bob_did.clone(), |message| {
-        println!("Bob received a message: {}", message.id);
-        
-        // Process based on message type
-        if message.type_.as_ref().map_or(false, |t| t == "TAP_TRANSFER") {
-            // Create an authorize response (in a real scenario, would verify first)
-            let authorize_body = Authorize {
-                transfer_id: message.id.clone(),
-                note: Some("Transfer authorized".to_string()),
-                metadata: HashMap::new(),
-            };
-            
-            match authorize_body.to_didcomm() {
-                Ok(response) => {
-                    let response = response
-                        .set_from(Some(bob_did.clone()))
-                        .set_to(Some(vec![alice_did.clone()]))
-                        .set_created_time(Some(chrono::Utc::now().to_rfc3339()));
-                    
-                    // Signal that we've processed the message
-                    let _ = tx.send(response);
-                },
-                Err(e) => eprintln!("Error creating response: {}", e),
-            }
-        }
-        
-        Ok(())
-    }).await?;
-    
-    // Alice creates a transfer message for Bob
+    // Alice creates and sends a transfer to Bob
     let originator = MessageParticipant {
         id: alice_did.clone(),
         role: Some("originator".to_string()),
+        policies: None,
+        leiCode: None,
     };
-    
+
     let beneficiary = MessageParticipant {
         id: bob_did.clone(),
         role: Some("beneficiary".to_string()),
+        policies: None,
+        leiCode: None,
     };
-    
-    let transfer_body = Transfer {
-        asset: AssetId::parse("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
+
+    let transfer = Transfer {
+        asset: AssetId::from_str("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
         originator,
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
@@ -380,22 +383,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         metadata: HashMap::new(),
     };
     
-    let transfer_message = transfer_body.to_didcomm()?
-        .set_from(Some(alice_did.clone()))
-        .set_to(Some(vec![bob_did.clone()]))
-        .set_created_time(Some(chrono::Utc::now().to_rfc3339()));
+    println!("Alice is sending a transfer to Bob...");
+    let (packed_transfer, _) = alice_agent.send_message(&transfer, vec![&bob_did], false).await?;
     
-    // Alice sends the message to the node
-    println!("Alice is sending a transfer message...");
-    node.receive(transfer_message).await?;
+    // In a real scenario, this message would be delivered over a transport layer
+    // For simplicity, we directly give Bob the packed message
     
-    // Wait for Bob's response
-    let bob_response = rx.await?;
+    println!("Bob receives the transfer...");
+    let received_transfer: Transfer = bob_agent.receive_message(&packed_transfer).await?;
     
-    // Alice processes Bob's response
-    println!("Alice received Bob's response");
-    let authorize_body = Authorize::from_didcomm(&bob_response)?;
-    println!("Authorization note: {}", authorize_body.note.unwrap_or_default());
+    println!("Bob unpacked the transfer:");
+    println!("  From: {}", received_transfer.originator.id);
+    println!("  Amount: {}", received_transfer.amount);
+    println!("  Asset: {}", received_transfer.asset);
+    
+    // Bob creates and sends an authorize response
+    let authorize = Authorize {
+        transfer_id: "transfer-123".to_string(), // In a real scenario, use the ID from the transfer
+        note: Some("Transfer authorized".to_string()),
+        metadata: HashMap::new(),
+    };
+    
+    println!("Bob is sending an authorize response to Alice...");
+    let (packed_authorize, _) = bob_agent.send_message(&authorize, vec![&alice_did], false).await?;
+    
+    // Alice receives Bob's response
+    println!("Alice receives Bob's response...");
+    let received_authorize: Authorize = alice_agent.receive_message(&packed_authorize).await?;
+    
+    println!("Alice unpacked the authorize response:");
+    println!("  Note: {}", received_authorize.note.unwrap_or_default());
     
     // In a real scenario, Alice would now proceed with the on-chain transaction
     println!("Alice can now proceed with the on-chain transaction");

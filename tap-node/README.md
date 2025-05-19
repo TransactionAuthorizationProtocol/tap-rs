@@ -109,7 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Processing Messages
 
 ```rust
-use tap_msg::didcomm::Message;
+use tap_msg::PlainMessage;
 
 // Receive and process an incoming message
 async fn handle_message(node: &TapNode, message: Message) -> Result<(), tap_node::Error> {
@@ -231,7 +231,7 @@ You can create custom message processors to extend the node's capabilities:
 use async_trait::async_trait;
 use tap_node::error::Result;
 use tap_node::message::processor::MessageProcessor;
-use tap_msg::didcomm::Message;
+use tap_msg::tap_msg::PlainMessage;
 
 #[derive(Clone, Debug)]
 struct MyCustomProcessor;

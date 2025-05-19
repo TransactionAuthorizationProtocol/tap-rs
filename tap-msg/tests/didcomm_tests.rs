@@ -41,11 +41,11 @@ async fn test_pack_tap_body() -> Result<()> {
     let to_did = "did:key:z6MkwYyuTCaaDKnMGHpMkteuFpj1KrsFgGXwW3nXdT7k3RQP";
     let to_dids = [to_did];
 
-    let packed_msg = body.to_didcomm_with_route(Some(from_did), to_dids.iter().copied())?;
+    let packed_msg = body.to_didcomm_with_route(from_did, to_dids.iter().copied())?;
 
     // Verify the packed message
-    assert_eq!(packed_msg.from, Some(from_did.to_string()));
-    assert_eq!(packed_msg.to, Some(vec![to_did.to_string()]));
+    assert_eq!(packed_msg.from, from_did.to_string());
+    assert_eq!(packed_msg.to, vec![to_did.to_string()]);
     assert_eq!(packed_msg.type_, Transfer::message_type());
 
     // Verify the body contains our data
@@ -106,7 +106,7 @@ async fn test_extract_tap_body() -> Result<()> {
     let to_did = "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6";
     let to_dids = [to_did];
 
-    let message = body.to_didcomm_with_route(Some(from_did), to_dids.iter().copied())?;
+    let message = body.to_didcomm_with_route(from_did, to_dids.iter().copied())?;
 
     // Extract the body using from_didcomm
     let extracted: Transfer = Transfer::from_didcomm(&message)?;

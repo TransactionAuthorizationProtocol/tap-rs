@@ -3,9 +3,11 @@
 //! This module provides traits for converting between DIDComm messages
 //! and TAP-specific message bodies, as well as validation of those bodies.
 
+use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
+use crate::message::policy::Policy;
+use crate::message::{Authorize, Participant, RemoveAgent, ReplaceAgent, UpdatePolicies};
 use chrono::Utc;
-use didcomm::Message;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -20,7 +22,7 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
     fn validate(&self) -> Result<()>;
 
     /// Convert this body to a DIDComm message.
-    fn to_didcomm(&self, from_did: Option<&str>) -> Result<Message> {
+    fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
         // Create a JSON representation of self with explicit type field
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -94,20 +96,15 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
         agent_dids.dedup();
 
         // If from_did is provided, remove it from the recipients list to avoid sending to self
-        if let Some(from) = from_did {
-            agent_dids.retain(|did| did != from);
-        }
-
-        // Always set the 'to' field, even if it's an empty list
-        let to = Some(agent_dids);
+        agent_dids.retain(|did| did != from);
 
         // Create the message
-        let message = Message {
+        let message = PlainMessage {
             id,
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
-            from: from_did.map(|s| s.to_string()),
-            to,
+            from: from.to_string(),
+            to: agent_dids,
             thid: None,
             pthid: None,
             created_time: Some(now),
@@ -121,17 +118,20 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
         Ok(message)
     }
 
-    /// Convert this body to a DIDComm message with a sender and multiple recipients.
+    /// Convert this body to a DIDComm message with a custom routing path.
     ///
-    /// According to TAP requirements:
-    /// - The `from` field should always be the creator's DID
-    /// - The `to` field should include DIDs of all agents involved except the creator
+    /// This method allows specifying an explicit list of recipient DIDs, overriding
+    /// the automatic extraction of participants from the message body.
     ///
-    /// Note: This method now directly uses the enhanced to_didcomm implementation
-    /// which automatically extracts agent DIDs. The explicit 'to' parameter allows
-    /// overriding the automatically extracted recipients when needed.
-    #[allow(dead_code)] // Used in tests but not in production code
-    fn to_didcomm_with_route<'a, I>(&self, from: Option<&str>, to: I) -> Result<Message>
+    /// # Arguments
+    ///
+    /// * `from` - The sender DID
+    /// * `to` - An iterator of recipient DIDs
+    ///
+    /// # Returns
+    ///
+    /// A new DIDComm message with the specified routing
+    fn to_didcomm_with_route<'a, I>(&self, from: &str, to: I) -> Result<PlainMessage>
     where
         I: IntoIterator<Item = &'a str>,
     {
@@ -141,14 +141,14 @@ pub trait TapMessageBody: Serialize + DeserializeOwned + Send + Sync {
         // Override with explicitly provided recipients if any
         let to_vec: Vec<String> = to.into_iter().map(String::from).collect();
         if !to_vec.is_empty() {
-            message.to = Some(to_vec);
+            message.to = to_vec;
         }
 
         Ok(message)
     }
 
     /// Extract this body type from a DIDComm message.
-    fn from_didcomm(message: &Message) -> Result<Self>
+    fn from_didcomm(message: &PlainMessage) -> Result<Self>
     where
         Self: Sized,
     {
@@ -273,9 +273,9 @@ pub trait TapMessage {
     /// # Returns
     ///
     /// A new DIDComm message that is properly linked to this message as a reply
-    fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<Message> {
+    fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<PlainMessage> {
         // Create the base message with creator as sender
-        let mut message = body.to_didcomm(Some(creator_did))?;
+        let mut message = body.to_didcomm(creator_did)?;
 
         // Set the thread ID to maintain the conversation thread
         if let Some(thread_id) = self.thread_id() {
@@ -300,7 +300,7 @@ pub trait TapMessage {
             .collect();
 
         if !recipients.is_empty() {
-            message.to = Some(recipients);
+            message.to = recipients;
         }
 
         Ok(message)
@@ -319,8 +319,8 @@ pub trait TapMessage {
     fn message_id(&self) -> &str;
 }
 
-// Implement TapMessage trait for didcomm::Message
-impl TapMessage for Message {
+// Implement TapMessage trait for PlainMessage
+impl TapMessage for PlainMessage {
     fn validate(&self) -> Result<()> {
         // Check if it's a TAP message first
         if !self.is_tap_message() {
@@ -390,15 +390,13 @@ impl TapMessage for Message {
     fn get_all_participants(&self) -> Vec<String> {
         let mut participants = Vec::new();
 
-        // Add sender if present
-        if let Some(from) = &self.from {
-            participants.push(from.clone());
+        // Add sender
+        if !self.from.is_empty() {
+            participants.push(self.from.clone());
         }
 
-        // Add recipients if present
-        if let Some(to) = &self.to {
-            participants.extend(to.clone());
-        }
+        // Add recipients
+        participants.extend(self.to.clone());
 
         participants
     }
@@ -439,8 +437,8 @@ impl TapMessage for Message {
     }
 }
 
-// Implement Connectable trait for Message
-impl Connectable for Message {
+// Implement Connectable trait for PlainMessage
+impl Connectable for PlainMessage {
     fn with_connection(&mut self, connect_id: &str) -> &mut Self {
         self.pthid = Some(connect_id.to_string());
         self
@@ -464,7 +462,7 @@ impl Connectable for Message {
 ///
 /// * `body` - The message body to include
 /// * `id` - Optional message ID (will be generated if None)
-/// * `from_did` - Optional sender DID
+/// * `from_did` - Sender DID
 /// * `to_dids` - Recipient DIDs (will override automatically extracted agent DIDs)
 ///
 /// # Returns
@@ -473,9 +471,9 @@ impl Connectable for Message {
 pub fn create_tap_message<T: TapMessageBody>(
     body: &T,
     id: Option<String>,
-    from_did: Option<&str>,
+    from_did: &str,
     to_dids: &[&str],
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Create the base message from the body, passing the from_did
     let mut message = body.to_didcomm(from_did)?;
 
@@ -486,8 +484,31 @@ pub fn create_tap_message<T: TapMessageBody>(
 
     // Override with explicitly provided recipients if any
     if !to_dids.is_empty() {
-        message.to = Some(to_dids.iter().map(|&s| s.to_string()).collect());
+        message.to = to_dids.iter().map(|&s| s.to_string()).collect();
     }
 
     Ok(message)
+}
+
+/// Authorizable trait implementation for various TAP message types.
+/// This module defines the Authorizable trait, which allows message types
+/// to be authorized, and implementations for relevant TAP message types.
+/// Authorizable trait for types that can be authorized or can generate authorization-related messages.
+pub trait Authorizable {
+    /// Create an Authorize message for this object.
+    fn authorize(&self, note: Option<String>) -> Authorize;
+
+    /// Create an UpdatePolicies message for this object.
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies;
+
+    /// Create a ReplaceAgent message for this object.
+    fn replace_agent(
+        &self,
+        transaction_id: String,
+        original_agent: String,
+        replacement: Participant,
+    ) -> ReplaceAgent;
+
+    /// Create a RemoveAgent message for this object.
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
 }

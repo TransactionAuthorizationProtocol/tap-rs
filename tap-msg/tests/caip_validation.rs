@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::types::{Participant, Transfer};
+use tap_msg::message::{Participant, Transfer};
 
 #[test]
 fn test_valid_transfer_body() {

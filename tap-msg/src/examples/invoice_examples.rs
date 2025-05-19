@@ -1,12 +1,14 @@
-//! Examples for using the Invoice and PaymentRequest functionality.
+//! Examples for using the Invoice and Payment functionality.
 
+use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
+use crate::message::payment::PaymentBuilder;
 use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::types::Participant;
-use crate::message::PaymentRequest;
-use didcomm::Message;
+use crate::message::{Participant, Payment};
 use std::collections::HashMap;
+use std::str::FromStr;
+use tap_caip::AssetId;
 
 /// Example of creating a basic invoice with line items
 pub fn create_basic_invoice_example() -> Result<Invoice> {
@@ -122,11 +124,11 @@ pub fn create_invoice_with_tax_example() -> Result<Invoice> {
     Ok(invoice)
 }
 
-/// Example of creating a PaymentRequest with an embedded invoice
+/// Example of creating a Payment with an embedded invoice
 pub fn create_payment_request_with_invoice_example(
     merchant_did: &str,
     customer_did: Option<&str>,
-) -> Result<Message> {
+) -> Result<PlainMessage> {
     // Create merchant participant
     let merchant = Participant {
         id: merchant_did.to_string(),
@@ -146,26 +148,36 @@ pub fn create_payment_request_with_invoice_example(
     // Create an invoice with tax
     let invoice = create_invoice_with_tax_example()?;
 
-    // Create a PaymentRequest with the invoice
-    let mut payment_request = PaymentRequest::with_currency(
-        invoice.currency_code.clone(),
-        format!("{:.2}", invoice.total),
-        merchant.clone(),
-        vec![agent],
-    );
+    // Create a Payment using the new API
+    let asset =
+        AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
 
-    // Add the invoice
+    // Create transaction ID
+    let transaction_id = uuid::Uuid::new_v4().to_string();
+
+    // Create a customer participant if provided
+    let customer = customer_did.map(|cust_did| Participant {
+        id: cust_did.to_string(),
+        role: Some("customer".to_string()),
+        policies: None,
+        leiCode: None,
+    });
+
+    // Use the builder pattern to create the payment
+    let mut payment_request = PaymentBuilder::default()
+        .transaction_id(transaction_id)
+        .asset(asset)
+        .amount(format!("{:.2}", invoice.total))
+        .currency_code(invoice.currency_code.clone())
+        .merchant(merchant.clone())
+        .add_agent(agent)
+        .build();
+
+    // Set customer if provided
+    payment_request.customer = customer;
+
+    // Add the invoice directly to the payment
     payment_request.invoice = Some(invoice);
-
-    // Add customer information if provided
-    if let Some(cust_did) = customer_did {
-        payment_request.customer = Some(Participant {
-            id: cust_did.to_string(),
-            role: Some("customer".to_string()),
-            policies: None,
-            leiCode: None,
-        });
-    }
 
     // Add expiry (e.g., 30 days)
     payment_request.expiry = Some("2023-10-01T00:00:00Z".to_string());
@@ -178,20 +190,40 @@ pub fn create_payment_request_with_invoice_example(
     };
 
     let message =
-        payment_request.to_didcomm_with_route(Some(merchant_did), recipients.iter().copied())?;
+        payment_request.to_didcomm_with_route(merchant_did, recipients.iter().copied())?;
 
     Ok(message)
 }
 
-/// Example of extracting and validating an invoice from a PaymentRequest message
-pub fn process_payment_request_with_invoice_example(message: &Message) -> Result<()> {
-    // Extract the PaymentRequest
-    let payment_request = PaymentRequest::from_didcomm(message)?;
+/// Example of extracting and validating an invoice from a Payment message
+pub fn process_payment_request_with_invoice_example(message: &PlainMessage) -> Result<()> {
+    // Extract the Payment
+    let payment_request = Payment::from_didcomm(message)?;
 
-    // Validate the PaymentRequest
+    // Validate the Payment
     payment_request.validate()?;
 
-    // Check if it has an invoice
+    // Print merchant information
+    println!("Merchant: {}", payment_request.merchant.id);
+
+    // Print customer information if present
+    if let Some(customer) = &payment_request.customer {
+        println!("Customer: {}", customer.id);
+    } else {
+        println!("Customer: Not specified");
+    }
+
+    println!("Amount: {}", payment_request.amount);
+
+    if let Some(currency) = &payment_request.currency_code {
+        println!("Currency: {}", currency);
+    }
+
+    if let Some(asset) = &payment_request.asset {
+        println!("Asset: {}", asset);
+    }
+
+    // Check if it has an invoice directly in the payment
     if let Some(invoice) = &payment_request.invoice {
         println!("Invoice ID: {}", invoice.id);
         println!("Currency: {}", invoice.currency_code);
@@ -234,6 +266,11 @@ pub fn process_payment_request_with_invoice_example(message: &Message) -> Result
         );
     } else {
         println!("Payment request does not contain an invoice");
+    }
+
+    // Print expiry if present
+    if let Some(expiry) = &payment_request.expiry {
+        println!("Expires: {}", expiry);
     }
 
     Ok(())

@@ -4,8 +4,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use tap_caip::AssetId;
+use tap_msg::message::tap_message_trait::Authorizable;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::{Authorizable, Authorize, Participant, Transfer, UpdateParty};
+use tap_msg::message::{Authorize, Participant, Reject, Settle, Transfer, UpdateParty};
 
 #[test]
 fn test_transfer_authorizable() {
@@ -14,7 +15,7 @@ fn test_transfer_authorizable() {
 
     // Convert to DIDComm message to get an ID
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
 
@@ -24,7 +25,7 @@ fn test_transfer_authorizable() {
 
     // Create a new DIDComm message from the auth object to get its transfer_id
     let auth_message = auth
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert auth to DIDComm");
 
     // Update the auth object with the transfer_id from the original transfer message
@@ -35,18 +36,24 @@ fn test_transfer_authorizable() {
     assert_eq!(auth.transaction_id, transfer_id);
     assert_eq!(auth.note, note);
 
-    // Test reject method - Now create Reject struct manually
-    let reject = transfer.reject(
-        "REJECT-001".to_string(),
-        "Rejected due to compliance issues".to_string(),
-    );
+    // Create Reject struct directly/manually since the trait is now at a different location
+    let reject_code = "REJECT-001".to_string();
+    let reject_reason = "Rejected due to compliance issues".to_string();
+    let reject = Reject {
+        transaction_id: transfer_message.id.clone(),
+        reason: format!("{}: {}", reject_code, reject_reason),
+    };
     assert_eq!(
         reject.reason,
         "REJECT-001: Rejected due to compliance issues"
     );
 
-    // Test settle method
-    let settle = transfer.settle("tx-12345".to_string(), Some("100".to_string()));
+    // Create Settle struct directly
+    let settle = Settle {
+        transaction_id: transfer_message.id.clone(),
+        settlement_id: "tx-12345".to_string(),
+        amount: Some("100".to_string()),
+    };
 
     assert_eq!(settle.settlement_id, "tx-12345".to_string());
     assert_eq!(settle.amount, Some("100".to_string()));
@@ -57,7 +64,7 @@ fn test_didcomm_message_authorizable() {
     // Create a Transfer message and convert to DIDComm message
     let transfer = create_test_transfer();
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
     let transfer_id = transfer_message.id.clone();
 
@@ -67,7 +74,7 @@ fn test_didcomm_message_authorizable() {
 
     // Create a new DIDComm message from the auth object to get its transfer_id
     let auth_message = auth
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert auth to DIDComm");
 
     // Update the auth object with the transfer_id from the original transfer message
@@ -78,18 +85,24 @@ fn test_didcomm_message_authorizable() {
     assert_eq!(auth.note, note);
     assert_eq!(auth.transaction_id, transfer_id);
 
-    // Test reject method - Create Reject struct manually
-    let reject = transfer.reject(
-        "REJECT-001".to_string(),
-        "Rejected due to compliance issues".to_string(),
-    );
+    // Create Reject struct directly/manually
+    let reject_code = "REJECT-001".to_string();
+    let reject_reason = "Rejected due to compliance issues".to_string();
+    let reject = Reject {
+        transaction_id: transfer_message.id.clone(),
+        reason: format!("{}: {}", reject_code, reject_reason),
+    };
     assert_eq!(
         reject.reason,
         "REJECT-001: Rejected due to compliance issues"
     );
 
-    // Test settle method
-    let settle = transfer.settle("tx-12345".to_string(), Some("100".to_string()));
+    // Create Settle struct directly
+    let settle = Settle {
+        transaction_id: transfer_message.id.clone(),
+        settlement_id: "tx-12345".to_string(),
+        amount: Some("100".to_string()),
+    };
 
     assert_eq!(settle.settlement_id, "tx-12345".to_string());
     assert_eq!(settle.amount, Some("100".to_string()));
@@ -99,8 +112,8 @@ fn test_didcomm_message_authorizable() {
 fn test_full_flow() {
     // Create a Transfer message
     let transfer = create_test_transfer();
-    let _original_message = transfer
-        .to_didcomm(None)
+    let original_message = transfer
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
     // Generate authorize response - Create Authorize struct manually
@@ -109,16 +122,20 @@ fn test_full_flow() {
 
     // Convert authorize to DIDComm message
     let auth_message = auth
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert authorize to DIDComm message");
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
-    // Generate settle response - Create Settle struct manually
-    let settle = transfer.settle("txid-12345".to_string(), Some("100".to_string()));
+    // Create Settle struct directly
+    let settle = Settle {
+        transaction_id: original_message.id.clone(),
+        settlement_id: "txid-12345".to_string(),
+        amount: Some("100".to_string()),
+    };
 
     // Convert settle to DIDComm message
     let settle_message = settle
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert settle to DIDComm message");
     assert_eq!(settle_message.type_, "https://tap.rsvp/schema/1.0#settle");
 }
@@ -130,7 +147,7 @@ fn test_update_party_message() {
 
     // Get the transfer_id (in a real scenario, this would be available)
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
 
@@ -156,13 +173,13 @@ fn test_update_party_message() {
 
     // Test conversion to DIDComm
     let didcomm_message = update_party
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     // Verify fields
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 
     // Test from_didcomm

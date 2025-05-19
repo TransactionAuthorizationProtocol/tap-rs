@@ -1,19 +1,19 @@
-//! Tests specifically focused on encryption/decryption functionality
-//!
-//! These tests verify the encryption and decryption functionality:
-//! - Testing AuthCrypt mode with different key types
-//! - Testing encryption with various payload sizes
-//! - Verifying JWE format compliance
+// Tests specifically focused on encryption/decryption functionality
+//
+// These tests verify the encryption and decryption functionality:
+// - Testing AuthCrypt mode with different key types
+// - Testing encryption with various payload sizes
+// - Verifying JWE format compliance
 
 use async_trait::async_trait;
 use base64::Engine;
-use didcomm::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker, MessagePacker};
+use tap_agent::did::{DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType};
 use tap_agent::did::{DIDMethodResolver, SyncDIDResolver};
 use tap_agent::error::{Error, Result};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::message::SecurityMode;
 use tap_msg::error::{Error as TapCoreError, Result as TapCoreResult};
 use tap_msg::message::tap_message_trait::TapMessageBody;
@@ -32,7 +32,7 @@ impl TapMessageBody for EncryptionTestMessage {
         "encryption-test"
     }
 
-    fn from_didcomm(msg: &didcomm::Message) -> TapCoreResult<Self> {
+    fn from_didcomm(msg: &tap_msg::PlainMessage) -> TapCoreResult<Self> {
         let id = msg
             .body
             .get("id")
@@ -70,7 +70,7 @@ impl TapMessageBody for EncryptionTestMessage {
         Ok(())
     }
 
-    fn to_didcomm(&self, from_did: Option<&str>) -> TapCoreResult<didcomm::Message> {
+    fn to_didcomm(&self, from_did: &str) -> TapCoreResult<tap_msg::PlainMessage> {
         let mut body = serde_json::json!({
             "id": self.id,
             "payload": self.payload
@@ -80,13 +80,13 @@ impl TapMessageBody for EncryptionTestMessage {
             body["metadata"] = metadata.clone();
         }
 
-        let msg = didcomm::Message {
+        let msg = tap_msg::PlainMessage {
             id: self.id.clone(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
             body,
-            from: from_did.map(|did| did.to_string()),
-            to: None,
+            from: from_did.to_string(),
+            to: Vec::new(),
             thid: None,
             pthid: None,
             created_time: None,
@@ -280,7 +280,7 @@ impl EncryptionTestEnvironment {
 
         // Create a message packer
         let message_packer =
-            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver));
+            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver), true);
 
         Self {
             sender_did,
@@ -428,10 +428,7 @@ async fn test_basic_authcrypt() {
 
             // Verify metadata was also preserved
             let metadata = unpacked.get("metadata").unwrap();
-            assert_eq!(
-                metadata.get("encryption_test").unwrap().as_bool().unwrap(),
-                true
-            );
+            assert!(metadata.get("encryption_test").unwrap().as_bool().unwrap());
 
             println!("✅ Full AuthCrypt encryption/decryption test passed");
         } else {
@@ -707,9 +704,9 @@ async fn test_authcrypt_structured_data() {
 
             let booleans = metadata.get("booleans").unwrap().as_array().unwrap();
             assert_eq!(booleans.len(), 3, "Booleans array should have 3 elements");
-            assert_eq!(booleans[0].as_bool().unwrap(), true);
-            assert_eq!(booleans[1].as_bool().unwrap(), false);
-            assert_eq!(booleans[2].as_bool().unwrap(), true);
+            assert!(booleans[0].as_bool().unwrap());
+            assert!(!booleans[1].as_bool().unwrap());
+            assert!(booleans[2].as_bool().unwrap());
 
             println!(
                 "✅ AuthCrypt with structured data: full encryption and decryption test passed"

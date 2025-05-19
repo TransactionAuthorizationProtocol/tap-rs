@@ -1,108 +1,106 @@
-use serde_json::json;
+//! Example of using HTTP messaging between TAP agents
+
 use std::sync::Arc;
+use std::time::Duration;
+use tap_agent::agent::DefaultAgent;
+use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::MultiResolver;
-use tap_agent::{AgentConfig, DefaultAgent};
-use tap_node::{HttpMessageSender, NodeConfig, TapNode};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_msg::didcomm::PlainMessage;
+use tokio::time::sleep;
 
-// Example message structure, left here for reference
-// #[derive(serde::Serialize)]
-// struct SimpleMessage {
-//     id: String,
-//     type_: String,
-//     from: Option<String>,
-//     to: Option<Vec<String>>,
-//     body: serde_json::Value,
-//     created_time: Option<u64>,
-// }
+/// A test resolver that resolves DIDs to predefined DID documents
+#[derive(Debug)]
+#[allow(dead_code)]
+struct TestDIDResolver;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Configure and create a TAP node
-    let config = NodeConfig::default();
-    let node = TapNode::new(config);
-
-    // Create resolvers and message packers
+    // Create a DID resolver
     let resolver = Arc::new(MultiResolver::default());
-    let secrets = Arc::new(BasicSecretResolver::new());
 
-    let alice_packer = Arc::new(DefaultMessagePacker::new(resolver.clone(), secrets.clone()));
-    let bob_packer = Arc::new(DefaultMessagePacker::new(resolver.clone(), secrets.clone()));
+    // Create a secrets resolver
+    let mut secrets = BasicSecretResolver::new();
 
-    // Create two test agents
-    let agent1_config = AgentConfig::new("did:example:alice".to_string());
-    let agent1 = Arc::new(DefaultAgent::new(agent1_config, alice_packer));
+    // Add Alice's secret
+    let alice_secret = create_test_secret("did:example:alice", "alice-key");
+    secrets.add_secret("did:example:alice", alice_secret);
 
-    let agent2_config = AgentConfig::new("did:example:bob".to_string());
-    let agent2 = Arc::new(DefaultAgent::new(agent2_config, bob_packer));
+    // Add Bob's secret
+    let bob_secret = create_test_secret("did:example:bob", "bob-key");
+    secrets.add_secret("did:example:bob", bob_secret);
 
-    // Register agents with the node
-    node.register_agent(agent1).await?;
-    node.register_agent(agent2).await?;
+    // Create the message packers
+    let alice_packer = Arc::new(DefaultMessagePacker::new(
+        resolver.clone(),
+        Arc::new(secrets.clone()),
+        true,
+    ));
+    let bob_packer = Arc::new(DefaultMessagePacker::new(
+        resolver.clone(),
+        Arc::new(secrets.clone()),
+        true,
+    ));
 
-    // Create a test message
-    let message = tap_msg::didcomm::Message {
-        id: uuid::Uuid::new_v4().to_string(),
-        typ: "https://tap.rsvp/schema/tap-message-v1".to_string(),
-        type_: "".to_string(), // This field is required but unused
-        from: Some("did:example:alice".to_string()),
-        to: Some(vec!["did:example:bob".to_string()]),
-        body: json!({
-            "content": "Hello, Bob!",
-            "timestamp": chrono::Utc::now().timestamp()
-        }),
-        created_time: Some(chrono::Utc::now().timestamp() as u64),
-        expires_time: None,
-        attachments: None,
+    // Create Agent configurations for Alice and Bob
+    let alice_config = AgentConfig::new("did:example:alice".to_string())
+        .with_security_mode("SIGNED")
+        .with_debug(true);
+
+    let bob_config = AgentConfig::new("did:example:bob".to_string())
+        .with_security_mode("SIGNED")
+        .with_debug(true);
+
+    // Create the agents
+    let _alice = DefaultAgent::new(alice_config, alice_packer);
+    let _bob = DefaultAgent::new(bob_config, bob_packer);
+
+    // Let's create a PlainMessage to simulate a message flow
+    let plain_message = PlainMessage {
+        id: "msg-123".to_string(),
+        typ: "application/didcomm-plain+json".to_string(),
+        type_: "example.message".to_string(),
+        body: serde_json::json!({"content": "Hello, Bob!"}),
+        from: "did:example:alice".to_string(),
+        to: vec!["did:example:bob".to_string()],
         thid: None,
         pthid: None,
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
+        expires_time: None,
         from_prior: None,
-        extra_headers: Default::default(),
+        attachments: None,
+        extra_headers: std::collections::HashMap::new(),
     };
 
-    // Send the message through the node
-    let packed_message = node
-        .send_message("did:example:alice", "did:example:bob", message)
-        .await?;
+    // Serialize the message
+    let message_json = serde_json::to_string(&plain_message)?;
+    println!("Original message: {}", message_json);
 
-    println!("Message packed successfully: {}", packed_message);
+    // In a real HTTP flow:
+    // 1. Alice would sign the message
+    // 2. Alice would send it to Bob's endpoint
+    // 3. Bob would receive and verify the message
 
-    // Create an HTTP message sender for external dispatch
-    let _sender = HttpMessageSender::with_options(
-        "https://recipient-node.example.com".to_string(),
-        5000, // 5 second timeout
-        2,    // 2 retries
-    );
+    // Wait to see output
+    sleep(Duration::from_secs(1)).await;
 
-    // In a real application, you would send this to the receiving node
-    // For this example, we'll just log what would happen
-    println!("Would send message to did:example:bob via HTTP");
-
-    // This would actually send the message in a real environment
-    // sender.send(packed_message, vec!["did:example:bob".to_string()]).await?;
-
-    // For demonstration, let's show how to configure HTTP sender for different environments
-
-    #[cfg(feature = "reqwest")]
-    {
-        println!("Using native HTTP implementation with reqwest");
-    }
-
-    #[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-    {
-        println!("Using WASM HTTP implementation with web-sys");
-    }
-
-    #[cfg(all(not(target_arch = "wasm32"), not(feature = "reqwest")))]
-    {
-        println!("Using fallback implementation - no actual HTTP requests will be made");
-    }
-
-    #[cfg(all(target_arch = "wasm32", not(feature = "wasm")))]
-    {
-        println!("Using WASM fallback implementation - no actual HTTP requests will be made");
-    }
-
-    println!("Message flow completed successfully");
     Ok(())
+}
+
+// Helper function to create a test secret
+fn create_test_secret(did: &str, key_id: &str) -> Secret {
+    Secret {
+        id: did.to_string(),
+        type_: SecretType::JsonWebKey2020,
+        secret_material: SecretMaterial::JWK {
+            private_key_jwk: serde_json::json!({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": "base64-encoded-public-key",
+                "d": "base64-encoded-private-key",
+                "kid": format!("{}#{}", did, key_id)
+            }),
+        },
+    }
 }

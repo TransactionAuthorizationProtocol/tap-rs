@@ -7,27 +7,117 @@
 //!
 //! It also provides functionality to generate new DIDs with different cryptographic curves.
 
+use crate::key_manager::{Secret, SecretMaterial, SecretType};
 use async_trait::async_trait;
 use base64::Engine;
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use didcomm::did::{
-    DIDDoc, DIDResolver, VerificationMaterial, VerificationMethod, VerificationMethodType,
-};
-use didcomm::error::{
-    Error as DidcommError, ErrorKind as DidcommErrorKind, Result as DidcommResult,
-};
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
 use k256::ecdsa::SigningKey as Secp256k1SigningKey;
 use multibase::{decode, encode, Base};
 use p256::ecdsa::SigningKey as P256SigningKey;
 use rand::rngs::OsRng;
-
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
 use crate::error::{Error, Result};
+
+/// DID Document
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DIDDoc {
+    /// DID that this document describes
+    pub id: String,
+
+    /// List of verification methods
+    pub verification_method: Vec<VerificationMethod>,
+
+    /// List of authentication verification method references (id strings)
+    pub authentication: Vec<String>,
+
+    /// List of key agreement verification method references (id strings)
+    pub key_agreement: Vec<String>,
+
+    /// List of services
+    pub service: Vec<Service>,
+}
+
+/// Service definition in a DID Document
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Service {
+    /// Service ID
+    pub id: String,
+
+    /// Service type
+    #[serde(rename = "type")]
+    pub type_: String,
+
+    /// Service endpoint URL
+    pub service_endpoint: String,
+
+    /// Additional properties
+    #[serde(flatten)]
+    pub properties: HashMap<String, Value>,
+}
+
+/// Verification method in a DID Document
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VerificationMethod {
+    /// Verification method ID
+    pub id: String,
+
+    /// Verification method type
+    #[serde(rename = "type")]
+    pub type_: VerificationMethodType,
+
+    /// Controller DID
+    pub controller: String,
+
+    /// Verification material
+    #[serde(flatten)]
+    pub verification_material: VerificationMaterial,
+}
+
+/// Verification method type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum VerificationMethodType {
+    /// Ed25519 Verification Key 2018
+    Ed25519VerificationKey2018,
+
+    /// X25519 Key Agreement Key 2019
+    X25519KeyAgreementKey2019,
+
+    /// ECDSA Secp256k1 Verification Key 2019
+    EcdsaSecp256k1VerificationKey2019,
+
+    /// JSON Web Key 2020
+    JsonWebKey2020,
+}
+
+/// Verification material
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum VerificationMaterial {
+    /// Base58 encoded public key
+    Base58 {
+        /// Public key encoded in base58
+        public_key_base58: String,
+    },
+
+    /// Multibase encoded public key
+    Multibase {
+        /// Public key encoded in multibase
+        public_key_multibase: String,
+    },
+
+    /// JSON Web Key
+    JWK {
+        /// Public key in JWK format
+        public_key_jwk: Value,
+    },
+}
 
 /// Key types supported for DID generation
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,9 +161,8 @@ impl Default for DIDGenerationOptions {
 }
 
 /// A trait for resolving DIDs to DID documents that is Send+Sync.
-///
-/// This is a wrapper around didcomm's DIDResolver that adds the
-/// Send+Sync bounds required for the TAP Agent.
+/// This trait is only available in native builds.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 pub trait SyncDIDResolver: Send + Sync + Debug {
     /// Resolve a DID to a DID document.
@@ -87,7 +176,10 @@ pub trait SyncDIDResolver: Send + Sync + Debug {
 }
 
 /// A resolver for a specific DID method.
+/// This trait is only available in native builds.
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
+#[cfg(not(target_arch = "wasm32"))]
 pub trait DIDMethodResolver: Send + Sync + Debug {
     /// Returns the method name this resolver handles (e.g., "key", "web", "pkh").
     fn method(&self) -> &str;
@@ -100,6 +192,26 @@ pub trait DIDMethodResolver: Send + Sync + Debug {
     /// # Returns
     /// The DID document as an Option
     async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>>;
+}
+
+/// A simplified DID resolver for WebAssembly with no async or Send/Sync requirements.
+#[cfg(target_arch = "wasm32")]
+pub trait WasmDIDResolver: Debug {
+    /// Resolves a DID synchronously, returning the DID document.
+    fn resolve(&self, did: &str) -> Result<Option<DIDDoc>>;
+}
+
+/// A simplified method-specific DID resolver for WebAssembly.
+#[cfg(target_arch = "wasm32")]
+pub trait WasmDIDMethodResolver: Debug {
+    /// Returns the method name this resolver handles.
+    fn method(&self) -> &str;
+
+    /// Resolves a DID synchronously, returning the DID document.
+    fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>>;
+
+    /// Get this resolver as Any for downcasting
+    fn as_any(&self) -> &dyn std::any::Any;
 }
 
 /// A resolver for the did:key method.
@@ -151,6 +263,97 @@ impl KeyResolver {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+impl WasmDIDMethodResolver for KeyResolver {
+    fn method(&self) -> &str {
+        "key"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn resolve_method(&self, did_key: &str) -> Result<Option<DIDDoc>> {
+        // Same implementation but without async/await
+        // Validate that this is a did:key
+        if !did_key.starts_with("did:key:") {
+            return Ok(None);
+        }
+
+        // Parse the multibase-encoded public key
+        let key_id = &did_key[8..]; // Skip the "did:key:" prefix
+        let (_, key_bytes) = match decode(key_id) {
+            Ok(result) => result,
+            Err(_) => return Ok(None),
+        };
+
+        // Check the key prefix - for did:key only Ed25519 is supported
+        if key_bytes.len() < 2 {
+            return Ok(None);
+        }
+
+        // Verify the key type - 0xED01 for Ed25519
+        if key_bytes[0] != 0xED || key_bytes[1] != 0x01 {
+            return Ok(None);
+        }
+
+        // Create the DID Document with the Ed25519 public key
+        let ed25519_public_key = &key_bytes[2..];
+
+        let ed_vm_id = format!("{}#{}", did_key, key_id);
+
+        // Create the Ed25519 verification method
+        let ed_verification_method = VerificationMethod {
+            id: ed_vm_id.clone(),
+            type_: VerificationMethodType::Ed25519VerificationKey2018,
+            controller: did_key.to_string(),
+            verification_material: VerificationMaterial::Multibase {
+                public_key_multibase: key_id.to_string(),
+            },
+        };
+
+        // Convert the Ed25519 public key to X25519 for key agreement
+        let mut verification_methods = vec![ed_verification_method.clone()];
+        let mut key_agreement = Vec::new();
+
+        if let Some(x25519_key) = Self::ed25519_to_x25519(ed25519_public_key) {
+            // Encode the X25519 public key in multibase format
+            let mut x25519_bytes = vec![0xEC, 0x01]; // Prefix for X25519
+            x25519_bytes.extend_from_slice(&x25519_key);
+            let x25519_multibase = encode(Base::Base58Btc, x25519_bytes);
+
+            // Create the X25519 verification method ID
+            let x25519_vm_id = format!("{}#{}", did_key, x25519_multibase);
+
+            // Create the X25519 verification method
+            let x25519_verification_method = VerificationMethod {
+                id: x25519_vm_id.clone(),
+                type_: VerificationMethodType::X25519KeyAgreementKey2019,
+                controller: did_key.to_string(),
+                verification_material: VerificationMaterial::Multibase {
+                    public_key_multibase: x25519_multibase,
+                },
+            };
+
+            // Add the X25519 key agreement method
+            verification_methods.push(x25519_verification_method);
+            key_agreement.push(x25519_vm_id);
+        }
+
+        // Create the DID document
+        let did_doc = DIDDoc {
+            id: did_key.to_string(),
+            verification_method: verification_methods,
+            authentication: vec![ed_vm_id],
+            key_agreement,
+            service: Vec::new(),
+        };
+
+        Ok(Some(did_doc))
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 impl DIDMethodResolver for KeyResolver {
     fn method(&self) -> &str {
@@ -242,13 +445,17 @@ impl DIDMethodResolver for KeyResolver {
 /// A multi-resolver for DID methods. This resolver manages multiple
 /// method-specific resolver. New resolvers can be added at runtime.
 #[derive(Debug)]
+#[cfg(not(target_arch = "wasm32"))]
 pub struct MultiResolver {
     resolvers: RwLock<HashMap<String, Arc<dyn DIDMethodResolver>>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 unsafe impl Send for MultiResolver {}
+#[cfg(not(target_arch = "wasm32"))]
 unsafe impl Sync for MultiResolver {}
 
+#[cfg(not(target_arch = "wasm32"))]
 impl MultiResolver {
     /// Create a new empty MultiResolver
     pub fn new() -> Self {
@@ -295,6 +502,47 @@ impl WebResolver {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+impl WasmDIDMethodResolver for WebResolver {
+    fn method(&self) -> &str {
+        "web"
+    }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
+        // For WASM, return a simple placeholder DID document without actual resolution
+        // Because we lack the proper web-fetch capabilities at the moment
+        let parts: Vec<&str> = did.split(':').collect();
+        if parts.len() < 3 || parts[0] != "did" || parts[1] != "web" {
+            return Err(Error::InvalidDID);
+        }
+
+        // Create a minimal DID document for did:web
+        let verification_method = VerificationMethod {
+            id: format!("{}#keys-1", did),
+            type_: VerificationMethodType::Ed25519VerificationKey2018,
+            controller: did.to_string(),
+            verification_material: VerificationMaterial::Multibase {
+                public_key_multibase: "zMockPublicKey".to_string(),
+            },
+        };
+
+        let did_doc = DIDDoc {
+            id: did.to_string(),
+            verification_method: vec![verification_method.clone()],
+            authentication: vec![verification_method.id.clone()],
+            key_agreement: Vec::new(),
+            service: Vec::new(),
+        };
+
+        Ok(Some(did_doc))
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 impl DIDMethodResolver for WebResolver {
     fn method(&self) -> &str {
@@ -504,15 +752,269 @@ impl DIDMethodResolver for WebResolver {
             }
         }
 
-        #[cfg(not(feature = "native"))]
+        #[cfg(target_arch = "wasm32")]
+        {
+            use wasm_bindgen::JsValue;
+            use wasm_bindgen_futures::JsFuture;
+            use web_sys::{Headers, Request, RequestInit, RequestMode, Response};
+
+            // Create request options
+            let mut opts = RequestInit::new();
+            opts.method("GET");
+            opts.mode(RequestMode::Cors);
+
+            // Create the request
+            let request = match Request::new_with_str_and_init(&url, &opts) {
+                Ok(req) => req,
+                Err(e) => {
+                    return Err(Error::DIDResolution(format!(
+                        "Failed to create request for {}: {:?}",
+                        url, e
+                    )));
+                }
+            };
+
+            // Add Accept header
+            let headers = match Headers::new() {
+                Ok(h) => h,
+                Err(e) => {
+                    return Err(Error::DIDResolution(format!(
+                        "Failed to create headers: {:?}",
+                        e
+                    )));
+                }
+            };
+
+            if let Err(e) = headers.set("Accept", "application/json") {
+                return Err(Error::DIDResolution(format!(
+                    "Failed to set Accept header: {:?}",
+                    e
+                )));
+            }
+
+            if let Err(e) = request.headers().set("Accept", "application/json") {
+                return Err(Error::DIDResolution(format!(
+                    "Failed to set Accept header: {:?}",
+                    e
+                )));
+            }
+
+            // Get the window object
+            let window = match web_sys::window() {
+                Some(w) => w,
+                None => {
+                    return Err(Error::DIDResolution(
+                        "No window object available".to_string(),
+                    ));
+                }
+            };
+
+            // Send the request
+            let resp_value = match JsFuture::from(window.fetch_with_request(&request)).await {
+                Ok(response) => response,
+                Err(e) => {
+                    return Err(Error::DIDResolution(format!(
+                        "Failed to fetch DID document from {}: {:?}",
+                        url, e
+                    )));
+                }
+            };
+
+            // Convert response to Response object
+            let resp: Response = match resp_value.dyn_into() {
+                Ok(r) => r,
+                Err(_) => {
+                    return Err(Error::DIDResolution(
+                        "Failed to convert response".to_string(),
+                    ));
+                }
+            };
+
+            // Check if successful
+            if resp.ok() {
+                // Get the text content
+                let text_promise = match resp.text() {
+                    Ok(t) => t,
+                    Err(e) => {
+                        return Err(Error::DIDResolution(format!(
+                            "Failed to get text from response: {:?}",
+                            e
+                        )));
+                    }
+                };
+
+                let text_jsval = match JsFuture::from(text_promise).await {
+                    Ok(t) => t,
+                    Err(e) => {
+                        return Err(Error::DIDResolution(format!(
+                            "Failed to await text promise: {:?}",
+                            e
+                        )));
+                    }
+                };
+
+                let text = match text_jsval.as_string() {
+                    Some(t) => t,
+                    None => {
+                        return Err(Error::DIDResolution("Response is not a string".to_string()));
+                    }
+                };
+
+                // Parse the DID document
+                match serde_json::from_str::<DIDDoc>(&text) {
+                    Ok(doc) => {
+                        // Validate that the document ID matches the requested DID
+                        if doc.id != did {
+                            return Err(Error::DIDResolution(format!(
+                                "DID Document ID ({}) does not match requested DID ({})",
+                                doc.id, did
+                            )));
+                        }
+                        Ok(Some(doc))
+                    }
+                    Err(parse_error) => {
+                        // If normal parsing fails, try to parse as a generic JSON Value
+                        // and manually construct a DIDDoc with the essential fields
+                        match serde_json::from_str::<serde_json::Value>(&text) {
+                            Ok(json_value) => {
+                                let doc_id = match json_value.get("id") {
+                                    Some(id) => match id.as_str() {
+                                        Some(id_str) => id_str.to_string(),
+                                        None => {
+                                            return Err(Error::DIDResolution(
+                                                "DID Document has invalid 'id' field".to_string(),
+                                            ))
+                                        }
+                                    },
+                                    None => {
+                                        return Err(Error::DIDResolution(
+                                            "DID Document missing 'id' field".to_string(),
+                                        ))
+                                    }
+                                };
+
+                                // Validate ID
+                                if doc_id != did {
+                                    return Err(Error::DIDResolution(format!(
+                                        "DID Document ID ({}) does not match requested DID ({})",
+                                        doc_id, did
+                                    )));
+                                }
+
+                                // Try to extract verification methods and other fields
+                                web_sys::console::log_1(&JsValue::from_str(
+                                    &format!("WARNING: Using partial DID document parsing due to format issues\nOriginal parse error: {}", parse_error)
+                                ));
+
+                                // Extract verification methods if present
+                                // Create a longer-lived empty vec to handle the None case
+                                let empty_vec = Vec::new();
+                                let vm_array = json_value
+                                    .get("verificationMethod")
+                                    .and_then(|v| v.as_array())
+                                    .unwrap_or(&empty_vec);
+
+                                // Attempt to parse each verification method
+                                let mut verification_methods = Vec::new();
+                                for vm_value in vm_array {
+                                    if let Ok(vm) = serde_json::from_value::<VerificationMethod>(
+                                        vm_value.clone(),
+                                    ) {
+                                        verification_methods.push(vm);
+                                    }
+                                }
+
+                                // Extract authentication references
+                                let authentication = json_value
+                                    .get("authentication")
+                                    .and_then(|v| v.as_array())
+                                    .unwrap_or(&empty_vec)
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect();
+
+                                // Extract key agreement references
+                                let key_agreement = json_value
+                                    .get("keyAgreement")
+                                    .and_then(|v| v.as_array())
+                                    .unwrap_or(&empty_vec)
+                                    .iter()
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                                    .collect();
+
+                                // Create an empty services list for the DIDDoc
+                                let services = Vec::new();
+
+                                // Extract raw service information for console logging
+                                if let Some(svc_array) =
+                                    json_value.get("service").and_then(|v| v.as_array())
+                                {
+                                    web_sys::console::log_1(&JsValue::from_str(
+                                        "Service endpoints (extracted from JSON):",
+                                    ));
+                                    for (i, svc_value) in svc_array.iter().enumerate() {
+                                        if let (Some(id), Some(endpoint)) = (
+                                            svc_value.get("id").and_then(|v| v.as_str()),
+                                            svc_value
+                                                .get("serviceEndpoint")
+                                                .and_then(|v| v.as_str()),
+                                        ) {
+                                            let type_value = svc_value
+                                                .get("type")
+                                                .and_then(|v| v.as_str())
+                                                .unwrap_or("Unknown");
+
+                                            web_sys::console::log_1(&JsValue::from_str(&format!(
+                                                "[{}] ID: {}\nType: {}\nEndpoint: {}",
+                                                i + 1,
+                                                id,
+                                                type_value,
+                                                endpoint
+                                            )));
+                                        }
+                                    }
+                                }
+
+                                // Create a simplified DID document with whatever we could extract
+                                let simplified_doc = DIDDoc {
+                                    id: doc_id,
+                                    verification_method: verification_methods,
+                                    authentication,
+                                    key_agreement,
+                                    service: services,
+                                };
+
+                                Ok(Some(simplified_doc))
+                            }
+                            Err(_) => Err(Error::DIDResolution(format!(
+                                "Failed to parse DID document from {}: {}",
+                                url, parse_error
+                            ))),
+                        }
+                    }
+                }
+            } else if resp.status() == 404 {
+                // Not found is a valid response, just return None
+                Ok(None)
+            } else {
+                Err(Error::DIDResolution(format!(
+                    "HTTP error fetching DID document from {}: {}",
+                    url,
+                    resp.status()
+                )))
+            }
+        }
+
+        #[cfg(all(not(target_arch = "wasm32"), not(feature = "native")))]
         {
             Err(Error::DIDResolution(
-                "Web DID resolution requires the 'native' feature".to_string(),
+                "Web DID resolution requires the 'native' feature or WASM".to_string(),
             ))
         }
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Default for MultiResolver {
     fn default() -> Self {
         let mut resolver = Self::new();
@@ -846,7 +1348,45 @@ impl DIDKeyGenerator {
     // The create_secret_from_key method has been moved up
 }
 
+#[cfg(target_arch = "wasm32")]
+impl WasmDIDResolver for MultiResolver {
+    fn resolve(&self, did: &str) -> Result<Option<DIDDoc>> {
+        // Extract the DID method
+        let parts: Vec<&str> = did.split(':').collect();
+        if parts.len() < 3 {
+            return Err(Error::InvalidDID);
+        }
+
+        let method = parts[1];
+
+        // Get the resolver from the map
+        let resolver_guard = self
+            .resolvers
+            .read()
+            .map_err(|_| Error::FailedToAcquireResolverReadLock)?;
+
+        if let Some(resolver) = resolver_guard.get(method) {
+            // Clone is not needed in this case since we're not using async
+            if let Some(wasm_resolver) = resolver
+                .as_any()
+                .downcast_ref::<dyn WasmDIDMethodResolver>()
+            {
+                wasm_resolver.resolve_method(did)
+            } else {
+                Err(Error::UnsupportedDIDMethod(format!(
+                    "Method {} is not a WasmDIDMethodResolver",
+                    method
+                )))
+            }
+        } else {
+            Err(Error::UnsupportedDIDMethod(method.to_string()))
+        }
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
+#[cfg(not(target_arch = "wasm32"))]
 impl SyncDIDResolver for MultiResolver {
     async fn resolve(&self, did: &str) -> Result<Option<DIDDoc>> {
         // Extract the DID method
@@ -876,15 +1416,7 @@ impl SyncDIDResolver for MultiResolver {
     }
 }
 
-#[async_trait(?Send)]
-impl DIDResolver for MultiResolver {
-    async fn resolve(&self, did: &str) -> DidcommResult<Option<DIDDoc>> {
-        match SyncDIDResolver::resolve(self, did).await {
-            Ok(did_doc) => Ok(did_doc),
-            Err(e) => Err(DidcommError::new(DidcommErrorKind::InvalidState, e)),
-        }
-    }
-}
+// DIDResolver trait from didcomm is no longer needed since we've removed the didcomm dependency
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
@@ -936,22 +1468,8 @@ impl JsDIDResolver {
     }
 }
 
-/// A resolver for a specific DID method without Send+Sync requirements (for WASM usage)
-#[cfg(target_arch = "wasm32")]
-#[async_trait(?Send)]
-pub trait WasmDIDMethodResolver: Debug {
-    /// Returns the method name this resolver handles (e.g., "key", "web", "pkh").
-    fn method(&self) -> &str;
-
-    /// Resolve a DID to a DID document.
-    ///
-    /// # Parameters
-    /// * `did` - The DID to resolve
-    ///
-    /// # Returns
-    /// The DID document as an Option
-    async fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>>;
-}
+// This is a duplicate trait that conflicts with the one defined above
+// So we're removing it here to avoid the conflict
 
 /// A wrapper for JavaScript DID resolvers.
 #[cfg(target_arch = "wasm32")]
@@ -1248,7 +1766,7 @@ mod tests {
 
         // Check the DID document
         assert_eq!(key.did_doc.id, key.did);
-        assert!(key.did_doc.verification_method.len() >= 1);
+        assert!(!key.did_doc.verification_method.is_empty());
 
         // Verify that all verification methods have the correct controller
         for vm in &key.did_doc.verification_method {

@@ -8,22 +8,24 @@
 //! authorizing, documenting, and recording financial transactions for
 //! cryptocurrency asset transfers.
 
-// Re-export the didcomm crate for convenience to users of tap-msg
-pub use didcomm;
-
 // Internal modules
 pub mod derive;
+pub mod didcomm;
 pub mod error;
 pub mod examples;
 pub mod message;
 pub mod utils;
 
 // Re-export public types for easier access
+pub use didcomm::{
+    Attachment, AttachmentData, Base64AttachmentData, JsonAttachmentData, LinksAttachmentData,
+    OutOfBand, PlainMessage,
+};
 pub use error::{Error, Result};
 pub use message::{
-    create_tap_message, AddAgents, Attachment, AttachmentData, Authorize, DocumentReference,
-    ErrorBody, Invoice, LineItem, OrderReference, Participant, PaymentRequest, Presentation,
-    Reject, Settle, TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, Transfer, Validate,
+    create_tap_message, AddAgents, Authorize, DocumentReference, ErrorBody, Invoice, LineItem,
+    OrderReference, Participant, Payment, Presentation, Reject, Settle, TapMessageBody,
+    TaxCategory, TaxSubtotal, TaxTotal, Transfer,
 };
 
 // Conditional compilation for WASM targets

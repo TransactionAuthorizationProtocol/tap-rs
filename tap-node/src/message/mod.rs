@@ -1,4 +1,4 @@
-//! Message processing and routing for TAP Node
+//! PlainMessage processing and routing for TAP Node
 //!
 //! This module provides functionality for processing and routing TAP messages between agents.
 
@@ -9,87 +9,96 @@ pub mod sender;
 
 // Re-export processors, routers, and senders
 pub use processor::{
-    DefaultMessageProcessor, LoggingMessageProcessor, MessageProcessor, ValidationMessageProcessor,
+    DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor,
+    ValidationPlainMessageProcessor,
 };
 pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
-pub use router::DefaultMessageRouter;
-pub use sender::{HttpMessageSender, MessageSender, NodeMessageSender};
+pub use router::DefaultPlainMessageRouter;
+pub use sender::{HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender};
 
-// Import the Message type from tap-msg
+// Import the PlainMessage type from tap-msg
 use crate::error::Result;
 use async_trait::async_trait;
-use tap_msg::didcomm::Message;
+use tap_msg::didcomm::PlainMessage;
 
 /// Router to determine the destination agent for a message
-pub trait MessageRouter: Send + Sync {
+pub trait PlainMessageRouter: Send + Sync {
     /// Route a message to determine the target agent DID
-    fn route_message_impl(&self, message: &Message) -> Result<String>;
+    fn route_message_impl(&self, message: &PlainMessage) -> Result<String>;
 }
 
-/// Async extension trait for the MessageRouter
+/// Async extension trait for the PlainMessageRouter
 #[async_trait]
-pub trait RouterAsyncExt: MessageRouter {
+pub trait RouterAsyncExt: PlainMessageRouter {
     /// Route a message asynchronously
-    async fn route_message(&self, message: &Message) -> Result<String>;
+    async fn route_message(&self, message: &PlainMessage) -> Result<String>;
 }
 
 #[async_trait]
-impl<T: MessageRouter + Sync> RouterAsyncExt for T {
-    async fn route_message(&self, message: &Message) -> Result<String> {
+impl<T: PlainMessageRouter + Sync> RouterAsyncExt for T {
+    async fn route_message(&self, message: &PlainMessage) -> Result<String> {
         self.route_message_impl(message)
     }
 }
 
 /// Processor enum to replace trait objects
 #[derive(Clone, Debug)]
-pub enum MessageProcessorType {
-    Default(DefaultMessageProcessor),
-    Logging(LoggingMessageProcessor),
-    Validation(ValidationMessageProcessor),
-    Composite(CompositeMessageProcessor),
+pub enum PlainMessageProcessorType {
+    Default(DefaultPlainMessageProcessor),
+    Logging(LoggingPlainMessageProcessor),
+    Validation(ValidationPlainMessageProcessor),
+    Composite(CompositePlainMessageProcessor),
 }
 
 /// Router enum to replace trait objects
 #[derive(Clone, Debug)]
-pub enum MessageRouterType {
-    Default(DefaultMessageRouter),
+pub enum PlainMessageRouterType {
+    Default(DefaultPlainMessageRouter),
 }
 
 /// A message processor that applies multiple processors in sequence
 #[derive(Clone, Debug)]
-pub struct CompositeMessageProcessor {
-    processors: Vec<MessageProcessorType>,
+pub struct CompositePlainMessageProcessor {
+    processors: Vec<PlainMessageProcessorType>,
 }
 
-impl CompositeMessageProcessor {
+impl CompositePlainMessageProcessor {
     /// Create a new composite message processor
-    pub fn new(processors: Vec<MessageProcessorType>) -> Self {
+    pub fn new(processors: Vec<PlainMessageProcessorType>) -> Self {
         Self { processors }
     }
 
     /// Add a processor to the chain
-    pub fn add_processor(&mut self, processor: MessageProcessorType) {
+    pub fn add_processor(&mut self, processor: PlainMessageProcessorType) {
         self.processors.push(processor);
     }
 }
 
 #[async_trait]
-impl MessageProcessor for CompositeMessageProcessor {
-    async fn process_incoming(&self, message: Message) -> Result<Option<Message>> {
+impl PlainMessageProcessor for CompositePlainMessageProcessor {
+    async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         let mut current_message = message;
 
         for processor in &self.processors {
             let processed = match processor {
-                MessageProcessorType::Default(p) => p.process_incoming(current_message).await?,
-                MessageProcessorType::Logging(p) => p.process_incoming(current_message).await?,
-                MessageProcessorType::Validation(p) => p.process_incoming(current_message).await?,
-                MessageProcessorType::Composite(p) => p.process_incoming(current_message).await?,
+                PlainMessageProcessorType::Default(p) => {
+                    p.process_incoming(current_message).await?
+                }
+                PlainMessageProcessorType::Logging(p) => {
+                    p.process_incoming(current_message).await?
+                }
+                PlainMessageProcessorType::Validation(p) => {
+                    p.process_incoming(current_message).await?
+                }
+                PlainMessageProcessorType::Composite(p) => {
+                    p.process_incoming(current_message).await?
+                }
             };
 
             if let Some(msg) = processed {
                 current_message = msg;
             } else {
-                // Message was filtered out
+                // PlainMessage was filtered out
                 return Ok(None);
             }
         }
@@ -97,21 +106,29 @@ impl MessageProcessor for CompositeMessageProcessor {
         Ok(Some(current_message))
     }
 
-    async fn process_outgoing(&self, message: Message) -> Result<Option<Message>> {
+    async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
         let mut current_message = message;
 
         for processor in &self.processors {
             let processed = match processor {
-                MessageProcessorType::Default(p) => p.process_outgoing(current_message).await?,
-                MessageProcessorType::Logging(p) => p.process_outgoing(current_message).await?,
-                MessageProcessorType::Validation(p) => p.process_outgoing(current_message).await?,
-                MessageProcessorType::Composite(p) => p.process_outgoing(current_message).await?,
+                PlainMessageProcessorType::Default(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::Logging(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::Validation(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::Composite(p) => {
+                    p.process_outgoing(current_message).await?
+                }
             };
 
             if let Some(msg) = processed {
                 current_message = msg;
             } else {
-                // Message was filtered out
+                // PlainMessage was filtered out
                 return Ok(None);
             }
         }
@@ -122,28 +139,28 @@ impl MessageProcessor for CompositeMessageProcessor {
 
 /// A composite router that tries multiple routers in sequence
 #[derive(Clone)]
-pub struct CompositeMessageRouter {
-    routers: Vec<MessageRouterType>,
+pub struct CompositePlainMessageRouter {
+    routers: Vec<PlainMessageRouterType>,
 }
 
-impl CompositeMessageRouter {
+impl CompositePlainMessageRouter {
     /// Create a new composite router
-    pub fn new(routers: Vec<MessageRouterType>) -> Self {
+    pub fn new(routers: Vec<PlainMessageRouterType>) -> Self {
         Self { routers }
     }
 
     /// Add a router to the chain
-    pub fn add_router(&mut self, router: MessageRouterType) {
+    pub fn add_router(&mut self, router: PlainMessageRouterType) {
         self.routers.push(router);
     }
 }
 
-impl MessageRouter for CompositeMessageRouter {
-    fn route_message_impl(&self, message: &Message) -> Result<String> {
+impl PlainMessageRouter for CompositePlainMessageRouter {
+    fn route_message_impl(&self, message: &PlainMessage) -> Result<String> {
         // Try each router in sequence until one succeeds
         for router in &self.routers {
             let result = match router {
-                MessageRouterType::Default(r) => r.route_message_impl(message),
+                PlainMessageRouterType::Default(r) => r.route_message_impl(message),
             };
 
             match result {

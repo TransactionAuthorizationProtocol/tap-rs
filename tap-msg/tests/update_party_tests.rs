@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::types::{Participant, Transfer, UpdateParty};
+use tap_msg::message::{Participant, Transfer, UpdateParty};
 
 #[test]
 fn test_update_party_creation() {
@@ -45,22 +45,22 @@ fn test_update_party_creation() {
 
     // Convert to DIDComm
     let didcomm_message = update_party
-        .to_didcomm(Some("did:example:1234567890abcdef"))
+        .to_didcomm("did:example:1234567890abcdef")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 
     // Convert to DIDComm
     let didcomm_message = update_party_with_note
-        .to_didcomm(Some("did:example:1234567890abcdef"))
+        .to_didcomm("did:example:1234567890abcdef")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 }
 
@@ -125,13 +125,13 @@ fn test_update_party_didcomm_conversion() {
 
     // Convert to DIDComm
     let didcomm_message = update_party
-        .to_didcomm(Some("did:example:1234567890abcdef"))
+        .to_didcomm("did:example:1234567890abcdef")
         .expect("Failed to convert UpdateParty to DIDComm");
 
     // Verify fields
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#updateparty"
+        "https://tap.rsvp/schema/1.0#update-party"
     );
 
     // Test from_didcomm
@@ -205,7 +205,7 @@ fn test_authorizable_with_update_party() {
 
     // Convert transfer to a DIDComm message *first* to get its ID
     let transfer_message = transfer
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert initial transfer to DIDComm message");
 
     // Create a participant to update (e.g., the beneficiary)

@@ -1,9 +1,9 @@
-use didcomm::Message;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
 use std::fs;
 use std::path::Path;
+use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{DIDCommPresentation, TapMessageBody};
 use tap_msg::Result;
 
@@ -67,7 +67,7 @@ fn load_test_vectors(directory: &str) -> Vec<TestVector> {
 /// Test presentation message against a test vector
 fn test_presentation_message(test_vector: &TestVector) -> Result<()> {
     // Convert the message to a DIDComm Message
-    let didcomm_result = serde_json::from_str::<Message>(&test_vector.message.to_string());
+    let didcomm_result = serde_json::from_str::<PlainMessage>(&test_vector.message.to_string());
 
     // First check - whether the message can be parsed as a DIDComm message
     if let Err(parse_error) = &didcomm_result {
@@ -133,7 +133,7 @@ fn test_presentation_message(test_vector: &TestVector) -> Result<()> {
     }
 
     // Final check for passing vectors - test round trip conversion
-    let to_didcomm_result = presentation.to_didcomm(None);
+    let to_didcomm_result = presentation.to_didcomm("did:example:sender");
 
     if let Err(round_trip_error) = &to_didcomm_result {
         return Err(tap_msg::Error::Validation(format!(
@@ -194,7 +194,7 @@ async fn test_presentation_round_trip() {
 
     // Test round-trip conversion
     let message_str = valid_vector.message.to_string();
-    let didcomm_message: Message =
+    let didcomm_message: PlainMessage =
         serde_json::from_str(&message_str).expect("Failed to parse message as DIDComm");
 
     // Convert to DIDCommPresentation
@@ -203,7 +203,7 @@ async fn test_presentation_round_trip() {
 
     // Convert back to DIDComm
     let round_trip_message = presentation
-        .to_didcomm(None)
+        .to_didcomm("did:example:sender")
         .expect("Failed to convert DIDCommPresentation back to DIDComm message");
 
     // Convert again to DIDCommPresentation to verify integrity
