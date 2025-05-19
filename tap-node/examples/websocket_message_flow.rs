@@ -8,10 +8,6 @@ use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{DIDKeyGenerator, MultiResolver};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
-use tap_node::message::sender::{
-    HttpPlainMessageSender, PlainMessageSender, WebSocketPlainMessageSender,
-};
-use tap_node::message::{DefaultPlainMessageRouter, PlainMessageRouter};
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -81,20 +77,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_debug(true);
 
     // Create the agents
-    let alice = Arc::new(DefaultAgent::new(alice_config, message_packer.clone()));
-    let bob = Arc::new(DefaultAgent::new(bob_config, message_packer.clone()));
+    let _alice = Arc::new(DefaultAgent::new(alice_config, message_packer.clone()));
+    let _bob = Arc::new(DefaultAgent::new(bob_config, message_packer.clone()));
 
     // Create WebSocket message routers
     println!("2. Creating message routers...");
 
     // Create a router config
-    let alice_router = tap_node::message::DefaultPlainMessageRouter::new();
-    let bob_router = tap_node::message::DefaultPlainMessageRouter::new();
+    let _alice_router = tap_node::message::DefaultPlainMessageRouter::new();
+    let _bob_router = tap_node::message::DefaultPlainMessageRouter::new();
 
     // Create message senders (simplified here - would need actual endpoints)
-    let alice_sender =
+    let _alice_sender =
         tap_node::WebSocketPlainMessageSender::new("ws://localhost:3001/ws".to_string());
-    let bob_sender =
+    let _bob_sender =
         tap_node::WebSocketPlainMessageSender::new("ws://localhost:3002/ws".to_string());
 
     // Start the WebSocket servers (would usually be in separate processes)

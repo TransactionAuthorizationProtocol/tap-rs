@@ -138,6 +138,7 @@ fn stress_test(c: &mut Criterion) {
                     let message_packer1 = Arc::new(DefaultMessagePacker::new(
                         did_resolver1,
                         Arc::new(resolver1),
+                        true,
                     ));
                     let agent1 = Arc::new(DefaultAgent::new(agent1_config, message_packer1));
 
@@ -145,6 +146,7 @@ fn stress_test(c: &mut Criterion) {
                     let message_packer2 = Arc::new(DefaultMessagePacker::new(
                         did_resolver2,
                         Arc::new(resolver2),
+                        true,
                     ));
                     let agent2 = Arc::new(DefaultAgent::new(agent2_config, message_packer2));
 

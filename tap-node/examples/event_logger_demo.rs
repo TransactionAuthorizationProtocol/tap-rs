@@ -1,6 +1,5 @@
 //! Example of using the TAP event logger
 
-use async_trait::async_trait;
 use log;
 use serde_json::json;
 use std::collections::HashMap;
@@ -138,7 +137,7 @@ async fn simulate_agent_setup(event_logger: &Arc<EventLogger>) {
     let secrets_resolver = Arc::new(TestSecretsResolver::new());
 
     // 3. Create a message packer
-    let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
+    let _message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
         did_resolver,
         secrets_resolver,
         true,

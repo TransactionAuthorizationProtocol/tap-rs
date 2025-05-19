@@ -1,7 +1,6 @@
 //! Tests for the TAP message router and processing
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use tap_agent::crypto::DebugSecretsResolver;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 

@@ -54,6 +54,10 @@
 //!     fn get_secrets_map(&self) -> &std::collections::HashMap<String, tap_agent::key_manager::Secret> {
 //!         &self.secrets
 //!     }
+//!     
+//!     fn get_secret_by_id(&self, id: &str) -> Option<tap_agent::key_manager::Secret> {
+//!         self.secrets.get(id).cloned()
+//!     }
 //! }
 //!
 //! async fn example() -> Result<(), Box<dyn std::error::Error>> {
@@ -76,7 +80,7 @@
 //!     let did_resolver = Arc::new(tap_agent::did::MultiResolver::default());
 //!     let secrets_resolver = Arc::new(TestSecretsResolver::new());
 //!     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
-//!         did_resolver, secrets_resolver
+//!         did_resolver, secrets_resolver, true
 //!     ));
 //!     let agent = DefaultAgent::new(agent_config, message_packer);
 //!     node.register_agent(Arc::new(agent)).await?;

@@ -5,7 +5,7 @@ use std::time::Duration;
 use tap_agent::agent::DefaultAgent;
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
-use tap_agent::did::{DIDDoc, MultiResolver, Service, VerificationMethod};
+use tap_agent::did::MultiResolver;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::didcomm::PlainMessage;
 use tokio::time::sleep;
@@ -52,8 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_debug(true);
 
     // Create the agents
-    let alice = DefaultAgent::new(alice_config, alice_packer);
-    let bob = DefaultAgent::new(bob_config, bob_packer);
+    let _alice = DefaultAgent::new(alice_config, alice_packer);
+    let _bob = DefaultAgent::new(bob_config, bob_packer);
 
     // Let's create a PlainMessage to simulate a message flow
     let plain_message = PlainMessage {
