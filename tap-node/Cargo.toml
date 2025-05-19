@@ -10,9 +10,9 @@ readme = "README.md"
 
 [dependencies]
 # Internal dependencies
-tap-msg = { version = "0.1.0", path = "../tap-msg" }
-tap-agent = { version = "0.1.0", path = "../tap-agent" }
-tap-caip = { version = "0.1.0", path = "../tap-caip" }
+tap-msg = { version = "0.2.0", path = "../tap-msg" }
+tap-agent = { version = "0.2.0", path = "../tap-agent" }
+tap-caip = { version = "0.2.0", path = "../tap-caip" }
 
 # Async runtime
 tokio = { workspace = true }
@@ -24,7 +24,12 @@ js-sys = { workspace = true, optional = true }
 wasm-bindgen-futures = { workspace = true, optional = true }
 console_error_panic_hook = { workspace = true, optional = true }
 web-sys = { workspace = true, optional = true, features = [
-  "Headers", "Request", "RequestInit", "RequestMode", "Response", "Window"
+    "Headers",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "Window",
 ] }
 
 # Serialization
@@ -37,21 +42,22 @@ anyhow = { workspace = true }
 
 # Utilities
 tracing = { workspace = true }
-dashmap = "5.4" # Concurrent HashMap implementation
+dashmap = "5.4"                # Concurrent HashMap implementation
 uuid = { workspace = true }
 futures = { version = "0.3" }
 sha2 = "0.10"
 base58 = "0.2"
-base64 = "0.13"  # For encoding signatures
+base64 = "0.13"                # For encoding signatures
 chrono = { workspace = true }
 log = "0.4"
-didcomm = "0.4"
 
 # HTTP client for native
 reqwest = { version = "0.11", features = ["json"], optional = true }
 
 # WebSocket support for native
-tokio-tungstenite = { version = "0.20", features = ["native-tls"], optional = true }
+tokio-tungstenite = { version = "0.20", features = [
+    "native-tls",
+], optional = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
@@ -70,15 +76,15 @@ native = ["tokio/full", "reqwest"]
 websocket = ["tokio-tungstenite"]
 native-with-websocket = ["native", "websocket"]
 wasm = [
-  "wasm-bindgen",
-  "js-sys",
-  "wasm-bindgen-futures",
-  "console_error_panic_hook",
-  "web-sys"
+    "wasm-bindgen",
+    "js-sys",
+    "wasm-bindgen-futures",
+    "console_error_panic_hook",
+    "web-sys",
 ]
 wasm-with-websocket = [
-  "wasm",
-  "web-sys/WebSocket",
-  "web-sys/MessageEvent",
-  "web-sys/BinaryType"
+    "wasm",
+    "web-sys/WebSocket",
+    "web-sys/MessageEvent",
+    "web-sys/BinaryType",
 ]

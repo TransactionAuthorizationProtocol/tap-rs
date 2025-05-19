@@ -1,27 +1,34 @@
 [workspace]
 members = [
     "tap-msg",
-    "tap-agent", "tap-caip", "tap-node", "tap-http", "tap-wasm",
+    "tap-agent",
+    "tap-caip",
+    "tap-node",
+    "tap-http",
+    "tap-wasm",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["Pelle Braendgaard <pelle@notabene.id>"]
 description = "Rust implementation of the Transaction Authorization Protocol (TAP)"
 repository = "https://github.com/TransactionAuthorizationProtocol/tap-rs"
 license = "MIT"
 keywords = ["tap", "transaction", "authorization", "didcomm", "caip"]
-categories = ["protocols", "web-programming", "cryptography", "api-bindings", "wasm"]
+categories = [
+    "protocols",
+    "web-programming",
+    "cryptography",
+    "api-bindings",
+    "wasm",
+]
 
 [workspace.dependencies]
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
-# DIDComm v2 library
-didcomm = { version = "0.4.1", default-features = false }
 
 # Async runtime - minimal features for WASM compatibility
 tokio = { version = "1.32.0", features = ["rt", "sync", "macros"] }
@@ -31,10 +38,7 @@ thiserror = "1.0"
 anyhow = "1.0.75"
 
 # UUID generation with WASM support
-# IMPORTANT: Do not upgrade uuid beyond 0.8.2!
-# The didcomm crate (v0.4.1) requires this specific version.
-# Upgrading will cause incompatibilities and build failures.
-uuid = { version = "0.8.2", features = ["v4", "serde", "wasm-bindgen"] }
+uuid = { version = "1.16.0", features = ["v4", "serde", "fast-rng"] }
 
 # Time handling with serde support
 chrono = { version = "0.4", features = ["serde"] }
@@ -51,7 +55,16 @@ js-sys = { version = "0.3" }
 wasm-bindgen-futures = { version = "0.4" }
 serde-wasm-bindgen = { version = "0.4" }
 console_error_panic_hook = { version = "0.1" }
-web-sys = { version = "0.3", features = ["console", "Headers", "Request", "RequestInit", "RequestMode", "Response", "Window", "Blob"] }
+web-sys = { version = "0.3", features = [
+    "console",
+    "Headers",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "Window",
+    "Blob",
+] }
 getrandom = { version = "0.2", features = ["js"] }
 
 # Cryptography and encoding
