@@ -26,7 +26,7 @@ rand = "0.8.5"
 thiserror = { workspace = true }
 
 # UUID generation
-uuid = { version = "=0.8.2", features = ["v4"] }
+uuid = { workspace = true }
 
 # Tracing
 tracing = { workspace = true }

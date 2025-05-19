@@ -31,14 +31,14 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Async runtime - minimal features for WASM compatibility
-tokio = { version = "1.32.0", features = ["rt", "sync", "macros"] }
+tokio = { version = "1.32.0", default-features = false, features = ["rt", "sync", "macros"] }
 
 # Error handling
 thiserror = "1.0"
 anyhow = "1.0.75"
 
 # UUID generation with WASM support
-uuid = { version = "1.16.0", features = ["v4", "serde", "fast-rng"] }
+uuid = { version = "1.16.0", features = ["v4", "serde", "fast-rng", "js"] }
 
 # Time handling with serde support
 chrono = { version = "0.4", features = ["serde"] }
