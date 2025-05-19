@@ -48,8 +48,7 @@ pub use did::{
     DIDGenerationOptions, DIDKeyGenerator, DIDMethodResolver, GeneratedKey, KeyResolver, KeyType,
     MultiResolver, SyncDIDResolver,
 };
-pub use didcomm::did::{DIDDoc, DIDResolver};
-pub use didcomm::secrets::Secret;
+pub use tap_msg::didcomm::{DIDDoc, Secret};
 pub use error::{Error, Result};
 pub use key_manager::{KeyManager, KeyManagerSecretResolver};
 pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};

@@ -4,7 +4,7 @@
 //! including security modes and message type identifiers.
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+// Value is not used in this file
 
 /// Security mode for message packing and unpacking.
 ///

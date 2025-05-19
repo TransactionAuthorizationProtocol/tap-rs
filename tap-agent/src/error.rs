@@ -76,7 +76,7 @@ pub enum Error {
 
     /// DIDComm specific errors
     #[error("DIDComm error: {0}")]
-    DIDComm(#[from] didcomm::error::Error),
+    DIDComm(String),
 
     /// DID Resolution error
     #[error("DID Resolution error: {0}")]

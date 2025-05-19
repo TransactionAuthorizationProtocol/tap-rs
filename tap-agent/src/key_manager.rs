@@ -5,7 +5,7 @@
 
 use crate::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey};
 use crate::error::{Error, Result};
-use didcomm::secrets::Secret;
+use tap_msg::didcomm::Secret;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 

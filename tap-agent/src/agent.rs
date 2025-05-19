@@ -310,36 +310,17 @@ impl Agent for DefaultAgent {
             // First pass: Look for DIDCommMessaging services specifically
             // Try to find a DIDCommMessaging service first
             if let Some(service) = doc.service.iter().find(|s| {
-                matches!(
-                    &s.service_endpoint,
-                    didcomm::did::ServiceKind::DIDCommMessaging { .. }
-                )
+                s.type_ == "DIDCommMessaging"
             }) {
-                if let didcomm::did::ServiceKind::DIDCommMessaging { value } =
-                    &service.service_endpoint
-                {
-                    // For DIDCommMessaging, return the URI directly
-                    return Ok(Some(value.uri.clone()));
-                }
+                // For DIDCommMessaging, return the service_endpoint directly
+                return Ok(Some(service.service_endpoint.clone()));
             }
 
             // If no DIDCommMessaging service found, look for other service types
-            if let Some(service) = doc
-                .service
-                .iter()
-                .find(|s| matches!(&s.service_endpoint, didcomm::did::ServiceKind::Other { .. }))
-            {
-                if let didcomm::did::ServiceKind::Other { value } = &service.service_endpoint {
-                    // For other services, try to extract a service endpoint from the value
-                    if let Some(endpoint) = value.get("serviceEndpoint").and_then(|v| v.as_str()) {
-                        return Ok(Some(endpoint.to_string()));
-                    } else if let Some(uri) = value.get("uri").and_then(|v| v.as_str()) {
-                        return Ok(Some(uri.to_string()));
-                    } else {
-                        // If we can't find a specific field, use the whole value as a string
-                        return Ok(Some(format!("{}", value)));
-                    }
-                }
+            // If no DIDCommMessaging service found, look for any service endpoint
+            if let Some(service) = doc.service.first() {
+                // Use the service endpoint directly for any service type
+                return Ok(Some(service.service_endpoint.clone()));
             }
         }
 

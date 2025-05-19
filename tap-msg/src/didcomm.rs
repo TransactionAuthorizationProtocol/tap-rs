@@ -2,6 +2,101 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
+/// DID Document
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DIDDoc {
+    /// DID that this document describes
+    pub id: String,
+
+    /// List of verification methods
+    pub verification_method: Vec<VerificationMethod>,
+
+    /// List of authentication verification method references (id strings)
+    pub authentication: Vec<String>,
+
+    /// List of key agreement verification method references (id strings)
+    pub key_agreement: Vec<String>,
+
+    /// List of services
+    pub service: Vec<Service>,
+}
+
+/// Service definition in a DID Document
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Service {
+    /// Service ID
+    pub id: String,
+
+    /// Service type
+    #[serde(rename = "type")]
+    pub type_: String,
+
+    /// Service endpoint URL
+    pub service_endpoint: String,
+
+    /// Additional properties
+    #[serde(flatten)]
+    pub properties: HashMap<String, Value>,
+}
+
+/// Verification method in a DID Document
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct VerificationMethod {
+    /// Verification method ID
+    pub id: String,
+
+    /// Verification method type
+    #[serde(rename = "type")]
+    pub type_: VerificationMethodType,
+
+    /// Controller DID
+    pub controller: String,
+
+    /// Verification material
+    #[serde(flatten)]
+    pub verification_material: VerificationMaterial,
+}
+
+/// Verification method type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum VerificationMethodType {
+    /// Ed25519 Verification Key 2018
+    Ed25519VerificationKey2018,
+
+    /// X25519 Key Agreement Key 2019
+    X25519KeyAgreementKey2019,
+
+    /// ECDSA Secp256k1 Verification Key 2019
+    EcdsaSecp256k1VerificationKey2019,
+
+    /// JSON Web Key 2020
+    JsonWebKey2020,
+}
+
+/// Verification material
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum VerificationMaterial {
+    /// Base58 encoded public key
+    Base58 {
+        /// Public key encoded in base58
+        public_key_base58: String,
+    },
+
+    /// Multibase encoded public key
+    Multibase {
+        /// Public key encoded in multibase
+        public_key_multibase: String,
+    },
+
+    /// JSON Web Key
+    JWK {
+        /// Public key in JWK format
+        public_key_jwk: Value,
+    },
+}
+
 /// Wrapper for plain message. Provides helpers for message building and packing/unpacking.
 /// Adapted from https://github.com/sicpa-dlab/didcomm-rust/blob/main/src/message/message.rs
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -319,6 +414,40 @@ pub struct LinksAttachmentData {
     /// A JSON Web Signature over the content of the attachment.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub jws: Option<String>,
+}
+
+// Secret key material types
+
+/// Secret key material type
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SecretType {
+    /// JSON Web Key 2020
+    JsonWebKey2020,
+}
+
+/// Secret key material
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum SecretMaterial {
+    /// JSON Web Key
+    JWK {
+        /// Private key in JWK format
+        private_key_jwk: Value,
+    },
+}
+
+/// Secret for cryptographic operations
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Secret {
+    /// Secret ID
+    pub id: String,
+
+    /// Secret type
+    pub type_: SecretType,
+
+    /// Secret material
+    pub secret_material: SecretMaterial,
 }
 
 #[cfg(test)]

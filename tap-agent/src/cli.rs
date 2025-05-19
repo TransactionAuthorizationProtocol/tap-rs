@@ -230,7 +230,7 @@ fn lookup_did(did: &str, output: Option<PathBuf>) -> Result<()> {
                 println!("      Controller: {}", vm.controller);
 
                 match &vm.verification_material {
-                    didcomm::did::VerificationMaterial::JWK { public_key_jwk } => {
+                    tap_msg::didcomm::VerificationMaterial::JWK { public_key_jwk } => {
                         println!("      Material: JWK");
                         if let Some(kty) = public_key_jwk.get("kty") {
                             println!("        Key Type: {}", kty);
@@ -239,11 +239,11 @@ fn lookup_did(did: &str, output: Option<PathBuf>) -> Result<()> {
                             println!("        Curve: {}", crv);
                         }
                     }
-                    didcomm::did::VerificationMaterial::Base58 { public_key_base58 } => {
+                    tap_msg::didcomm::VerificationMaterial::Base58 { public_key_base58 } => {
                         println!("      Material: Base58");
                         println!("        Key: {}", public_key_base58);
                     }
-                    didcomm::did::VerificationMaterial::Multibase {
+                    tap_msg::didcomm::VerificationMaterial::Multibase {
                         public_key_multibase,
                     } => {
                         println!("      Material: Multibase");

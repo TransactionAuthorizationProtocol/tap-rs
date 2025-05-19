@@ -217,14 +217,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a payment request using the proper struct and builder pattern
     let payment_request = tap_msg::message::payment::PaymentBuilder::default()
-        .asset("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse().unwrap())
+        .asset(
+            "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+                .parse()
+                .unwrap(),
+        )
         .amount(amount.to_string())
         .transaction_id(transaction_id.clone())
         .memo("Payment simulator payment request".to_string())
         .originator(sender_agent.clone())
         .beneficiary(recipient_agent.clone())
         .build();
-        
+
     // Add currency code
     let mut payment_request = payment_request;
     payment_request.currency_code = Some(currency);

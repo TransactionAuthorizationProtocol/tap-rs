@@ -10,13 +10,10 @@
 use async_trait::async_trait;
 use base64::Engine;
 use curve25519_dalek::edwards::CompressedEdwardsY;
-use didcomm::did::{
-    DIDDoc, DIDResolver, VerificationMaterial, VerificationMethod, VerificationMethodType,
+use tap_msg::didcomm::{
+    DIDDoc, VerificationMaterial, VerificationMethod, VerificationMethodType,
+    Secret, SecretMaterial, SecretType
 };
-use didcomm::error::{
-    Error as DidcommError, ErrorKind as DidcommErrorKind, Result as DidcommResult,
-};
-use didcomm::secrets::{Secret, SecretMaterial, SecretType};
 use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
 use k256::ecdsa::SigningKey as Secp256k1SigningKey;
 use multibase::{decode, encode, Base};
@@ -876,15 +873,7 @@ impl SyncDIDResolver for MultiResolver {
     }
 }
 
-#[async_trait(?Send)]
-impl DIDResolver for MultiResolver {
-    async fn resolve(&self, did: &str) -> DidcommResult<Option<DIDDoc>> {
-        match SyncDIDResolver::resolve(self, did).await {
-            Ok(did_doc) => Ok(did_doc),
-            Err(e) => Err(DidcommError::new(DidcommErrorKind::InvalidState, e)),
-        }
-    }
-}
+// DIDResolver trait from didcomm is no longer needed since we've removed the didcomm dependency
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
