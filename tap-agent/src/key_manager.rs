@@ -48,25 +48,26 @@ pub struct Secret {
 pub trait KeyManager: Send + Sync + std::fmt::Debug + 'static {
     /// Generate a new key with the specified options
     fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey>;
-    
+
     /// Generate a new web DID with the specified domain and options
-    fn generate_web_did(&self, domain: &str, options: DIDGenerationOptions) -> Result<GeneratedKey>;
-    
+    fn generate_web_did(&self, domain: &str, options: DIDGenerationOptions)
+        -> Result<GeneratedKey>;
+
     /// Add an existing key to the key manager
     fn add_key(&self, key: &GeneratedKey) -> Result<()>;
-    
+
     /// Remove a key from the key manager
     fn remove_key(&self, did: &str) -> Result<()>;
-    
+
     /// Check if the key manager has a key for the given DID
     fn has_key(&self, did: &str) -> Result<bool>;
-    
+
     /// Get a list of all DIDs in the key manager
     fn list_keys(&self) -> Result<Vec<String>>;
-    
+
     /// Get access to the secrets storage
     fn get_secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>>;
-    
+
     /// Get a secret resolver for use with cryptographic operations
     fn secret_resolver(&self) -> KeyManagerSecretResolver;
 }
@@ -181,7 +182,7 @@ impl KeyManager for DefaultKeyManager {
             Err(Error::FailedToAcquireResolverReadLock)
         }
     }
-    
+
     /// Get access to the secrets storage
     fn get_secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>> {
         Arc::clone(&self.secrets)
@@ -219,18 +220,18 @@ impl DebugSecretsResolver for KeyManagerSecretResolver {
     fn get_secrets_map(&self) -> &std::collections::HashMap<String, Secret> {
         // This is not a suitable pattern for a shared reference return type
         // Instead, we'll use a static empty HashMap with a 'static lifetime
-        
+
         // NOTE: This implementation is only for debugging and diagnostics purposes
         // It does not provide access to the actual secrets, which should be accessed
         // using the get_secret_by_id method instead
-        
+
         // Return a reference to a static empty HashMap
-        static EMPTY_MAP: once_cell::sync::Lazy<std::collections::HashMap<String, Secret>> = 
+        static EMPTY_MAP: once_cell::sync::Lazy<std::collections::HashMap<String, Secret>> =
             once_cell::sync::Lazy::new(|| std::collections::HashMap::new());
-            
+
         &EMPTY_MAP
     }
-    
+
     /// Get a secret by ID
     fn get_secret_by_id(&self, secret_id: &str) -> Option<Secret> {
         if let Ok(secrets) = self.secrets.read() {

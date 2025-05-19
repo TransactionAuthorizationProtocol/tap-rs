@@ -177,7 +177,11 @@ async fn create_agent(
     let secret_resolver = Arc::new(secret_resolver);
 
     // Create message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
+    let message_packer = Arc::new(DefaultMessagePacker::new(
+        did_resolver,
+        secret_resolver,
+        true,
+    ));
 
     // Create agent
     let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));

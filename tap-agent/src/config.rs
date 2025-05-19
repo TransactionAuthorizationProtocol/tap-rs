@@ -11,10 +11,10 @@ pub struct AgentConfig {
 
     /// Security mode for messages
     pub security_mode: Option<String>,
-    
+
     /// Enable debug mode
     pub debug: bool,
-    
+
     /// Timeout in seconds for network operations
     pub timeout_seconds: Option<u64>,
 

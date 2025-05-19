@@ -105,7 +105,7 @@ impl<T: 'static> AsAny for T {
 pub trait DebugSecretsResolver: Debug + Send + Sync + AsAny {
     /// Get a reference to the secrets map for debugging purposes
     fn get_secrets_map(&self) -> &std::collections::HashMap<String, Secret>;
-    
+
     /// Get a secret by ID
     fn get_secret_by_id(&self, id: &str) -> Option<Secret>;
 }
@@ -142,7 +142,7 @@ impl DebugSecretsResolver for BasicSecretResolver {
     fn get_secrets_map(&self) -> &std::collections::HashMap<String, Secret> {
         &self.secrets
     }
-    
+
     fn get_secret_by_id(&self, id: &str) -> Option<Secret> {
         self.secrets.get(id).cloned()
     }
@@ -188,7 +188,7 @@ impl DefaultMessagePacker {
             debug,
         }
     }
-    
+
     /// Create a new DefaultMessagePacker with a default DID resolver
     ///
     /// # Parameters
@@ -201,7 +201,7 @@ impl DefaultMessagePacker {
         // Create a default MultiResolver for DIDs
         #[cfg(not(target_arch = "wasm32"))]
         let did_resolver = Arc::new(crate::did::MultiResolver::default());
-        
+
         Self {
             did_resolver,
             secrets_resolver,

@@ -1,3 +1,4 @@
+use tap_agent::key_manager::DefaultKeyManager;
 //! Tests for signing and verifying messages with different key types
 
 use tap_agent::did::{DIDGenerationOptions, KeyType};
@@ -10,7 +11,7 @@ mod tests {
 
     #[test]
     fn test_ed25519_key_generation() {
-        let key_manager = KeyManager::new();
+        let key_manager = DefaultKeyManager::new();
         let options = DIDGenerationOptions {
             key_type: KeyType::Ed25519,
         };
@@ -22,7 +23,7 @@ mod tests {
 
     #[test]
     fn test_p256_key_generation() {
-        let key_manager = KeyManager::new();
+        let key_manager = DefaultKeyManager::new();
         let options = DIDGenerationOptions {
             key_type: KeyType::P256,
         };
@@ -34,7 +35,7 @@ mod tests {
 
     #[test]
     fn test_secp256k1_key_generation() {
-        let key_manager = KeyManager::new();
+        let key_manager = DefaultKeyManager::new();
         let options = DIDGenerationOptions {
             key_type: KeyType::Secp256k1,
         };

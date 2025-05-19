@@ -206,10 +206,10 @@ pub trait WasmDIDResolver: Debug {
 pub trait WasmDIDMethodResolver: Debug {
     /// Returns the method name this resolver handles.
     fn method(&self) -> &str;
-    
+
     /// Resolves a DID synchronously, returning the DID document.
     fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>>;
-    
+
     /// Get this resolver as Any for downcasting
     fn as_any(&self) -> &dyn std::any::Any;
 }
@@ -268,11 +268,11 @@ impl WasmDIDMethodResolver for KeyResolver {
     fn method(&self) -> &str {
         "key"
     }
-    
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-    
+
     fn resolve_method(&self, did_key: &str) -> Result<Option<DIDDoc>> {
         // Same implementation but without async/await
         // Validate that this is a did:key
@@ -507,11 +507,11 @@ impl WasmDIDMethodResolver for WebResolver {
     fn method(&self) -> &str {
         "web"
     }
-    
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
-    
+
     fn resolve_method(&self, did: &str) -> Result<Option<DIDDoc>> {
         // For WASM, return a simple placeholder DID document without actual resolution
         // Because we lack the proper web-fetch capabilities at the moment
@@ -519,7 +519,7 @@ impl WasmDIDMethodResolver for WebResolver {
         if parts.len() < 3 || parts[0] != "did" || parts[1] != "web" {
             return Err(Error::InvalidDID);
         }
-        
+
         // Create a minimal DID document for did:web
         let verification_method = VerificationMethod {
             id: format!("{}#keys-1", did),
@@ -529,7 +529,7 @@ impl WasmDIDMethodResolver for WebResolver {
                 public_key_multibase: "zMockPublicKey".to_string(),
             },
         };
-        
+
         let did_doc = DIDDoc {
             id: did.to_string(),
             verification_method: vec![verification_method.clone()],
@@ -537,7 +537,7 @@ impl WasmDIDMethodResolver for WebResolver {
             key_agreement: Vec::new(),
             service: Vec::new(),
         };
-        
+
         Ok(Some(did_doc))
     }
 }
@@ -756,75 +756,80 @@ impl DIDMethodResolver for WebResolver {
         {
             use wasm_bindgen::JsValue;
             use wasm_bindgen_futures::JsFuture;
-            use web_sys::{Request, RequestInit, RequestMode, Response, Headers};
+            use web_sys::{Headers, Request, RequestInit, RequestMode, Response};
 
             // Create request options
             let mut opts = RequestInit::new();
             opts.method("GET");
             opts.mode(RequestMode::Cors);
-            
+
             // Create the request
             let request = match Request::new_with_str_and_init(&url, &opts) {
                 Ok(req) => req,
                 Err(e) => {
                     return Err(Error::DIDResolution(format!(
-                        "Failed to create request for {}: {:?}", url, e
+                        "Failed to create request for {}: {:?}",
+                        url, e
                     )));
                 }
             };
-            
+
             // Add Accept header
             let headers = match Headers::new() {
                 Ok(h) => h,
                 Err(e) => {
                     return Err(Error::DIDResolution(format!(
-                        "Failed to create headers: {:?}", e
+                        "Failed to create headers: {:?}",
+                        e
                     )));
                 }
             };
-            
+
             if let Err(e) = headers.set("Accept", "application/json") {
                 return Err(Error::DIDResolution(format!(
-                    "Failed to set Accept header: {:?}", e
+                    "Failed to set Accept header: {:?}",
+                    e
                 )));
             }
-            
+
             if let Err(e) = request.headers().set("Accept", "application/json") {
                 return Err(Error::DIDResolution(format!(
-                    "Failed to set Accept header: {:?}", e
+                    "Failed to set Accept header: {:?}",
+                    e
                 )));
             }
-            
+
             // Get the window object
             let window = match web_sys::window() {
                 Some(w) => w,
                 None => {
                     return Err(Error::DIDResolution(
-                        "No window object available".to_string()
+                        "No window object available".to_string(),
                     ));
                 }
             };
-            
+
             // Send the request
             let resp_value = match JsFuture::from(window.fetch_with_request(&request)).await {
                 Ok(response) => response,
                 Err(e) => {
                     return Err(Error::DIDResolution(format!(
-                        "Failed to fetch DID document from {}: {:?}", url, e
+                        "Failed to fetch DID document from {}: {:?}",
+                        url, e
                     )));
                 }
             };
-            
+
             // Convert response to Response object
             let resp: Response = match resp_value.dyn_into() {
                 Ok(r) => r,
                 Err(_) => {
                     return Err(Error::DIDResolution(
-                        "Failed to convert response".to_string()
+                        "Failed to convert response".to_string(),
                     ));
                 }
             };
-            
+
             // Check if successful
             if resp.ok() {
                 // Get the text content
@@ -832,29 +837,29 @@ impl DIDMethodResolver for WebResolver {
                     Ok(t) => t,
                     Err(e) => {
                         return Err(Error::DIDResolution(format!(
-                            "Failed to get text from response: {:?}", e
+                            "Failed to get text from response: {:?}",
+                            e
                         )));
                     }
                 };
-                
+
                 let text_jsval = match JsFuture::from(text_promise).await {
                     Ok(t) => t,
                     Err(e) => {
                         return Err(Error::DIDResolution(format!(
-                            "Failed to await text promise: {:?}", e
+                            "Failed to await text promise: {:?}",
+                            e
                         )));
                     }
                 };
-                
+
                 let text = match text_jsval.as_string() {
                     Some(t) => t,
                     None => {
-                        return Err(Error::DIDResolution(
-                            "Response is not a string".to_string()
-                        ));
+                        return Err(Error::DIDResolution("Response is not a string".to_string()));
                     }
                 };
-                
+
                 // Parse the DID document
                 match serde_json::from_str::<DIDDoc>(&text) {
                     Ok(doc) => {
@@ -866,7 +871,7 @@ impl DIDMethodResolver for WebResolver {
                             )));
                         }
                         Ok(Some(doc))
-                    },
+                    }
                     Err(parse_error) => {
                         // If normal parsing fails, try to parse as a generic JSON Value
                         // and manually construct a DIDDoc with the essential fields
@@ -875,9 +880,11 @@ impl DIDMethodResolver for WebResolver {
                                 let doc_id = match json_value.get("id") {
                                     Some(id) => match id.as_str() {
                                         Some(id_str) => id_str.to_string(),
-                                        None => return Err(Error::DIDResolution(
-                                            "DID Document has invalid 'id' field".to_string(),
-                                        )),
+                                        None => {
+                                            return Err(Error::DIDResolution(
+                                                "DID Document has invalid 'id' field".to_string(),
+                                            ))
+                                        }
                                     },
                                     None => {
                                         return Err(Error::DIDResolution(
@@ -910,10 +917,8 @@ impl DIDMethodResolver for WebResolver {
                                 // Attempt to parse each verification method
                                 let mut verification_methods = Vec::new();
                                 for vm_value in vm_array {
-                                    if let Ok(vm) = serde_json::from_value::<
-                                        VerificationMethod,
-                                    >(
-                                        vm_value.clone()
+                                    if let Ok(vm) = serde_json::from_value::<VerificationMethod>(
+                                        vm_value.clone(),
                                     ) {
                                         verification_methods.push(vm);
                                     }
@@ -925,9 +930,7 @@ impl DIDMethodResolver for WebResolver {
                                     .and_then(|v| v.as_array())
                                     .unwrap_or(&empty_vec)
                                     .iter()
-                                    .filter_map(|v| {
-                                        v.as_str().map(|s| s.to_string())
-                                    })
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
                                     .collect();
 
                                 // Extract key agreement references
@@ -936,34 +939,38 @@ impl DIDMethodResolver for WebResolver {
                                     .and_then(|v| v.as_array())
                                     .unwrap_or(&empty_vec)
                                     .iter()
-                                    .filter_map(|v| {
-                                        v.as_str().map(|s| s.to_string())
-                                    })
+                                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
                                     .collect();
 
                                 // Create an empty services list for the DIDDoc
                                 let services = Vec::new();
 
                                 // Extract raw service information for console logging
-                                if let Some(svc_array) = json_value
-                                    .get("service")
-                                    .and_then(|v| v.as_array())
+                                if let Some(svc_array) =
+                                    json_value.get("service").and_then(|v| v.as_array())
                                 {
-                                    web_sys::console::log_1(&JsValue::from_str("Service endpoints (extracted from JSON):"));
+                                    web_sys::console::log_1(&JsValue::from_str(
+                                        "Service endpoints (extracted from JSON):",
+                                    ));
                                     for (i, svc_value) in svc_array.iter().enumerate() {
                                         if let (Some(id), Some(endpoint)) = (
                                             svc_value.get("id").and_then(|v| v.as_str()),
-                                            svc_value.get("serviceEndpoint").and_then(|v| v.as_str()),
+                                            svc_value
+                                                .get("serviceEndpoint")
+                                                .and_then(|v| v.as_str()),
                                         ) {
                                             let type_value = svc_value
                                                 .get("type")
                                                 .and_then(|v| v.as_str())
                                                 .unwrap_or("Unknown");
-                                                
-                                            web_sys::console::log_1(&JsValue::from_str(
-                                                &format!("[{}] ID: {}\nType: {}\nEndpoint: {}", 
-                                                    i + 1, id, type_value, endpoint)
-                                            ));
+
+                                            web_sys::console::log_1(&JsValue::from_str(&format!(
+                                                "[{}] ID: {}\nType: {}\nEndpoint: {}",
+                                                i + 1,
+                                                id,
+                                                type_value,
+                                                endpoint
+                                            )));
                                         }
                                     }
                                 }
@@ -1349,20 +1356,27 @@ impl WasmDIDResolver for MultiResolver {
         if parts.len() < 3 {
             return Err(Error::InvalidDID);
         }
-        
+
         let method = parts[1];
-        
+
         // Get the resolver from the map
-        let resolver_guard = self.resolvers
+        let resolver_guard = self
+            .resolvers
             .read()
             .map_err(|_| Error::FailedToAcquireResolverReadLock)?;
-            
+
         if let Some(resolver) = resolver_guard.get(method) {
             // Clone is not needed in this case since we're not using async
-            if let Some(wasm_resolver) = resolver.as_any().downcast_ref::<dyn WasmDIDMethodResolver>() {
+            if let Some(wasm_resolver) = resolver
+                .as_any()
+                .downcast_ref::<dyn WasmDIDMethodResolver>()
+            {
                 wasm_resolver.resolve_method(did)
             } else {
-                Err(Error::UnsupportedDIDMethod(format!("Method {} is not a WasmDIDMethodResolver", method)))
+                Err(Error::UnsupportedDIDMethod(format!(
+                    "Method {} is not a WasmDIDMethodResolver",
+                    method
+                )))
             }
         } else {
             Err(Error::UnsupportedDIDMethod(method.to_string()))

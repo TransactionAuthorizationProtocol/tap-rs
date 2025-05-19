@@ -2,6 +2,9 @@
 //!
 //! This module provides command-line utilities for creating and managing
 //! Decentralized Identifiers (DIDs) and associated cryptographic keys.
+//!
+//! This module is only available when the `native` feature is enabled.
+#![cfg(feature = "native")]
 
 use crate::did::{
     DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyType, MultiResolver, SyncDIDResolver,

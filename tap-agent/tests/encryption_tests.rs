@@ -1,3 +1,4 @@
+use tap_agent::key_manager::DefaultKeyManager;
 //! Tests specifically focused on encryption/decryption functionality
 //!
 //! These tests verify the encryption and decryption functionality:
@@ -280,7 +281,7 @@ impl EncryptionTestEnvironment {
 
         // Create a message packer
         let message_packer =
-            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver));
+            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver), true);
 
         Self {
             sender_did,

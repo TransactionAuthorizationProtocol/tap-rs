@@ -1,3 +1,4 @@
+use tap_agent::key_manager::DefaultKeyManager;
 //! Comprehensive tests for cryptographic operations
 //!
 //! These tests verify the cryptographic implementations for:
@@ -327,7 +328,7 @@ impl TestEnvironment {
 
         // Create a message packer
         let message_packer =
-            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver));
+            DefaultMessagePacker::new(Arc::new(did_resolver), Arc::new(secret_resolver), true);
 
         Self {
             ed25519_did,

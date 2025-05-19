@@ -98,15 +98,15 @@ impl KeyManager for DefaultKeyManager {
     fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey, JsValue> {
         self.generator.generate_key(options.key_type)
     }
-    
+
     fn has_key(&self, _did: &str) -> Result<bool, JsValue> {
         Ok(false) // Simplified implementation
     }
-    
+
     fn list_keys(&self) -> Result<Vec<String>, JsValue> {
         Ok(Vec::new()) // Simplified implementation
     }
-    
+
     fn add_key(&self, _generated_key: &GeneratedKey) -> Result<(), JsValue> {
         Ok(()) // Simplified implementation
     }
@@ -119,7 +119,7 @@ impl DIDKeyGenerator {
     pub fn new() -> Self {
         Self {}
     }
-    
+
     pub fn generate_key(&self, key_type: KeyType) -> Result<GeneratedKey, JsValue> {
         match key_type {
             KeyType::Ed25519 => {
@@ -127,15 +127,15 @@ impl DIDKeyGenerator {
                 let mut rng = rand::thread_rng();
                 let signing_key = SigningKey::generate(&mut rng);
                 let verifying_key = VerifyingKey::from(&signing_key);
-                
+
                 // Get public and private key bytes
                 let private_key = signing_key.to_bytes().to_vec();
                 let public_key = verifying_key.to_bytes().to_vec();
-                
+
                 // Generate a DID from the public key
                 let public_key_b64 = base64::engine::general_purpose::STANDARD.encode(&public_key);
                 let did = format!("did:key:z6Mk{}", public_key_b64);
-                
+
                 // Create a basic DID document
                 let did_doc = DIDDoc {
                     id: did.clone(),
@@ -144,7 +144,7 @@ impl DIDKeyGenerator {
                     key_agreement: vec![],
                     service: vec![],
                 };
-                
+
                 Ok(GeneratedKey {
                     did,
                     key_type: KeyType::Ed25519,
@@ -153,15 +153,13 @@ impl DIDKeyGenerator {
                     did_doc,
                 })
             }
-            KeyType::P256 => {
-                Err(JsValue::from_str("P256 key generation not implemented"))
-            }
-            KeyType::Secp256k1 => {
-                Err(JsValue::from_str("Secp256k1 key generation not implemented"))
-            }
+            KeyType::P256 => Err(JsValue::from_str("P256 key generation not implemented")),
+            KeyType::Secp256k1 => Err(JsValue::from_str(
+                "Secp256k1 key generation not implemented",
+            )),
         }
     }
-    
+
     pub fn create_secret_from_key(&self, key: &GeneratedKey) -> Secret {
         // Create a JWK from the key
         let private_key_jwk = match key.key_type {
@@ -186,7 +184,7 @@ impl DIDKeyGenerator {
                 "y": "", // Not implemented
             }),
         };
-        
+
         Secret {
             type_: SecretType::JsonWebKey2020,
             id: format!("{}#keys-1", key.did),
@@ -205,11 +203,11 @@ impl BasicSecretResolver {
             secrets: HashMap::new(),
         }
     }
-    
+
     pub fn add_secret(&mut self, did: &str, secret: Secret) {
         self.secrets.insert(did.to_string(), secret);
     }
-    
+
     pub fn get_secrets_map(&self) -> &HashMap<String, Secret> {
         &self.secrets
     }
@@ -1618,48 +1616,60 @@ impl TapAgent {
             key_manager: Arc::new(key_manager),
         }
     }
-    
+
     /// Pack a message using this agent's keys for transmission
     /// This creates a signed message that can be verified by the recipient
     #[wasm_bindgen(js_name = packMessage)]
     pub fn pack_message(&self, message: &Message) -> Result<JsValue, JsValue> {
         // Create a clone of the message that we can modify
         let mut message_clone = message.clone();
-        
+
         // Ensure the message has this agent's DID as the sender
         if message_clone.from_did().is_none() {
             message_clone.set_from_did(Some(self.id.clone()));
         }
-        
+
         // Sign the message using this agent's keys
         self.sign_message(&mut message_clone)?;
-        
+
         // Convert the packed message to bytes
         let message_bytes = message_clone.to_bytes()?;
-        
+
         // Create a JS object to return with the packed message and metadata
         let result = js_sys::Object::new();
-        
+
         // Set the packed message bytes
         Reflect::set(&result, &JsValue::from_str("message"), &message_bytes)?;
-        
+
         // Set metadata about the message
         let metadata = js_sys::Object::new();
-        Reflect::set(&metadata, &JsValue::from_str("type"), &JsValue::from_str("signed"))?;
-        Reflect::set(&metadata, &JsValue::from_str("sender"), &JsValue::from_str(&self.id))?;
+        Reflect::set(
+            &metadata,
+            &JsValue::from_str("type"),
+            &JsValue::from_str("signed"),
+        )?;
+        Reflect::set(
+            &metadata,
+            &JsValue::from_str("sender"),
+            &JsValue::from_str(&self.id),
+        )?;
         if let Some(recipient) = message_clone.to_did() {
-            Reflect::set(&metadata, &JsValue::from_str("recipient"), &JsValue::from_str(&recipient))?;
+            Reflect::set(
+                &metadata,
+                &JsValue::from_str("recipient"),
+                &JsValue::from_str(&recipient),
+            )?;
         }
-        
+
         Reflect::set(&result, &JsValue::from_str("metadata"), &metadata)?;
-        
+
         if self.debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Message packed and signed by {}",
                 self.id
             )));
         }
-        
+
         Ok(result.into())
     }
 
@@ -2343,7 +2353,7 @@ impl TapAgent {
         // Create a GeneratedKey
         let generated_key = GeneratedKey {
             did: did.clone(),
-            key_type: key_type.clone(),  // Clone the key_type here
+            key_type: key_type.clone(), // Clone the key_type here
             public_key,
             private_key,
             did_doc: DIDDoc {

@@ -6,13 +6,13 @@ use crate::key_manager::KeyManager;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::message::SecurityMode;
 use async_trait::async_trait;
+#[cfg(feature = "native")]
+use reqwest::Client;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::sync::Arc;
 #[cfg(feature = "native")]
 use std::time::Duration;
-#[cfg(feature = "native")]
-use reqwest::Client;
 use tap_msg::TapMessageBody;
 
 /// Result of a message delivery attempt
@@ -59,12 +59,15 @@ pub trait Agent {
 pub trait WasmAgent {
     /// Gets the agent's DID
     fn get_agent_did(&self) -> &str;
-    
+
     /// Pack a message for delivery
     fn pack_message<T: TapMessageBody + serde::Serialize>(&self, message: &T) -> Result<String>;
-    
+
     /// Unpack a received message
-    fn unpack_message<T: TapMessageBody + DeserializeOwned>(&self, packed_message: &str) -> Result<T>;
+    fn unpack_message<T: TapMessageBody + DeserializeOwned>(
+        &self,
+        packed_message: &str,
+    ) -> Result<T>;
 }
 
 /// The DefaultAgent is a concrete implementation of the Agent trait
@@ -87,14 +90,17 @@ impl WasmAgent for DefaultAgent {
     fn get_agent_did(&self) -> &str {
         &self.config.agent_did
     }
-    
+
     fn pack_message<T: TapMessageBody + serde::Serialize>(&self, message: &T) -> Result<String> {
         // Simple mock implementation
         let message_json = serde_json::to_string(message)?;
         Ok(message_json)
     }
-    
-    fn unpack_message<T: TapMessageBody + DeserializeOwned>(&self, packed_message: &str) -> Result<T> {
+
+    fn unpack_message<T: TapMessageBody + DeserializeOwned>(
+        &self,
+        packed_message: &str,
+    ) -> Result<T> {
         // Simple mock implementation
         let message: T = serde_json::from_str(packed_message)?;
         Ok(message)
@@ -104,10 +110,7 @@ impl WasmAgent for DefaultAgent {
 #[cfg(not(target_arch = "wasm32"))]
 impl DefaultAgent {
     /// Creates a new DefaultAgent with the given configuration and message packer
-    pub fn new(
-        config: AgentConfig,
-        message_packer: impl MessagePacker + 'static,
-    ) -> DefaultAgent {
+    pub fn new(config: AgentConfig, message_packer: impl MessagePacker + 'static) -> DefaultAgent {
         #[cfg(feature = "native")]
         {
             let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
@@ -123,7 +126,7 @@ impl DefaultAgent {
                 http_client: client,
             }
         }
-        
+
         #[cfg(not(feature = "native"))]
         {
             DefaultAgent {
@@ -139,8 +142,10 @@ impl DefaultAgent {
         key_manager: Arc<dyn crate::key_manager::KeyManager>,
     ) -> DefaultAgent {
         let resolver = key_manager.secret_resolver();
-        let message_packer =
-            crate::crypto::DefaultMessagePacker::new_with_default_resolver(Arc::new(resolver), config.debug);
+        let message_packer = crate::crypto::DefaultMessagePacker::new_with_default_resolver(
+            Arc::new(resolver),
+            config.debug,
+        );
         DefaultAgent::new(config, message_packer)
     }
 
@@ -148,22 +153,22 @@ impl DefaultAgent {
     pub fn builder(agent_did: impl Into<String>) -> DefaultAgentBuilder {
         DefaultAgentBuilder::new(agent_did.into())
     }
-    
+
     /// Creates a new ephemeral agent with a randomly generated DID
-    /// 
+    ///
     /// This is a helper method to aid with migration from the old API.
     pub fn new_ephemeral() -> Result<(Self, String)> {
         // Create a new key manager
         let key_manager = Arc::new(crate::key_manager::DefaultKeyManager::new());
-        
+
         // Generate a random Ed25519 key
         let key = key_manager.generate_key(crate::did::DIDGenerationOptions {
             key_type: crate::did::KeyType::Ed25519,
         })?;
-        
+
         // Get the DID from the key
         let did = key.did.clone();
-        
+
         // Create a config with the DID
         let config = crate::config::AgentConfig {
             agent_did: did.clone(),
@@ -172,10 +177,10 @@ impl DefaultAgent {
             timeout_seconds: Some(30),
             parameters: std::collections::HashMap::new(),
         };
-        
+
         // Create a new agent
         let agent = Self::new_with_default_packer(config, key_manager);
-        
+
         Ok((agent, did))
     }
 
@@ -198,7 +203,7 @@ impl DefaultAgent {
             .send()
             .await
             .map_err(|e| Error::Networking(format!("Failed to send message to endpoint: {}", e)))?;
-            
+
         // Get the status code
         let status = response.status().as_u16();
 
@@ -207,13 +212,14 @@ impl DefaultAgent {
 
         Ok(status)
     }
-            
+
     #[cfg(any(not(feature = "native"), target_arch = "wasm32"))]
     pub async fn send_to_endpoint(&self, _packed_message: &str, _endpoint: &str) -> Result<u16> {
         // Feature not enabled or WASM doesn't have http_client
-        Err(crate::error::Error::NotImplemented("HTTP client not available".to_string()))
+        Err(crate::error::Error::NotImplemented(
+            "HTTP client not available".to_string(),
+        ))
     }
-            
 
     /// Determine the appropriate security mode for a message type
     ///
@@ -282,29 +288,30 @@ impl Agent for DefaultAgent {
         // No service endpoint found
         Ok(None)
     }
-    
+
     #[cfg(target_arch = "wasm32")]
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>> {
         // WASM-specific implementation for DID resolution
         // This simplified version just returns the DID as an endpoint for testing purposes
         // In a real implementation, this would call into JavaScript to resolve the DID
-        
+
         // For WASM, we'll create a mock endpoint for now
         if to.starts_with("did:") {
             // Create a mock endpoint URL for testing
             // In a real implementation, this would call the resolver
             let endpoint = format!("https://example.com/agents/{}", to.replace(":", "-"));
-            web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(
-                &format!("Mock endpoint for {}: {}", to, endpoint)
-            ));
+            web_sys::console::log_1(&wasm_bindgen::JsValue::from_str(&format!(
+                "Mock endpoint for {}: {}",
+                to, endpoint
+            )));
             return Ok(Some(endpoint));
         }
-        
+
         // If not a DID, might be a direct URL
         if to.starts_with("http://") || to.starts_with("https://") {
             return Ok(Some(to.to_string()));
         }
-        
+
         // No endpoint found
         Ok(None)
     }
@@ -457,7 +464,7 @@ impl Agent for DefaultAgent {
 
         Ok((packed, delivery_results))
     }
-    
+
     #[cfg(target_arch = "wasm32")]
     async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
         &self,
@@ -467,7 +474,7 @@ impl Agent for DefaultAgent {
     ) -> Result<(String, Vec<DeliveryResult>)> {
         use wasm_bindgen::JsValue;
         use web_sys::console;
-        
+
         if to.is_empty() {
             return Err(Error::Validation("No recipients specified".to_string()));
         }
@@ -488,7 +495,10 @@ impl Agent for DefaultAgent {
 
         // Log the plaintext message
         console::log_1(&JsValue::from_str("==== SENDING TAP MESSAGE ===="));
-        console::log_1(&JsValue::from_str(&format!("Message Type: {}", T::message_type())));
+        console::log_1(&JsValue::from_str(&format!(
+            "Message Type: {}",
+            T::message_type()
+        )));
         console::log_1(&JsValue::from_str(&format!("Recipients: {:?}", to)));
         console::log_1(&JsValue::from_str(&format!(
             "PLAINTEXT CONTENT: {}",
@@ -506,14 +516,18 @@ impl Agent for DefaultAgent {
 
         // Determine the appropriate security mode
         let security_mode = self.determine_security_mode::<T>();
-        console::log_1(&JsValue::from_str(&format!("Security Mode: {:?}", security_mode)));
+        console::log_1(&JsValue::from_str(&format!(
+            "Security Mode: {:?}",
+            security_mode
+        )));
 
         // For each recipient, look up service endpoint before sending
         for recipient in &to {
             if let Ok(Some(endpoint)) = self.get_service_endpoint(recipient).await {
-                console::log_1(&JsValue::from_str(
-                    &format!("Found service endpoint for {}: {}", recipient, endpoint)
-                ));
+                console::log_1(&JsValue::from_str(&format!(
+                    "Found service endpoint for {}: {}",
+                    recipient, endpoint
+                )));
             }
         }
 
@@ -541,9 +555,10 @@ impl Agent for DefaultAgent {
         for recipient in &to {
             match self.get_service_endpoint(recipient).await {
                 Ok(Some(endpoint)) => {
-                    console::log_1(&JsValue::from_str(
-                        &format!("Delivering message to {} at {}", recipient, endpoint)
-                    ));
+                    console::log_1(&JsValue::from_str(&format!(
+                        "Delivering message to {} at {}",
+                        recipient, endpoint
+                    )));
 
                     // Extract message ID for logging
                     let message_id = match serde_json::from_str::<serde_json::Value>(&packed) {
@@ -559,9 +574,10 @@ impl Agent for DefaultAgent {
                     match self.send_to_endpoint(&packed, &endpoint).await {
                         Ok(status) => {
                             // Log success
-                            console::log_1(&JsValue::from_str(
-                                &format!("✅ Delivered message {} to {} at {}", message_id, recipient, endpoint)
-                            ));
+                            console::log_1(&JsValue::from_str(&format!(
+                                "✅ Delivered message {} to {} at {}",
+                                message_id, recipient, endpoint
+                            )));
 
                             delivery_results.push(DeliveryResult {
                                 did: recipient.to_string(),
@@ -588,9 +604,10 @@ impl Agent for DefaultAgent {
                     }
                 }
                 Ok(None) => {
-                    console::log_1(&JsValue::from_str(
-                        &format!("⚠️ No service endpoint found for {}, skipping delivery", recipient)
-                    ));
+                    console::log_1(&JsValue::from_str(&format!(
+                        "⚠️ No service endpoint found for {}, skipping delivery",
+                        recipient
+                    )));
                 }
                 Err(e) => {
                     // Log error but don't fail
@@ -662,7 +679,7 @@ impl Agent for DefaultAgent {
         serde_json::from_value(message_value.clone())
             .map_err(|e| Error::Serialization(format!("Failed to deserialize message: {}", e)))
     }
-    
+
     #[cfg(target_arch = "wasm32")]
     async fn receive_message<T: TapMessageBody + DeserializeOwned + Send>(
         &self,
@@ -670,11 +687,11 @@ impl Agent for DefaultAgent {
     ) -> Result<T> {
         use wasm_bindgen::JsValue;
         use web_sys::console;
-        
+
         // Log the received packed message
         console::log_1(&JsValue::from_str("==== RECEIVING TAP MESSAGE ===="));
         console::log_1(&JsValue::from_str("--- PACKED MESSAGE ---"));
-        
+
         let formatted_msg = serde_json::from_str::<serde_json::Value>(packed_message)
             .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed_message.to_string()))
             .unwrap_or(packed_message.to_string());
@@ -711,7 +728,10 @@ impl Agent for DefaultAgent {
                 message_type
             )));
         }
-        console::log_1(&JsValue::from_str(&format!("✅ Message type validation passed: {}", message_type)));
+        console::log_1(&JsValue::from_str(&format!(
+            "✅ Message type validation passed: {}",
+            message_type
+        )));
 
         // Deserialize the message into the expected type
         serde_json::from_value(message_value.clone())
