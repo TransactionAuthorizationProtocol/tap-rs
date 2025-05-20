@@ -7,6 +7,9 @@
 /// Agent implementation
 pub mod agent;
 
+/// Agent key abstraction
+pub mod agent_key;
+
 /// Agent configuration
 pub mod config;
 
@@ -25,8 +28,14 @@ pub mod error;
 /// Key management
 pub mod key_manager;
 
+/// Local agent key implementation
+pub mod local_agent_key;
+
 /// Message types and utilities
 pub mod message;
+
+/// Message packing and unpacking utilities
+pub mod message_packing;
 
 /// Key storage utilities
 pub mod storage;
@@ -51,8 +60,16 @@ pub use did::{
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
-pub use key_manager::{DefaultKeyManager, KeyManager, Secret, SecretMaterial, SecretType};
+pub use key_manager::{DefaultKeyManager, KeyManager, KeyManagerBuilder, Secret, SecretMaterial, SecretType};
 pub use storage::{KeyStorage, StoredKey};
+
+// Agent key re-exports
+pub use agent_key::{
+    AgentKey, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption, 
+    JwsAlgorithm, SigningKey, VerificationKey
+};
+pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
+pub use message_packing::{Packable, UnpackOptions, Unpackable, PackOptions, KeyManagerPacking};
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]
@@ -60,7 +77,7 @@ pub use did::MultiResolver;
 
 // Native-only re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub use agent::{Agent, DefaultAgent, DeliveryResult};
+pub use agent::{Agent, DefaultAgent, DeliveryResult, ModernAgent, ModernAgentBuilder};
 #[cfg(not(target_arch = "wasm32"))]
 pub use crypto::BasicSecretResolver;
 #[cfg(not(target_arch = "wasm32"))]
