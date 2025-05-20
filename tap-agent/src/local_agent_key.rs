@@ -92,11 +92,12 @@ impl AgentKey for LocalAgentKey {
 
         // Create a copy without the private key parts
         let mut public_jwk = serde_json::Map::new();
-        
+
         // Copy all fields except 'd' (private key)
-        for (key, value) in jwk.as_object().ok_or_else(|| {
-            Error::Cryptography("Invalid JWK format: not an object".to_string())
-        })? {
+        for (key, value) in jwk
+            .as_object()
+            .ok_or_else(|| Error::Cryptography("Invalid JWK format: not an object".to_string()))?
+        {
             if key != "d" {
                 public_jwk.insert(key.clone(), value.clone());
             }
@@ -167,10 +168,8 @@ impl SigningKey for LocalAgentKey {
             }
             (Some("EC"), Some("P-256")) => {
                 // Extract the private key (d parameter in JWK)
-                let private_key_base64 = jwk
-                    .get("d")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
+                let private_key_base64 =
+                    jwk.get("d").and_then(|v| v.as_str()).ok_or_else(|| {
                         Error::Cryptography("Missing private key (d) in JWK".to_string())
                     })?;
 
@@ -195,10 +194,8 @@ impl SigningKey for LocalAgentKey {
             }
             (Some("EC"), Some("secp256k1")) => {
                 // Extract the private key (d parameter in JWK)
-                let private_key_base64 = jwk
-                    .get("d")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
+                let private_key_base64 =
+                    jwk.get("d").and_then(|v| v.as_str()).ok_or_else(|| {
                         Error::Cryptography("Missing private key (d) in JWK".to_string())
                     })?;
 
@@ -206,18 +203,20 @@ impl SigningKey for LocalAgentKey {
                 let private_key_bytes = base64::engine::general_purpose::STANDARD
                     .decode(private_key_base64)
                     .map_err(|e| {
-                        Error::Cryptography(format!("Failed to decode secp256k1 private key: {}", e))
+                        Error::Cryptography(format!(
+                            "Failed to decode secp256k1 private key: {}",
+                            e
+                        ))
                     })?;
 
                 // Create a secp256k1 signing key
-                let signing_key = Secp256k1SigningKey::from_slice(&private_key_bytes).map_err(
-                    |e| {
+                let signing_key =
+                    Secp256k1SigningKey::from_slice(&private_key_bytes).map_err(|e| {
                         Error::Cryptography(format!(
                             "Failed to create secp256k1 signing key: {:?}",
                             e
                         ))
-                    },
-                )?;
+                    })?;
 
                 // Sign the message using ECDSA
                 let signature: Secp256k1Signature = signing_key.sign(data);
@@ -310,12 +309,9 @@ impl VerificationKey for LocalAgentKey {
         match (kty, crv, protected_header.alg.as_str()) {
             (Some("OKP"), Some("Ed25519"), "EdDSA") => {
                 // Extract the public key
-                let public_key_base64 = jwk
-                    .get("x")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        Error::Cryptography("Missing public key (x) in JWK".to_string())
-                    })?;
+                let public_key_base64 = jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
+                    Error::Cryptography("Missing public key (x) in JWK".to_string())
+                })?;
 
                 // Decode the public key from base64
                 let public_key_bytes = base64::engine::general_purpose::STANDARD
@@ -333,16 +329,15 @@ impl VerificationKey for LocalAgentKey {
                 }
 
                 // Create an Ed25519 verifying key
-                let verifying_key =
-                    match VerifyingKey::try_from(public_key_bytes.as_slice()) {
-                        Ok(key) => key,
-                        Err(e) => {
-                            return Err(Error::Cryptography(format!(
-                                "Failed to create Ed25519 verifying key: {:?}",
-                                e
-                            )))
-                        }
-                    };
+                let verifying_key = match VerifyingKey::try_from(public_key_bytes.as_slice()) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        return Err(Error::Cryptography(format!(
+                            "Failed to create Ed25519 verifying key: {:?}",
+                            e
+                        )))
+                    }
+                };
 
                 // Verify the signature
                 if signature.len() != 64 {
@@ -363,18 +358,12 @@ impl VerificationKey for LocalAgentKey {
             }
             (Some("EC"), Some("P-256"), "ES256") => {
                 // Extract the public key coordinates
-                let x_b64 = jwk
-                    .get("x")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        Error::Cryptography("Missing x coordinate in JWK".to_string())
-                    })?;
-                let y_b64 = jwk
-                    .get("y")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        Error::Cryptography("Missing y coordinate in JWK".to_string())
-                    })?;
+                let x_b64 = jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
+                    Error::Cryptography("Missing x coordinate in JWK".to_string())
+                })?;
+                let y_b64 = jwk.get("y").and_then(|v| v.as_str()).ok_or_else(|| {
+                    Error::Cryptography("Missing y coordinate in JWK".to_string())
+                })?;
 
                 // Decode the coordinates
                 let x_bytes = base64::engine::general_purpose::STANDARD
@@ -415,18 +404,12 @@ impl VerificationKey for LocalAgentKey {
             }
             (Some("EC"), Some("secp256k1"), "ES256K") => {
                 // Extract the public key coordinates
-                let x_b64 = jwk
-                    .get("x")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        Error::Cryptography("Missing x coordinate in JWK".to_string())
-                    })?;
-                let y_b64 = jwk
-                    .get("y")
-                    .and_then(|v| v.as_str())
-                    .ok_or_else(|| {
-                        Error::Cryptography("Missing y coordinate in JWK".to_string())
-                    })?;
+                let x_b64 = jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
+                    Error::Cryptography("Missing x coordinate in JWK".to_string())
+                })?;
+                let y_b64 = jwk.get("y").and_then(|v| v.as_str()).ok_or_else(|| {
+                    Error::Cryptography("Missing y coordinate in JWK".to_string())
+                })?;
 
                 // Decode the coordinates
                 let x_bytes = base64::engine::general_purpose::STANDARD
@@ -446,14 +429,13 @@ impl VerificationKey for LocalAgentKey {
                 point_bytes.extend_from_slice(&y_bytes);
 
                 // Parse the verifying key from the SEC1 encoded point
-                let verifier = k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes).map_err(
-                    |e| {
+                let verifier =
+                    k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes).map_err(|e| {
                         Error::Cryptography(format!(
                             "Failed to create secp256k1 verifying key: {:?}",
                             e
                         ))
-                    },
-                )?;
+                    })?;
 
                 // Parse the signature from DER format
                 let k256_signature = Secp256k1Signature::from_der(signature).map_err(|e| {
@@ -494,9 +476,8 @@ impl EncryptionKey for LocalAgentKey {
         OsRng.fill_bytes(&mut iv_bytes);
 
         // 3. Encrypt the plaintext with AES-GCM
-        let cipher = Aes256Gcm::new_from_slice(&cek).map_err(|e| {
-            Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e))
-        })?;
+        let cipher = Aes256Gcm::new_from_slice(&cek)
+            .map_err(|e| Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e)))?;
 
         // Create a nonce from the IV
         let nonce = Nonce::from_slice(&iv_bytes);
@@ -523,7 +504,9 @@ impl EncryptionKey for LocalAgentKey {
         protected_header: Option<JweProtected>,
     ) -> Result<Jwe> {
         if recipients.is_empty() {
-            return Err(Error::Validation("No recipients specified for JWE".to_string()));
+            return Err(Error::Validation(
+                "No recipients specified for JWE".to_string(),
+            ));
         }
 
         // 1. Generate a random content encryption key (CEK)
@@ -567,9 +550,8 @@ impl EncryptionKey for LocalAgentKey {
         });
 
         // 6. Encrypt the plaintext with AES-GCM
-        let cipher = Aes256Gcm::new_from_slice(&cek).map_err(|e| {
-            Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e))
-        })?;
+        let cipher = Aes256Gcm::new_from_slice(&cek)
+            .map_err(|e| Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e)))?;
 
         // Create a nonce from the IV
         let nonce = Nonce::from_slice(&iv_bytes);
@@ -597,18 +579,32 @@ impl EncryptionKey for LocalAgentKey {
             let encrypted_key = match (kty, crv) {
                 (Some("EC"), Some("P-256")) => {
                     // Extract the public key coordinates
-                    let x_b64 = recipient_jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
-                        Error::Cryptography("Missing x coordinate in recipient JWK".to_string())
-                    })?;
-                    let y_b64 = recipient_jwk.get("y").and_then(|v| v.as_str()).ok_or_else(|| {
-                        Error::Cryptography("Missing y coordinate in recipient JWK".to_string())
-                    })?;
+                    let x_b64 =
+                        recipient_jwk
+                            .get("x")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| {
+                                Error::Cryptography(
+                                    "Missing x coordinate in recipient JWK".to_string(),
+                                )
+                            })?;
+                    let y_b64 =
+                        recipient_jwk
+                            .get("y")
+                            .and_then(|v| v.as_str())
+                            .ok_or_else(|| {
+                                Error::Cryptography(
+                                    "Missing y coordinate in recipient JWK".to_string(),
+                                )
+                            })?;
 
-                    let x_bytes = base64::engine::general_purpose::STANDARD.decode(x_b64)
+                    let x_bytes = base64::engine::general_purpose::STANDARD
+                        .decode(x_b64)
                         .map_err(|e| {
                             Error::Cryptography(format!("Failed to decode x coordinate: {}", e))
                         })?;
-                    let y_bytes = base64::engine::general_purpose::STANDARD.decode(y_b64)
+                    let y_bytes = base64::engine::general_purpose::STANDARD
+                        .decode(y_b64)
                         .map_err(|e| {
                             Error::Cryptography(format!("Failed to decode y coordinate: {}", e))
                         })?;
@@ -618,13 +614,19 @@ impl EncryptionKey for LocalAgentKey {
                     point_bytes.extend_from_slice(&x_bytes);
                     point_bytes.extend_from_slice(&y_bytes);
 
-                    let encoded_point = P256EncodedPoint::from_bytes(&point_bytes).map_err(|e| {
-                        Error::Cryptography(format!("Failed to create P-256 encoded point: {}", e))
-                    })?;
+                    let encoded_point =
+                        P256EncodedPoint::from_bytes(&point_bytes).map_err(|e| {
+                            Error::Cryptography(format!(
+                                "Failed to create P-256 encoded point: {}",
+                                e
+                            ))
+                        })?;
 
                     // This checks if the point is on the curve and returns the public key
                     let recipient_pk = P256PublicKey::from_encoded_point(&encoded_point)
-                        .ok_or_else(|| Error::Cryptography("Invalid P-256 public key".to_string()))?;
+                        .ok_or_else(|| {
+                            Error::Cryptography("Invalid P-256 public key".to_string())
+                        })?;
 
                     // Perform ECDH to derive a shared secret
                     let shared_secret = ephemeral_secret.diffie_hellman(&recipient_pk);
@@ -743,9 +745,8 @@ impl DecryptionKey for LocalAgentKey {
         };
 
         // 2. Decrypt the ciphertext with AES-GCM
-        let cipher = Aes256Gcm::new_from_slice(&cek).map_err(|e| {
-            Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e))
-        })?;
+        let cipher = Aes256Gcm::new_from_slice(&cek)
+            .map_err(|e| Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e)))?;
 
         // Create a nonce from the IV
         let nonce = Nonce::from_slice(iv);
@@ -762,7 +763,8 @@ impl DecryptionKey for LocalAgentKey {
         let mut buffer = ciphertext.to_vec();
         let aad_bytes = aad.unwrap_or(b"");
 
-        cipher.decrypt_in_place_detached(nonce, aad_bytes, &mut buffer, tag_array)
+        cipher
+            .decrypt_in_place_detached(nonce, aad_bytes, &mut buffer, tag_array)
             .map_err(|e| Error::Cryptography(format!("AES-GCM decryption failed: {:?}", e)))?;
 
         Ok(buffer)
@@ -830,11 +832,9 @@ impl PublicVerificationKey {
             }
             VerificationMaterial::Base58 { public_key_base58 } => {
                 // Convert Base58 to JWK
-                let public_key_bytes = bs58::decode(public_key_base58)
-                    .into_vec()
-                    .map_err(|e| {
-                        Error::Cryptography(format!("Failed to decode Base58 key: {}", e))
-                    })?;
+                let public_key_bytes = bs58::decode(public_key_base58).into_vec().map_err(|e| {
+                    Error::Cryptography(format!("Failed to decode Base58 key: {}", e))
+                })?;
 
                 // Assume Ed25519 for Base58 keys
                 Ok(Self::new(
@@ -846,7 +846,9 @@ impl PublicVerificationKey {
                     }),
                 ))
             }
-            VerificationMaterial::Multibase { public_key_multibase } => {
+            VerificationMaterial::Multibase {
+                public_key_multibase,
+            } => {
                 // Convert Multibase to JWK
                 let (_, bytes) = multibase::decode(public_key_multibase).map_err(|e| {
                     Error::Cryptography(format!("Failed to decode Multibase key: {}", e))
@@ -926,16 +928,15 @@ impl VerificationKey for PublicVerificationKey {
                 }
 
                 // Create an Ed25519 verifying key
-                let verifying_key =
-                    match VerifyingKey::try_from(public_key_bytes.as_slice()) {
-                        Ok(key) => key,
-                        Err(e) => {
-                            return Err(Error::Cryptography(format!(
-                                "Failed to create Ed25519 verifying key: {:?}",
-                                e
-                            )))
-                        }
-                    };
+                let verifying_key = match VerifyingKey::try_from(public_key_bytes.as_slice()) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        return Err(Error::Cryptography(format!(
+                            "Failed to create Ed25519 verifying key: {:?}",
+                            e
+                        )))
+                    }
+                };
 
                 // Verify the signature
                 if signature.len() != 64 {
@@ -1043,14 +1044,13 @@ impl VerificationKey for PublicVerificationKey {
                 point_bytes.extend_from_slice(&y_bytes);
 
                 // Parse the verifying key from the SEC1 encoded point
-                let verifier = k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes).map_err(
-                    |e| {
+                let verifier =
+                    k256::ecdsa::VerifyingKey::from_sec1_bytes(&point_bytes).map_err(|e| {
                         Error::Cryptography(format!(
                             "Failed to create secp256k1 verifying key: {:?}",
                             e
                         ))
-                    },
-                )?;
+                    })?;
 
                 // Parse the signature from DER format
                 let k256_signature = Secp256k1Signature::from_der(signature).map_err(|e| {

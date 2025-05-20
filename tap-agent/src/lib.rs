@@ -60,16 +60,18 @@ pub use did::{
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
-pub use key_manager::{DefaultKeyManager, KeyManager, KeyManagerBuilder, Secret, SecretMaterial, SecretType};
+pub use key_manager::{
+    DefaultKeyManager, KeyManager, KeyManagerBuilder, Secret, SecretMaterial, SecretType,
+};
 pub use storage::{KeyStorage, StoredKey};
 
 // Agent key re-exports
 pub use agent_key::{
-    AgentKey, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption, 
-    JwsAlgorithm, SigningKey, VerificationKey
+    AgentKey, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption, JwsAlgorithm, SigningKey,
+    VerificationKey,
 };
 pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
-pub use message_packing::{Packable, UnpackOptions, Unpackable, PackOptions, KeyManagerPacking};
+pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]

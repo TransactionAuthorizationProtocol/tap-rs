@@ -1,8 +1,8 @@
-//\! Message Packing and Unpacking Utilities
-//\!
-//\! This module provides traits and implementations for standardizing
-//\! how messages are prepared for transmission (packed) and processed
-//\! upon receipt (unpacked).
+//! Message Packing and Unpacking Utilities
+//!
+//! This module provides traits and implementations for standardizing
+//! how messages are prepared for transmission (packed) and processed
+//! upon receipt (unpacked).
 
 use crate::agent_key::VerificationKey;
 use crate::error::{Error, Result};
@@ -56,11 +56,15 @@ impl From<MessageError> for Error {
             MessageError::Crypto(e) => Error::Cryptography(e),
             MessageError::InvalidFormat(e) => Error::Validation(e),
             MessageError::UnsupportedSecurityMode(mode) => {
-                Error::Validation(format\!("Unsupported security mode: {:?}", mode))
+                Error::Validation(format!("Unsupported security mode: {:?}", mode))
             }
-            MessageError::MissingParameter(e) => Error::Validation(format\!("Missing parameter: {}", e)),
-            MessageError::KeyNotFound(e) => Error::Cryptography(format\!("Key not found: {}", e)),
-            MessageError::VerificationFailed => Error::Cryptography("Verification failed".to_string()),
+            MessageError::MissingParameter(e) => {
+                Error::Validation(format!("Missing parameter: {}", e))
+            }
+            MessageError::KeyNotFound(e) => Error::Cryptography(format!("Key not found: {}", e)),
+            MessageError::VerificationFailed => {
+                Error::Cryptography("Verification failed".to_string())
+            }
             MessageError::DecryptionFailed => Error::Cryptography("Decryption failed".to_string()),
         }
     }
@@ -104,15 +108,15 @@ impl PackOptions {
     pub fn with_auth_crypt(mut self, sender_kid: &str, recipient_jwk: &serde_json::Value) -> Self {
         self.security_mode = SecurityMode::AuthCrypt;
         self.sender_kid = Some(sender_kid.to_string());
-        
+
         // Extract kid from JWK if available
         if let Some(kid) = recipient_jwk.get("kid").and_then(|k| k.as_str()) {
             self.recipient_kid = Some(kid.to_string());
         }
-        
+
         self
     }
-    
+
     /// Get the security mode
     pub fn security_mode(&self) -> SecurityMode {
         self.security_mode
@@ -139,7 +143,7 @@ impl UnpackOptions {
             require_signature: false,
         }
     }
-    
+
     /// Set whether to require a valid signature
     pub fn with_require_signature(mut self, require: bool) -> Self {
         self.require_signature = require;
@@ -173,16 +177,28 @@ pub trait Unpackable<Input, Output = PlainMessage>: Sized {
 #[async_trait]
 pub trait KeyManagerPacking: Send + Sync + Debug {
     /// Get a signing key by ID
-    async fn get_signing_key(&self, kid: &str) -> Result<Arc<dyn crate::agent_key::SigningKey + Send + Sync>>;
-    
+    async fn get_signing_key(
+        &self,
+        kid: &str,
+    ) -> Result<Arc<dyn crate::agent_key::SigningKey + Send + Sync>>;
+
     /// Get an encryption key by ID
-    async fn get_encryption_key(&self, kid: &str) -> Result<Arc<dyn crate::agent_key::EncryptionKey + Send + Sync>>;
-    
+    async fn get_encryption_key(
+        &self,
+        kid: &str,
+    ) -> Result<Arc<dyn crate::agent_key::EncryptionKey + Send + Sync>>;
+
     /// Get a decryption key by ID
-    async fn get_decryption_key(&self, kid: &str) -> Result<Arc<dyn crate::agent_key::DecryptionKey + Send + Sync>>;
-    
+    async fn get_decryption_key(
+        &self,
+        kid: &str,
+    ) -> Result<Arc<dyn crate::agent_key::DecryptionKey + Send + Sync>>;
+
     /// Resolve a verification key
-    async fn resolve_verification_key(&self, kid: &str) -> Result<Arc<dyn VerificationKey + Send + Sync>>;
+    async fn resolve_verification_key(
+        &self,
+        kid: &str,
+    ) -> Result<Arc<dyn VerificationKey + Send + Sync>>;
 }
 
 /// Implement Packable for PlainMessage
@@ -208,11 +224,14 @@ impl Packable for PlainMessage {
                 let signing_key = key_manager.get_signing_key(&sender_kid).await?;
 
                 // Prepare the message payload to sign
-                let payload = serde_json::to_string(self).map_err(|e| Error::Serialization(e.to_string()))?;
+                let payload =
+                    serde_json::to_string(self).map_err(|e| Error::Serialization(e.to_string()))?;
 
                 // Create a JWS
-                let jws = signing_key.create_jws(payload.as_bytes(), None).await
-                    .map_err(|e| Error::Cryptography(format\!("Failed to create JWS: {}", e)))?;
+                let jws = signing_key
+                    .create_jws(payload.as_bytes(), None)
+                    .await
+                    .map_err(|e| Error::Cryptography(format!("Failed to create JWS: {}", e)))?;
 
                 // Serialize the JWS
                 serde_json::to_string(&jws).map_err(|e| Error::Serialization(e.to_string()))
@@ -234,22 +253,23 @@ impl Packable for PlainMessage {
                 let recipient_key = key_manager.resolve_verification_key(&recipient_kid).await?;
 
                 // Serialize the message
-                let plaintext = serde_json::to_string(self).map_err(|e| Error::Serialization(e.to_string()))?;
+                let plaintext =
+                    serde_json::to_string(self).map_err(|e| Error::Serialization(e.to_string()))?;
 
                 // Create a JWE for the recipient
-                let jwe = encryption_key.create_jwe(
-                    plaintext.as_bytes(),
-                    &[recipient_key.as_ref()],
-                    None,
-                ).await
-                .map_err(|e| Error::Cryptography(format\!("Failed to create JWE: {}", e)))?;
+                let jwe = encryption_key
+                    .create_jwe(plaintext.as_bytes(), &[recipient_key.as_ref()], None)
+                    .await
+                    .map_err(|e| Error::Cryptography(format!("Failed to create JWE: {}", e)))?;
 
                 // Serialize the JWE
                 serde_json::to_string(&jwe).map_err(|e| Error::Serialization(e.to_string()))
             }
             SecurityMode::Any => {
                 // Any mode is not valid for packing, only for unpacking
-                Err(Error::Validation("SecurityMode::Any is not valid for packing".to_string()))
+                Err(Error::Validation(
+                    "SecurityMode::Any is not valid for packing".to_string(),
+                ))
             }
         }
     }
@@ -265,36 +285,38 @@ impl<T: Serialize + Send + Sync> Packable for T {
     ) -> Result<String> {
         // Convert to a Value first
         let value = serde_json::to_value(self).map_err(|e| Error::Serialization(e.to_string()))?;
-        
+
         // Ensure it's an object
-        let obj = value.as_object().ok_or_else(|| 
-            Error::Validation("Message is not a JSON object".to_string())
-        )?;
-        
+        let obj = value
+            .as_object()
+            .ok_or_else(|| Error::Validation("Message is not a JSON object".to_string()))?;
+
         // Extract ID, or generate one if missing
-        let id = obj.get("id")
+        let id = obj
+            .get("id")
             .and_then(|v| v.as_str())
             .unwrap_or_else(|| Uuid::new_v4().to_string().as_str());
-            
+
         // Extract type, or use default
-        let msg_type = obj.get("type")
+        let msg_type = obj
+            .get("type")
             .and_then(|v| v.as_str())
             .unwrap_or("https://tap.rsvp/schema/1.0/message");
-            
+
         // Create sender/recipient lists
         let from = options.sender_kid.as_ref().map(|kid| {
             // Extract DID part from kid (assuming format is did#key-1)
             kid.split('#').next().unwrap_or(kid).to_string()
         });
-        
+
         let to = if let Some(kid) = &options.recipient_kid {
             // Extract DID part from kid
             let did = kid.split('#').next().unwrap_or(kid).to_string();
-            vec\![did]
+            vec![did]
         } else {
-            vec\![]
+            vec![]
         };
-            
+
         // Create a PlainMessage
         let plain_message = PlainMessage {
             id: id.to_string(),
@@ -311,7 +333,7 @@ impl<T: Serialize + Send + Sync> Packable for T {
             attachments: None,
             extra_headers: std::collections::HashMap::new(),
         };
-        
+
         // Pack using the PlainMessage implementation
         plain_message.pack(key_manager, options).await
     }
@@ -328,15 +350,15 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
         // Decode the payload
         let payload_bytes = base64::engine::general_purpose::STANDARD
             .decode(&packed_message.payload)
-            .map_err(|e| Error::Cryptography(format\!("Failed to decode JWS payload: {}", e)))?;
+            .map_err(|e| Error::Cryptography(format!("Failed to decode JWS payload: {}", e)))?;
 
         // Convert to string
         let payload_str = String::from_utf8(payload_bytes)
-            .map_err(|e| Error::Validation(format\!("Invalid UTF-8 in payload: {}", e)))?;
+            .map_err(|e| Error::Validation(format!("Invalid UTF-8 in payload: {}", e)))?;
 
         // Parse as PlainMessage first
-        let plain_message: PlainMessage = serde_json::from_str(&payload_str)
-            .map_err(|e| Error::Serialization(e.to_string()))?;
+        let plain_message: PlainMessage =
+            serde_json::from_str(&payload_str).map_err(|e| Error::Serialization(e.to_string()))?;
 
         // Verify signatures
         let mut verified = false;
@@ -346,13 +368,13 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
             let protected_bytes = base64::engine::general_purpose::STANDARD
                 .decode(&signature.protected)
                 .map_err(|e| {
-                    Error::Cryptography(format\!("Failed to decode protected header: {}", e))
+                    Error::Cryptography(format!("Failed to decode protected header: {}", e))
                 })?;
 
             // Parse the protected header
             let protected: crate::message::JwsProtected = serde_json::from_slice(&protected_bytes)
                 .map_err(|e| {
-                    Error::Serialization(format\!("Failed to parse protected header: {}", e))
+                    Error::Serialization(format!("Failed to parse protected header: {}", e))
                 })?;
 
             // Get the key ID
@@ -367,12 +389,10 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
             // Decode the signature
             let signature_bytes = base64::engine::general_purpose::STANDARD
                 .decode(&signature.signature)
-                .map_err(|e| {
-                    Error::Cryptography(format\!("Failed to decode signature: {}", e))
-                })?;
+                .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
 
             // Create the signing input (protected.payload)
-            let signing_input = format\!("{}.{}", signature.protected, packed_message.payload);
+            let signing_input = format!("{}.{}", signature.protected, packed_message.payload);
 
             // Verify the signature
             match verification_key
@@ -387,8 +407,10 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
             }
         }
 
-        if \!verified {
-            return Err(Error::Cryptography("Signature verification failed".to_string()));
+        if !verified {
+            return Err(Error::Cryptography(
+                "Signature verification failed".to_string(),
+            ));
         }
 
         // If we want the PlainMessage itself, return it
@@ -440,7 +462,7 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jwe, T> for Jwe {
                 Ok(plaintext) => {
                     // Convert to string
                     let plaintext_str = String::from_utf8(plaintext).map_err(|e| {
-                        Error::Validation(format\!("Invalid UTF-8 in plaintext: {}", e))
+                        Error::Validation(format!("Invalid UTF-8 in plaintext: {}", e))
                     })?;
 
                     // Parse as PlainMessage
@@ -455,7 +477,8 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jwe, T> for Jwe {
                     if std::any::TypeId::of::<T>() == std::any::TypeId::of::<PlainMessage>() {
                         // This is safe because we've verified that T is PlainMessage
                         let result = serde_json::to_value(plain_message).unwrap();
-                        return serde_json::from_value(result).map_err(|e| Error::Serialization(e.to_string()));
+                        return serde_json::from_value(result)
+                            .map_err(|e| Error::Serialization(e.to_string()));
                     }
 
                     // Otherwise deserialize the body to the requested type
@@ -486,40 +509,45 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<String, T> for String {
                 // Parse as JWS
                 let jws: Jws = serde_json::from_str(packed_message)
                     .map_err(|e| Error::Serialization(e.to_string()))?;
-                
+
                 return Jws::unpack(&jws, key_manager, options).await;
             }
-            
+
             // Check if it's a JWE (has ciphertext, protected, and recipients fields)
-            if value.get("ciphertext").is_some() && value.get("protected").is_some() && value.get("recipients").is_some() {
+            if value.get("ciphertext").is_some()
+                && value.get("protected").is_some()
+                && value.get("recipients").is_some()
+            {
                 // Parse as JWE
                 let jwe: Jwe = serde_json::from_str(packed_message)
                     .map_err(|e| Error::Serialization(e.to_string()))?;
-                
+
                 return Jwe::unpack(&jwe, key_manager, options).await;
             }
-            
+
             // Check if it's a PlainMessage (has body and type fields)
             if value.get("body").is_some() && value.get("type").is_some() {
                 // Parse as PlainMessage
                 let plain: PlainMessage = serde_json::from_str(packed_message)
                     .map_err(|e| Error::Serialization(e.to_string()))?;
-                
+
                 // If we want the PlainMessage itself, return it
                 if std::any::TypeId::of::<T>() == std::any::TypeId::of::<PlainMessage>() {
                     // This is safe because we've verified that T is PlainMessage
                     let result = serde_json::to_value(plain).unwrap();
-                    return serde_json::from_value(result).map_err(|e| Error::Serialization(e.to_string()));
+                    return serde_json::from_value(result)
+                        .map_err(|e| Error::Serialization(e.to_string()));
                 }
-                
+
                 // Otherwise get the body
-                return serde_json::from_value(plain.body).map_err(|e| Error::Serialization(e.to_string()));
+                return serde_json::from_value(plain.body)
+                    .map_err(|e| Error::Serialization(e.to_string()));
             }
-            
+
             // If it doesn't match any known format but is a valid JSON, try to parse directly
             return serde_json::from_value(value).map_err(|e| Error::Serialization(e.to_string()));
         }
-        
+
         // If not valid JSON, return an error
         Err(Error::Validation("Message is not valid JSON".to_string()))
     }

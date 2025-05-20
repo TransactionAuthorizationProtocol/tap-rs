@@ -2,11 +2,11 @@ use crate::config::AgentConfig;
 use crate::crypto::MessagePacker;
 use crate::error::{Error, Result};
 #[cfg(not(target_arch = "wasm32"))]
-use crate::message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
-#[cfg(not(target_arch = "wasm32"))]
 use crate::key_manager::KeyManager;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::message::SecurityMode;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
 use async_trait::async_trait;
 #[cfg(feature = "native")]
 use reqwest::Client;
@@ -15,8 +15,8 @@ use serde_json::Value;
 use std::sync::Arc;
 #[cfg(feature = "native")]
 use std::time::Duration;
-use tap_msg::TapMessageBody;
 use tap_msg::didcomm::PlainMessage;
+use tap_msg::TapMessageBody;
 
 /// Result of a message delivery attempt
 #[derive(Debug, Clone)]
@@ -446,10 +446,7 @@ impl ModernAgent {
         #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
         {
             let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
-            let client = Client::builder()
-                .timeout(timeout)
-                .build()
-                .ok();
+            let client = Client::builder().timeout(timeout).build().ok();
 
             ModernAgent {
                 config,
@@ -562,9 +559,10 @@ impl ModernAgent {
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
     pub async fn send_to_endpoint(&self, packed_message: &str, endpoint: &str) -> Result<u16> {
         // Get HTTP client
-        let client = self.http_client.as_ref().ok_or_else(|| {
-            Error::Networking("HTTP client not available".to_string())
-        })?;
+        let client = self
+            .http_client
+            .as_ref()
+            .ok_or_else(|| Error::Networking("HTTP client not available".to_string()))?;
 
         // Send the message to the endpoint via HTTP POST
         let response = client
@@ -612,7 +610,10 @@ impl Agent for ModernAgent {
         // If it's a DID, try to find a service endpoint
         if to.starts_with("did:") {
             // Simulate a service endpoint for now
-            return Ok(Some(format!("https://example.com/did/{}", to.replace(":", "_"))));
+            return Ok(Some(format!(
+                "https://example.com/did/{}",
+                to.replace(":", "_")
+            )));
         }
 
         // No service endpoint found
@@ -662,7 +663,9 @@ impl Agent for ModernAgent {
         };
 
         // Pack the message
-        let packed = message.pack(&*self.key_manager, pack_options).await
+        let packed = message
+            .pack(&*self.key_manager, pack_options)
+            .await
             .map_err(|e| Error::Cryptography(format!("Failed to pack message: {}", e)))?;
 
         // Log the packed message
@@ -772,8 +775,13 @@ impl Agent for ModernAgent {
         };
 
         // Unpack the message using the Unpackable trait
-        let plain_message: PlainMessage = String::unpack(&packed_message.to_string(), &*self.key_manager, unpack_options).await
-            .map_err(|e| Error::Cryptography(format!("Failed to unpack message: {}", e)))?;
+        let plain_message: PlainMessage = String::unpack(
+            &packed_message.to_string(),
+            &*self.key_manager,
+            unpack_options,
+        )
+        .await
+        .map_err(|e| Error::Cryptography(format!("Failed to unpack message: {}", e)))?;
 
         // Log the unpacked message
         println!("--- UNPACKED CONTENT ---");
