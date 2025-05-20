@@ -10,6 +10,9 @@ pub mod agent;
 /// Agent key abstraction
 pub mod agent_key;
 
+/// Agent key manager implementation
+pub mod agent_key_manager;
+
 /// Agent configuration
 pub mod config;
 
@@ -60,6 +63,7 @@ pub use did::{
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
+pub use agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 pub use key_manager::{
     DefaultKeyManager, KeyManager, KeyManagerBuilder, Secret, SecretMaterial, SecretType,
 };
