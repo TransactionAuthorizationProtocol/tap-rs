@@ -4,8 +4,8 @@
 //! for keys that are stored locally, either in memory or on disk.
 
 use crate::agent_key::{
-    AgentKey, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption,
-    JwsAlgorithm, SigningKey, VerificationKey,
+    AgentKey, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption, JwsAlgorithm, SigningKey,
+    VerificationKey,
 };
 use crate::did::{KeyType, VerificationMaterial};
 use crate::error::{Error, Result};

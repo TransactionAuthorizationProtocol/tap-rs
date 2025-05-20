@@ -12,12 +12,11 @@ use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
+use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
-use std::any::Any;
 use tap_msg::didcomm::PlainMessage;
 use uuid::Uuid;
-
 
 /// Error type specific to message packing and unpacking
 #[derive(Debug, thiserror::Error)]
@@ -279,18 +278,25 @@ impl Packable for PlainMessage {
 
 /// We can't implement Packable for all types due to the conflict with PlainMessage
 /// Instead, let's create a helper function:
-pub async fn pack_any<T>(obj: &T, key_manager: &(impl KeyManagerPacking + ?Sized), options: PackOptions) -> Result<String> 
-where T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq {
+pub async fn pack_any<T>(
+    obj: &T,
+    key_manager: &(impl KeyManagerPacking + ?Sized),
+    options: PackOptions,
+) -> Result<String>
+where
+    T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq,
+{
     // Skip attempt to implement Packable for generic types and use a helper function instead
-    
+
     // If the object is a PlainMessage, use PlainMessage's implementation
     if obj.type_id() == std::any::TypeId::of::<PlainMessage>() {
         // In this case, we can't easily downcast, so we'll serialize and deserialize
         let value = serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
-        let plain_msg: PlainMessage = serde_json::from_value(value).map_err(|e| Error::Serialization(e.to_string()))?;
+        let plain_msg: PlainMessage =
+            serde_json::from_value(value).map_err(|e| Error::Serialization(e.to_string()))?;
         return plain_msg.pack(key_manager, options).await;
     }
-    
+
     // Otherwise, implement the same logic here as in the PlainMessage implementation
     match options.security_mode {
         SecurityMode::Plain => {
@@ -299,15 +305,17 @@ where T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq
         }
         SecurityMode::Signed => {
             // Signed mode requires a sender KID
-            let sender_kid = options.sender_kid.clone().ok_or_else(|| {
-                Error::Validation("Signed mode requires sender_kid".to_string())
-            })?;
+            let sender_kid = options
+                .sender_kid
+                .clone()
+                .ok_or_else(|| Error::Validation("Signed mode requires sender_kid".to_string()))?;
 
             // Get the signing key
             let signing_key = key_manager.get_signing_key(&sender_kid).await?;
 
             // Convert to a Value first
-            let value = serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
+            let value =
+                serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
 
             // Ensure it's an object
             let obj = value
@@ -359,7 +367,8 @@ where T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq
             };
 
             // Prepare the message payload to sign
-            let payload = serde_json::to_string(&plain_message).map_err(|e| Error::Serialization(e.to_string()))?;
+            let payload = serde_json::to_string(&plain_message)
+                .map_err(|e| Error::Serialization(e.to_string()))?;
 
             // Create a JWS
             let jws = signing_key
@@ -387,7 +396,8 @@ where T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq
             let recipient_key = key_manager.resolve_verification_key(&recipient_kid).await?;
 
             // Convert to a Value first
-            let value = serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
+            let value =
+                serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
 
             // Ensure it's an object
             let obj = value
@@ -439,7 +449,8 @@ where T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq
             };
 
             // Serialize the message
-            let plaintext = serde_json::to_string(&plain_message).map_err(|e| Error::Serialization(e.to_string()))?;
+            let plaintext = serde_json::to_string(&plain_message)
+                .map_err(|e| Error::Serialization(e.to_string()))?;
 
             // Create a JWE for the recipient
             let jwe = encryption_key

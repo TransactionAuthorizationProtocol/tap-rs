@@ -2,9 +2,7 @@
 //!
 //! This module provides a key manager for storing and retrieving
 //! cryptographic keys used by the TAP Agent for DID operations.
-use crate::agent_key::{
-    AgentKey, DecryptionKey, EncryptionKey, SigningKey, VerificationKey,
-};
+use crate::agent_key::{AgentKey, DecryptionKey, EncryptionKey, SigningKey, VerificationKey};
 use crate::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey};
 use crate::error::{Error, Result};
 use crate::local_agent_key::{LocalAgentKey, PublicVerificationKey};
@@ -56,12 +54,12 @@ pub struct Secret {
 pub trait KeyManager: Send + Sync + std::fmt::Debug + 'static {
     /// Get access to the secrets storage for this key manager
     fn secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>>;
-    
+
     /// Get a secret resolver for this key manager
     fn secret_resolver(&self) -> KeyManagerSecretResolver {
         KeyManagerSecretResolver::new_from_secrets(self.secrets())
     }
-    
+
     /// Generate a new key with the specified options
     fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey>;
 
@@ -529,7 +527,8 @@ impl KeyManager for DefaultKeyManager {
                 if let Ok(mut encryption_keys) = self.encryption_keys.write() {
                     let arc_key =
                         Arc::new(agent_key.clone()) as Arc<dyn EncryptionKey + Send + Sync>;
-                    encryption_keys.insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
+                    encryption_keys
+                        .insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
                     return Ok(arc_key);
                 }
             }
@@ -565,7 +564,8 @@ impl KeyManager for DefaultKeyManager {
                 if let Ok(mut decryption_keys) = self.decryption_keys.write() {
                     let arc_key =
                         Arc::new(agent_key.clone()) as Arc<dyn DecryptionKey + Send + Sync>;
-                    decryption_keys.insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
+                    decryption_keys
+                        .insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
                     return Ok(arc_key);
                 }
             }
@@ -672,7 +672,8 @@ impl KeyManager for DefaultKeyManager {
             })?;
 
         // Resolve the verification key
-        let verification_key = KeyManager::resolve_verification_key(self, &signature.header.kid).await?;
+        let verification_key =
+            KeyManager::resolve_verification_key(self, &signature.header.kid).await?;
 
         // Decode the signature
         let signature_bytes = base64::engine::general_purpose::STANDARD
@@ -754,7 +755,9 @@ impl KeyManager for DefaultKeyManager {
             // Try each recipient
             for recipient in &jwe.recipients {
                 // Try to get the decryption key
-                if let Ok(decryption_key) = KeyManager::get_decryption_key(self, &recipient.header.kid).await {
+                if let Ok(decryption_key) =
+                    KeyManager::get_decryption_key(self, &recipient.header.kid).await
+                {
                     // Try to decrypt
                     if let Ok(plaintext) = decryption_key.unwrap_jwe(&jwe).await {
                         return Ok(plaintext);
@@ -978,12 +981,10 @@ impl KeyManagerSecretResolver {
             secrets: key_manager.secrets(),
         }
     }
-    
+
     /// Create a new KeyManagerSecretResolver directly from secrets
     pub fn new_from_secrets(secrets: Arc<RwLock<HashMap<String, Secret>>>) -> Self {
-        Self {
-            secrets,
-        }
+        Self { secrets }
     }
 }
 
@@ -1080,10 +1081,14 @@ mod tests {
 
         // Ed25519
         let ed25519_kid = format!("{}#keys-1", ed25519_key.did);
-        let signing_key = KeyManager::get_signing_key(&manager, &ed25519_kid).await.unwrap();
+        let signing_key = KeyManager::get_signing_key(&manager, &ed25519_kid)
+            .await
+            .unwrap();
         let signature = signing_key.sign(test_data).await.unwrap();
 
-        let verification_key = KeyManager::resolve_verification_key(&manager, &ed25519_kid).await.unwrap();
+        let verification_key = KeyManager::resolve_verification_key(&manager, &ed25519_kid)
+            .await
+            .unwrap();
         let protected = crate::message::JwsProtected {
             typ: "application/didcomm-signed+json".to_string(),
             alg: "EdDSA".to_string(),
@@ -1097,10 +1102,14 @@ mod tests {
 
         // P-256
         let p256_kid = format!("{}#keys-1", p256_key.did);
-        let signing_key = KeyManager::get_signing_key(&manager, &p256_kid).await.unwrap();
+        let signing_key = KeyManager::get_signing_key(&manager, &p256_kid)
+            .await
+            .unwrap();
         let signature = signing_key.sign(test_data).await.unwrap();
 
-        let verification_key = KeyManager::resolve_verification_key(&manager, &p256_kid).await.unwrap();
+        let verification_key = KeyManager::resolve_verification_key(&manager, &p256_kid)
+            .await
+            .unwrap();
         let protected = crate::message::JwsProtected {
             typ: "application/didcomm-signed+json".to_string(),
             alg: "ES256".to_string(),
@@ -1114,10 +1123,14 @@ mod tests {
 
         // secp256k1
         let secp256k1_kid = format!("{}#keys-1", secp256k1_key.did);
-        let signing_key = KeyManager::get_signing_key(&manager, &secp256k1_kid).await.unwrap();
+        let signing_key = KeyManager::get_signing_key(&manager, &secp256k1_kid)
+            .await
+            .unwrap();
         let signature = signing_key.sign(test_data).await.unwrap();
 
-        let verification_key = KeyManager::resolve_verification_key(&manager, &secp256k1_kid).await.unwrap();
+        let verification_key = KeyManager::resolve_verification_key(&manager, &secp256k1_kid)
+            .await
+            .unwrap();
         let protected = crate::message::JwsProtected {
             typ: "application/didcomm-signed+json".to_string(),
             alg: "ES256K".to_string(),

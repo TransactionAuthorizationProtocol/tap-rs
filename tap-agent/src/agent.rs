@@ -43,7 +43,9 @@ pub trait Agent {
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>>;
 
     /// Sends a message to one or more recipients
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
+    async fn send_message<
+        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static,
+    >(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -88,9 +90,9 @@ pub struct DefaultAgent {
     http_client: Client,
 }
 
-/// Modern Agent implementation using the new KeyManager and message packing utilities.
+/// Agent implementation using the KeyManager and message packing utilities.
 #[derive(Debug, Clone)]
-pub struct ModernAgent {
+pub struct Agent {
     /// Configuration for the agent
     pub config: AgentConfig,
     /// Key Manager for cryptographic operations
@@ -440,15 +442,15 @@ impl DefaultAgent {
     }
 }
 
-impl ModernAgent {
-    /// Creates a new ModernAgent with the given configuration and key manager
+impl Agent {
+    /// Creates a new Agent with the given configuration and key manager
     pub fn new(config: AgentConfig, key_manager: Arc<dyn KeyManagerPacking>) -> Self {
         #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
         {
             let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
             let client = Client::builder().timeout(timeout).build().ok();
 
-            ModernAgent {
+            Agent {
                 config,
                 key_manager,
                 http_client: client,
@@ -457,14 +459,14 @@ impl ModernAgent {
 
         #[cfg(not(all(feature = "native", not(target_arch = "wasm32"))))]
         {
-            ModernAgent {
+            Agent {
                 config,
                 key_manager,
             }
         }
     }
 
-    /// Creates a new ModernAgent from stored keys
+    /// Creates a new Agent from stored keys
     ///
     /// This function uses the KeyManagerBuilder to load keys from storage
     ///
@@ -511,7 +513,7 @@ impl ModernAgent {
         let config = AgentConfig::new(agent_did).with_debug(debug);
 
         // Create the agent
-        Ok(ModernAgent::new(config, Arc::new(key_manager)))
+        Ok(Agent::new(config, Arc::new(key_manager)))
     }
 
     /// Determine the appropriate security mode for a message type
@@ -593,7 +595,7 @@ impl ModernAgent {
 
 #[async_trait]
 #[cfg(not(target_arch = "wasm32"))]
-impl Agent for ModernAgent {
+impl crate::agent::Agent for Agent {
     fn get_agent_did(&self) -> &str {
         &self.config.agent_did
     }
@@ -620,7 +622,9 @@ impl Agent for ModernAgent {
         Ok(None)
     }
 
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
+    async fn send_message<
+        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static,
+    >(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -664,9 +668,10 @@ impl Agent for ModernAgent {
 
         // Pack the message
         // Use the pack_any helper function instead of trait method
-        let packed = crate::message_packing::pack_any(message, self.key_manager.as_ref(), pack_options)
-            .await
-            .map_err(|e| Error::Cryptography(format!("Failed to pack message: {}", e)))?;
+        let packed =
+            crate::message_packing::pack_any(message, self.key_manager.as_ref(), pack_options)
+                .await
+                .map_err(|e| Error::Cryptography(format!("Failed to pack message: {}", e)))?;
 
         // Log the packed message
         println!("--- PACKED MESSAGE ---");
@@ -878,7 +883,9 @@ impl Agent for DefaultAgent {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
+    async fn send_message<
+        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static,
+    >(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -1027,7 +1034,9 @@ impl Agent for DefaultAgent {
     }
 
     #[cfg(target_arch = "wasm32")]
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
+    async fn send_message<
+        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static,
+    >(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -1352,19 +1361,19 @@ impl DefaultAgentBuilder {
     }
 }
 
-/// Builder for ModernAgent instance
+/// Builder for Agent instance
 #[derive(Debug, Clone)]
-pub struct ModernAgentBuilder {
+pub struct AgentBuilder {
     agent_did: String,
     debug: bool,
     timeout_seconds: Option<u64>,
     security_mode: Option<String>,
 }
 
-impl ModernAgentBuilder {
-    /// Creates a new ModernAgentBuilder with the given agent DID
+impl AgentBuilder {
+    /// Creates a new AgentBuilder with the given agent DID
     pub fn new(agent_did: String) -> Self {
-        ModernAgentBuilder {
+        AgentBuilder {
             agent_did,
             debug: false,
             timeout_seconds: None,
@@ -1390,8 +1399,8 @@ impl ModernAgentBuilder {
         self
     }
 
-    /// Builds a ModernAgent with the given key manager
-    pub fn build(self, key_manager: Arc<dyn KeyManagerPacking>) -> ModernAgent {
+    /// Builds an Agent with the given key manager
+    pub fn build(self, key_manager: Arc<dyn KeyManagerPacking>) -> Agent {
         let config = AgentConfig {
             agent_did: self.agent_did,
             debug: self.debug,
@@ -1400,6 +1409,6 @@ impl ModernAgentBuilder {
             parameters: std::collections::HashMap::new(),
         };
 
-        ModernAgent::new(config, key_manager)
+        Agent::new(config, key_manager)
     }
 }

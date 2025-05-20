@@ -20,15 +20,18 @@ The `tap-agent` crate is designed with a modular architecture that separates con
 
 ```
 tap-agent
-├── agent       - Core agent implementation and traits
-├── config      - Agent configuration parameters
-├── cli         - Command-line interface for DID and key management
-├── crypto      - Cryptographic operations and message security
-├── did         - DID resolution, generation, and validation
-├── error       - Error types and handling
-├── message     - Message formatting and processing
-├── key_manager - Key generation and management
-├── storage     - Persistent storage for keys and DIDs
+├── agent        - Core agent implementation and traits
+├── agent_key    - Key abstraction for signing, verification, encryption, and decryption
+├── config       - Agent configuration parameters
+├── cli          - Command-line interface for DID and key management
+├── crypto       - Cryptographic operations and message security
+├── did          - DID resolution, generation, and validation
+├── error        - Error types and handling
+├── key_manager  - Key generation and management
+├── local_agent_key - Concrete implementation of AgentKey traits
+├── message      - Message formatting and processing
+├── message_packing - Message packing and unpacking utilities
+├── storage      - Persistent storage for keys and DIDs
 ```
 
 This architecture follows clean separation of concerns principles:
@@ -49,12 +52,35 @@ The `Agent` trait defines the core interface for TAP agents, with methods for:
 - Receiving and unpacking messages
 - Validating message contents
 
-The `DefaultAgent` implementation provides a production-ready implementation of this trait with:
+The `Agent` implementation provides a production-ready implementation of this trait with:
 - Multiple creation methods (builder pattern, from stored keys, ephemeral)
 - Automatic service endpoint discovery and message delivery
 - Configurable timeout and security settings
 - Comprehensive logging for debugging
 - Support for both native and WASM environments
+- Integration with the `KeyManager` for cryptographic operations
+
+#### AgentKey
+
+The `AgentKey` trait hierarchy provides a flexible abstraction for cryptographic keys:
+
+- `AgentKey` - Base trait with core properties (key ID, DID, key type)
+- `SigningKey` - Extends `AgentKey` with capabilities for creating JWS signatures
+- `VerificationKey` - Trait for verifying signatures (can be implemented by public keys)
+- `EncryptionKey` - Extends `AgentKey` with capabilities for creating JWE encryptions
+- `DecryptionKey` - Extends `AgentKey` with capabilities for decrypting JWEs
+
+The `LocalAgentKey` implementation provides a concrete implementation that:
+- Stores key material locally (in memory or persistent storage)
+- Supports multiple cryptographic algorithms (Ed25519, P-256, Secp256k1)
+- Implements all the AgentKey-related traits for complete cryptographic functionality
+- Works with the JWS/JWE standards for signatures and encryption
+
+This trait-based approach enables:
+- Clean separation between key management and cryptographic operations
+- Support for different key storage mechanisms (local, HSM, remote, etc.)
+- Flexible algorithm selection based on key types
+- Simple interface for common cryptographic operations
 
 #### DID Resolution
 
@@ -126,7 +152,7 @@ The TAP Agent can be created in multiple ways depending on your needs. Here are 
 The builder pattern provides a clean, fluent interface for creating agents:
 
 ```rust
-use tap_agent::{DefaultAgent, DefaultKeyManager};
+use tap_agent::{Agent, AgentBuilder, DefaultKeyManager};
 use std::sync::Arc;
 
 // Create a key manager
@@ -138,7 +164,7 @@ let key = key_manager.generate_key(DIDGenerationOptions {
 })?;
 
 // Build the agent with the generated key
-let agent = DefaultAgent::builder(key.did)
+let agent = AgentBuilder::new(key.did)
     .with_debug(true)
     .with_timeout(30)
     .with_security_mode("SIGNED".to_string())
@@ -150,19 +176,16 @@ let agent = DefaultAgent::builder(key.did)
 Load keys from the default storage location (~/.tap/keys.json):
 
 ```rust
-use tap_agent::DefaultAgent;
+use tap_agent::Agent;
 
 // Use a stored key with a specific DID
-let agent = DefaultAgent::from_stored_keys(
+let agent = Agent::from_stored_keys(
     Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
     true
-)?;
+).await?;
 
 // Or use the default key from storage
-let agent = DefaultAgent::from_stored_keys(None, true)?;
-
-// If no keys exist, create a new ephemeral agent as fallback
-let agent = DefaultAgent::from_stored_or_ephemeral(None, true);
+let agent = Agent::from_stored_keys(None, true).await?;
 ```
 
 #### 3. Using Ephemeral Keys
@@ -170,11 +193,23 @@ let agent = DefaultAgent::from_stored_or_ephemeral(None, true);
 Create an agent with a temporary key that is not persisted:
 
 ```rust
-use tap_agent::DefaultAgent;
+use tap_agent::{DefaultKeyManager, AgentBuilder};
+use std::sync::Arc;
 
-// Create an ephemeral agent with a new key
-let (agent, did) = DefaultAgent::new_ephemeral()?;
-println!("Created ephemeral agent with DID: {}", did);
+// Create a key manager
+let key_manager = Arc::new(DefaultKeyManager::new());
+
+// Generate a random key
+let key = key_manager.generate_key(DIDGenerationOptions {
+    key_type: KeyType::Ed25519,
+})?;
+
+// Create an agent with the ephemeral key
+let agent = AgentBuilder::new(key.did.clone())
+    .with_debug(true)
+    .build(key_manager);
+
+println!("Created ephemeral agent with DID: {}", key.did);
 ```
 
 #### 4. Manual Creation (Advanced)
@@ -182,40 +217,33 @@ println!("Created ephemeral agent with DID: {}", did);
 For complete control over the agent configuration:
 
 ```rust
-use tap_agent::{Agent, DefaultAgent, AgentConfig, MultiResolver, KeyResolver};
-use tap_agent::{DefaultMessagePacker, BasicSecretResolver, Secret, SecretMaterial, SecretType};
+use tap_agent::{Agent, AgentConfig, DefaultKeyManager, KeyManagerPacking, Secret, SecretMaterial, SecretType};
 use std::sync::Arc;
 
 // Create agent configuration
 let config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
 
-// Set up DID resolver
-let mut did_resolver = MultiResolver::new();
-did_resolver.register_method("key", KeyResolver::new());
-let did_resolver = Arc::new(did_resolver);
+// Set up a key manager
+let mut key_manager = DefaultKeyManager::new();
 
-// Set up secret resolver
-let mut secret_resolver = BasicSecretResolver::new();
+// Add a secret to the key manager
 let secret = Secret {
-    id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK#keys-1".to_string(),
+    id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
     type_: SecretType::JsonWebKey2020,
     secret_material: SecretMaterial::JWK {
         private_key_jwk: serde_json::json!({
             "kty": "OKP",
             "crv": "Ed25519",
             "x": "11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-            "d": "nWGxne_9WmC6hEr-BQh-uDpW6n7dZsN4c4C9rFfIz3Yh"
+            "d": "nWGxne_9WmC6hEr-BQh-uDpW6n7dZsN4c4C9rFfIz3Yh",
+            "kid": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK#keys-1"
         }),
     },
 };
-secret_resolver.add_secret("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK", secret);
-let secret_resolver = Arc::new(secret_resolver);
-
-// Create message packer
-let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver, true));
+key_manager.add_secret(&secret.id, secret)?;
 
 // Create the agent
-let agent = DefaultAgent::new(config, message_packer);
+let agent = Agent::new(config, Arc::new(key_manager));
 ```
 
 ### Sending Messages
@@ -819,6 +847,21 @@ Note that did:web resolution requires the **native** feature to be enabled, as i
 ## Cryptographic Support
 
 The `tap-agent` crate implements comprehensive cryptographic operations with support for:
+
+### Key Abstraction
+
+- **AgentKey Trait Hierarchy** - Modular and extensible key capabilities:
+  - `AgentKey` - Core trait with key ID, DID, and key type properties
+  - `SigningKey` - For creating digital signatures (JWS)
+  - `VerificationKey` - For verifying signatures
+  - `EncryptionKey` - For encrypting data (JWE)
+  - `DecryptionKey` - For decrypting data
+  
+- **LocalAgentKey Implementation** - Concrete implementation of the AgentKey traits:
+  - Stores key material in memory or persistent storage
+  - Implements all cryptographic operations locally
+  - Supports multiple key types and algorithms
+  - Compatible with JWS and JWE standards
 
 ### Key Types
 - **Ed25519** - Fast digital signatures with small signatures (128 bits of security)

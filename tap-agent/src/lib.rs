@@ -79,7 +79,7 @@ pub use did::MultiResolver;
 
 // Native-only re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub use agent::{Agent, DefaultAgent, DeliveryResult, ModernAgent, ModernAgentBuilder};
+pub use agent::{Agent, AgentBuilder, DefaultAgent, DeliveryResult};
 #[cfg(not(target_arch = "wasm32"))]
 pub use crypto::BasicSecretResolver;
 #[cfg(not(target_arch = "wasm32"))]
