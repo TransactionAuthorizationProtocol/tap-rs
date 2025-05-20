@@ -284,7 +284,7 @@ pub async fn pack_any<T>(
     options: PackOptions,
 ) -> Result<String>
 where
-    T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq,
+    T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized,
 {
     // Skip attempt to implement Packable for generic types and use a helper function instead
 

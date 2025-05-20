@@ -1,9 +1,11 @@
+use crate::agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 use crate::config::AgentConfig;
 use crate::error::{Error, Result};
+use crate::key_manager::KeyManager; // Add KeyManager trait
 #[cfg(not(target_arch = "wasm32"))]
 use crate::message::SecurityMode;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::message_packing::{KeyManagerPacking, PackOptions, UnpackOptions, Unpackable};
+use crate::message_packing::{PackOptions, UnpackOptions, Unpackable};
 use async_trait::async_trait;
 #[cfg(feature = "native")]
 use reqwest::Client;
@@ -41,7 +43,7 @@ pub trait Agent {
 
     /// Sends a message to one or more recipients
     async fn send_message<
-        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static,
+        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + 'static,
     >(
         &self,
         message: &T,
@@ -73,13 +75,13 @@ pub trait WasmAgent {
 }
 
 
-/// TapAgent implementation using the KeyManager and message packing utilities.
+/// TapAgent implementation using the AgentKeyManager for cryptographic operations.
 #[derive(Debug, Clone)]
 pub struct TapAgent {
     /// Configuration for the agent
     pub config: AgentConfig,
     /// Key Manager for cryptographic operations
-    key_manager: Arc<dyn KeyManagerPacking>,
+    key_manager: Arc<AgentKeyManager>,
     /// HTTP client for sending requests
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
     http_client: Option<Client>,
@@ -87,8 +89,8 @@ pub struct TapAgent {
 
 
 impl TapAgent {
-    /// Creates a new TapAgent with the given configuration and key manager
-    pub fn new(config: AgentConfig, key_manager: Arc<dyn KeyManagerPacking>) -> Self {
+    /// Creates a new TapAgent with the given configuration and AgentKeyManager
+    pub fn new(config: AgentConfig, key_manager: Arc<AgentKeyManager>) -> Self {
         #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
         {
             let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
@@ -119,11 +121,10 @@ impl TapAgent {
     ///
     /// A tuple containing the TapAgent and the DID that was generated
     pub async fn from_ephemeral_key() -> crate::error::Result<(Self, String)> {
-        use crate::did::{DIDGenerationOptions, DIDKeyGenerator, KeyType};
-        use crate::key_manager::{DefaultKeyManager, KeyManager};
+        use crate::did::{DIDGenerationOptions, KeyType};
         
         // Create a key manager
-        let key_manager = DefaultKeyManager::new();
+        let key_manager = AgentKeyManager::new();
         
         // Generate a key
         let key = key_manager.generate_key(DIDGenerationOptions {
@@ -142,7 +143,7 @@ impl TapAgent {
 
     /// Creates a new TapAgent from stored keys
     ///
-    /// This function uses the KeyManagerBuilder to load keys from storage
+    /// This function uses the AgentKeyManagerBuilder to load keys from storage
     ///
     /// # Arguments
     ///
@@ -153,11 +154,10 @@ impl TapAgent {
     ///
     /// A Result containing either the created agent or an error if no keys are available
     pub async fn from_stored_keys(did: Option<String>, debug: bool) -> Result<Self> {
-        use crate::key_manager::{KeyManager, KeyManagerBuilder};
         use crate::storage::KeyStorage;
 
         // Load keys from storage
-        let key_manager_builder = KeyManagerBuilder::new().load_from_default_storage();
+        let key_manager_builder = AgentKeyManagerBuilder::new().load_from_default_storage();
         let key_manager = key_manager_builder.build()?;
 
         // Get the DIDs available in the key manager
@@ -297,7 +297,7 @@ impl crate::agent::Agent for TapAgent {
     }
 
     async fn send_message<
-        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static,
+        T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + 'static,
     >(
         &self,
         message: &T,
@@ -497,55 +497,3 @@ impl crate::agent::Agent for TapAgent {
 }
 
 
-
-/// Builder for TapAgent instance
-#[derive(Debug, Clone)]
-pub struct AgentBuilder {
-    agent_did: String,
-    debug: bool,
-    timeout_seconds: Option<u64>,
-    security_mode: Option<String>,
-}
-
-impl AgentBuilder {
-    /// Creates a new AgentBuilder with the given agent DID
-    pub fn new(agent_did: String) -> Self {
-        AgentBuilder {
-            agent_did,
-            debug: false,
-            timeout_seconds: None,
-            security_mode: None,
-        }
-    }
-
-    /// Sets the debug flag
-    pub fn with_debug(mut self, debug: bool) -> Self {
-        self.debug = debug;
-        self
-    }
-
-    /// Sets the timeout in seconds
-    pub fn with_timeout(mut self, timeout_seconds: u64) -> Self {
-        self.timeout_seconds = Some(timeout_seconds);
-        self
-    }
-
-    /// Sets the security mode
-    pub fn with_security_mode(mut self, security_mode: String) -> Self {
-        self.security_mode = Some(security_mode);
-        self
-    }
-
-    /// Builds a TapAgent with the given key manager
-    pub fn build(self, key_manager: Arc<dyn KeyManagerPacking>) -> TapAgent {
-        let config = AgentConfig {
-            agent_did: self.agent_did,
-            debug: self.debug,
-            timeout_seconds: self.timeout_seconds,
-            security_mode: self.security_mode,
-            parameters: std::collections::HashMap::new(),
-        };
-
-        TapAgent::new(config, key_manager)
-    }
-}

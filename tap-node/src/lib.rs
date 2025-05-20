@@ -1,102 +1,38 @@
-//! # TAP Node Implementation
+//! TAP Node - A node implementation for the TAP protocol
 //!
-//! This crate provides a complete node implementation for the Transaction Authorization Protocol (TAP).
-//! The TAP Node acts as a central hub for managing multiple TAP agents, routing messages between them,
-//! and coordinating the entire transaction lifecycle in a secure and scalable manner.
+//! The TAP Node is the central component that manages TAP Agents, routes messages,
+//! processes events, and provides a scalable architecture for TAP deployments.
 //!
-//! ## Overview
+//! # Key Components
 //!
-//! The Transaction Authorization Protocol (TAP) is designed for secure, privacy-preserving financial
-//! transactions between parties. A TAP Node serves as the infrastructure layer that:
+//! - **Agent Registry**: Manages multiple TAP Agents
+//! - **Event Bus**: Publishes and distributes events throughout the system
+//! - **Message Processors**: Process incoming and outgoing messages
+//! - **Message Router**: Routes messages to the appropriate agent
+//! - **Processor Pool**: Provides scalable concurrent message processing
 //!
-//! - Manages multiple TAP agents with different roles and capabilities
-//! - Processes incoming and outgoing TAP messages
-//! - Routes messages to the appropriate agents based on DID addressing
-//! - Handles message validation, transformation, and delivery
-//! - Provides an event system for monitoring and reacting to node activities
-//! - Scales to handle high message throughput with a processing pool
+//! # Thread Safety and Concurrency
 //!
-//! ## Architecture
+//! The TAP Node is designed with concurrent operations in mind. It uses a combination of
+//! async/await patterns and synchronization primitives to safely handle multiple operations
+//! simultaneously. Most components within the node are either immutable or use interior
+//! mutability with appropriate synchronization.
 //!
-//! The TAP Node is built with several key components:
+//! # Message Flow
 //!
-//! - **Agent Registry**: Maintains a collection of TAP agents by their DIDs
-//! - **PlainMessage Processors**: Process, validate, and transform messages
-//! - **PlainMessage Routers**: Determine the target agent for a message
-//! - **Processor Pool**: Provides concurrent message processing for scalability
-//! - **Event Bus**: Broadcasts node events to subscribers
-//! - **DID Resolver**: Resolves DIDs to DID Documents for message verification
+//! Messages in TAP Node follow a structured flow:
 //!
-//! ## Usage Example
+//! 1. **Receipt**: Messages are received through the `receive_message` method
+//! 2. **Processing**: Each message is processed by the registered processors
+//! 3. **Routing**: The router determines which agent should handle the message
+//! 4. **Dispatch**: The message is delivered to the appropriate agent
+//! 5. **Response**: Responses are handled similarly in the reverse direction
 //!
-//! ```rust,no_run
-//! use std::sync::Arc;
-//! use tap_agent::{AgentConfig, DefaultAgent};
-//! use tap_node::{NodeConfig, TapNode, DefaultAgentExt};
-//! use tap_node::message::processor_pool::ProcessorPoolConfig;
-//! use tokio::time::Duration;
+//! # Scalability
 //!
-//! // Test secrets resolver for doctests
-//! #[derive(Debug)]
-//! struct TestSecretsResolver {
-//!     secrets: std::collections::HashMap<String, tap_agent::key_manager::Secret>
-//! }
-//!
-//! impl TestSecretsResolver {
-//!     pub fn new() -> Self {
-//!         Self {
-//!             secrets: std::collections::HashMap::new()
-//!         }
-//!     }
-//! }
-//!
-//! impl tap_agent::crypto::DebugSecretsResolver for TestSecretsResolver {
-//!     fn get_secrets_map(&self) -> &std::collections::HashMap<String, tap_agent::key_manager::Secret> {
-//!         &self.secrets
-//!     }
-//!     
-//!     fn get_secret_by_id(&self, id: &str) -> Option<tap_agent::key_manager::Secret> {
-//!         self.secrets.get(id).cloned()
-//!     }
-//! }
-//!
-//! async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//!     // Create a node with default configuration
-//!     let config = NodeConfig::default();
-//!     let mut node = TapNode::new(config);
-//!
-//!     // Configure and start the processor pool
-//!     let pool_config = ProcessorPoolConfig {
-//!         workers: 4,
-//!         channel_capacity: 100,
-//!         worker_timeout: Duration::from_secs(30),
-//!     };
-//!     node.start(pool_config).await?;
-//!
-//!     // Create and register a TAP agent
-//!     // (simplified - in practice you would need to set up proper crypto)
-//!     let agent_config = AgentConfig::new("did:example:123".to_string());
-//!     // In a real scenario, you'd create these properly:
-//!     let did_resolver = Arc::new(tap_agent::did::MultiResolver::default());
-//!     let secrets_resolver = Arc::new(TestSecretsResolver::new());
-//!     let message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
-//!         did_resolver, secrets_resolver, true
-//!     ));
-//!     let agent = DefaultAgent::new(agent_config, message_packer);
-//!     node.register_agent(Arc::new(agent)).await?;
-//!
-//!     // The node is now ready to process messages
-//!     // You would typically listen for incoming messages and call:
-//!     // node.receive_message(message).await?;
-//!
-//!     Ok(())
-//! }
-//! ```
-//!
-//! ## Thread Safety and Async
-//!
-//! The TAP Node is designed to be thread-safe and fully async, making it suitable for
-//! high-throughput environments. The core `TapNode` structure can be safely cloned and
+//! The node supports scalable message processing through the optional processor pool,
+//! which uses a configurable number of worker threads to process messages concurrently.
+//! This allows a single node to handle high message throughput while maintaining
 //! shared between threads, with all mutable state protected by appropriate synchronization
 //! primitives.
 
@@ -115,19 +51,13 @@ pub use message::sender::{
 
 use std::sync::Arc;
 
-use tap_agent::{Agent, DefaultAgent};
+use tap_agent::{Agent, TapAgent};
+use tap_agent::message_packing::PackOptions;
 use tap_msg::didcomm::PlainMessage;
 
 use agent::AgentRegistry;
 use event::EventBus;
 use message::processor::{
-    DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor,
-    ValidationPlainMessageProcessor,
-};
-use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
-use message::router::DefaultPlainMessageRouter;
-use message::RouterAsyncExt;
-use message::{
     CompositePlainMessageProcessor, CompositePlainMessageRouter, PlainMessageProcessorType,
     PlainMessageRouterType,
 };
@@ -135,14 +65,14 @@ use resolver::NodeResolver;
 
 use async_trait::async_trait;
 
-// Extension trait for DefaultAgent to add serialization methods
+// Extension trait for TapAgent to add serialization methods
 ///
-/// This trait extends the DefaultAgent with methods for serializing and packing
+/// This trait extends the TapAgent with methods for serializing and packing
 /// DIDComm messages for transmission. It provides functionality for converting
 /// in-memory message objects to secure, serialized formats that follow the
 /// DIDComm messaging protocol standards.
 #[async_trait]
-pub trait DefaultAgentExt {
+pub trait TapAgentExt {
     /// Pack and serialize a DIDComm message for transmission
     ///
     /// This method takes a DIDComm message and recipient DID, then:
@@ -160,87 +90,19 @@ pub trait DefaultAgentExt {
 }
 
 #[async_trait]
-impl DefaultAgentExt for DefaultAgent {
+impl TapAgentExt for TapAgent {
     async fn send_serialized_message(
         &self,
         message: &PlainMessage,
         to_did: &str,
     ) -> Result<String> {
-        // Since we cannot directly access the agent's PlainMessagePacker (which handles signing),
-        // and using send_message with a custom adapter proved difficult due to Rust's type system,
-        // we'll take a different approach.
-
-        // First, serialize the DIDComm PlainMessage to a JSON Value
-        let json_value = serde_json::to_value(message).map_err(Error::Serialization)?;
-
-        // Get the agent's DID as the sender
-        let from_did = self.get_agent_did();
-
-        // Get the message type
-        let message_type = message.type_.clone();
-
-        // We need a way to properly sign and package the message.
-        // Instead of using a simulated signature, let's create a proper signed DIDComm v2 message.
-        // Unfortunately, without direct access to PlainMessagePacker, we need to implement a simplified version.
-
-        // First, create a payload that would normally be signed
-        let _payload = serde_json::json!({
-            // Use the message's ID or generate a new one if needed
-            "id": message.id.clone(),
-
-            // Standard DIDComm type fields
-            "typ": "application/didcomm-signed+json",
-            "type": message_type,
-
-            // Include the from field for proper sender identification
-            "from": from_did,
-
-            // Include the to field for proper recipient identification
-            "to": [to_did],
-
-            // Include the original message body
-            "body": json_value,
-
-            // Add timestamp
-            "created_time": chrono::Utc::now().timestamp()
-        });
-
-        // Since we can't use the agent's actual cryptographic signing capabilities directly,
-        // we'll try another approach - call out to a lower-level method for DIDComm message preparation.
-
-        // Simulate a proper DIDComm signed message structure
-        // In a real implementation, we would use the agent's cryptographic capabilities
-        // to generate a real signature.
-        let packed_message = serde_json::json!({
-            // Standard DIDComm headers
-            "id": message.id.clone(),
-            "typ": "application/didcomm-signed+json",
-            "type": message_type,
-            "from": from_did,
-            "to": [to_did],
-            "body": json_value,
-            "created_time": chrono::Utc::now().timestamp(),
-
-            // Add real signature structure but with simulated signature
-            // In a production implementation, this would use actual Ed25519 signatures
-            "signatures": [{
-                "signature": base64::encode(format!("SIGNATURE_PLACEHOLDER_FOR_{}", message.id)),
-                "header": {
-                    "kid": format!("{}#keys-1", from_did),
-                    "alg": "EdDSA"
-                }
-            }]
-        });
-
-        // Serialize to a string
-        let packed = serde_json::to_string(&packed_message).map_err(Error::Serialization)?;
-
+        // Use the existing send_message to pack the PlainMessage
+        // We'll convert to the right format and use it directly
+        let (packed, _) = self.send_message(message, vec![to_did], false).await?;
+        
         Ok(packed)
     }
 }
-
-// Already imported as public at the top
-// use event::logger::{EventLogger, EventLoggerConfig};
 
 /// Configuration for a TAP Node
 #[derive(Debug, Clone, Default)]
@@ -457,40 +319,41 @@ impl TapNode {
         Ok(())
     }
 
-    /// Send a message from one agent to another
-    ///
-    /// This method handles the processing, routing, and delivery of a message
-    /// from one agent to another. It returns the packed message.
+    /// Send a message to an agent
     pub async fn send_message(
         &self,
-        from_did: &str,
-        to_did: &str,
+        sender_did: String,
+        to_did: String,
         message: PlainMessage,
     ) -> Result<String> {
         // Process the outgoing message
-        let processed_message = match self.outgoing_processor.process_outgoing(message).await? {
+        let processed_message = match self
+            .outgoing_processor
+            .process_outgoing(message, &sender_did, &to_did)
+            .await?
+        {
             Some(msg) => msg,
-            None => return Err(Error::Processing("PlainMessage was dropped".to_string())),
+            None => return Err(Error::MessageDropped("PlainMessage dropped during processing".to_string())),
         };
 
-        // Get the sending agent
-        let agent = self.agents.get_agent(from_did).await?;
+        // Get the sender agent
+        let agent = self.agents.get_agent(&sender_did).await?;
 
         // Pack the message
         let packed = agent
-            .send_serialized_message(&processed_message, to_did)
+            .send_serialized_message(&processed_message, to_did.as_str())
             .await?;
 
-        // Publish an event for the sent message
+        // Publish an event for the message
         self.event_bus
-            .publish_message_sent(processed_message, from_did.to_string(), to_did.to_string())
+            .publish_agent_sent_message(sender_did, to_did, packed.clone().into_bytes())
             .await;
 
         Ok(packed)
     }
 
     /// Register a new agent with the node
-    pub async fn register_agent(&self, agent: Arc<DefaultAgent>) -> Result<()> {
+    pub async fn register_agent(&self, agent: Arc<TapAgent>) -> Result<()> {
         let agent_did = agent.get_agent_did().to_string();
         self.agents.register_agent(agent_did.clone(), agent).await?;
 
@@ -502,39 +365,51 @@ impl TapNode {
 
     /// Unregister an agent from the node
     pub async fn unregister_agent(&self, did: &str) -> Result<()> {
-        // Unregister the agent
         self.agents.unregister_agent(did).await?;
 
-        // Publish event about agent unregistration
-        self.event_bus
-            .publish_agent_unregistered(did.to_string())
-            .await;
+        // Publish event about agent registration
+        self.event_bus.publish_agent_unregistered(did.to_string()).await;
 
         Ok(())
     }
 
-    /// Get all registered agent DIDs
-    pub fn get_all_agent_dids(&self) -> Vec<String> {
+    /// Get a list of registered agent DIDs
+    pub fn list_agents(&self) -> Vec<String> {
         self.agents.get_all_dids()
     }
 
-    /// Get the event bus
-    pub fn get_event_bus(&self) -> Arc<EventBus> {
-        self.event_bus.clone()
+    /// Get a reference to the agent registry
+    pub fn agents(&self) -> &Arc<AgentRegistry> {
+        &self.agents
     }
 
-    /// Get the resolver
-    pub fn get_resolver(&self) -> Arc<NodeResolver> {
-        self.resolver.clone()
+    /// Get a reference to the event bus
+    pub fn event_bus(&self) -> &Arc<EventBus> {
+        &self.event_bus
     }
 
-    /// Get the node config
+    /// Get a reference to the resolver
+    pub fn resolver(&self) -> &Arc<NodeResolver> {
+        &self.resolver
+    }
+
+    /// Get a mutable reference to the processor pool
+    /// This is a reference to Option<ProcessorPool> to allow starting the pool after node creation
+    pub fn processor_pool_mut(&mut self) -> &mut Option<ProcessorPool> {
+        &mut self.processor_pool
+    }
+
+    /// Get the node configuration
     pub fn config(&self) -> &NodeConfig {
         &self.config
     }
-
-    /// Get the agent registry
-    pub fn agents(&self) -> &AgentRegistry {
-        &self.agents
-    }
 }
+
+// Namespace imports
+// These imports make the implementation cleaner, but should be hidden from public API
+use message::processor::DefaultPlainMessageProcessor;
+use message::processor::LoggingPlainMessageProcessor;
+use message::processor::ValidationPlainMessageProcessor;
+use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
+use message::router::DefaultPlainMessageRouter;
+use message::RouterAsyncExt;

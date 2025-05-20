@@ -57,16 +57,14 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 
 // Re-export key types for convenience
 pub use config::AgentConfig;
-pub use crypto::{DefaultMessagePacker, MessagePacker};
+pub use crypto::MessagePacker;
 pub use did::{
     DIDDoc, DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyResolver, KeyType,
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
 pub use agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
-pub use key_manager::{
-    DefaultKeyManager, KeyManager, KeyManagerBuilder, Secret, SecretMaterial, SecretType,
-};
+pub use key_manager::{KeyManager, Secret, SecretMaterial, SecretType};
 pub use storage::{KeyStorage, StoredKey};
 
 // Agent key re-exports
@@ -84,13 +82,9 @@ pub use did::MultiResolver;
 
 // Native-only re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub use agent::{Agent, AgentBuilder, DeliveryResult, TapAgent};
-#[cfg(not(target_arch = "wasm32"))]
-pub use crypto::BasicSecretResolver;
+pub use agent::{Agent, DeliveryResult, TapAgent};
 #[cfg(not(target_arch = "wasm32"))]
 pub use did::{DIDMethodResolver, SyncDIDResolver};
-#[cfg(not(target_arch = "wasm32"))]
-pub use key_manager::KeyManagerSecretResolver;
 #[cfg(not(target_arch = "wasm32"))]
 pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
 

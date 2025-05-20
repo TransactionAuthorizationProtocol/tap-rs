@@ -6,7 +6,7 @@ use dashmap::DashMap;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
-use tap_agent::DefaultAgent;
+use tap_agent::TapAgent;
 
 /// Registry of TAP agents
 #[derive(Debug)]
@@ -14,7 +14,7 @@ pub struct AgentRegistry {
     /// Maximum number of agents that can be registered
     max_agents: Option<usize>,
     /// Mapping of agent DIDs to agent instances
-    agents: DashMap<String, Arc<DefaultAgent>>,
+    agents: DashMap<String, Arc<TapAgent>>,
 }
 
 impl AgentRegistry {
@@ -37,7 +37,7 @@ impl AgentRegistry {
     }
 
     /// Get an agent by DID
-    pub async fn get_agent(&self, did: &str) -> Result<Arc<DefaultAgent>> {
+    pub async fn get_agent(&self, did: &str) -> Result<Arc<TapAgent>> {
         self.agents
             .get(did)
             .map(|agent| agent.clone())
@@ -45,7 +45,7 @@ impl AgentRegistry {
     }
 
     /// Register a new agent
-    pub async fn register_agent(&self, did: String, agent: Arc<DefaultAgent>) -> Result<()> {
+    pub async fn register_agent(&self, did: String, agent: Arc<TapAgent>) -> Result<()> {
         // Check if we've reached the maximum number of agents
         if let Some(max) = self.max_agents {
             if self.agent_count() >= max {

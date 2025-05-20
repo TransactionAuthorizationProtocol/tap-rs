@@ -12,9 +12,9 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use tap_agent::agent::{Agent, TapAgent};
+use tap_agent::agent_key_manager::AgentKeyManager;
 use tap_agent::config::AgentConfig;
-use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
-use tap_agent::did::{KeyResolver, MultiResolver};
+use tap_agent::KeyManager;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle, Transfer};
@@ -24,21 +24,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
         println!("=== TAIP-3 Transfer Flow with TAIP-4 Authorization ===\n");
 
-        // Create originator agent
-        let (originator_agent, originator_did) = create_agent(
-            "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-            "11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo",
-            "nWGxne/9WmC6hEr+BQh+uDpW6n7dZsN4c4C9rFfIz3Yh",
-        )
-        .await;
+        // Create originator agent with an ephemeral key
+        let (originator_agent, originator_did) = TapAgent::from_ephemeral_key().await?;
 
-        // Create beneficiary agent
-        let (beneficiary_agent, beneficiary_did) = create_agent(
-            "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k",
-            "8zYZK2vvsAyVYpNpnYzTnUPjBuWdWpYmPpQmwErV9XQg",
-            "8zYZK2vvsAyVYpNpnYzTnUPjBuWdWpYmPpQmwErV9XQg",
-        )
-        .await;
+        // Create beneficiary agent with an ephemeral key
+        let (beneficiary_agent, beneficiary_did) = TapAgent::from_ephemeral_key().await?;
 
         println!("Created originator agent with DID: {}", originator_did);
         println!("Created beneficiary agent with DID: {}\n", beneficiary_did);
@@ -144,50 +134,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     })
 }
 
-/// Create an agent with the given DID and key material
-async fn create_agent(
-    did: &str,
-    public_key: &str,
-    private_key: &str,
-) -> (Arc<impl Agent>, String) {
-    // Create agent configuration
-    let agent_config = AgentConfig::new(did.to_string());
-
-    // Create DID resolver
-    let mut did_resolver = MultiResolver::new();
-    did_resolver.register_method("key", KeyResolver::new());
-    let did_resolver = Arc::new(did_resolver);
-
-    // Create secret resolver with the agent's key
-    let mut secret_resolver = BasicSecretResolver::new();
-    let secret = Secret {
-        id: format!("{}#keys-1", did),
-        type_: SecretType::JsonWebKey2020,
-        secret_material: SecretMaterial::JWK {
-            private_key_jwk: serde_json::json!({
-                "kty": "OKP",
-                "crv": "Ed25519",
-                "x": public_key,
-                "d": private_key
-            }),
-        },
-    };
-
-    secret_resolver.add_secret(did, secret);
-    let secret_resolver = Arc::new(secret_resolver);
-
-    // Create message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        did_resolver,
-        secret_resolver,
-        true,
-    ));
-
-    // Create agent using the standard Agent implementation
-    let agent = Arc::new(TapAgent::new(agent_config, message_packer));
-
-    (agent, did.to_string())
-}
 
 /// Create a transfer message
 fn create_transfer_message(
