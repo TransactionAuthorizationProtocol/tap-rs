@@ -264,6 +264,7 @@ fn create_payment_message_with_invoice(
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let customer = Participant {
@@ -271,6 +272,7 @@ fn create_payment_message_with_invoice(
         role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create settlement agent
@@ -279,6 +281,7 @@ fn create_payment_message_with_invoice(
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create line items for the invoice

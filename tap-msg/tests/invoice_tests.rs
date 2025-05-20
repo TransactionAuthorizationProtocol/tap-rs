@@ -115,6 +115,7 @@ fn test_payment_request_with_invoice() {
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create an agent participant
@@ -123,6 +124,7 @@ fn test_payment_request_with_invoice() {
         role: Some("agent".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a simple invoice

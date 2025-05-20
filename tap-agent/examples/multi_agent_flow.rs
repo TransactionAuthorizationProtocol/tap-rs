@@ -116,12 +116,14 @@ fn main() -> Result<()> {
                 role: Some("originator".to_string()),
                 policies: None,
                 leiCode: None,
+                name: None,
             },
             beneficiary: Some(Participant {
                 id: beneficiary_party.to_string(),
                 role: Some("beneficiary".to_string()),
                 policies: None,
                 leiCode: None,
+                name: None,
             }),
             amount: "100.0".to_string(),
             agents: vec![
@@ -131,18 +133,21 @@ fn main() -> Result<()> {
                     role: Some("originatorVASP".to_string()),
                     policies: None,
                     leiCode: None,
+                    name: None,
                 },
                 Participant {
                     id: originator_wallet_did.clone(),
                     role: Some("originatorWallet".to_string()),
                     policies: None,
                     leiCode: None,
+                    name: None,
                 },
                 Participant {
                     id: originator_wallet_api_did.clone(),
                     role: Some("originatorWalletAPI".to_string()),
                     policies: None,
                     leiCode: None,
+                    name: None,
                 },
                 // Beneficiary agent
                 Participant {
@@ -150,6 +155,7 @@ fn main() -> Result<()> {
                     role: Some("beneficiaryVASP".to_string()),
                     policies: None,
                     leiCode: None,
+                    name: None,
                 },
             ],
             settlement_id: None,
@@ -212,12 +218,14 @@ fn main() -> Result<()> {
                     role: Some("beneficiaryWallet".to_string()),
                     policies: None,
                     leiCode: None,
+                    name: None,
                 },
                 Participant {
                     id: beneficiary_wallet_api_did.clone(),
                     role: Some("beneficiaryWalletAPI".to_string()),
                     policies: None,
                     leiCode: None,
+                    name: None,
                 },
             ],
         };

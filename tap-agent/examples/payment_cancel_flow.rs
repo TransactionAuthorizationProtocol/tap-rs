@@ -184,6 +184,7 @@ fn create_payment_message(
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let customer = Participant {
@@ -191,6 +192,7 @@ fn create_payment_message(
         role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create settlement agent
@@ -199,6 +201,7 @@ fn create_payment_message(
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a payment message

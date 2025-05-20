@@ -186,6 +186,7 @@ fn test_fuzz_tap_message_body_validation() {
         role: None,
         policies: None,
         leiCode: None,
+        name: None,
     };
     assert!(
         transfer.validate().is_err(),
@@ -239,6 +240,7 @@ fn create_test_transfer() -> Transfer {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -246,6 +248,7 @@ fn create_test_transfer() -> Transfer {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agents = vec![Participant {
@@ -253,6 +256,7 @@ fn create_test_transfer() -> Transfer {
         role: None,
         policies: None,
         leiCode: None,
+        name: None,
     }];
 
     Transfer {

@@ -359,6 +359,7 @@ fn create_transfer_message(
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -366,6 +367,7 @@ fn create_transfer_message(
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create settlement agent
@@ -374,6 +376,7 @@ fn create_transfer_message(
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Validate asset ID

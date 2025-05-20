@@ -35,6 +35,7 @@ let originator = Participant {
     role: Some("originator".to_string()),
     policies: None,
     leiCode: None,
+    name: None,
 };
 
 let beneficiary = Participant {
@@ -42,6 +43,7 @@ let beneficiary = Participant {
     role: Some("beneficiary".to_string()),
     policies: None,
     leiCode: None,
+    name: None,
 };
 
 let transfer = Transfer {
@@ -75,6 +77,7 @@ let merchant = Participant {
     role: Some("merchant".to_string()),
     policies: None,
     leiCode: None,
+    name: None,
 };
 
 // Create line items for the invoice
@@ -180,6 +183,7 @@ let participant = Participant {
     role: Some("beneficiary".to_string()),
     policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
     leiCode: None,
+    name: None,
 };
 
 // Create an UpdatePolicies message to dynamically update policies
@@ -272,6 +276,7 @@ let merchant = Participant {
     role: Some("merchant".to_string()),
     policies: None,
     leiCode: None,
+    name: None,
 };
 
 // Create a simple invoice with line items
@@ -350,7 +355,7 @@ async fn send_secure_message(
         SecurityMode::AuthCrypt,
         false, // Don't automatically deliver
     ).await?;
-    
+
     // The packed_message is now a secure JWE format message
     Ok(packed_message)
 }
@@ -397,7 +402,7 @@ let presentation = Presentation {
 presentation.validate()?;
 ```
 
-## Message Validation 
+## Message Validation
 
 TAP messages implement the `TapMessageBody` trait, which provides a `validate()` method for checking message correctness:
 

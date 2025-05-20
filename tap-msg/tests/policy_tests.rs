@@ -22,6 +22,7 @@ fn test_participant_with_policies() {
         role: Some("beneficiary".to_string()),
         policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
         leiCode: None,
+        name: None,
     };
 
     // Verify the policy is correctly included

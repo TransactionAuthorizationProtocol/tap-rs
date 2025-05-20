@@ -669,6 +669,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                             role: first_agent.role.clone(),
                             policies: None,
                             leiCode: None,
+                            name: None,
                         }
                     } else {
                         // No originator found - this is an error case
@@ -710,6 +711,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                             role: a.role.clone(),
                             policies: None,
                             leiCode: None,
+                            name: None,
                         })
                         .collect();
 

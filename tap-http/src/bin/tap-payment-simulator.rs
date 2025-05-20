@@ -176,6 +176,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let _customer = Participant {
@@ -183,6 +184,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create agent participants
@@ -191,6 +193,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("sender".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let recipient_agent = Participant {
@@ -198,6 +201,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("recipient".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a settlement agent participant (required by validation)
@@ -213,6 +217,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a payment request using the proper struct and builder pattern
@@ -250,6 +255,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -257,6 +263,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a transfer using the proper struct

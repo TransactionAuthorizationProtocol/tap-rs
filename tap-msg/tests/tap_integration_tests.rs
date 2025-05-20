@@ -441,6 +441,7 @@ fn create_test_transfer() -> Transfer {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -448,6 +449,7 @@ fn create_test_transfer() -> Transfer {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agents = vec![Participant {
@@ -455,6 +457,7 @@ fn create_test_transfer() -> Transfer {
         role: None,
         policies: None,
         leiCode: None,
+        name: None,
     }];
 
     Transfer {
@@ -478,6 +481,7 @@ fn create_test_payment_request() -> Payment {
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let customer = Participant {
@@ -485,6 +489,7 @@ fn create_test_payment_request() -> Payment {
         role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agents = vec![Participant {
@@ -492,6 +497,7 @@ fn create_test_payment_request() -> Payment {
         role: Some("agent".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     }];
 
     let asset =

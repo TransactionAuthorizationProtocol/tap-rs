@@ -66,6 +66,7 @@ fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -73,6 +74,7 @@ fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a transfer body

@@ -14,6 +14,7 @@ fn create_participant(did: &str) -> Participant {
         role: None,
         policies: None,
         leiCode: None,
+        name: None,
     }
 }
 
@@ -29,6 +30,7 @@ fn test_create_message() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -36,6 +38,7 @@ fn test_create_message() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {

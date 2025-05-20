@@ -31,12 +31,14 @@ fn create_test_transfer() -> Result<PlainMessage> {
             role: Some("originator".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         },
         beneficiary: Some(Participant {
             id: beneficiary_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }),
         amount: "100.00".to_string(),
         agents: vec![
@@ -45,12 +47,14 @@ fn create_test_transfer() -> Result<PlainMessage> {
                 role: Some("sender_vasp".to_string()),
                 policies: None,
                 leiCode: None,
+                name: None,
             },
             Participant {
                 id: receiver_vasp_did.to_string(),
                 role: Some("receiver_vasp".to_string()),
                 policies: None,
                 leiCode: None,
+                name: None,
             },
         ],
         settlement_id: None,
@@ -134,6 +138,7 @@ fn test_add_agents() -> Result<()> {
         role: Some("observer".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Use the Authorizable trait to create an AddAgents message
@@ -170,6 +175,7 @@ fn test_authorizable_trait_methods() -> Result<()> {
         role: Some("replacement_agent".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Use the Authorizable trait methods on the Transfer struct
@@ -292,6 +298,7 @@ fn test_reply_chain() -> Result<()> {
             role: Some("compliance".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }],
     };
 
@@ -324,12 +331,14 @@ fn create_test_transfer_struct() -> Result<Transfer> {
         id: "did:example:originator".to_string(),
         role: Some("originator".to_string()),
         leiCode: None,
+        name: None,
         policies: None,
     };
     let beneficiary = Participant {
         id: "did:example:beneficiary".to_string(),
         role: Some("beneficiary".to_string()),
         leiCode: None,
+        name: None,
         policies: None,
     };
     let transfer = Transfer {
@@ -344,12 +353,14 @@ fn create_test_transfer_struct() -> Result<Transfer> {
                 id: "did:example:sender_vasp".to_string(),
                 role: Some("sender_vasp".to_string()),
                 leiCode: None,
+                name: None,
                 policies: None,
             },
             Participant {
                 id: "did:example:receiver_vasp".to_string(),
                 role: Some("receiver_vasp".to_string()),
                 leiCode: None,
+                name: None,
                 policies: None,
             },
         ],

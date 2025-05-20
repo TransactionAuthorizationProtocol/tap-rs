@@ -7,7 +7,7 @@ The `tap-agent` crate implements the agent functionality for the Transaction Aut
 The TAP Agent serves as the foundation for secure communication in the TAP ecosystem, enabling entities to:
 
 - **Establish secure identities** using Decentralized Identifiers (DIDs)
-- **Exchange authenticated and encrypted messages** with strong cryptographic guarantees 
+- **Exchange authenticated and encrypted messages** with strong cryptographic guarantees
 - **Process and validate** TAP protocol messages for compliant transfers and payments
 - **Manage cryptographic keys** with support for multiple key types and algorithms
 - **Resolve DIDs** across different methods with a pluggable resolver architecture
@@ -267,12 +267,14 @@ let transfer = Transfer {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     },
     beneficiary: Some(Participant {
         id: "did:key:z6MkhFvVnYxkqLNEiWQmUwhQuVpXiCfNmRUVi5yZ4Cg9w15k".to_string(),
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     }),
     amount: "100.0".to_string(),
     agents: vec![],
@@ -300,7 +302,7 @@ let (packed_message, delivery_results) = agent.send_message(&transfer, recipient
 // Check delivery results
 for result in delivery_results {
     if let Some(status) = result.status {
-        println!("Message delivered to {} at endpoint {}, status: {}", 
+        println!("Message delivered to {} at endpoint {}, status: {}",
                  result.did, result.endpoint, status);
     } else if let Some(error) = &result.error {
         println!("Failed to deliver message to {}: {}", result.did, error);
@@ -373,14 +375,14 @@ let did_doc = resolver.resolve("did:web:example.com").await?;
 
 if let Some(doc) = did_doc {
     println!("Resolved DID: {}", doc.id);
-    
+
     // Check verification methods
     for vm in &doc.verification_method {
         println!("Verification method: {}", vm.id);
         println!("  Type: {:?}", vm.type_);
         println!("  Controller: {}", vm.controller);
     }
-    
+
     // Check authentication methods
     if !doc.authentication.is_empty() {
         println!("Authentication methods:");
@@ -388,7 +390,7 @@ if let Some(doc) = did_doc {
             println!("  {}", auth);
         }
     }
-    
+
     // Check key agreement methods
     if !doc.key_agreement.is_empty() {
         println!("Key agreement methods:");
@@ -396,7 +398,7 @@ if let Some(doc) = did_doc {
             println!("  {}", ka);
         }
     }
-    
+
     // Check service endpoints
     if !doc.service.is_empty() {
         println!("Service endpoints:");
@@ -456,10 +458,10 @@ impl DIDMethodResolver for CustomResolver {
         if !did.starts_with("did:example:") {
             return Ok(None);
         }
-        
+
         // Extract ID portion
         let id_part = &did[12..]; // Skip "did:example:"
-        
+
         // Create a simple verification method
         let vm_id = format!("{}#keys-1", did);
         let vm = VerificationMethod {
@@ -470,7 +472,7 @@ impl DIDMethodResolver for CustomResolver {
                 public_key_base58: format!("custom-key-for-{}", id_part),
             },
         };
-        
+
         // Create a DID document
         let doc = DIDDoc {
             id: did.to_string(),
@@ -482,7 +484,7 @@ impl DIDMethodResolver for CustomResolver {
             capability_delegation: vec![],
             service: vec![],
         };
-        
+
         Ok(Some(doc))
     }
 }
@@ -663,10 +665,10 @@ async fn work_with_service_endpoint(agent: &DefaultAgent, did: &str, message: &T
     match agent.get_service_endpoint(did).await? {
         Some(endpoint) => {
             println!("Found service endpoint for {}: {}", did, endpoint);
-            
+
             // Pack the message first (if you want to handle delivery manually)
             let (packed_message, _) = agent.send_message(message, vec![did], false).await?;
-            
+
             // Now you can manually send to the endpoint:
             // let client = reqwest::Client::new();
             // let response = client.post(endpoint)
@@ -677,11 +679,11 @@ async fn work_with_service_endpoint(agent: &DefaultAgent, did: &str, message: &T
         },
         None => println!("No service endpoint found for {}", did),
     }
-    
+
     // Method 2: Let the agent handle delivery automatically
     // The boolean parameter (true) tells the agent to attempt automatic delivery
     let (_, delivery_results) = agent.send_message(message, vec![did], true).await?;
-    
+
     // Check the delivery results
     for result in delivery_results {
         if let Some(status) = result.status {
@@ -690,7 +692,7 @@ async fn work_with_service_endpoint(agent: &DefaultAgent, did: &str, message: &T
             println!("Delivery to {} failed: {}", result.did, error);
         }
     }
-    
+
     Ok(())
 }
 ```
@@ -730,7 +732,7 @@ The TAP Agent can work with different types of service endpoints defined in DID 
    {
      "service": [{
        "id": "did:example:123#messaging",
-       "type": "MessagingService", 
+       "type": "MessagingService",
        "serviceEndpoint": "https://example.com/messages"
      }]
    }
@@ -758,12 +760,12 @@ let transfer = Transfer {
 };
 
 // The third parameter (true) enables automatic delivery
-let (packed_message, delivery_results) = 
+let (packed_message, delivery_results) =
     agent.send_message(&transfer, vec![recipient_did], true).await?;
 
 // Example 2: Send to multiple recipients
 let recipients = vec!["did:web:example.com", "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"];
-let (packed_message, delivery_results) = 
+let (packed_message, delivery_results) =
     agent.send_message(&transfer, recipients, true).await?;
 
 // Process delivery results
@@ -830,7 +832,7 @@ The crate provides several feature flags to customize functionality:
   - HTTP support for service endpoint delivery
   - Complete DID resolution with HTTP requests for did:web
   - File system access for key storage
-  
+
 - **wasm**: Enables WebAssembly support for browser environments:
   - Browser-compatible cryptography
   - JavaScript integration
@@ -856,7 +858,7 @@ The `tap-agent` crate implements comprehensive cryptographic operations with sup
   - `VerificationKey` - For verifying signatures
   - `EncryptionKey` - For encrypting data (JWE)
   - `DecryptionKey` - For decrypting data
-  
+
 - **LocalAgentKey Implementation** - Concrete implementation of the AgentKey traits:
   - Stores key material in memory or persistent storage
   - Implements all cryptographic operations locally
@@ -873,7 +875,7 @@ The `tap-agent` crate implements comprehensive cryptographic operations with sup
   - EdDSA algorithm for Ed25519 keys
   - ES256 algorithm for P-256 keys
   - ES256K algorithm for secp256k1 keys
-  
+
 - **JWE (JSON Web Encryption)** - Standards-compliant encryption:
   - AES-GCM (A256GCM) for authenticated encryption
   - ECDH-ES+A256KW for key agreement and key wrapping

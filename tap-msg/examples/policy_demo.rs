@@ -42,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             Policy::RequirePresentation(presentation_policy),
         ]),
         leiCode: None,
+        name: None,
     };
 
     // Display the participant info
