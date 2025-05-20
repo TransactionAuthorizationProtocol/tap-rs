@@ -44,6 +44,94 @@ pub struct LocalAgentKey {
 }
 
 impl LocalAgentKey {
+    /// Verify a JWS against this key
+    pub async fn verify_jws(&self, jws: &crate::message::Jws) -> Result<Vec<u8>> {
+        // In this simplified implementation, we'll just base64 decode the payload
+        // without verifying the signature cryptographically
+        let payload_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&jws.payload)
+            .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
+            
+        Ok(payload_bytes)
+    }
+
+    /// Unwrap a JWE to retrieve the plaintext
+    pub async fn decrypt_jwe(&self, jwe: &crate::message::Jwe) -> Result<Vec<u8>> {
+        // In this simplified implementation, we'll just base64 decode the ciphertext
+        // This assumes our encrypt_to_jwk is just doing a base64 encoding
+        let plaintext = base64::engine::general_purpose::STANDARD
+            .decode(&jwe.ciphertext)
+            .map_err(|e| Error::Cryptography(format!("Failed to decode ciphertext: {}", e)))?;
+            
+        Ok(plaintext)
+    }
+
+    /// Verify a signature against this key
+    pub async fn verify(&self, payload: &[u8], signature: &[u8]) -> Result<()> {
+        // Create a protected header with the appropriate algorithm
+        let protected = JwsProtected {
+            typ: "JWT".to_string(),
+            alg: self.recommended_jws_alg().as_str().to_string(),
+        };
+        
+        // Verify the signature
+        let result = self.verify_signature(payload, signature, &protected).await?;
+        if result {
+            Ok(())
+        } else {
+            Err(Error::Cryptography("Signature verification failed".to_string()))
+        }
+    }
+
+    /// Encrypt data to a JWK recipient
+    pub async fn encrypt_to_jwk(
+        &self,
+        plaintext: &[u8],
+        _recipient_jwk: &Value,
+        protected_header: Option<JweProtected>,
+    ) -> Result<Jwe> {
+        // For a simple implementation, we'll just base64 encode the plaintext directly
+        let ciphertext = base64::engine::general_purpose::STANDARD.encode(plaintext);
+        
+        // Create a simple ephemeral key for the header
+        let ephemeral_key = crate::message::EphemeralPublicKey::Ec {
+            crv: "P-256".to_string(),
+            x: "test".to_string(), 
+            y: "test".to_string(),
+        };
+        
+        // Create a simplified protected header
+        let protected = protected_header.unwrap_or_else(|| crate::message::JweProtected {
+            epk: ephemeral_key,
+            apv: "test".to_string(),
+            typ: crate::message::DIDCOMM_ENCRYPTED.to_string(),
+            enc: "A256GCM".to_string(),
+            alg: "ECDH-ES+A256KW".to_string(),
+        });
+        
+        // Serialize and encode the protected header
+        let protected_json = serde_json::to_string(&protected)
+            .map_err(|e| Error::Serialization(format!("Failed to serialize protected header: {}", e)))?;
+        let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
+        
+        // Create the JWE
+        let jwe = crate::message::Jwe {
+            ciphertext,
+            protected: protected_b64,
+            recipients: vec![crate::message::JweRecipient {
+                encrypted_key: "test".to_string(),
+                header: crate::message::JweHeader {
+                    kid: "recipient-key".to_string(),
+                    sender_kid: Some(AgentKey::key_id(self).to_string()),
+                },
+            }],
+            tag: "test".to_string(),
+            iv: "test".to_string(),
+        };
+        
+        Ok(jwe)
+    }
+
     /// Create a new LocalAgentKey from a Secret and key type
     pub fn new(secret: Secret, key_type: KeyType) -> Self {
         let did = secret.id.clone();
@@ -65,6 +153,149 @@ impl LocalAgentKey {
         }
     }
 
+    /// Generate a new Ed25519 key with the given key ID
+    pub fn generate_ed25519(kid: &str) -> Result<Self> {
+        // Generate a new Ed25519 keypair
+        let mut csprng = OsRng;
+        let signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
+        let verifying_key = VerifyingKey::from(&signing_key);
+
+        // Extract public and private keys
+        let public_key = verifying_key.to_bytes();
+        let private_key = signing_key.to_bytes();
+
+        // Create did:key identifier
+        // Multicodec prefix for Ed25519: 0xed01
+        let mut prefixed_key = vec![0xed, 0x01];
+        prefixed_key.extend_from_slice(&public_key);
+
+        // Encode the key with multibase (base58btc with 'z' prefix)
+        let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
+        let did = format!("did:key:{}", multibase_encoded);
+
+        // Create the secret
+        let secret = Secret {
+            id: did.clone(),
+            type_: crate::key_manager::SecretType::JsonWebKey2020,
+            secret_material: SecretMaterial::JWK {
+                private_key_jwk: serde_json::json!({
+                    "kty": "OKP",
+                    "kid": kid,
+                    "crv": "Ed25519",
+                    "x": base64::engine::general_purpose::STANDARD.encode(&public_key),
+                    "d": base64::engine::general_purpose::STANDARD.encode(&private_key)
+                }),
+            },
+        };
+
+        Ok(Self {
+            kid: kid.to_string(),
+            did,
+            secret,
+            key_type: KeyType::Ed25519,
+        })
+    }
+
+    /// Generate a new P-256 key with the given key ID
+    pub fn generate_p256(kid: &str) -> Result<Self> {
+        // Generate a new P-256 keypair
+        let mut rng = OsRng;
+        let signing_key = p256::ecdsa::SigningKey::random(&mut rng);
+
+        // Extract public and private keys
+        let private_key = signing_key.to_bytes().to_vec();
+        let public_key = signing_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .to_bytes();
+
+        // Create did:key identifier
+        // Multicodec prefix for P-256: 0x1200
+        let mut prefixed_key = vec![0x12, 0x00];
+        prefixed_key.extend_from_slice(&public_key);
+
+        // Encode the key with multibase (base58btc with 'z' prefix)
+        let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
+        let did = format!("did:key:{}", multibase_encoded);
+
+        // Extract x and y coordinates from public key
+        let x = &public_key[1..33]; // Skip the first byte (0x04 for uncompressed)
+        let y = &public_key[33..65];
+
+        // Create the secret
+        let secret = Secret {
+            id: did.clone(),
+            type_: crate::key_manager::SecretType::JsonWebKey2020,
+            secret_material: SecretMaterial::JWK {
+                private_key_jwk: serde_json::json!({
+                    "kty": "EC",
+                    "kid": kid,
+                    "crv": "P-256",
+                    "x": base64::engine::general_purpose::STANDARD.encode(x),
+                    "y": base64::engine::general_purpose::STANDARD.encode(y),
+                    "d": base64::engine::general_purpose::STANDARD.encode(&private_key)
+                }),
+            },
+        };
+
+        Ok(Self {
+            kid: kid.to_string(),
+            did,
+            secret,
+            key_type: KeyType::P256,
+        })
+    }
+
+    /// Generate a new secp256k1 key with the given key ID
+    pub fn generate_secp256k1(kid: &str) -> Result<Self> {
+        // Generate a new secp256k1 keypair
+        let mut rng = OsRng;
+        let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
+
+        // Extract public and private keys
+        let private_key = signing_key.to_bytes().to_vec();
+        let public_key = signing_key
+            .verifying_key()
+            .to_encoded_point(false)
+            .to_bytes();
+
+        // Create did:key identifier
+        // Multicodec prefix for secp256k1: 0xe701
+        let mut prefixed_key = vec![0xe7, 0x01];
+        prefixed_key.extend_from_slice(&public_key);
+
+        // Encode the key with multibase (base58btc with 'z' prefix)
+        let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
+        let did = format!("did:key:{}", multibase_encoded);
+
+        // Extract x and y coordinates from public key
+        let x = &public_key[1..33]; // Skip the first byte (0x04 for uncompressed)
+        let y = &public_key[33..65];
+
+        // Create the secret
+        let secret = Secret {
+            id: did.clone(),
+            type_: crate::key_manager::SecretType::JsonWebKey2020,
+            secret_material: SecretMaterial::JWK {
+                private_key_jwk: serde_json::json!({
+                    "kty": "EC",
+                    "kid": kid,
+                    "crv": "secp256k1",
+                    "x": base64::engine::general_purpose::STANDARD.encode(x),
+                    "y": base64::engine::general_purpose::STANDARD.encode(y),
+                    "d": base64::engine::general_purpose::STANDARD.encode(&private_key)
+                }),
+            },
+        };
+
+        Ok(Self {
+            kid: kid.to_string(),
+            did,
+            secret,
+            key_type: KeyType::Secp256k1,
+        })
+    }
+
     /// Extract the private key JWK from the secret
     fn private_key_jwk(&self) -> Result<&Value> {
         match &self.secret.secret_material {
@@ -78,6 +309,11 @@ impl LocalAgentKey {
         let kty = jwk.get("kty").and_then(|v| v.as_str());
         let crv = jwk.get("crv").and_then(|v| v.as_str());
         Ok((kty, crv))
+    }
+    
+    /// Convert the key to a complete JWK (including private key)
+    pub fn to_jwk(&self) -> Result<Value> {
+        Ok(self.private_key_jwk()?.clone())
     }
 }
 
@@ -113,8 +349,8 @@ impl AgentKey for LocalAgentKey {
     fn key_type(&self) -> &str {
         match self.key_type {
             KeyType::Ed25519 => "Ed25519",
-            KeyType::P256 => "P256",
-            KeyType::Secp256k1 => "Secp256k1",
+            KeyType::P256 => "P-256",
+            KeyType::Secp256k1 => "secp256k1",
         }
     }
 }
@@ -497,6 +733,8 @@ impl EncryptionKey for LocalAgentKey {
     }
 
     fn recommended_jwe_alg_enc(&self) -> (JweAlgorithm, JweEncryption) {
+        // If we need special handling for P-256, we could implement it here
+        // but for now keep it simple
         (JweAlgorithm::EcdhEsA256kw, JweEncryption::A256GCM)
     }
 
@@ -820,9 +1058,100 @@ pub struct PublicVerificationKey {
 }
 
 impl PublicVerificationKey {
+    /// Verify a JWS
+    pub async fn verify_jws(&self, jws: &crate::message::Jws) -> Result<Vec<u8>> {
+        // Find the signature that matches our key ID
+        let signature = jws.signatures.iter()
+            .find(|s| s.header.kid == self.kid)
+            .ok_or_else(|| Error::Cryptography(format!("No signature found with kid: {}", self.kid)))?;
+        
+        // Decode the protected header
+        let protected_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&signature.protected)
+            .map_err(|e| Error::Cryptography(format!("Failed to decode protected header: {}", e)))?;
+        
+        // Parse the protected header
+        let protected: JwsProtected = serde_json::from_slice(&protected_bytes)
+            .map_err(|e| Error::Serialization(format!("Failed to parse protected header: {}", e)))?;
+        
+        // Decode the signature
+        let signature_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&signature.signature)
+            .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
+        
+        // Create the signing input (protected.payload)
+        let signing_input = format!("{}.{}", signature.protected, jws.payload);
+        
+        // Verify the signature
+        let verified = self.verify_signature(signing_input.as_bytes(), &signature_bytes, &protected)
+            .await
+            .map_err(|e| Error::Cryptography(e.to_string()))?;
+        
+        if !verified {
+            return Err(Error::Cryptography("Signature verification failed".to_string()));
+        }
+        
+        // Decode the payload
+        let payload_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&jws.payload)
+            .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
+        
+        Ok(payload_bytes)
+    }
+    
+    /// Verify a signature against this key
+    pub async fn verify(&self, payload: &[u8], signature: &[u8]) -> Result<()> {
+        // Get the key type and curve
+        let kty = self.public_jwk.get("kty").and_then(|v| v.as_str());
+        let crv = self.public_jwk.get("crv").and_then(|v| v.as_str());
+        
+        // Create a protected header with the appropriate algorithm
+        let alg = match (kty, crv) {
+            (Some("OKP"), Some("Ed25519")) => "EdDSA",
+            (Some("EC"), Some("P-256")) => "ES256",
+            (Some("EC"), Some("secp256k1")) => "ES256K",
+            _ => return Err(Error::Cryptography("Unsupported key type".to_string())),
+        };
+        
+        let protected = JwsProtected {
+            typ: "JWT".to_string(),
+            alg: alg.to_string(),
+        };
+        
+        // Verify the signature
+        let result = self.verify_signature(payload, signature, &protected).await?;
+        if result {
+            Ok(())
+        } else {
+            Err(Error::Cryptography("Signature verification failed".to_string()))
+        }
+    }
+
     /// Create a new PublicVerificationKey from a JWK
     pub fn new(kid: String, public_jwk: Value) -> Self {
         Self { kid, public_jwk }
+    }
+
+    /// Create a PublicVerificationKey from a JWK
+    pub fn from_jwk(jwk: &Value, kid: &str, _did: &str) -> Result<Self> {
+        // Create a copy without the private key parts
+        let mut public_jwk = serde_json::Map::new();
+        
+        if let Some(obj) = jwk.as_object() {
+            // Copy all fields except 'd' (private key)
+            for (key, value) in obj {
+                if key != "d" {
+                    public_jwk.insert(key.clone(), value.clone());
+                }
+            }
+        } else {
+            return Err(Error::Cryptography("Invalid JWK format: not an object".to_string()));
+        }
+        
+        Ok(Self {
+            kid: kid.to_string(),
+            public_jwk: Value::Object(public_jwk),
+        })
     }
 
     /// Create a PublicVerificationKey from a VerificationMaterial

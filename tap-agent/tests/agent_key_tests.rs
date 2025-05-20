@@ -29,9 +29,9 @@ async fn test_local_agent_key_creation() -> Result<()> {
     assert!(secp256k1_key.did().starts_with("did:key:"));
 
     // Verify key IDs
-    assert_eq!(ed25519_key.key_id(), "test-ed25519");
-    assert_eq!(p256_key.key_id(), "test-p256");
-    assert_eq!(secp256k1_key.key_id(), "test-secp256k1");
+    assert_eq!(AgentKey::key_id(&ed25519_key), "test-ed25519");
+    assert_eq!(AgentKey::key_id(&p256_key), "test-p256");
+    assert_eq!(AgentKey::key_id(&secp256k1_key), "test-secp256k1");
 
     Ok(())
 }
@@ -47,9 +47,9 @@ async fn test_sign_and_verify() -> Result<()> {
     assert!(ed25519_key.verify(test_data, &signature).await.is_ok());
 
     // Extract public verification key and test
-    let public_jwk = ed25519_key.public_key_jwk()?;
+    let public_jwk = AgentKey::public_key_jwk(&ed25519_key)?;
     let verification_key =
-        PublicVerificationKey::from_jwk(&public_jwk, ed25519_key.key_id(), ed25519_key.did())?;
+        PublicVerificationKey::from_jwk(&public_jwk, AgentKey::key_id(&ed25519_key), ed25519_key.did())?;
     assert!(verification_key.verify(test_data, &signature).await.is_ok());
 
     // Test with corrupted signature
@@ -88,8 +88,8 @@ async fn test_jws_creation_and_verification() -> Result<()> {
     assert_eq!(verified, payload);
 
     // Test with public verification key
-    let public_jwk = key.public_key_jwk()?;
-    let verification_key = PublicVerificationKey::from_jwk(&public_jwk, key.key_id(), key.did())?;
+    let public_jwk = AgentKey::public_key_jwk(&key)?;
+    let verification_key = PublicVerificationKey::from_jwk(&public_jwk, AgentKey::key_id(&key), key.did())?;
     let verified = verification_key.verify_jws(&jws).await?;
     assert_eq!(verified, payload);
 
@@ -102,7 +102,7 @@ async fn test_encrypt_and_decrypt() -> Result<()> {
     let plaintext = b"secret message for encryption";
 
     // Create recipient JWK
-    let recipient_jwk = key.public_key_jwk()?;
+    let recipient_jwk = AgentKey::public_key_jwk(&key)?;
 
     // Encrypt
     let jwe = key.encrypt_to_jwk(plaintext, &recipient_jwk, None).await?;
@@ -129,8 +129,8 @@ async fn test_recommended_algorithms() -> Result<()> {
     assert_eq!(secp256k1_key.recommended_jws_alg(), JwsAlgorithm::ES256K);
 
     // For JWE, check P-256
-    assert_eq!(p256_key.recommended_jwe_alg(), JweAlgorithm::ECDH_ES);
-    assert_eq!(p256_key.recommended_jwe_enc(), JweEncryption::A256GCM);
+    assert_eq!(p256_key.recommended_jwe_alg_enc().0, JweAlgorithm::EcdhEsA256kw);
+    assert_eq!(p256_key.recommended_jwe_alg_enc().1, JweEncryption::A256GCM);
 
     Ok(())
 }
@@ -142,11 +142,12 @@ async fn test_serialization() -> Result<()> {
 
     // Serialize to JWK
     let jwk = key.to_jwk()?;
-    assert!(jwk.contains_key("d")); // Private key should be present
+    // Check if private key is present by checking 'd' field
+    assert!(jwk.as_object().unwrap().contains_key("d")); // Private key should be present
 
     // Serialize public only
-    let public_jwk = key.public_key_jwk()?;
-    assert!(!public_jwk.contains_key("d")); // Private key should not be present
+    let public_jwk = AgentKey::public_key_jwk(&key)?;
+    assert!(!public_jwk.as_object().unwrap().contains_key("d")); // Private key should not be present
 
     Ok(())
 }

@@ -58,6 +58,8 @@ impl JwsAlgorithm {
 pub enum JweAlgorithm {
     /// ECDH-ES + AES key wrap with 256-bit key
     EcdhEsA256kw,
+    /// ECDH-ES (direct key agreement)
+    EcdhEs,
 }
 
 impl JweAlgorithm {
@@ -65,6 +67,7 @@ impl JweAlgorithm {
     pub fn as_str(&self) -> &'static str {
         match self {
             JweAlgorithm::EcdhEsA256kw => "ECDH-ES+A256KW",
+            JweAlgorithm::EcdhEs => "ECDH-ES",
         }
     }
 }

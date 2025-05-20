@@ -19,9 +19,6 @@ pub mod config;
 /// Command-line interface for managing DIDs and keys
 pub mod cli;
 
-/// Cryptographic utilities
-pub mod crypto;
-
 /// DID utilities
 pub mod did;
 
@@ -56,14 +53,13 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 }
 
 // Re-export key types for convenience
+pub use agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 pub use config::AgentConfig;
-pub use crypto::MessagePacker;
 pub use did::{
     DIDDoc, DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyResolver, KeyType,
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
-pub use agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 pub use key_manager::{KeyManager, Secret, SecretMaterial, SecretType};
 pub use storage::{KeyStorage, StoredKey};
 
@@ -74,6 +70,7 @@ pub use agent_key::{
 };
 pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
 pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
+pub use message::SecurityMode;
 pub use tap_msg::didcomm::PlainMessage;
 
 // Native-only DID resolver re-exports
@@ -86,7 +83,7 @@ pub use agent::{Agent, DeliveryResult, TapAgent};
 #[cfg(not(target_arch = "wasm32"))]
 pub use did::{DIDMethodResolver, SyncDIDResolver};
 #[cfg(not(target_arch = "wasm32"))]
-pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
+pub use message::PRESENTATION_MESSAGE_TYPE;
 
 // WASM-only re-exports
 #[cfg(target_arch = "wasm32")]
