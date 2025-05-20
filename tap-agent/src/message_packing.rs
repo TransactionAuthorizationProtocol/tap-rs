@@ -14,8 +14,10 @@ use serde::Serialize;
 use serde_json::Value;
 use std::fmt::Debug;
 use std::sync::Arc;
+use std::any::Any;
 use tap_msg::didcomm::PlainMessage;
 use uuid::Uuid;
+
 
 /// Error type specific to message packing and unpacking
 #[derive(Debug, thiserror::Error)]
@@ -157,7 +159,7 @@ pub trait Packable<Output = String>: Sized {
     /// Pack the object for secure transmission
     async fn pack(
         &self,
-        key_manager: &impl KeyManagerPacking,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
         options: PackOptions,
     ) -> Result<Output>;
 }
@@ -168,7 +170,7 @@ pub trait Unpackable<Input, Output = PlainMessage>: Sized {
     /// Unpack the object from its secure format
     async fn unpack(
         packed_message: &Input,
-        key_manager: &impl KeyManagerPacking,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
         options: UnpackOptions,
     ) -> Result<Output>;
 }
@@ -206,7 +208,7 @@ pub trait KeyManagerPacking: Send + Sync + Debug {
 impl Packable for PlainMessage {
     async fn pack(
         &self,
-        key_manager: &impl KeyManagerPacking,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
         options: PackOptions,
     ) -> Result<String> {
         match options.security_mode {
@@ -216,7 +218,7 @@ impl Packable for PlainMessage {
             }
             SecurityMode::Signed => {
                 // Signed mode requires a sender KID
-                let sender_kid = options.sender_kid.ok_or_else(|| {
+                let sender_kid = options.sender_kid.clone().ok_or_else(|| {
                     Error::Validation("Signed mode requires sender_kid".to_string())
                 })?;
 
@@ -238,11 +240,11 @@ impl Packable for PlainMessage {
             }
             SecurityMode::AuthCrypt => {
                 // AuthCrypt mode requires both sender and recipient KIDs
-                let sender_kid = options.sender_kid.ok_or_else(|| {
+                let sender_kid = options.sender_kid.clone().ok_or_else(|| {
                     Error::Validation("AuthCrypt mode requires sender_kid".to_string())
                 })?;
 
-                let recipient_kid = options.recipient_kid.ok_or_else(|| {
+                let recipient_kid = options.recipient_kid.clone().ok_or_else(|| {
                     Error::Validation("AuthCrypt mode requires recipient_kid".to_string())
                 })?;
 
@@ -258,7 +260,7 @@ impl Packable for PlainMessage {
 
                 // Create a JWE for the recipient
                 let jwe = encryption_key
-                    .create_jwe(plaintext.as_bytes(), &[recipient_key.as_ref()], None)
+                    .create_jwe(plaintext.as_bytes(), &[recipient_key], None)
                     .await
                     .map_err(|e| Error::Cryptography(format!("Failed to create JWE: {}", e)))?;
 
@@ -275,67 +277,185 @@ impl Packable for PlainMessage {
     }
 }
 
-/// Implement Packable for any serializable object that doesn't implement PlainMessage directly
-#[async_trait]
-impl<T: Serialize + Send + Sync> Packable for T {
-    async fn pack(
-        &self,
-        key_manager: &impl KeyManagerPacking,
-        options: PackOptions,
-    ) -> Result<String> {
-        // Convert to a Value first
-        let value = serde_json::to_value(self).map_err(|e| Error::Serialization(e.to_string()))?;
+/// We can't implement Packable for all types due to the conflict with PlainMessage
+/// Instead, let's create a helper function:
+pub async fn pack_any<T>(obj: &T, key_manager: &(impl KeyManagerPacking + ?Sized), options: PackOptions) -> Result<String> 
+where T: Serialize + Send + Sync + std::fmt::Debug + 'static + Sized + PartialEq {
+    // Skip attempt to implement Packable for generic types and use a helper function instead
+    
+    // If the object is a PlainMessage, use PlainMessage's implementation
+    if obj.type_id() == std::any::TypeId::of::<PlainMessage>() {
+        // In this case, we can't easily downcast, so we'll serialize and deserialize
+        let value = serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
+        let plain_msg: PlainMessage = serde_json::from_value(value).map_err(|e| Error::Serialization(e.to_string()))?;
+        return plain_msg.pack(key_manager, options).await;
+    }
+    
+    // Otherwise, implement the same logic here as in the PlainMessage implementation
+    match options.security_mode {
+        SecurityMode::Plain => {
+            // For plain mode, just serialize the object to JSON
+            serde_json::to_string(obj).map_err(|e| Error::Serialization(e.to_string()))
+        }
+        SecurityMode::Signed => {
+            // Signed mode requires a sender KID
+            let sender_kid = options.sender_kid.clone().ok_or_else(|| {
+                Error::Validation("Signed mode requires sender_kid".to_string())
+            })?;
 
-        // Ensure it's an object
-        let obj = value
-            .as_object()
-            .ok_or_else(|| Error::Validation("Message is not a JSON object".to_string()))?;
+            // Get the signing key
+            let signing_key = key_manager.get_signing_key(&sender_kid).await?;
 
-        // Extract ID, or generate one if missing
-        let id = obj
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or_else(|| Uuid::new_v4().to_string().as_str());
+            // Convert to a Value first
+            let value = serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
 
-        // Extract type, or use default
-        let msg_type = obj
-            .get("type")
-            .and_then(|v| v.as_str())
-            .unwrap_or("https://tap.rsvp/schema/1.0/message");
+            // Ensure it's an object
+            let obj = value
+                .as_object()
+                .ok_or_else(|| Error::Validation("Message is not a JSON object".to_string()))?;
 
-        // Create sender/recipient lists
-        let from = options.sender_kid.as_ref().map(|kid| {
-            // Extract DID part from kid (assuming format is did#key-1)
-            kid.split('#').next().unwrap_or(kid).to_string()
-        });
+            // Extract ID, or generate one if missing
+            let id_string = obj
+                .get("id")
+                .map(|v| v.as_str().unwrap_or_default().to_string())
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
+            let id = id_string.as_str();
 
-        let to = if let Some(kid) = &options.recipient_kid {
-            // Extract DID part from kid
-            let did = kid.split('#').next().unwrap_or(kid).to_string();
-            vec![did]
-        } else {
-            vec![]
-        };
+            // Extract type, or use default
+            let msg_type = obj
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("https://tap.rsvp/schema/1.0/message");
 
-        // Create a PlainMessage
-        let plain_message = PlainMessage {
-            id: id.to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: msg_type.to_string(),
-            body: value,
-            from: from.unwrap_or_default(),
-            to,
-            thid: None,
-            pthid: None,
-            created_time: Some(chrono::Utc::now().timestamp() as u64),
-            expires_time: None,
-            from_prior: None,
-            attachments: None,
-            extra_headers: std::collections::HashMap::new(),
-        };
+            // Create sender/recipient lists
+            let from = options.sender_kid.as_ref().map(|kid| {
+                // Extract DID part from kid (assuming format is did#key-1)
+                kid.split('#').next().unwrap_or(kid).to_string()
+            });
 
-        // Pack using the PlainMessage implementation
-        plain_message.pack(key_manager, options).await
+            let to = if let Some(kid) = &options.recipient_kid {
+                // Extract DID part from kid
+                let did = kid.split('#').next().unwrap_or(kid).to_string();
+                vec![did]
+            } else {
+                vec![]
+            };
+
+            // Create a PlainMessage
+            let plain_message = PlainMessage {
+                id: id.to_string(),
+                typ: "application/didcomm-plain+json".to_string(),
+                type_: msg_type.to_string(),
+                body: value,
+                from: from.unwrap_or_default(),
+                to,
+                thid: None,
+                pthid: None,
+                created_time: Some(chrono::Utc::now().timestamp() as u64),
+                expires_time: None,
+                from_prior: None,
+                attachments: None,
+                extra_headers: std::collections::HashMap::new(),
+            };
+
+            // Prepare the message payload to sign
+            let payload = serde_json::to_string(&plain_message).map_err(|e| Error::Serialization(e.to_string()))?;
+
+            // Create a JWS
+            let jws = signing_key
+                .create_jws(payload.as_bytes(), None)
+                .await
+                .map_err(|e| Error::Cryptography(format!("Failed to create JWS: {}", e)))?;
+
+            // Serialize the JWS
+            serde_json::to_string(&jws).map_err(|e| Error::Serialization(e.to_string()))
+        }
+        SecurityMode::AuthCrypt => {
+            // AuthCrypt mode requires both sender and recipient KIDs
+            let sender_kid = options.sender_kid.clone().ok_or_else(|| {
+                Error::Validation("AuthCrypt mode requires sender_kid".to_string())
+            })?;
+
+            let recipient_kid = options.recipient_kid.clone().ok_or_else(|| {
+                Error::Validation("AuthCrypt mode requires recipient_kid".to_string())
+            })?;
+
+            // Get the encryption key
+            let encryption_key = key_manager.get_encryption_key(&sender_kid).await?;
+
+            // Get the recipient's verification key
+            let recipient_key = key_manager.resolve_verification_key(&recipient_kid).await?;
+
+            // Convert to a Value first
+            let value = serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
+
+            // Ensure it's an object
+            let obj = value
+                .as_object()
+                .ok_or_else(|| Error::Validation("Message is not a JSON object".to_string()))?;
+
+            // Extract ID, or generate one if missing
+            let id_string = obj
+                .get("id")
+                .map(|v| v.as_str().unwrap_or_default().to_string())
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
+            let id = id_string.as_str();
+
+            // Extract type, or use default
+            let msg_type = obj
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("https://tap.rsvp/schema/1.0/message");
+
+            // Create sender/recipient lists
+            let from = options.sender_kid.as_ref().map(|kid| {
+                // Extract DID part from kid (assuming format is did#key-1)
+                kid.split('#').next().unwrap_or(kid).to_string()
+            });
+
+            let to = if let Some(kid) = &options.recipient_kid {
+                // Extract DID part from kid
+                let did = kid.split('#').next().unwrap_or(kid).to_string();
+                vec![did]
+            } else {
+                vec![]
+            };
+
+            // Create a PlainMessage
+            let plain_message = PlainMessage {
+                id: id.to_string(),
+                typ: "application/didcomm-plain+json".to_string(),
+                type_: msg_type.to_string(),
+                body: value,
+                from: from.unwrap_or_default(),
+                to,
+                thid: None,
+                pthid: None,
+                created_time: Some(chrono::Utc::now().timestamp() as u64),
+                expires_time: None,
+                from_prior: None,
+                attachments: None,
+                extra_headers: std::collections::HashMap::new(),
+            };
+
+            // Serialize the message
+            let plaintext = serde_json::to_string(&plain_message).map_err(|e| Error::Serialization(e.to_string()))?;
+
+            // Create a JWE for the recipient
+            let jwe = encryption_key
+                .create_jwe(plaintext.as_bytes(), &[recipient_key], None)
+                .await
+                .map_err(|e| Error::Cryptography(format!("Failed to create JWE: {}", e)))?;
+
+            // Serialize the JWE
+            serde_json::to_string(&jwe).map_err(|e| Error::Serialization(e.to_string()))
+        }
+        SecurityMode::Any => {
+            // Any mode is not valid for packing, only for unpacking
+            Err(Error::Validation(
+                "SecurityMode::Any is not valid for packing".to_string(),
+            ))
+        }
     }
 }
 
@@ -344,7 +464,7 @@ impl<T: Serialize + Send + Sync> Packable for T {
 impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
     async fn unpack(
         packed_message: &Jws,
-        key_manager: &impl KeyManagerPacking,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
         _options: UnpackOptions,
     ) -> Result<T> {
         // Decode the payload
@@ -430,7 +550,7 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
 impl<T: DeserializeOwned + Send + 'static> Unpackable<Jwe, T> for Jwe {
     async fn unpack(
         packed_message: &Jwe,
-        key_manager: &impl KeyManagerPacking,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
         options: UnpackOptions,
     ) -> Result<T> {
         // Find a recipient that matches our expected key, if any
@@ -499,7 +619,7 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jwe, T> for Jwe {
 impl<T: DeserializeOwned + Send + 'static> Unpackable<String, T> for String {
     async fn unpack(
         packed_message: &String,
-        key_manager: &impl KeyManagerPacking,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
         options: UnpackOptions,
     ) -> Result<T> {
         // Try to parse as JSON first

@@ -43,7 +43,7 @@ pub trait Agent {
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>>;
 
     /// Sends a message to one or more recipients
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
+    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -620,7 +620,7 @@ impl Agent for ModernAgent {
         Ok(None)
     }
 
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
+    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -663,8 +663,8 @@ impl Agent for ModernAgent {
         };
 
         // Pack the message
-        let packed = message
-            .pack(&*self.key_manager, pack_options)
+        // Use the pack_any helper function instead of trait method
+        let packed = crate::message_packing::pack_any(message, self.key_manager.as_ref(), pack_options)
             .await
             .map_err(|e| Error::Cryptography(format!("Failed to pack message: {}", e)))?;
 
@@ -772,6 +772,7 @@ impl Agent for ModernAgent {
         let unpack_options = UnpackOptions {
             expected_security_mode: SecurityMode::Any,
             expected_recipient_kid: Some(format!("{}#keys-1", self.get_agent_did())),
+            require_signature: false,
         };
 
         // Unpack the message using the Unpackable trait
@@ -877,7 +878,7 @@ impl Agent for DefaultAgent {
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
+    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
         &self,
         message: &T,
         to: Vec<&str>,
@@ -1026,7 +1027,7 @@ impl Agent for DefaultAgent {
     }
 
     #[cfg(target_arch = "wasm32")]
-    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync>(
+    async fn send_message<T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + PartialEq + 'static>(
         &self,
         message: &T,
         to: Vec<&str>,

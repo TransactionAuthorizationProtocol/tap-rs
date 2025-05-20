@@ -3,7 +3,7 @@
 //! This module provides a key manager for storing and retrieving
 //! cryptographic keys used by the TAP Agent for DID operations.
 use crate::agent_key::{
-    AgentKey, AgentKeyError, DecryptionKey, EncryptionKey, SigningKey, VerificationKey,
+    AgentKey, DecryptionKey, EncryptionKey, SigningKey, VerificationKey,
 };
 use crate::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey};
 use crate::error::{Error, Result};
@@ -11,6 +11,7 @@ use crate::local_agent_key::{LocalAgentKey, PublicVerificationKey};
 use crate::message_packing::{KeyManagerPacking, MessageError};
 
 use async_trait::async_trait;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -53,6 +54,14 @@ pub struct Secret {
 /// Trait defining the interface for a key manager component
 #[async_trait]
 pub trait KeyManager: Send + Sync + std::fmt::Debug + 'static {
+    /// Get access to the secrets storage for this key manager
+    fn secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>>;
+    
+    /// Get a secret resolver for this key manager
+    fn secret_resolver(&self) -> KeyManagerSecretResolver {
+        KeyManagerSecretResolver::new_from_secrets(self.secrets())
+    }
+    
     /// Generate a new key with the specified options
     fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey>;
 
@@ -168,6 +177,11 @@ impl Default for DefaultKeyManager {
 
 #[async_trait]
 impl KeyManager for DefaultKeyManager {
+    /// Get access to the secrets storage
+    fn secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>> {
+        Arc::clone(&self.secrets)
+    }
+
     /// Generate a new key with the specified options
     fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
         // Generate the key
@@ -186,7 +200,7 @@ impl KeyManager for DefaultKeyManager {
         // Store the agent key as signing, encryption, and decryption keys
         if let Ok(mut signing_keys) = self.signing_keys.write() {
             signing_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn SigningKey + Send + Sync>,
             );
         } else {
@@ -195,7 +209,7 @@ impl KeyManager for DefaultKeyManager {
 
         if let Ok(mut encryption_keys) = self.encryption_keys.write() {
             encryption_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn EncryptionKey + Send + Sync>,
             );
         } else {
@@ -204,7 +218,7 @@ impl KeyManager for DefaultKeyManager {
 
         if let Ok(mut decryption_keys) = self.decryption_keys.write() {
             decryption_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn DecryptionKey + Send + Sync>,
             );
         } else {
@@ -214,7 +228,7 @@ impl KeyManager for DefaultKeyManager {
         // Also store a reference in verification keys
         if let Ok(mut verification_keys) = self.verification_keys.write() {
             verification_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn VerificationKey + Send + Sync>,
             );
         } else {
@@ -246,7 +260,7 @@ impl KeyManager for DefaultKeyManager {
         // Store the agent key as signing, encryption, and decryption keys
         if let Ok(mut signing_keys) = self.signing_keys.write() {
             signing_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn SigningKey + Send + Sync>,
             );
         } else {
@@ -255,7 +269,7 @@ impl KeyManager for DefaultKeyManager {
 
         if let Ok(mut encryption_keys) = self.encryption_keys.write() {
             encryption_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn EncryptionKey + Send + Sync>,
             );
         } else {
@@ -264,7 +278,7 @@ impl KeyManager for DefaultKeyManager {
 
         if let Ok(mut decryption_keys) = self.decryption_keys.write() {
             decryption_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn DecryptionKey + Send + Sync>,
             );
         } else {
@@ -274,7 +288,7 @@ impl KeyManager for DefaultKeyManager {
         // Also store a reference in verification keys
         if let Ok(mut verification_keys) = self.verification_keys.write() {
             verification_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn VerificationKey + Send + Sync>,
             );
         } else {
@@ -299,7 +313,7 @@ impl KeyManager for DefaultKeyManager {
         // Store the agent key as signing, encryption, and decryption keys
         if let Ok(mut signing_keys) = self.signing_keys.write() {
             signing_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn SigningKey + Send + Sync>,
             );
         } else {
@@ -308,7 +322,7 @@ impl KeyManager for DefaultKeyManager {
 
         if let Ok(mut encryption_keys) = self.encryption_keys.write() {
             encryption_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn EncryptionKey + Send + Sync>,
             );
         } else {
@@ -317,7 +331,7 @@ impl KeyManager for DefaultKeyManager {
 
         if let Ok(mut decryption_keys) = self.decryption_keys.write() {
             decryption_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn DecryptionKey + Send + Sync>,
             );
         } else {
@@ -327,7 +341,7 @@ impl KeyManager for DefaultKeyManager {
         // Also store a reference in verification keys
         if let Ok(mut verification_keys) = self.verification_keys.write() {
             verification_keys.insert(
-                agent_key.key_id().to_string(),
+                AgentKey::key_id(&agent_key).to_string(),
                 Arc::new(agent_key.clone()) as Arc<dyn VerificationKey + Send + Sync>,
             );
         } else {
@@ -479,7 +493,7 @@ impl KeyManager for DefaultKeyManager {
                 // Add to signing keys for next time
                 if let Ok(mut signing_keys) = self.signing_keys.write() {
                     let arc_key = Arc::new(agent_key.clone()) as Arc<dyn SigningKey + Send + Sync>;
-                    signing_keys.insert(agent_key.key_id().to_string(), arc_key.clone());
+                    signing_keys.insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
                     return Ok(arc_key);
                 }
             }
@@ -515,7 +529,7 @@ impl KeyManager for DefaultKeyManager {
                 if let Ok(mut encryption_keys) = self.encryption_keys.write() {
                     let arc_key =
                         Arc::new(agent_key.clone()) as Arc<dyn EncryptionKey + Send + Sync>;
-                    encryption_keys.insert(agent_key.key_id().to_string(), arc_key.clone());
+                    encryption_keys.insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
                     return Ok(arc_key);
                 }
             }
@@ -551,7 +565,7 @@ impl KeyManager for DefaultKeyManager {
                 if let Ok(mut decryption_keys) = self.decryption_keys.write() {
                     let arc_key =
                         Arc::new(agent_key.clone()) as Arc<dyn DecryptionKey + Send + Sync>;
-                    decryption_keys.insert(agent_key.key_id().to_string(), arc_key.clone());
+                    decryption_keys.insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
                     return Ok(arc_key);
                 }
             }
@@ -581,7 +595,7 @@ impl KeyManager for DefaultKeyManager {
         // For now, we'll just check our signing keys and create verification keys from them
 
         // Check if we can resolve from a signing key
-        let signing_key = self.get_signing_key(kid).await;
+        let signing_key = KeyManager::get_signing_key(self, kid).await;
         if let Ok(key) = signing_key {
             // Create a verification key from the signing key
             let public_jwk = key.public_key_jwk()?;
@@ -611,7 +625,7 @@ impl KeyManager for DefaultKeyManager {
         protected_header: Option<crate::message::JwsProtected>,
     ) -> Result<String> {
         // Get the signing key
-        let signing_key = self.get_signing_key(kid).await?;
+        let signing_key = KeyManager::get_signing_key(self, kid).await?;
 
         // Sign the payload
         let jws = signing_key
@@ -658,7 +672,7 @@ impl KeyManager for DefaultKeyManager {
             })?;
 
         // Resolve the verification key
-        let verification_key = self.resolve_verification_key(&signature.header.kid).await?;
+        let verification_key = KeyManager::resolve_verification_key(self, &signature.header.kid).await?;
 
         // Decode the signature
         let signature_bytes = base64::engine::general_purpose::STANDARD
@@ -697,10 +711,10 @@ impl KeyManager for DefaultKeyManager {
         protected_header: Option<crate::message::JweProtected>,
     ) -> Result<String> {
         // Get the encryption key
-        let encryption_key = self.get_encryption_key(sender_kid).await?;
+        let encryption_key = KeyManager::get_encryption_key(self, sender_kid).await?;
 
         // Resolve the recipient's verification key
-        let recipient_key = self.resolve_verification_key(recipient_kid).await?;
+        let recipient_key = KeyManager::resolve_verification_key(self, recipient_kid).await?;
 
         // Encrypt the plaintext
         let jwe = encryption_key
@@ -729,7 +743,7 @@ impl KeyManager for DefaultKeyManager {
                 })?;
 
             // Get the decryption key
-            let decryption_key = self.get_decryption_key(kid).await?;
+            let decryption_key = KeyManager::get_decryption_key(self, kid).await?;
 
             // Decrypt the JWE
             decryption_key
@@ -740,7 +754,7 @@ impl KeyManager for DefaultKeyManager {
             // Try each recipient
             for recipient in &jwe.recipients {
                 // Try to get the decryption key
-                if let Ok(decryption_key) = self.get_decryption_key(&recipient.header.kid).await {
+                if let Ok(decryption_key) = KeyManager::get_decryption_key(self, &recipient.header.kid).await {
                     // Try to decrypt
                     if let Ok(plaintext) = decryption_key.unwrap_jwe(&jwe).await {
                         return Ok(plaintext);
@@ -757,31 +771,31 @@ impl KeyManager for DefaultKeyManager {
 
 #[async_trait]
 impl KeyManagerPacking for DefaultKeyManager {
-    async fn get_signing_key(&self, kid: &str) -> Result<Arc<dyn SigningKey>, MessageError> {
+    async fn get_signing_key(&self, kid: &str) -> Result<Arc<dyn SigningKey + Send + Sync>> {
         KeyManager::get_signing_key(self, kid)
             .await
-            .map_err(|e| MessageError::KeyManager(e.to_string()))
+            .map_err(|e| Error::from(MessageError::KeyManager(e.to_string())))
     }
 
-    async fn get_encryption_key(&self, kid: &str) -> Result<Arc<dyn EncryptionKey>, MessageError> {
+    async fn get_encryption_key(&self, kid: &str) -> Result<Arc<dyn EncryptionKey + Send + Sync>> {
         KeyManager::get_encryption_key(self, kid)
             .await
-            .map_err(|e| MessageError::KeyManager(e.to_string()))
+            .map_err(|e| Error::from(MessageError::KeyManager(e.to_string())))
     }
 
-    async fn get_decryption_key(&self, kid: &str) -> Result<Arc<dyn DecryptionKey>, MessageError> {
+    async fn get_decryption_key(&self, kid: &str) -> Result<Arc<dyn DecryptionKey + Send + Sync>> {
         KeyManager::get_decryption_key(self, kid)
             .await
-            .map_err(|e| MessageError::KeyManager(e.to_string()))
+            .map_err(|e| Error::from(MessageError::KeyManager(e.to_string())))
     }
 
     async fn resolve_verification_key(
         &self,
         kid: &str,
-    ) -> Result<Arc<dyn VerificationKey>, MessageError> {
+    ) -> Result<Arc<dyn VerificationKey + Send + Sync>> {
         KeyManager::resolve_verification_key(self, kid)
             .await
-            .map_err(|e| MessageError::KeyManager(e.to_string()))
+            .map_err(|e| Error::from(MessageError::KeyManager(e.to_string())))
     }
 }
 
@@ -905,7 +919,7 @@ impl KeyManagerBuilder {
                 // Add to signing keys
                 if let Ok(mut signing_keys) = key_manager.signing_keys.write() {
                     signing_keys.insert(
-                        agent_key.key_id().to_string(),
+                        AgentKey::key_id(&agent_key).to_string(),
                         Arc::new(agent_key.clone()) as Arc<dyn SigningKey + Send + Sync>,
                     );
                 } else {
@@ -915,7 +929,7 @@ impl KeyManagerBuilder {
                 // Add to encryption keys
                 if let Ok(mut encryption_keys) = key_manager.encryption_keys.write() {
                     encryption_keys.insert(
-                        agent_key.key_id().to_string(),
+                        AgentKey::key_id(&agent_key).to_string(),
                         Arc::new(agent_key.clone()) as Arc<dyn EncryptionKey + Send + Sync>,
                     );
                 } else {
@@ -925,7 +939,7 @@ impl KeyManagerBuilder {
                 // Add to decryption keys
                 if let Ok(mut decryption_keys) = key_manager.decryption_keys.write() {
                     decryption_keys.insert(
-                        agent_key.key_id().to_string(),
+                        AgentKey::key_id(&agent_key).to_string(),
                         Arc::new(agent_key.clone()) as Arc<dyn DecryptionKey + Send + Sync>,
                     );
                 } else {
@@ -935,7 +949,7 @@ impl KeyManagerBuilder {
                 // Add to verification keys
                 if let Ok(mut verification_keys) = key_manager.verification_keys.write() {
                     verification_keys.insert(
-                        agent_key.key_id().to_string(),
+                        AgentKey::key_id(&agent_key).to_string(),
                         Arc::new(agent_key.clone()) as Arc<dyn VerificationKey + Send + Sync>,
                     );
                 } else {
@@ -961,7 +975,14 @@ impl KeyManagerSecretResolver {
     /// Create a new KeyManagerSecretResolver
     pub fn new(key_manager: Arc<dyn KeyManager>) -> Self {
         Self {
-            secrets: Arc::clone(&key_manager.secrets),
+            secrets: key_manager.secrets(),
+        }
+    }
+    
+    /// Create a new KeyManagerSecretResolver directly from secrets
+    pub fn new_from_secrets(secrets: Arc<RwLock<HashMap<String, Secret>>>) -> Self {
+        Self {
+            secrets,
         }
     }
 }
@@ -1059,13 +1080,10 @@ mod tests {
 
         // Ed25519
         let ed25519_kid = format!("{}#keys-1", ed25519_key.did);
-        let signing_key = manager.get_signing_key(&ed25519_kid).await.unwrap();
+        let signing_key = KeyManager::get_signing_key(&manager, &ed25519_kid).await.unwrap();
         let signature = signing_key.sign(test_data).await.unwrap();
 
-        let verification_key = manager
-            .resolve_verification_key(&ed25519_kid)
-            .await
-            .unwrap();
+        let verification_key = KeyManager::resolve_verification_key(&manager, &ed25519_kid).await.unwrap();
         let protected = crate::message::JwsProtected {
             typ: "application/didcomm-signed+json".to_string(),
             alg: "EdDSA".to_string(),
@@ -1079,10 +1097,10 @@ mod tests {
 
         // P-256
         let p256_kid = format!("{}#keys-1", p256_key.did);
-        let signing_key = manager.get_signing_key(&p256_kid).await.unwrap();
+        let signing_key = KeyManager::get_signing_key(&manager, &p256_kid).await.unwrap();
         let signature = signing_key.sign(test_data).await.unwrap();
 
-        let verification_key = manager.resolve_verification_key(&p256_kid).await.unwrap();
+        let verification_key = KeyManager::resolve_verification_key(&manager, &p256_kid).await.unwrap();
         let protected = crate::message::JwsProtected {
             typ: "application/didcomm-signed+json".to_string(),
             alg: "ES256".to_string(),
@@ -1096,13 +1114,10 @@ mod tests {
 
         // secp256k1
         let secp256k1_kid = format!("{}#keys-1", secp256k1_key.did);
-        let signing_key = manager.get_signing_key(&secp256k1_kid).await.unwrap();
+        let signing_key = KeyManager::get_signing_key(&manager, &secp256k1_kid).await.unwrap();
         let signature = signing_key.sign(test_data).await.unwrap();
 
-        let verification_key = manager
-            .resolve_verification_key(&secp256k1_kid)
-            .await
-            .unwrap();
+        let verification_key = KeyManager::resolve_verification_key(&manager, &secp256k1_kid).await.unwrap();
         let protected = crate::message::JwsProtected {
             typ: "application/didcomm-signed+json".to_string(),
             alg: "ES256K".to_string(),

@@ -4,7 +4,7 @@
 //! for keys that are stored locally, either in memory or on disk.
 
 use crate::agent_key::{
-    AgentKey, AgentKeyError, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption,
+    AgentKey, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption,
     JwsAlgorithm, SigningKey, VerificationKey,
 };
 use crate::did::{KeyType, VerificationMaterial};
@@ -38,7 +38,7 @@ pub struct LocalAgentKey {
     /// The associated DID
     did: String,
     /// The secret containing the key material
-    secret: Secret,
+    pub secret: Secret,
     /// The key type
     key_type: KeyType,
 }
@@ -278,7 +278,7 @@ impl SigningKey for LocalAgentKey {
                 protected: protected_b64,
                 signature: signature_value,
                 header: JwsHeader {
-                    kid: self.key_id().to_string(),
+                    kid: crate::agent_key::AgentKey::key_id(self).to_string(),
                 },
             }],
         };
@@ -387,8 +387,11 @@ impl VerificationKey for LocalAgentKey {
                 })?;
 
                 // This checks if the point is on the curve and returns the public key
-                let public_key = P256PublicKey::from_encoded_point(&encoded_point)
-                    .ok_or_else(|| Error::Cryptography("Invalid P-256 public key".to_string()))?;
+                let public_key_opt = P256PublicKey::from_encoded_point(&encoded_point);
+                if public_key_opt.is_none().into() {
+                    return Err(Error::Cryptography("Invalid P-256 public key".to_string()));
+                }
+                let public_key = public_key_opt.unwrap();
 
                 // Parse the signature from DER format
                 let p256_signature = P256Signature::from_der(signature).map_err(|e| {
@@ -463,7 +466,7 @@ impl EncryptionKey for LocalAgentKey {
         &self,
         plaintext: &[u8],
         aad: Option<&[u8]>,
-        recipient_public_key: &dyn VerificationKey,
+        _recipient_public_key: &dyn VerificationKey,
     ) -> Result<(Vec<u8>, Vec<u8>, Vec<u8>)> {
         // We'll implement AES-GCM encryption with key derived from ECDH
 
@@ -494,7 +497,7 @@ impl EncryptionKey for LocalAgentKey {
     }
 
     fn recommended_jwe_alg_enc(&self) -> (JweAlgorithm, JweEncryption) {
-        (JweAlgorithm::ECDH_ES_A256KW, JweEncryption::A256GCM)
+        (JweAlgorithm::EcdhEsA256kw, JweEncryption::A256GCM)
     }
 
     async fn create_jwe(
@@ -623,10 +626,11 @@ impl EncryptionKey for LocalAgentKey {
                         })?;
 
                     // This checks if the point is on the curve and returns the public key
-                    let recipient_pk = P256PublicKey::from_encoded_point(&encoded_point)
-                        .ok_or_else(|| {
-                            Error::Cryptography("Invalid P-256 public key".to_string())
-                        })?;
+                    let recipient_pk_opt = P256PublicKey::from_encoded_point(&encoded_point);
+                    if recipient_pk_opt.is_none().into() {
+                        return Err(Error::Cryptography("Invalid P-256 public key".to_string()));
+                    }
+                    let recipient_pk = recipient_pk_opt.unwrap();
 
                     // Perform ECDH to derive a shared secret
                     let shared_secret = ephemeral_secret.diffie_hellman(&recipient_pk);
@@ -655,8 +659,8 @@ impl EncryptionKey for LocalAgentKey {
             jwe_recipients.push(JweRecipient {
                 encrypted_key: base64::engine::general_purpose::STANDARD.encode(encrypted_key),
                 header: JweHeader {
-                    kid: recipient.key_id().to_string(),
-                    sender_kid: Some(self.key_id().to_string()),
+                    kid: (&**recipient).key_id().to_string(),
+                    sender_kid: Some(crate::agent_key::AgentKey::key_id(self).to_string()),
                 },
             });
         }
@@ -775,11 +779,11 @@ impl DecryptionKey for LocalAgentKey {
         let recipient = jwe
             .recipients
             .iter()
-            .find(|r| r.header.kid == self.key_id())
+            .find(|r| r.header.kid == crate::agent_key::AgentKey::key_id(self))
             .ok_or_else(|| {
                 Error::Cryptography(format!(
                     "No matching recipient found for key ID: {}",
-                    self.key_id()
+                    crate::agent_key::AgentKey::key_id(self)
                 ))
             })?;
 
@@ -994,8 +998,11 @@ impl VerificationKey for PublicVerificationKey {
                 })?;
 
                 // This checks if the point is on the curve and returns the public key
-                let public_key = P256PublicKey::from_encoded_point(&encoded_point)
-                    .ok_or_else(|| Error::Cryptography("Invalid P-256 public key".to_string()))?;
+                let public_key_opt = P256PublicKey::from_encoded_point(&encoded_point);
+                if public_key_opt.is_none().into() {
+                    return Err(Error::Cryptography("Invalid P-256 public key".to_string()));
+                }
+                let public_key = public_key_opt.unwrap();
 
                 // Parse the signature from DER format
                 let p256_signature = P256Signature::from_der(signature).map_err(|e| {

@@ -57,14 +57,14 @@ impl JwsAlgorithm {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum JweAlgorithm {
     /// ECDH-ES + AES key wrap with 256-bit key
-    ECDH_ES_A256KW,
+    EcdhEsA256kw,
 }
 
 impl JweAlgorithm {
     /// Returns the algorithm identifier as a string
     pub fn as_str(&self) -> &'static str {
         match self {
-            JweAlgorithm::ECDH_ES_A256KW => "ECDH-ES+A256KW",
+            JweAlgorithm::EcdhEsA256kw => "ECDH-ES+A256KW",
         }
     }
 }
