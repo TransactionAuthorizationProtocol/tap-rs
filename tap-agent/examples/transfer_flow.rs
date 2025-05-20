@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::agent::{Agent, TapAgent};
 use tap_agent::config::AgentConfig;
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{KeyResolver, MultiResolver};
@@ -149,7 +149,7 @@ async fn create_agent(
     did: &str,
     public_key: &str,
     private_key: &str,
-) -> (Arc<DefaultAgent>, String) {
+) -> (Arc<impl Agent>, String) {
     // Create agent configuration
     let agent_config = AgentConfig::new(did.to_string());
 
@@ -183,8 +183,8 @@ async fn create_agent(
         true,
     ));
 
-    // Create agent
-    let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));
+    // Create agent using the standard Agent implementation
+    let agent = Arc::new(TapAgent::new(agent_config, message_packer));
 
     (agent, did.to_string())
 }

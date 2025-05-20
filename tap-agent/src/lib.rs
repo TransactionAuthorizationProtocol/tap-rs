@@ -72,6 +72,7 @@ pub use agent_key::{
 };
 pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
 pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
+pub use tap_msg::didcomm::PlainMessage;
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]
@@ -79,7 +80,7 @@ pub use did::MultiResolver;
 
 // Native-only re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub use agent::{Agent, AgentBuilder, DefaultAgent, DeliveryResult};
+pub use agent::{Agent, AgentBuilder, DeliveryResult, TapAgent};
 #[cfg(not(target_arch = "wasm32"))]
 pub use crypto::BasicSecretResolver;
 #[cfg(not(target_arch = "wasm32"))]

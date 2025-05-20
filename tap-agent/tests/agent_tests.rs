@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::agent::{Agent, TapAgent};
 use tap_agent::config::AgentConfig;
 
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
@@ -182,7 +182,7 @@ async fn test_agent_get_service_endpoint() {
     ));
 
     // Create the agent
-    let agent = DefaultAgent::new(config, message_packer);
+    let agent = TapAgent::new(config, message_packer);
 
     // Test get_service_endpoint works correctly
     let endpoint = agent.get_service_endpoint("did:example:456").await.unwrap();
@@ -230,7 +230,7 @@ async fn test_send_message_to_multiple_recipients() {
     ));
 
     // Create the agent
-    let agent = DefaultAgent::new(config, message_packer);
+    let agent = TapAgent::new(config, message_packer);
 
     // Create a simple message
     let test_message = TestMessage {

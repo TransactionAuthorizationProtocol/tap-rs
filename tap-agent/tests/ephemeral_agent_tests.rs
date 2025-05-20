@@ -1,7 +1,7 @@
 //! Tests for ephemeral agent creation
 
 use std::sync::Arc;
-use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::agent::{Agent, TapAgent};
 use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{DIDGenerationOptions, KeyType, MultiResolver};
 use tap_agent::key_manager::{DefaultKeyManager, KeyManager, Secret, SecretMaterial, SecretType};
@@ -74,7 +74,7 @@ impl tap_msg::TapMessageBody for EmptyMessage {
 #[test]
 async fn test_create_ephemeral_agent() {
     // Test that we can create an ephemeral agent with a new key
-    let (agent, did) = tap_agent::agent::DefaultAgent::new_ephemeral().unwrap();
+    let (agent, did) = TapAgent::from_ephemeral_key().await.unwrap();
 
     // Check that the agent was created successfully
     assert!(!did.is_empty(), "DID should not be empty");
@@ -143,7 +143,7 @@ async fn test_create_agent_from_key() {
     };
 
     // Create the agent
-    let agent = DefaultAgent::new(config, message_packer);
+    let agent = TapAgent::new(config, message_packer);
 
     // Verify the agent has the expected DID
     assert_eq!(agent.get_agent_did(), key.did);

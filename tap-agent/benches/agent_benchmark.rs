@@ -9,13 +9,13 @@ use std::sync::Arc;
 use tap_agent::did::MultiResolver;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::{
-    Agent, AgentConfig, BasicSecretResolver, DefaultAgent, DefaultMessagePacker, SyncDIDResolver,
+    Agent, AgentConfig, BasicSecretResolver, DefaultMessagePacker, SyncDIDResolver, TapAgent
 };
 use tap_caip::AssetId;
 use tap_msg::{message::Transfer, Participant};
 
 /// Create a test agent with known key material for benchmarking
-fn create_test_agent() -> (Arc<DefaultAgent>, String) {
+fn create_test_agent() -> (Arc<TapAgent>, String) {
     // Create a DID for the agent - using a fixed DID for predictability
     let did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
 
@@ -53,7 +53,7 @@ fn create_test_agent() -> (Arc<DefaultAgent>, String) {
     ));
 
     // Create agent
-    let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));
+    let agent = Arc::new(TapAgent::new(agent_config, message_packer));
 
     (agent, did)
 }
