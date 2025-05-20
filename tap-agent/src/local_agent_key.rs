@@ -51,7 +51,7 @@ impl LocalAgentKey {
         let payload_bytes = base64::engine::general_purpose::STANDARD
             .decode(&jws.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
-            
+
         Ok(payload_bytes)
     }
 
@@ -62,7 +62,7 @@ impl LocalAgentKey {
         let plaintext = base64::engine::general_purpose::STANDARD
             .decode(&jwe.ciphertext)
             .map_err(|e| Error::Cryptography(format!("Failed to decode ciphertext: {}", e)))?;
-            
+
         Ok(plaintext)
     }
 
@@ -73,13 +73,17 @@ impl LocalAgentKey {
             typ: "JWT".to_string(),
             alg: self.recommended_jws_alg().as_str().to_string(),
         };
-        
+
         // Verify the signature
-        let result = self.verify_signature(payload, signature, &protected).await?;
+        let result = self
+            .verify_signature(payload, signature, &protected)
+            .await?;
         if result {
             Ok(())
         } else {
-            Err(Error::Cryptography("Signature verification failed".to_string()))
+            Err(Error::Cryptography(
+                "Signature verification failed".to_string(),
+            ))
         }
     }
 
@@ -92,14 +96,14 @@ impl LocalAgentKey {
     ) -> Result<Jwe> {
         // For a simple implementation, we'll just base64 encode the plaintext directly
         let ciphertext = base64::engine::general_purpose::STANDARD.encode(plaintext);
-        
+
         // Create a simple ephemeral key for the header
         let ephemeral_key = crate::message::EphemeralPublicKey::Ec {
             crv: "P-256".to_string(),
-            x: "test".to_string(), 
+            x: "test".to_string(),
             y: "test".to_string(),
         };
-        
+
         // Create a simplified protected header
         let protected = protected_header.unwrap_or_else(|| crate::message::JweProtected {
             epk: ephemeral_key,
@@ -108,12 +112,13 @@ impl LocalAgentKey {
             enc: "A256GCM".to_string(),
             alg: "ECDH-ES+A256KW".to_string(),
         });
-        
+
         // Serialize and encode the protected header
-        let protected_json = serde_json::to_string(&protected)
-            .map_err(|e| Error::Serialization(format!("Failed to serialize protected header: {}", e)))?;
+        let protected_json = serde_json::to_string(&protected).map_err(|e| {
+            Error::Serialization(format!("Failed to serialize protected header: {}", e))
+        })?;
         let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
-        
+
         // Create the JWE
         let jwe = crate::message::Jwe {
             ciphertext,
@@ -128,7 +133,7 @@ impl LocalAgentKey {
             tag: "test".to_string(),
             iv: "test".to_string(),
         };
-        
+
         Ok(jwe)
     }
 
@@ -310,7 +315,7 @@ impl LocalAgentKey {
         let crv = jwk.get("crv").and_then(|v| v.as_str());
         Ok((kty, crv))
     }
-    
+
     /// Convert the key to a complete JWK (including private key)
     pub fn to_jwk(&self) -> Result<Value> {
         Ok(self.private_key_jwk()?.clone())
@@ -1061,50 +1066,60 @@ impl PublicVerificationKey {
     /// Verify a JWS
     pub async fn verify_jws(&self, jws: &crate::message::Jws) -> Result<Vec<u8>> {
         // Find the signature that matches our key ID
-        let signature = jws.signatures.iter()
+        let signature = jws
+            .signatures
+            .iter()
             .find(|s| s.header.kid == self.kid)
-            .ok_or_else(|| Error::Cryptography(format!("No signature found with kid: {}", self.kid)))?;
-        
+            .ok_or_else(|| {
+                Error::Cryptography(format!("No signature found with kid: {}", self.kid))
+            })?;
+
         // Decode the protected header
         let protected_bytes = base64::engine::general_purpose::STANDARD
             .decode(&signature.protected)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode protected header: {}", e)))?;
-        
+            .map_err(|e| {
+                Error::Cryptography(format!("Failed to decode protected header: {}", e))
+            })?;
+
         // Parse the protected header
-        let protected: JwsProtected = serde_json::from_slice(&protected_bytes)
-            .map_err(|e| Error::Serialization(format!("Failed to parse protected header: {}", e)))?;
-        
+        let protected: JwsProtected = serde_json::from_slice(&protected_bytes).map_err(|e| {
+            Error::Serialization(format!("Failed to parse protected header: {}", e))
+        })?;
+
         // Decode the signature
         let signature_bytes = base64::engine::general_purpose::STANDARD
             .decode(&signature.signature)
             .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
-        
+
         // Create the signing input (protected.payload)
         let signing_input = format!("{}.{}", signature.protected, jws.payload);
-        
+
         // Verify the signature
-        let verified = self.verify_signature(signing_input.as_bytes(), &signature_bytes, &protected)
+        let verified = self
+            .verify_signature(signing_input.as_bytes(), &signature_bytes, &protected)
             .await
             .map_err(|e| Error::Cryptography(e.to_string()))?;
-        
+
         if !verified {
-            return Err(Error::Cryptography("Signature verification failed".to_string()));
+            return Err(Error::Cryptography(
+                "Signature verification failed".to_string(),
+            ));
         }
-        
+
         // Decode the payload
         let payload_bytes = base64::engine::general_purpose::STANDARD
             .decode(&jws.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
-        
+
         Ok(payload_bytes)
     }
-    
+
     /// Verify a signature against this key
     pub async fn verify(&self, payload: &[u8], signature: &[u8]) -> Result<()> {
         // Get the key type and curve
         let kty = self.public_jwk.get("kty").and_then(|v| v.as_str());
         let crv = self.public_jwk.get("crv").and_then(|v| v.as_str());
-        
+
         // Create a protected header with the appropriate algorithm
         let alg = match (kty, crv) {
             (Some("OKP"), Some("Ed25519")) => "EdDSA",
@@ -1112,18 +1127,22 @@ impl PublicVerificationKey {
             (Some("EC"), Some("secp256k1")) => "ES256K",
             _ => return Err(Error::Cryptography("Unsupported key type".to_string())),
         };
-        
+
         let protected = JwsProtected {
             typ: "JWT".to_string(),
             alg: alg.to_string(),
         };
-        
+
         // Verify the signature
-        let result = self.verify_signature(payload, signature, &protected).await?;
+        let result = self
+            .verify_signature(payload, signature, &protected)
+            .await?;
         if result {
             Ok(())
         } else {
-            Err(Error::Cryptography("Signature verification failed".to_string()))
+            Err(Error::Cryptography(
+                "Signature verification failed".to_string(),
+            ))
         }
     }
 
@@ -1136,7 +1155,7 @@ impl PublicVerificationKey {
     pub fn from_jwk(jwk: &Value, kid: &str, _did: &str) -> Result<Self> {
         // Create a copy without the private key parts
         let mut public_jwk = serde_json::Map::new();
-        
+
         if let Some(obj) = jwk.as_object() {
             // Copy all fields except 'd' (private key)
             for (key, value) in obj {
@@ -1145,9 +1164,11 @@ impl PublicVerificationKey {
                 }
             }
         } else {
-            return Err(Error::Cryptography("Invalid JWK format: not an object".to_string()));
+            return Err(Error::Cryptography(
+                "Invalid JWK format: not an object".to_string(),
+            ));
         }
-        
+
         Ok(Self {
             kid: kid.to_string(),
             public_jwk: Value::Object(public_jwk),

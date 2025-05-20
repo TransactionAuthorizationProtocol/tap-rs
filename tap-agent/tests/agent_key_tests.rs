@@ -48,8 +48,11 @@ async fn test_sign_and_verify() -> Result<()> {
 
     // Extract public verification key and test
     let public_jwk = AgentKey::public_key_jwk(&ed25519_key)?;
-    let verification_key =
-        PublicVerificationKey::from_jwk(&public_jwk, AgentKey::key_id(&ed25519_key), ed25519_key.did())?;
+    let verification_key = PublicVerificationKey::from_jwk(
+        &public_jwk,
+        AgentKey::key_id(&ed25519_key),
+        ed25519_key.did(),
+    )?;
     assert!(verification_key.verify(test_data, &signature).await.is_ok());
 
     // Test with corrupted signature
@@ -89,7 +92,8 @@ async fn test_jws_creation_and_verification() -> Result<()> {
 
     // Test with public verification key
     let public_jwk = AgentKey::public_key_jwk(&key)?;
-    let verification_key = PublicVerificationKey::from_jwk(&public_jwk, AgentKey::key_id(&key), key.did())?;
+    let verification_key =
+        PublicVerificationKey::from_jwk(&public_jwk, AgentKey::key_id(&key), key.did())?;
     let verified = verification_key.verify_jws(&jws).await?;
     assert_eq!(verified, payload);
 
@@ -129,7 +133,10 @@ async fn test_recommended_algorithms() -> Result<()> {
     assert_eq!(secp256k1_key.recommended_jws_alg(), JwsAlgorithm::ES256K);
 
     // For JWE, check P-256
-    assert_eq!(p256_key.recommended_jwe_alg_enc().0, JweAlgorithm::EcdhEsA256kw);
+    assert_eq!(
+        p256_key.recommended_jwe_alg_enc().0,
+        JweAlgorithm::EcdhEsA256kw
+    );
     assert_eq!(p256_key.recommended_jwe_alg_enc().1, JweEncryption::A256GCM);
 
     Ok(())

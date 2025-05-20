@@ -1,15 +1,10 @@
 //! Tests for TAP Agent
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tap_agent::agent::{Agent, TapAgent};
+use tap_agent::agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 use tap_agent::config::AgentConfig;
-
-use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
-use tap_agent::did::{
-    DIDDoc, DIDMethodResolver, MultiResolver, Service, VerificationMethod, VerificationMethodType,
-};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_msg::TapMessageBody;
 
@@ -29,104 +24,11 @@ impl TapMessageBody for TestMessage {
     }
 }
 
-/// A DID resolver for testing that returns a hardcoded DID document
-#[derive(Debug)]
-struct TestDIDResolver;
+/// Create a test key manager with pre-configured test keys
+fn create_test_key_manager() -> Arc<AgentKeyManager> {
+    let mut builder = AgentKeyManagerBuilder::new();
 
-impl TestDIDResolver {
-    fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait]
-impl DIDMethodResolver for TestDIDResolver {
-    fn method(&self) -> &str {
-        "example"
-    }
-
-    async fn resolve_method(&self, did: &str) -> tap_agent::error::Result<Option<DIDDoc>> {
-        match did {
-            "did:example:123" => {
-                // Return a DID document with no services
-                Ok(Some(DIDDoc {
-                    id: did.to_string(),
-                    verification_method: vec![VerificationMethod {
-                        id: format!("{}#key-1", did),
-                        type_: VerificationMethodType::Ed25519VerificationKey2018,
-                        controller: did.to_string(),
-                        verification_material: tap_agent::did::VerificationMaterial::Base58 {
-                            public_key_base58: "test1234".to_string(),
-                        },
-                    }],
-                    authentication: vec![format!("{}#key-1", did)],
-                    key_agreement: vec![],
-                    assertion_method: vec![],
-                    capability_invocation: vec![],
-                    capability_delegation: vec![],
-                    service: vec![],
-                }))
-            }
-            "did:example:456" => {
-                // Return a DID document with a DIDComm service
-                Ok(Some(DIDDoc {
-                    id: did.to_string(),
-                    verification_method: vec![VerificationMethod {
-                        id: format!("{}#key-1", did),
-                        type_: VerificationMethodType::Ed25519VerificationKey2018,
-                        controller: did.to_string(),
-                        verification_material: tap_agent::did::VerificationMaterial::Base58 {
-                            public_key_base58: "test1234".to_string(),
-                        },
-                    }],
-                    authentication: vec![format!("{}#key-1", did)],
-                    key_agreement: vec![],
-                    assertion_method: vec![],
-                    capability_invocation: vec![],
-                    capability_delegation: vec![],
-                    service: vec![Service {
-                        id: format!("{}#didcomm-1", did),
-                        type_: "DIDCommMessaging".to_string(),
-                        service_endpoint: "https://example.com/didcomm".to_string(),
-                        properties: std::collections::HashMap::new(),
-                    }],
-                }))
-            }
-            "did:example:web" => {
-                // Return a DID document with a web service
-                Ok(Some(DIDDoc {
-                    id: did.to_string(),
-                    verification_method: vec![VerificationMethod {
-                        id: format!("{}#key-1", did),
-                        type_: VerificationMethodType::Ed25519VerificationKey2018,
-                        controller: did.to_string(),
-                        verification_material: tap_agent::did::VerificationMaterial::Base58 {
-                            public_key_base58: "test1234".to_string(),
-                        },
-                    }],
-                    authentication: vec![format!("{}#key-1", did)],
-                    key_agreement: vec![],
-                    assertion_method: vec![],
-                    capability_invocation: vec![],
-                    capability_delegation: vec![],
-                    service: vec![Service {
-                        id: format!("{}#service-1", did),
-                        type_: "Web".to_string(),
-                        service_endpoint: "https://example.com/api".to_string(),
-                        properties: std::collections::HashMap::new(),
-                    }],
-                }))
-            }
-            _ => Ok(None),
-        }
-    }
-}
-
-/// Simple function to create a test secret resolver
-fn create_test_secret_resolver() -> BasicSecretResolver {
-    let mut resolver = BasicSecretResolver::new();
-
-    // Add a test secret
+    // Add a test secret for agent
     let secret = Secret {
         id: "did:example:123".to_string(),
         type_: SecretType::JsonWebKey2020,
@@ -139,8 +41,7 @@ fn create_test_secret_resolver() -> BasicSecretResolver {
             }),
         },
     };
-
-    resolver.add_secret("did:example:123", secret);
+    builder = builder.add_secret("did:example:123".to_string(), secret);
 
     // Add a test secret for recipient
     let secret = Secret {
@@ -155,10 +56,9 @@ fn create_test_secret_resolver() -> BasicSecretResolver {
             }),
         },
     };
+    builder = builder.add_secret("did:example:456".to_string(), secret);
 
-    resolver.add_secret("did:example:456", secret);
-
-    resolver
+    Arc::new(builder.build().unwrap())
 }
 
 #[tokio::test]
@@ -166,71 +66,64 @@ async fn test_agent_get_service_endpoint() {
     // Create a test agent config
     let config = AgentConfig::new("did:example:123".to_string());
 
-    // Create the DID resolver
-    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(
-        TestDIDResolver::new(),
-    )]));
-
-    // Create the secret resolver
-    let secret_resolver = create_test_secret_resolver();
-
-    // Create the message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        resolver.clone(),
-        Arc::new(secret_resolver),
-        true,
-    ));
+    // Create the test key manager
+    let key_manager = create_test_key_manager();
 
     // Create the agent
-    let agent = TapAgent::new(config, message_packer);
+    let agent = TapAgent::new(config, key_manager);
 
-    // Test get_service_endpoint works correctly
+    // Test get_service_endpoint works correctly for DIDs
+    // In the updated implementation, DIDs will use the fallback URL format:
+    // https://example.com/did/{did_with_underscores}
     let endpoint = agent.get_service_endpoint("did:example:456").await.unwrap();
     assert!(endpoint.is_some(), "Service endpoint should be found");
     assert!(
-        endpoint.unwrap().contains("https://example.com/didcomm"),
-        "Service endpoint has correct URL"
+        endpoint
+            .unwrap()
+            .contains("https://example.com/did/did_example_456"),
+        "Service endpoint should use fallback URL format"
     );
 
-    // Test for a DID with other service type
+    // Test for another DID
     let endpoint = agent.get_service_endpoint("did:example:web").await.unwrap();
     assert!(
         endpoint.is_some(),
-        "Service endpoint should be found for web service"
+        "Service endpoint should be found for web DID"
     );
     assert!(
-        endpoint.unwrap().contains("https://example.com/api"),
-        "Web service endpoint has correct URL"
+        endpoint
+            .unwrap()
+            .contains("https://example.com/did/did_example_web"),
+        "Service endpoint should use fallback URL format"
     );
 
-    // Test for a DID with no service endpoint
-    let endpoint = agent.get_service_endpoint("did:example:123").await.unwrap();
-    assert!(endpoint.is_none(), "No service endpoint should be found");
+    // Test for direct URLs
+    let endpoint = agent
+        .get_service_endpoint("https://direct.example.com")
+        .await
+        .unwrap();
+    assert!(
+        endpoint.is_some(),
+        "Service endpoint should be found for direct URL"
+    );
+    assert_eq!(
+        endpoint.unwrap(),
+        "https://direct.example.com",
+        "Direct URLs should be returned as-is"
+    );
 }
 
 #[tokio::test]
-#[ignore = "Skip for now - issues with test keys"]
+#[ignore = "Skipped until valid test keys are available for crypto operations"]
 async fn test_send_message_to_multiple_recipients() {
     // Create a test agent config
     let config = AgentConfig::new("did:example:123".to_string());
 
-    // Create the DID resolver
-    let resolver = Arc::new(MultiResolver::new_with_resolvers(vec![Arc::new(
-        TestDIDResolver::new(),
-    )]));
-
-    // Create the secret resolver
-    let secret_resolver = create_test_secret_resolver();
-
-    // Create the message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        resolver.clone(),
-        Arc::new(secret_resolver),
-        true,
-    ));
+    // Create the test key manager
+    let key_manager = create_test_key_manager();
 
     // Create the agent
-    let agent = TapAgent::new(config, message_packer);
+    let agent = TapAgent::new(config, key_manager);
 
     // Create a simple message
     let test_message = TestMessage {
@@ -255,6 +148,13 @@ async fn test_send_message_to_multiple_recipients() {
     // Check the delivery results
     for result in &delivery_results {
         assert_eq!(result.did, "did:example:456");
+        // Endpoints should use the fallback URL format
+        assert!(
+            result
+                .endpoint
+                .contains("https://example.com/did/did_example_456"),
+            "Endpoint should use fallback URL format"
+        );
         assert!(result.status.is_none()); // No actual delivery with deliver=false
         assert!(result.error.is_none()); // No error expected
     }

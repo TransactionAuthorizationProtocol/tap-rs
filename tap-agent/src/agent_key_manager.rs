@@ -4,14 +4,12 @@
 //! It manages keys for signing, verification, encryption, and decryption operations, with support
 //! for different key types (Ed25519, P-256, secp256k1).
 
-use crate::agent_key::{
-    AgentKey, DecryptionKey, EncryptionKey, SigningKey, VerificationKey,
-};
+use crate::agent_key::{AgentKey, DecryptionKey, EncryptionKey, SigningKey, VerificationKey};
 use crate::did::{DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyType};
 use crate::error::{Error, Result};
+use crate::key_manager::{KeyManager, Secret, SecretMaterial};
 use crate::local_agent_key::{LocalAgentKey, PublicVerificationKey};
-use crate::key_manager::{Secret, SecretMaterial, KeyManager};
-use crate::message::{JwsProtected, JweProtected};
+use crate::message::{JweProtected, JwsProtected};
 use crate::message_packing::{KeyManagerPacking, MessageError};
 use crate::storage::{KeyStorage, StoredKey};
 
@@ -121,7 +119,9 @@ impl AgentKeyManager {
             for (did, secret) in secrets.iter() {
                 // Extract key type from the key
                 let key_type = match secret.secret_material {
-                    SecretMaterial::JWK { ref private_key_jwk } => {
+                    SecretMaterial::JWK {
+                        ref private_key_jwk,
+                    } => {
                         let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                         let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
 
@@ -136,15 +136,19 @@ impl AgentKeyManager {
 
                 // Get private and public keys from the JWK
                 let private_key_b64 = match &secret.secret_material {
-                    SecretMaterial::JWK { private_key_jwk } => {
-                        private_key_jwk.get("d").and_then(|v| v.as_str()).unwrap_or("").to_string()
-                    }
+                    SecretMaterial::JWK { private_key_jwk } => private_key_jwk
+                        .get("d")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                 };
-                
+
                 let public_key_b64 = match &secret.secret_material {
-                    SecretMaterial::JWK { private_key_jwk } => {
-                        private_key_jwk.get("x").and_then(|v| v.as_str()).unwrap_or("").to_string()
-                    }
+                    SecretMaterial::JWK { private_key_jwk } => private_key_jwk
+                        .get("x")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
                 };
 
                 // Create a StoredKey and add to key storage
@@ -621,13 +625,13 @@ impl KeyManager for AgentKeyManager {
             })?;
 
         // Parse the protected header
-        let protected: JwsProtected = serde_json::from_slice(&protected_bytes)
-            .map_err(|e| {
-                Error::Serialization(format!("Failed to parse protected header: {}", e))
-            })?;
+        let protected: JwsProtected = serde_json::from_slice(&protected_bytes).map_err(|e| {
+            Error::Serialization(format!("Failed to parse protected header: {}", e))
+        })?;
 
         // Resolve the verification key
-        let verification_key = KeyManager::resolve_verification_key(self, &signature.header.kid).await?;
+        let verification_key =
+            KeyManager::resolve_verification_key(self, &signature.header.kid).await?;
 
         // Decode the signature
         let signature_bytes = base64::engine::general_purpose::STANDARD

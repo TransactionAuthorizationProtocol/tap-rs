@@ -69,8 +69,8 @@ pub use agent_key::{
     VerificationKey,
 };
 pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
-pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
 pub use message::SecurityMode;
+pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
 pub use tap_msg::didcomm::PlainMessage;
 
 // Native-only DID resolver re-exports

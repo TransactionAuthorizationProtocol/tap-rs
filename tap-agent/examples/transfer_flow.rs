@@ -14,8 +14,8 @@ use std::sync::Arc;
 use tap_agent::agent::{Agent, TapAgent};
 use tap_agent::agent_key_manager::AgentKeyManager;
 use tap_agent::config::AgentConfig;
-use tap_agent::KeyManager;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_agent::KeyManager;
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle, Transfer};
 use tap_msg::Participant;
@@ -133,7 +133,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(())
     })
 }
-
 
 /// Create a transfer message
 fn create_transfer_message(

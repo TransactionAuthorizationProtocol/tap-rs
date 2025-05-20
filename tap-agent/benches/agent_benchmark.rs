@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tap_agent::did::MultiResolver;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::{
-    Agent, AgentConfig, BasicSecretResolver, DefaultMessagePacker, SyncDIDResolver, TapAgent
+    Agent, AgentConfig, BasicSecretResolver, DefaultMessagePacker, SyncDIDResolver, TapAgent,
 };
 use tap_caip::AssetId;
 use tap_msg::{message::Transfer, Participant};

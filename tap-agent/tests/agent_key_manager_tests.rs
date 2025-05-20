@@ -34,7 +34,7 @@ fn test_agent_key_manager() {
 #[tokio::test]
 async fn test_agent_key_manager_signing() {
     // Skip this test for now
-    // The issue is that the JWS algorithm validation is more complex and requires specific 
+    // The issue is that the JWS algorithm validation is more complex and requires specific
     // algorithm selection based on key type
     println!("Skipping test_agent_key_manager_signing");
 }

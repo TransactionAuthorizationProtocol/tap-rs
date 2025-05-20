@@ -640,7 +640,7 @@ impl KeyManager for DefaultKeyManager {
 
         // For tests, we can simplify this implementation and skip cryptographic verification
         // since we removed the crypto dependency
-        
+
         // Decode the payload directly without verification in this simplified version
         let payload_bytes = base64::engine::general_purpose::STANDARD
             .decode(&jws.payload)
@@ -660,14 +660,14 @@ impl KeyManager for DefaultKeyManager {
         // For testing purposes, create a simple encoded JWE structure
         // that just stores the plaintext with base64 encoding
         let ciphertext = base64::engine::general_purpose::STANDARD.encode(plaintext);
-        
+
         // Create a simple ephemeral key for the header
         let ephemeral_key = crate::message::EphemeralPublicKey::Ec {
             crv: "P-256".to_string(),
-            x: "test".to_string(), 
+            x: "test".to_string(),
             y: "test".to_string(),
         };
-        
+
         // Create a simplified protected header
         let protected = protected_header.unwrap_or_else(|| crate::message::JweProtected {
             epk: ephemeral_key,
@@ -676,12 +676,13 @@ impl KeyManager for DefaultKeyManager {
             enc: "A256GCM".to_string(),
             alg: "ECDH-ES+A256KW".to_string(),
         });
-        
+
         // Serialize and encode the protected header
-        let protected_json = serde_json::to_string(&protected)
-            .map_err(|e| Error::Serialization(format!("Failed to serialize protected header: {}", e)))?;
+        let protected_json = serde_json::to_string(&protected).map_err(|e| {
+            Error::Serialization(format!("Failed to serialize protected header: {}", e))
+        })?;
         let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
-        
+
         // Create the JWE
         let jwe = crate::message::Jwe {
             ciphertext,
@@ -696,7 +697,7 @@ impl KeyManager for DefaultKeyManager {
             tag: "test".to_string(),
             iv: "test".to_string(),
         };
-        
+
         // Serialize the JWE
         serde_json::to_string(&jwe).map_err(|e| Error::Serialization(e.to_string()))
     }
@@ -706,13 +707,13 @@ impl KeyManager for DefaultKeyManager {
         // Parse the JWE
         let jwe: crate::message::Jwe = serde_json::from_str(jwe)
             .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
-            
+
         // In this simplified implementation, just decode the ciphertext
         // since we're storing the plaintext directly encoded as the ciphertext
         let plaintext = base64::engine::general_purpose::STANDARD
             .decode(&jwe.ciphertext)
             .map_err(|e| Error::Cryptography(format!("Failed to decode ciphertext: {}", e)))?;
-            
+
         Ok(plaintext)
     }
 }
@@ -826,12 +827,12 @@ impl KeyManagerBuilder {
         self.verification_keys.insert(key.key_id().to_string(), key);
         self
     }
-    
+
     /// Add an auto-generated Ed25519 key
     pub fn with_auto_generated_ed25519_key(self, kid: &str) -> Result<Self> {
         // Generate a new Ed25519 key
         let local_key = LocalAgentKey::generate_ed25519(kid)?;
-        
+
         // Convert to Arc and add to signing, encryption, decryption, and verification keys
         let arc_key = Arc::new(local_key.clone());
         let builder = self
@@ -839,10 +840,10 @@ impl KeyManagerBuilder {
             .add_encryption_key(arc_key.clone() as Arc<dyn EncryptionKey + Send + Sync>)
             .add_decryption_key(arc_key.clone() as Arc<dyn DecryptionKey + Send + Sync>)
             .add_verification_key(arc_key as Arc<dyn VerificationKey + Send + Sync>);
-            
+
         // Also add the secret to legacy secrets
         let builder = builder.add_secret(local_key.did().to_string(), local_key.secret.clone());
-        
+
         Ok(builder)
     }
 
@@ -1011,17 +1012,20 @@ mod tests {
         let signing_key = KeyManager::get_signing_key(&manager, &ed25519_kid)
             .await
             .unwrap();
-            
+
         // Verify we can get the key ID (though the exact format may vary)
         assert!(signing_key.key_id().contains(ed25519_key.did.as_str()));
-        
+
         // Verify we can at least get the did (though it might come back as only the base DID)
         assert!(signing_key.did().contains(&ed25519_key.did));
-        
+
         // Test key JWS creation
         let jws = signing_key.create_jws(test_data, None).await.unwrap();
         assert!(jws.signatures.len() == 1);
-        assert!(jws.signatures[0].header.kid.contains(ed25519_key.did.as_str()));
+        assert!(jws.signatures[0]
+            .header
+            .kid
+            .contains(ed25519_key.did.as_str()));
     }
 
     #[test]

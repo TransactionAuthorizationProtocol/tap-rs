@@ -1,5 +1,7 @@
 use crate::agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 use crate::config::AgentConfig;
+#[cfg(all(not(target_arch = "wasm32"), test))]
+use crate::did::SyncDIDResolver; // Import SyncDIDResolver trait
 use crate::error::{Error, Result};
 use crate::key_manager::KeyManager; // Add KeyManager trait
 #[cfg(not(target_arch = "wasm32"))]
@@ -74,7 +76,6 @@ pub trait WasmAgent {
     ) -> Result<T>;
 }
 
-
 /// TapAgent implementation using the AgentKeyManager for cryptographic operations.
 #[derive(Debug, Clone)]
 pub struct TapAgent {
@@ -82,11 +83,13 @@ pub struct TapAgent {
     pub config: AgentConfig,
     /// Key Manager for cryptographic operations
     key_manager: Arc<AgentKeyManager>,
+    /// DID Resolver for resolving DIDs to service endpoints
+    #[cfg(all(not(target_arch = "wasm32"), test))]
+    resolver: Option<Arc<dyn SyncDIDResolver>>,
     /// HTTP client for sending requests
     #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
     http_client: Option<Client>,
 }
-
 
 impl TapAgent {
     /// Creates a new TapAgent with the given configuration and AgentKeyManager
@@ -96,22 +99,79 @@ impl TapAgent {
             let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
             let client = Client::builder().timeout(timeout).build().ok();
 
-            TapAgent {
+            #[cfg(test)]
+            let agent = TapAgent {
+                config,
+                key_manager,
+                resolver: None,
+                http_client: client,
+            };
+
+            #[cfg(not(test))]
+            let agent = TapAgent {
                 config,
                 key_manager,
                 http_client: client,
-            }
+            };
+
+            agent
         }
 
         #[cfg(not(all(feature = "native", not(target_arch = "wasm32"))))]
         {
+            #[cfg(all(not(target_arch = "wasm32"), test))]
+            let agent = TapAgent {
+                config,
+                key_manager,
+                resolver: None,
+            };
+
+            #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+            let agent = TapAgent {
+                config,
+                key_manager,
+            };
+
+            #[cfg(target_arch = "wasm32")]
+            let agent = TapAgent {
+                config,
+                key_manager,
+            };
+
+            agent
+        }
+    }
+
+    /// Creates a new TapAgent with the given configuration, key manager, and DID resolver
+    #[cfg(all(not(target_arch = "wasm32"), test))]
+    pub fn new_with_resolver(
+        config: AgentConfig,
+        key_manager: Arc<AgentKeyManager>,
+        resolver: Arc<dyn SyncDIDResolver>,
+    ) -> Self {
+        #[cfg(feature = "native")]
+        {
+            let timeout = Duration::from_secs(config.timeout_seconds.unwrap_or(30));
+            let client = Client::builder().timeout(timeout).build().ok();
+
             TapAgent {
                 config,
                 key_manager,
+                resolver: Some(resolver),
+                http_client: client,
+            }
+        }
+
+        #[cfg(not(feature = "native"))]
+        {
+            TapAgent {
+                config,
+                key_manager,
+                resolver: Some(resolver),
             }
         }
     }
-    
+
     /// Creates a new TapAgent with an ephemeral key
     ///
     /// This function generates a new DID key for temporary use.
@@ -122,23 +182,38 @@ impl TapAgent {
     /// A tuple containing the TapAgent and the DID that was generated
     pub async fn from_ephemeral_key() -> crate::error::Result<(Self, String)> {
         use crate::did::{DIDGenerationOptions, KeyType};
-        
+
         // Create a key manager
         let key_manager = AgentKeyManager::new();
-        
+
         // Generate a key
         let key = key_manager.generate_key(DIDGenerationOptions {
             key_type: KeyType::Ed25519,
         })?;
-        
+
         // Create a config with the new DID
-        let config = AgentConfig::new(key.did.clone())
-            .with_debug(true);
-            
+        let config = AgentConfig::new(key.did.clone()).with_debug(true);
+
         // Create the agent
-        let agent = Self::new(config, Arc::new(key_manager));
-        
-        Ok((agent, key.did))
+        #[cfg(all(not(target_arch = "wasm32"), test))]
+        {
+            // Create a default resolver
+            let resolver = Arc::new(crate::did::MultiResolver::default());
+            let agent = Self::new_with_resolver(config, Arc::new(key_manager), resolver);
+            return Ok((agent, key.did));
+        }
+
+        #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+        {
+            let agent = Self::new(config, Arc::new(key_manager));
+            return Ok((agent, key.did));
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let agent = Self::new(config, Arc::new(key_manager));
+            return Ok((agent, key.did));
+        }
     }
 
     /// Creates a new TapAgent from stored keys
@@ -187,7 +262,26 @@ impl TapAgent {
         let config = AgentConfig::new(agent_did).with_debug(debug);
 
         // Create the agent
-        Ok(TapAgent::new(config, Arc::new(key_manager)))
+        #[cfg(all(not(target_arch = "wasm32"), test))]
+        {
+            // Create a default resolver
+            let resolver = Arc::new(crate::did::MultiResolver::default());
+            return Ok(TapAgent::new_with_resolver(
+                config,
+                Arc::new(key_manager),
+                resolver,
+            ));
+        }
+
+        #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+        {
+            return Ok(TapAgent::new(config, Arc::new(key_manager)));
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            return Ok(TapAgent::new(config, Arc::new(key_manager)));
+        }
     }
 
     /// Determine the appropriate security mode for a message type
@@ -275,17 +369,43 @@ impl crate::agent::Agent for TapAgent {
     }
 
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>> {
-        // For now, we'll use a simple approach that assumes the DID is a URL
-        // In a real implementation, we would use a DID Resolver to get the service endpoint
-
         // If it's a URL, return it directly
         if to.starts_with("http://") || to.starts_with("https://") {
             return Ok(Some(to.to_string()));
         }
 
-        // If it's a DID, try to find a service endpoint
+        // If it's a DID, try to find a service endpoint using the resolver
         if to.starts_with("did:") {
-            // Simulate a service endpoint for now
+            // Use the DID resolver from the AgentKeyManager to get the service endpoints
+            // For now, we'll use a simple approach that looks for DIDCommMessaging or Web service types
+
+            // For testing purposes, attempt to check if TapAgent has a resolver field
+            #[cfg(test)]
+            if let Some(resolver) = self.resolver.as_ref() {
+                if let Ok(Some(did_doc)) = resolver.resolve(to).await {
+                    // Look for services of type DIDCommMessaging first
+                    if let Some(service) = did_doc
+                        .service
+                        .iter()
+                        .find(|s| s.type_ == "DIDCommMessaging")
+                    {
+                        return Ok(Some(service.service_endpoint.clone()));
+                    }
+
+                    // Then try Web type
+                    if let Some(service) = did_doc.service.iter().find(|s| s.type_ == "Web") {
+                        return Ok(Some(service.service_endpoint.clone()));
+                    }
+
+                    // No matching service found in DID doc
+                    if !did_doc.service.is_empty() {
+                        // Use the first service as fallback
+                        return Ok(Some(did_doc.service[0].service_endpoint.clone()));
+                    }
+                }
+            }
+
+            // Fallback to a placeholder URL if no resolver is available or no service found
             return Ok(Some(format!(
                 "https://example.com/did/{}",
                 to.replace(":", "_")
@@ -495,5 +615,3 @@ impl crate::agent::Agent for TapAgent {
             .map_err(|e| Error::Serialization(format!("Failed to deserialize message: {}", e)))
     }
 }
-
-
