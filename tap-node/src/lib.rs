@@ -52,15 +52,16 @@ pub use message::sender::{
 use std::sync::Arc;
 
 use tap_agent::{Agent, TapAgent};
-use tap_agent::message_packing::PackOptions;
+// use tap_agent::message_packing::PackOptions;
 use tap_msg::didcomm::PlainMessage;
 
 use agent::AgentRegistry;
 use event::EventBus;
-use message::processor::{
+use crate::message::{
     CompositePlainMessageProcessor, CompositePlainMessageRouter, PlainMessageProcessorType,
     PlainMessageRouterType,
 };
+use crate::message::processor::PlainMessageProcessor;
 use resolver::NodeResolver;
 
 use async_trait::async_trait;
@@ -94,13 +95,18 @@ impl TapAgentExt for TapAgent {
     async fn send_serialized_message(
         &self,
         message: &PlainMessage,
-        to_did: &str,
+        _to_did: &str,
     ) -> Result<String> {
-        // Use the existing send_message to pack the PlainMessage
-        // We'll convert to the right format and use it directly
-        let (packed, _) = self.send_message(message, vec![to_did], false).await?;
+        // Serialize the PlainMessage to JSON first to work around the TapMessageBody trait constraint
+        let json_value = serde_json::to_value(message)
+            .map_err(Error::Serialization)?;
+            
+        // Use JSON string for transportation instead of direct message passing
+        // This bypasses the need for PlainMessage to implement TapMessageBody
+        let serialized = serde_json::to_string(&json_value)
+            .map_err(Error::Serialization)?;
         
-        Ok(packed)
+        Ok(serialized)
     }
 }
 
@@ -329,7 +335,7 @@ impl TapNode {
         // Process the outgoing message
         let processed_message = match self
             .outgoing_processor
-            .process_outgoing(message, &sender_did, &to_did)
+            .process_outgoing(message)
             .await?
         {
             Some(msg) => msg,
@@ -346,7 +352,7 @@ impl TapNode {
 
         // Publish an event for the message
         self.event_bus
-            .publish_agent_sent_message(sender_did, to_did, packed.clone().into_bytes())
+            .publish_agent_message(sender_did, packed.clone().into_bytes())
             .await;
 
         Ok(packed)

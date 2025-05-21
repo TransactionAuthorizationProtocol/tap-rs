@@ -48,6 +48,10 @@ pub enum Error {
     /// Configuration error
     #[error("Configuration error: {0}")]
     Configuration(String),
+    
+    /// Message dropped during processing
+    #[error("Message dropped: {0}")]
+    MessageDropped(String),
 }
 
 /// Result type for TAP Node

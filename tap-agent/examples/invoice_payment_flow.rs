@@ -12,10 +12,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::agent::{Agent, TapAgent};
+use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
-use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
-use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle};
@@ -206,21 +205,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Create an agent with the given DID and key material
-async fn create_agent(
-    did: &str,
-    public_key: &str,
-    private_key: &str,
-) -> (Arc<DefaultAgent>, String) {
+async fn create_agent(did: &str, public_key: &str, private_key: &str) -> (Arc<TapAgent>, String) {
     // Create agent configuration
     let agent_config = AgentConfig::new(did.to_string());
 
-    // Create DID resolver
-    let mut did_resolver = MultiResolver::new();
-    did_resolver.register_method("key", KeyResolver::new());
-    let did_resolver = Arc::new(did_resolver);
+    // Create key manager builder
+    let mut builder = AgentKeyManagerBuilder::new();
 
-    // Create secret resolver with the agent's key
-    let mut secret_resolver = BasicSecretResolver::new();
+    // Add the agent's key
     let secret = Secret {
         id: format!("{}#keys-1", did),
         type_: SecretType::JsonWebKey2020,
@@ -234,20 +226,16 @@ async fn create_agent(
         },
     };
 
-    secret_resolver.add_secret(did, secret);
-    let secret_resolver = Arc::new(secret_resolver);
+    // Add the secret to the key manager
+    builder = builder.add_secret(did.to_string(), secret);
 
-    // Create message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        did_resolver,
-        secret_resolver,
-        true,
-    ));
+    // Build the key manager
+    let key_manager = builder.build().expect("Failed to build key manager");
 
-    // Create agent
-    let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));
+    // Create the agent
+    let agent = TapAgent::new(agent_config, Arc::new(key_manager));
 
-    (agent, did.to_string())
+    (Arc::new(agent), did.to_string())
 }
 
 /// Create a payment message with an invoice
