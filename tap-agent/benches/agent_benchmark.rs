@@ -6,54 +6,19 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use tap_agent::did::MultiResolver;
-use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
-use tap_agent::{
-    Agent, AgentConfig, BasicSecretResolver, DefaultMessagePacker, SyncDIDResolver, TapAgent,
-};
+use tap_agent::{Agent, TapAgent};
 use tap_caip::AssetId;
 use tap_msg::{message::Transfer, Participant};
 
-/// Create a test agent with known key material for benchmarking
+/// Create a test agent with ephemeral key for benchmarking
 fn create_test_agent() -> (Arc<TapAgent>, String) {
-    // Create a DID for the agent - using a fixed DID for predictability
-    let did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
+    let rt = tokio::runtime::Runtime::new().unwrap();
 
-    // Create agent config
-    let agent_config = AgentConfig::new(did.clone());
-
-    // Create a secret resolver with the test key
-    let mut secret_resolver = BasicSecretResolver::new();
-
-    // Add a test Ed25519 key with correctly sized private key (32 bytes)
-    let secret = Secret {
-        id: format!("{}#keys-1", did),
-        type_: SecretType::JsonWebKey2020,
-        secret_material: SecretMaterial::JWK {
-            private_key_jwk: serde_json::json!({
-                "kty": "OKP",
-                "kid": format!("{}#keys-1", did),
-                "crv": "Ed25519",
-                "x": "F74Yk9BrwnXVJUEKwDxBfNjOElv1eIHr9QypeZ2DQQg",
-                "d": "9kVnxrZlZW6V2MrNfcXUL8sAle/XX9XBbOxmHKFbvs4="
-            }),
-        },
-    };
-
-    secret_resolver.add_secret(&did, secret);
-
-    // Create DID resolver
-    let did_resolver: Arc<dyn SyncDIDResolver> = Arc::new(MultiResolver::default());
-
-    // Create message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        did_resolver,
-        Arc::new(secret_resolver),
-        false,
-    ));
-
-    // Create agent
-    let agent = Arc::new(TapAgent::new(agent_config, message_packer));
+    // Create agent with ephemeral key
+    let (agent, did) = rt.block_on(async {
+        let (agent, did) = TapAgent::from_ephemeral_key().await.unwrap();
+        (Arc::new(agent), did)
+    });
 
     (agent, did)
 }

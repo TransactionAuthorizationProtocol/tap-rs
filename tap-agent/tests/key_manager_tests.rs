@@ -1,5 +1,5 @@
 use tap_agent::{
-    agent_key::{AgentKey, JwsAlgorithm, SigningKey},
+    agent_key::{AgentKey, JwsAlgorithm},
     error::Result,
     key_manager::KeyManagerBuilder,
     KeyManager,

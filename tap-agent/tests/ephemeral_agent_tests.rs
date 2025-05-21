@@ -7,55 +7,7 @@ use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tokio::test;
 
-#[derive(Debug)]
-struct TestDIDResolver;
 
-impl TestDIDResolver {
-    fn new() -> Self {
-        Self
-    }
-}
-
-#[async_trait::async_trait]
-impl tap_agent::did::DIDMethodResolver for TestDIDResolver {
-    fn method(&self) -> &str {
-        "key"
-    }
-
-    async fn resolve_method(
-        &self,
-        did: &str,
-    ) -> tap_agent::error::Result<Option<tap_agent::did::DIDDoc>> {
-        // Simple mock implementation
-        if did.starts_with("did:key:") {
-            let vm_id = format!("{}#1", did);
-
-            // Create a basic verification method
-            let vm = tap_agent::did::VerificationMethod {
-                id: vm_id.clone(),
-                type_: tap_agent::did::VerificationMethodType::Ed25519VerificationKey2018,
-                controller: did.to_string(),
-                verification_material: tap_agent::did::VerificationMaterial::Base58 {
-                    public_key_base58: "test1234".to_string(),
-                },
-            };
-
-            // Create a basic DID document
-            Ok(Some(tap_agent::did::DIDDoc {
-                id: did.to_string(),
-                verification_method: vec![vm],
-                authentication: vec![vm_id.clone()],
-                key_agreement: vec![],
-                assertion_method: vec![],
-                capability_invocation: vec![],
-                capability_delegation: vec![],
-                service: vec![],
-            }))
-        } else {
-            Ok(None)
-        }
-    }
-}
 
 // Define a simple EmptyMessage for testing if it doesn't exist
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

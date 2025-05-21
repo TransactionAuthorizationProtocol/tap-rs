@@ -2,7 +2,6 @@ use tap_agent::{
     agent_key::{AgentKey, EncryptionKey, JweAlgorithm, JweEncryption, JwsAlgorithm, SigningKey},
     error::Result,
     local_agent_key::{LocalAgentKey, PublicVerificationKey},
-    KeyManager,
 };
 
 #[tokio::test]

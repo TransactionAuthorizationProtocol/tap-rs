@@ -49,8 +49,8 @@
 //!
 //! // Pack a message using the node's send_message method
 //! let packed_message = node.send_message(
-//!     "did:example:sender",
-//!     "did:example:recipient",
+//!     "did:example:sender".to_string(),
+//!     "did:example:recipient".to_string(),
 //!     message
 //! ).await?;
 //!
