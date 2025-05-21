@@ -138,80 +138,9 @@ async fn implement_basic_flow() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### TypeScript Implementation
+### WebAssembly and TypeScript Implementation
 
-```typescript
-import { Participant, Message, MessageType } from "@tap-rs/tap-ts";
-
-async function implementBasicFlow() {
-    // Create agents
-    const originatorAgent = new Participant({
-        nickname: "Originator",
-        // In a real implementation, you would provide or generate keys
-    });
-
-    const beneficiaryAgent = new Participant({
-        nickname: "Beneficiary",
-    });
-
-    const originatorDid = originatorAgent.did;
-    const beneficiaryDid = beneficiaryAgent.did;
-
-    // Step 1: Originator creates and sends Transfer message
-    const transfer = new Message({
-        type: MessageType.TRANSFER,
-    });
-
-    transfer.setTransferData({
-        asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F",
-        amount: "100.0",
-        originatorDid: originatorDid,
-        beneficiaryDid: beneficiaryDid,
-        memo: "Payment for services"
-    });
-
-    console.log("1. Originator sends Transfer message");
-    const transferId = transfer.id;
-
-    // In a real scenario, this would be sent over a transport
-    // For this example, we'll manually handle the messages
-
-    // Step 2: Beneficiary processes the Transfer and responds with Authorize
-    const authorize = new Message({
-        type: MessageType.AUTHORIZE,
-        correlation: transferId,
-    });
-
-    authorize.setAuthorizeData({
-        note: "Transfer authorized, please proceed with on-chain settlement"
-    });
-
-    console.log("2. Beneficiary sends Authorize message");
-
-    // Step 3: Originator processes the Authorize message
-    console.log("3. Originator receives authorization");
-
-    // Step 4: Originator performs the on-chain settlement (simulated here)
-    console.log("4. Originator performs on-chain settlement");
-    const settlementId = "0x1234567890abcdef1234567890abcdef12345678";
-
-    // Step 5: Originator sends a Receipt message confirming settlement
-    const receipt = new Message({
-        type: MessageType.RECEIPT,
-        correlation: transferId,
-    });
-
-    receipt.setReceiptData({
-        settlementId: settlementId,
-        note: "Settlement completed successfully"
-    });
-
-    console.log("5. Originator sends Receipt message");
-
-    // Step 6: Beneficiary processes the Receipt
-    console.log("6. Beneficiary confirms receipt of settlement");
-}
-```
+For information on implementing TAP flows in TypeScript or WebAssembly environments, please refer to the specific documentation in the [tap-ts README](../../tap-ts/README.md).
 
 ## Transfer with Rejection Flow
 

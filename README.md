@@ -90,11 +90,17 @@ Available command-line tools:
    # List stored keys
    tap-agent-cli keys list
    
-   # Pack a plaintext DIDComm message
+   # Pack a plaintext DIDComm message (supports signed, authcrypt, and anoncrypt modes)
    tap-agent-cli pack --input message.json --output packed.json --mode signed
+   tap-agent-cli pack --input message.json --output packed.json --mode authcrypt --recipient did:key:z6Mk...
+   tap-agent-cli pack --input message.json --output packed.json --mode anoncrypt --recipient did:key:z6Mk...
    
    # Unpack a signed or encrypted DIDComm message
    tap-agent-cli unpack --input packed.json --output unpacked.json
+   
+   # Pack/unpack with specific key selection
+   tap-agent-cli pack --input message.json --output packed.json --mode signed --key did:key:z6Mk...
+   tap-agent-cli unpack --input packed.json --output unpacked.json --key did:key:z6Mk...
    ```
 
 2. **tap-http**: Run a TAP HTTP server for DIDComm messaging
@@ -218,27 +224,7 @@ tap-agent-cli keys view did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 tap-agent-cli keys set-default did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 ```
 
-### Using the TypeScript API
-
-```typescript
-import { TAPAgent, DIDKeyType } from '@taprsvp/tap-agent';
-
-// Create a new agent with auto-generated did:key
-const agent = new TAPAgent({
-  nickname: "My Agent",
-  debug: true
-});
-
-// Generate a did:key with specific key type
-const edDID = await agent.generateDID(DIDKeyType.Ed25519);
-console.log(`Generated DID: ${edDID.did}`);
-
-// Generate a did:web
-const webDID = await agent.generateWebDID('example.com', DIDKeyType.P256);
-console.log(`Web DID: ${webDID.did}`);
-```
-
-For more details, see the [DID Generation Documentation](./tap-ts/DID-GENERATION.md).
+For TypeScript and WebAssembly bindings, see the [tap-ts README](./tap-ts/README.md).
 
 ## Common Use Cases
 
@@ -287,6 +273,59 @@ cargo clippy
 # Install command-line tools
 cargo install --path tap-agent
 cargo install --path tap-http
+```
+
+## CLI Tools Reference
+
+### DIDComm Message Packing and Unpacking
+
+The `tap-agent-cli` tool provides commands for packing and unpacking DIDComm messages:
+
+```bash
+# Install the tap-agent CLI
+cargo install tap-agent
+
+# Pack a plaintext message to a signed DIDComm message 
+tap-agent-cli pack --input message.json --output packed.json --mode signed
+
+# Pack using authenticated encryption (requires recipient DID)
+tap-agent-cli pack --input message.json --output packed.json --mode authcrypt --recipient did:key:z6Mk...
+
+# Pack using anonymous encryption (requires recipient DID)
+tap-agent-cli pack --input message.json --output packed.json --mode anoncrypt --recipient did:key:z6Mk...
+
+# Use a specific key for packing (otherwise the default key is used)
+tap-agent-cli pack --input message.json --output packed.json --mode signed --key did:key:z6Mk...
+
+# Unpack a DIDComm message (works with signed, authcrypt, or anoncrypt messages)
+tap-agent-cli unpack --input packed.json --output unpacked.json
+
+# Unpack using a specific key (otherwise all available keys are tried)
+tap-agent-cli unpack --input packed.json --output unpacked.json --key did:key:z6Mk...
+```
+
+The input message.json should be a plain JSON object following the DIDComm message format:
+
+```json
+{
+  "id": "1234567890",
+  "type": "https://tap.rsvp/schema/1.0#Transfer",
+  "from": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+  "to": ["did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL"],
+  "body": {
+    "asset": "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "originator": {
+      "@id": "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+      "role": "originator"
+    },
+    "beneficiary": {
+      "@id": "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+      "role": "beneficiary"
+    },
+    "amount": "100.0",
+    "agents": []
+  }
+}
 ```
 
 ## Running TAP HTTP Server

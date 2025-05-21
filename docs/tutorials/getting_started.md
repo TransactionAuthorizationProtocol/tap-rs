@@ -9,7 +9,6 @@ Before starting, make sure you have:
 - Rust 1.71.0 or later installed
 - Cargo installed
 - Basic familiarity with Rust and async programming
-- (Optional) Node.js 14+ for TypeScript examples
 
 ## 1. Adding TAP-RS to Your Project
 
@@ -26,17 +25,11 @@ tap-caip = "0.2.0"
 tokio = { version = "1", features = ["full"] }
 ```
 
-### TypeScript/JavaScript Project
+### WebAssembly and TypeScript Support
 
-If you're using TAP-RS in a browser or Node.js environment:
-
-```bash
-# Using npm
-npm install @tap-rs/tap-ts
-
-# Using yarn
-yarn add @tap-rs/tap-ts
-```
+For information on using TAP-RS in browser environments or with TypeScript, see:
+- [tap-wasm README](../../tap-wasm/README.md)
+- [tap-ts README](../../tap-ts/README.md)
 
 ## 2. Creating a TAP Agent
 
@@ -111,25 +104,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### In TypeScript
-
-```typescript
-import { Participant, wasmLoader } from "@tap-rs/tap-ts";
-
-async function main() {
-    // Load the WASM module
-    await wasmLoader.load();
-
-    // Create a participant (this will generate a DID key by default)
-    const participant = new Participant({
-        nickname: "My TypeScript Participant"
-    });
-
-    console.log(`Created participant with DID: ${participant.did}`);
-}
-
-main().catch(console.error);
-```
 
 ## 3. Creating and Sending TAP Messages
 
@@ -193,29 +167,6 @@ async fn create_and_send_transfer(
 }
 ```
 
-### In TypeScript
-
-```typescript
-import { Message, MessageType } from "@tap-rs/tap-ts";
-
-// Create a TAP message
-const createTransferMessage = () => {
-    const transfer = new Message({
-        type: MessageType.TRANSFER,
-    });
-
-    // Set transfer data
-    transfer.setTransferData({
-        asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F", // DAI token
-        amount: "100.0",
-        originatorDid: "did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH",
-        beneficiaryDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-        memo: "Payment for services"
-    });
-
-    return transfer;
-};
-```
 
 ## 4. Setting Up a TAP Node
 
@@ -239,32 +190,6 @@ async fn create_node() -> Result<Arc<Node>, Box<dyn std::error::Error>> {
 }
 ```
 
-### In TypeScript
-
-```typescript
-import { TapNode, Participant } from "@tap-rs/tap-ts";
-
-// Create a TAP node
-const node = new TapNode({
-    debug: true,
-    network: {
-        peers: ["https://example.com/tap"], // Optional peers
-    },
-});
-
-// Create a participant
-const participant = new Participant({
-    nickname: "Alice",
-});
-
-// Register the participant with the node
-node.registerParticipant(participant);
-
-// Subscribe to messages on the node
-const unsubscribe = node.subscribeToMessages((message, metadata) => {
-    console.log(`Received message: ${message.id} from ${metadata.fromDid}`);
-});
-```
 
 ## 5. Processing Incoming Messages
 
@@ -304,35 +229,6 @@ async fn process_incoming_message(
 }
 ```
 
-### In TypeScript
-
-```typescript
-import { Participant, Message, MessageType } from "@tap-rs/tap-ts";
-
-// Register a message handler for a specific message type
-participant.registerMessageHandler(MessageType.TRANSFER, (message, metadata) => {
-    console.log("Received transfer message:");
-    console.log("  From:", metadata.fromDid);
-
-    const transferData = message.getTransferData();
-    console.log("  Amount:", transferData.amount);
-    console.log("  Asset:", transferData.asset);
-
-    // Create an authorize response
-    const authorize = new Message({
-        type: MessageType.AUTHORIZE,
-        correlation: message.id, // Link to the transfer message
-    });
-
-    // Set authorize data
-    authorize.setAuthorizeData({
-        note: "Transfer authorized"
-    });
-
-    // Send the response
-    return participant.sendMessage(metadata.fromDid, authorize);
-});
-```
 
 ## 6. Complete End-to-End Example
 
@@ -425,9 +321,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### In TypeScript
-
-See the [basic_usage.ts](../../tap-ts/examples/basic_usage.ts) example for a complete TypeScript implementation.
 
 ## Next Steps
 
@@ -435,7 +328,6 @@ Now that you've learned the basics of using TAP-RS, you might want to explore:
 
 - [Implementing TAP flows](./implementing_tap_flows.md) - A detailed guide on implementing complete TAP flows
 - [Security best practices](./security_best_practices.md) - How to secure your TAP implementation
-- [WASM integration](./wasm_integration.md) - How to use TAP-RS in browser environments
 - [API Reference](../api/index.md) - Complete API documentation
 
 For questions or support, please open an issue on the [TAP-RS GitHub repository](https://github.com/notabene/tap-rs).

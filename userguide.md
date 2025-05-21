@@ -62,29 +62,7 @@ let generated_key = generator.generate_did(options)?;
 println!("Generated DID: {}", generated_key.did);
 ```
 
-### Using the TypeScript API
 
-When working with the TypeScript bindings, you can auto-generate DIDs or create them explicitly:
-
-```typescript
-import { TAPAgent, DIDKeyType } from '@taprsvp/tap-agent';
-
-// Create a new agent - an Ed25519 did:key will be automatically generated
-const agent = new TAPAgent({
-  nickname: "My Agent",
-  debug: true
-});
-
-// Generate a did:key with specific key type
-const edDID = await agent.generateDID(DIDKeyType.Ed25519);
-console.log(`Generated DID: ${edDID.did}`);
-
-// Generate a did:web
-const webDID = await agent.generateWebDID('example.com', DIDKeyType.P256);
-console.log(`Web DID: ${webDID.did}`);
-```
-
-For more details, see the [DID Generation Documentation](./tap-ts/DID-GENERATION.md).
 
 ## Example: Transfer Authorization Flow
 
@@ -134,54 +112,9 @@ TAP uses Chain Agnostic Identifiers (CAIP) for blockchain references:
 
 ## WebAssembly Integration
 
-TAP-RS includes comprehensive WebAssembly support for integration in browser and Node.js environments:
+TAP-RS includes WebAssembly support for integration in browser and Node.js environments through the `tap-wasm` crate and TypeScript bindings in the `tap-ts` package.
 
-### Browser Usage
-
-```javascript
-import init, {
-  init_tap_wasm,
-  Message,
-  TapAgent,
-  MessageType
-} from 'tap-wasm';
-
-async function main() {
-  // Initialize the WASM module
-  await init();
-  init_tap_wasm();
-
-  // Create a new agent with auto-generated DID
-  const agent = new TapAgent({
-    nickname: "Test Agent",
-    debug: true
-  });
-
-  // Generate and process TAP messages
-  const message = new Message('msg_123', 'Transfer', '1.0');
-
-  // Set the transfer message body
-  message.set_transfer_body({
-    asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
-    originator: {
-      id: agent.get_did(),
-      role: "originator"
-    },
-    beneficiary: {
-      id: "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
-      role: "beneficiary"
-    },
-    amount: "100.0",
-    agents: [],
-    memo: "Test transfer"
-  });
-
-  // Sign the message
-  agent.sign_message(message);
-}
-```
-
-See the [tap-wasm README](./tap-wasm/README.md) for more detailed information on WASM bindings.
+For details on the WASM integration, see the [tap-wasm README](./tap-wasm/README.md) and [tap-ts README](./tap-ts/README.md).
 
 ## Key Features
 

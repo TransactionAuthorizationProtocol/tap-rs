@@ -31,7 +31,7 @@ npm install @taprsvp/tap-agent
 import { TAPAgent } from '@taprsvp/tap-agent';
 
 // Create an agent (a new DID will be generated automatically)
-// Note: Using the static create method which handles WASM initialization
+// IMPORTANT: Always use the static create() method which properly initializes WASM
 const agent = await TAPAgent.create({
   nickname: "My Agent",
   debug: true
@@ -39,6 +39,9 @@ const agent = await TAPAgent.create({
 
 // The agent now has a valid DID automatically
 console.log(`Agent DID: ${agent.did}`); // e.g., did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+// INCORRECT USAGE - DO NOT USE THE CONSTRUCTOR DIRECTLY
+// const agent = new TAPAgent({ nickname: "My Agent" }); // Will cause errors when WASM isn't initialized!
 ```
 
 ### Creating and Sending Messages
@@ -65,6 +68,12 @@ console.log("Packed message:", packedResult.message);
 
 // In a real application, you would send this packed message to the recipient
 // ...
+
+// The recipient would create their agent with the async factory method
+const recipientAgent = await TAPAgent.create({
+  nickname: "Recipient Agent", 
+  debug: true
+});
 
 // The recipient would then unpack the message
 const unpackedMessage = await recipientAgent.unpackMessage(packedResult.message);
@@ -158,6 +167,7 @@ Register handlers for different message types:
 
 ```typescript
 // Register a handler for transfer messages
+// Note: Make sure to register handlers AFTER agent creation is complete
 agent.onMessage("Transfer", async (message) => {
   console.log("Received transfer message:", message);
   
@@ -219,6 +229,31 @@ npm test
 
 # Run tests in watch mode
 npm run test:watch
+```
+
+#### Testing Considerations
+
+When writing tests, remember that WASM initialization requires special handling:
+
+```typescript
+import { TAPAgent } from '../agent';
+import { beforeEach, describe, expect, it } from 'vitest';
+
+describe('TAPAgent', () => {
+  let agent: TAPAgent;
+
+  beforeEach(async () => {
+    // IMPORTANT: Always use the async create() method in tests
+    agent = await TAPAgent.create({ nickname: "Test Agent" });
+  });
+
+  it('should have a valid DID', () => {
+    expect(agent.did).toBeDefined();
+    expect(agent.did).toMatch(/^did:key:/);
+  });
+
+  // More tests...
+});
 ```
 
 ## License

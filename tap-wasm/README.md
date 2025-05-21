@@ -34,46 +34,59 @@ import init, {
   MessageType 
 } from 'tap-wasm';
 
-async function main() {
-  // Initialize the WASM module
-  await init();
-
-  // Create a new agent
-  const agent = new WasmTapAgent({
-    nickname: "Test Agent",
-    debug: true
-  });
-  console.log(`Agent created with DID: ${agent.get_did()}`);
-
-  // Create a transfer message
-  const message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-  
-  // Set the transfer message body
-  message.body = {
-    asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
-    originator: {
-      '@id': agent.get_did(),
-      role: "originator"
-    },
-    beneficiary: {
-      '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
-      role: "beneficiary"
-    },
-    amount: "100.0",
-    agents: [],
-    memo: "Test transfer"
-  };
-
-  // Pack the message
-  const packedResult = await agent.packMessage(message);
-  console.log("Packed message:", packedResult.message);
-  
-  // Unpack the message
-  const unpackedMessage = await agent.unpackMessage(packedResult.message);
-  console.log("Unpacked message:", unpackedMessage);
+// Recommended pattern using a static create method
+class TAPAgent {
+  static async create(options = {}) {
+    // Initialize WASM first
+    await init();
+    
+    // Then create the agent
+    return new WasmTapAgent(options);
+  }
 }
 
-main().catch(console.error);
+async function main() {
+  try {
+    // Create an agent using the static factory method
+    // This ensures WASM is initialized before agent creation
+    const agent = await TAPAgent.create({
+      nickname: "Test Agent",
+      debug: true
+    });
+    console.log(`Agent created with DID: ${agent.get_did()}`);
+
+    // Create a transfer message
+    const message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
+    
+    // Set the transfer message body
+    message.body = {
+      asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+      originator: {
+        '@id': agent.get_did(),
+        role: "originator"
+      },
+      beneficiary: {
+        '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+        role: "beneficiary"
+      },
+      amount: "100.0",
+      agents: [],
+      memo: "Test transfer"
+    };
+
+    // Pack the message
+    const packedResult = await agent.packMessage(message);
+    console.log("Packed message:", packedResult.message);
+    
+    // Unpack the message
+    const unpackedMessage = await agent.unpackMessage(packedResult.message);
+    console.log("Unpacked message:", unpackedMessage);
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
+
+main();
 ```
 
 ### Node.js
@@ -81,24 +94,54 @@ main().catch(console.error);
 ```javascript
 const tap_wasm = require('tap-wasm');
 
-async function main() {
-  // Initialize the WASM module
-  await tap_wasm.default();
-
-  // Create a new agent
-  const agent = new tap_wasm.WasmTapAgent({
-    nickname: "Test Agent",
-    debug: true
-  });
-  
-  // Create a transfer message
-  const message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-  
-  // Set the message body and pack it
-  // ...similar to the browser example
+// Recommended pattern using a static create method
+class TAPAgent {
+  static async create(options = {}) {
+    // Initialize WASM first
+    await tap_wasm.default();
+    
+    // Then create the agent
+    return new tap_wasm.WasmTapAgent(options);
+  }
 }
 
-main().catch(console.error);
+async function main() {
+  try {
+    // Create an agent using the static factory method
+    // This ensures WASM is initialized before agent creation
+    const agent = await TAPAgent.create({
+      nickname: "Test Agent",
+      debug: true
+    });
+    console.log(`Agent created with DID: ${agent.get_did()}`);
+    
+    // Create a transfer message
+    const message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
+    
+    // Set the message body (similar to browser example)
+    message.body = {
+      asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+      originator: {
+        '@id': agent.get_did(),
+        role: "originator"
+      },
+      beneficiary: {
+        '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
+        role: "beneficiary"
+      },
+      amount: "100.0",
+      agents: []
+    };
+    
+    // Pack and send the message
+    const packed = await agent.packMessage(message);
+    console.log("Message packed successfully:", packed.message);
+  } catch (error) {
+    console.error("Error:", error);
+  }
+}
+
+main();
 ```
 
 ## API Reference
@@ -142,11 +185,29 @@ message.pthid = "parent_thread_123"; // Parent thread ID
 #### Creating an Agent
 
 ```javascript
-// Create a new agent
-const agent = new WasmTapAgent({
+// RECOMMENDED: Create a new agent using static factory pattern
+class TAPAgent {
+  static async create(options = {}) {
+    // Initialize WASM first
+    await init();
+    
+    // Then create the agent
+    return new WasmTapAgent(options);
+  }
+}
+
+// Use the factory method (RECOMMENDED)
+const agent = await TAPAgent.create({
   did: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK", // Optional - generated if not provided
   nickname: "Example Agent",
   debug: true // Optional - logs to console if true
+});
+
+// ALTERNATIVELY: Create directly (NOT RECOMMENDED - may cause WASM initialization errors)
+// Only use this approach if you're certain WASM is already initialized
+const agent2 = new WasmTapAgent({
+  nickname: "Example Agent",
+  debug: true
 });
 ```
 
