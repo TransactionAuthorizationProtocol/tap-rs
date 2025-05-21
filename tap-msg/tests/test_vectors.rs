@@ -660,6 +660,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                             role: o.role.clone(),
                             policies: None, // Ignoring policies for now due to type mismatch
                             leiCode: o.lei_code.clone(),
+                            name: None,
                         }
                     } else if !transfer_body.agents.is_empty() {
                         // Use first agent as originator
@@ -691,6 +692,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                         role: b.role.clone(),
                         policies: None, // Ignoring policies for now due to type mismatch
                         leiCode: b.lei_code.clone(),
+                        name: None,
                     });
 
                     // Convert agents - exclude first agent if we used it as originator

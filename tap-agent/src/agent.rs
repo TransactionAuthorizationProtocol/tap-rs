@@ -284,6 +284,40 @@ impl TapAgent {
         }
     }
 
+    /// Creates a new TapAgent from an existing private key
+    ///
+    /// This function creates a new TapAgent using a provided private key,
+    /// which can be useful for integrating with external key management systems
+    /// or when keys are generated outside the TAP agent.
+    ///
+    /// # Arguments
+    ///
+    /// * `private_key` - The private key bytes
+    /// * `key_type` - The type of key (Ed25519, P256, or Secp256k1)
+    /// * `debug` - Whether to enable debug mode
+    ///
+    /// # Returns
+    ///
+    /// A Result containing either the created agent or an error
+    /// Currently disabled - this will be improved in a future version
+    ///
+    /// Creates a new TapAgent from an existing private key
+    ///
+    /// This function creates a new TapAgent using a provided private key,
+    /// which can be useful for integrating with external key management systems
+    /// or when keys are generated outside the TAP agent.
+    #[allow(unused_variables)]
+    pub async fn from_private_key(
+        private_key: &[u8],
+        key_type: crate::did::KeyType,
+        debug: bool,
+    ) -> Result<(Self, String)> {
+        // For now, fallback to ephemeral key instead
+        Err(Error::NotImplemented(
+            "from_private_key is not yet implemented".to_string(),
+        ))
+    }
+
     /// Determine the appropriate security mode for a message type
     ///
     /// This method implements TAP protocol rules for which security modes

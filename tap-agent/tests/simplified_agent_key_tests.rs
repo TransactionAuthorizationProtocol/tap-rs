@@ -1,8 +1,5 @@
 use serde_json::Value;
-use tap_agent::{
-    agent_key::AgentKey,
-    error::Result,
-};
+use tap_agent::{agent_key::AgentKey, error::Result};
 
 /// Basic test to check that we can import and use the AgentKey traits
 #[tokio::test]

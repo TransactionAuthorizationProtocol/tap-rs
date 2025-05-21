@@ -7,9 +7,8 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
-use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_agent::storage::KeyStorage;
-use tap_agent::DefaultAgent;
+use tap_agent::{Agent, AgentConfig, Secret, SecretMaterial, SecretType, TapAgent};
 use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
@@ -132,216 +131,6 @@ fn print_help() {
     println!("      2. Fall back to an ephemeral agent if no stored keys exist");
 }
 
-/// Create an agent for the server
-///
-/// This will try in the following order:
-/// 1. Use the provided agent DID and key from arguments or environment variables
-/// 2. Load keys from the stored keys in ~/.tap/keys.json
-/// 3. Create an ephemeral agent with a new DID:key
-fn create_agent(
-    agent_did: Option<String>,
-    agent_key: Option<String>,
-) -> Result<(DefaultAgent, String), Box<dyn Error>> {
-    match (agent_did, agent_key) {
-        (Some(_), None) => Err("Agent key must be provided when using a custom agent DID".into()),
-        (None, Some(_)) => Err("Agent DID must be provided when using a custom agent key".into()),
-        (Some(did), Some(key)) => {
-            info!("Loading agent from provided DID and key");
-
-            // First, validate the DID format
-            if !did.starts_with("did:") {
-                return Err("Invalid DID format. DID must start with 'did:'".into());
-            }
-
-            // Create a DID resolver
-            let did_resolver = std::sync::Arc::new(tap_agent::did::MultiResolver::default());
-
-            // Create a basic secret resolver for the key
-            let mut secret_resolver = tap_agent::crypto::BasicSecretResolver::new();
-
-            // Try to parse the key as a JWK first
-            // This block is now handled directly in the add_secret call
-
-            // Add the secret to the resolver
-            secret_resolver.add_secret(
-                &did,
-                if key.trim().starts_with('{') {
-                    // The key appears to be a JSON object, assume it's a JWK
-                    info!("Using JWK format key");
-
-                    // Parse JWK
-                    let jwk: serde_json::Value = match serde_json::from_str(&key) {
-                        Ok(jwk) => jwk,
-                        Err(e) => return Err(format!("Failed to parse JWK: {}", e).into()),
-                    };
-
-                    // Create a secret from the JWK
-                    let private_key_jwk = jwk.clone();
-
-                    // Create a DIDComm secret
-                    Secret {
-                        type_: SecretType::JsonWebKey2020, // Use the correct variant for all key types
-                        id: format!("{}#keys-1", did),
-                        secret_material: SecretMaterial::JWK { private_key_jwk },
-                    }
-                } else if key.trim().contains(':') {
-                    // The key might be a multibase encoded key
-                    info!("Using multibase format key");
-
-                    // Determine key type based on DID method
-                    let key_type = if did.starts_with("did:key:") {
-                        // did:key method, the key type is encoded in the key itself
-                        tap_agent::did::KeyType::Ed25519 // Assume Ed25519 for now
-                    } else {
-                        // Determine from DID method or default to Ed25519
-                        tap_agent::did::KeyType::Ed25519
-                    };
-
-                    // Create a private key from the multibase string
-                    let (multicode_id, key_bytes) = match multibase::decode(key.trim()) {
-                        Ok((id, bytes)) => (id, bytes),
-                        Err(e) => {
-                            return Err(format!("Failed to decode multibase key: {}", e).into())
-                        }
-                    };
-
-                    // Convert to a secret format that DIDComm understands
-                    // This will need to be customized based on the key format
-
-                    // For Ed25519 keys
-                    if key_type == tap_agent::did::KeyType::Ed25519 {
-                        // Create a JWK from the key bytes
-                        let private_key_jwk = serde_json::json!({
-                            "kty": "OKP",
-                            "crv": "Ed25519",
-                            "d": base64::engine::general_purpose::STANDARD.encode(&key_bytes),
-                            "x": base64::engine::general_purpose::STANDARD.encode(&key_bytes[..32]), // First 32 bytes for Ed25519
-                        });
-
-                        // Create a DIDComm secret
-                        Secret {
-                            type_: SecretType::JsonWebKey2020,
-                            id: format!("{}#keys-1", did),
-                            secret_material: SecretMaterial::JWK { private_key_jwk },
-                        }
-                    } else {
-                        return Err(format!(
-                            "Unsupported key type for multibase key: {:?}",
-                            multicode_id
-                        )
-                        .into());
-                    }
-                } else {
-                    // Assume raw base64 format
-                    info!("Using base64 format key");
-
-                    // Determine key type based on DID method
-                    let key_type = if did.starts_with("did:key:") {
-                        // did:key method, the key type is encoded in the key itself
-                        tap_agent::did::KeyType::Ed25519 // Assume Ed25519 for now
-                    } else {
-                        // Determine from DID method or default to Ed25519
-                        tap_agent::did::KeyType::Ed25519
-                    };
-
-                    // Decode the base64 key
-                    let key_bytes = match base64::engine::general_purpose::STANDARD
-                        .decode(key.trim())
-                    {
-                        Ok(bytes) => bytes,
-                        Err(e) => return Err(format!("Failed to decode base64 key: {}", e).into()),
-                    };
-
-                    // Create a JWK from the key bytes
-                    let private_key_jwk = if key_type == tap_agent::did::KeyType::Ed25519 {
-                        serde_json::json!({
-                            "kty": "OKP",
-                            "crv": "Ed25519",
-                            "d": base64::engine::general_purpose::STANDARD.encode(&key_bytes),
-                            "x": base64::engine::general_purpose::STANDARD.encode(&key_bytes[..32]), // Simplified, in reality Ed25519 public key is derived from private
-                        })
-                    } else {
-                        return Err("Unsupported key type for base64 key".into());
-                    };
-
-                    // Create a DIDComm secret
-                    Secret {
-                        type_: SecretType::JsonWebKey2020,
-                        id: format!("{}#keys-1", did),
-                        secret_material: SecretMaterial::JWK { private_key_jwk },
-                    }
-                },
-            );
-
-            // Create a message packer
-            let message_packer = tap_agent::crypto::DefaultMessagePacker::new(
-                did_resolver,
-                std::sync::Arc::new(secret_resolver),
-                true, // debug mode
-            );
-
-            // Create agent configuration
-            let config = tap_agent::config::AgentConfig {
-                agent_did: did.clone(),
-                parameters: std::collections::HashMap::new(),
-                security_mode: Some("SIGNED".to_string()),
-                debug: true,
-                timeout_seconds: Some(30),
-            };
-
-            // Create the agent
-            let agent = DefaultAgent::new(config, message_packer);
-
-            Ok((agent, did))
-        }
-        (None, None) => {
-            // Try to load agent from stored keys
-            info!("Attempting to load agent from stored keys");
-
-            match tap_agent::storage::KeyStorage::load_default() {
-                Ok(key_storage) if !key_storage.keys.is_empty() => {
-                    // We found stored keys, use them
-                    let did = match &key_storage.default_did {
-                        Some(default_did) => default_did.clone(),
-                        None => {
-                            // No default DID set, use the first key
-                            key_storage.keys.keys().next().unwrap().clone()
-                        }
-                    };
-
-                    info!("Found stored key with DID: {}", did);
-
-                    // Create agent from stored key
-                    match DefaultAgent::from_stored_keys(Some(did.clone()), true) {
-                        Ok(agent) => {
-                            info!("Successfully loaded agent from stored keys");
-                            return Ok((agent, did));
-                        }
-                        Err(e) => {
-                            // Log error but continue to fallback to ephemeral
-                            warn!("Failed to create agent from stored keys: {}, falling back to ephemeral agent", e);
-                        }
-                    }
-                }
-                Ok(_) => {
-                    info!("No stored keys found, falling back to ephemeral agent");
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to load stored keys: {}, falling back to ephemeral agent",
-                        e
-                    );
-                }
-            }
-
-            // Create an ephemeral agent as fallback
-            info!("Creating ephemeral agent");
-            let (agent, did) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
-            Ok((agent, did))
-        }
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Parse command line arguments first (to check for --verbose)
@@ -359,8 +148,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Verify random number generator by creating two agents and comparing DIDs
     // Only in verbose mode to not spam normal output
     if args.verbose {
-        let (_test_agent1, test_did1) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
-        let (_test_agent2, test_did2) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
+        let (_test_agent1, test_did1) = TapAgent::from_ephemeral_key().await?;
+        let (_test_agent2, test_did2) = TapAgent::from_ephemeral_key().await?;
         info!("Test DID 1: {}", test_did1);
         info!("Test DID 2: {}", test_did2);
         if test_did1 == test_did2 {
@@ -372,7 +161,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     // Create the actual agent
-    let (agent, agent_did) = create_agent(args.agent_did.clone(), args.agent_key.clone())?;
+    let agent = TapAgent::from_stored_keys(None, true).await.unwrap();
+    let agent_did = agent.get_agent_did();
 
     let agent_arc = Arc::new(agent);
     info!("Using agent with DID: {}", agent_did);

@@ -159,3 +159,129 @@ async fn test_send_message_to_multiple_recipients() {
         assert!(result.error.is_none()); // No error expected
     }
 }
+
+#[tokio::test]
+async fn test_from_private_key_ed25519() {
+    use chrono::Utc;
+    use ed25519_dalek::SigningKey;
+    use rand::rngs::OsRng;
+    use tap_agent::KeyType;
+    use tap_msg::message::Presentation;
+    use uuid::Uuid;
+
+    // Generate a random Ed25519 key
+    let mut csprng = OsRng;
+    let signing_key = SigningKey::generate(&mut csprng);
+    let private_key_bytes = signing_key.to_bytes();
+
+    // Create a TapAgent from the private key
+    let (agent, did) = TapAgent::from_private_key(&private_key_bytes, KeyType::Ed25519, true)
+        .await
+        .unwrap();
+
+    // Verify the agent was created correctly
+    assert!(did.starts_with("did:key:z"), "DID should be a did:key");
+    assert_eq!(agent.get_agent_did(), &did);
+
+    // Create a simple presentation message to test with
+    let presentation = Presentation::builder()
+        .presentation_id(Uuid::new_v4().to_string())
+        .thread_id(Uuid::new_v4().to_string())
+        .created_time(Utc::now())
+        .from(did.clone())
+        .to(vec!["did:example:123".to_string()])
+        .build()
+        .unwrap();
+
+    // Pack the message (no delivery)
+    let (packed, _) = agent
+        .send_message(&presentation, vec!["did:example:123"], false)
+        .await
+        .unwrap();
+
+    // Verify that the packed message is not empty
+    assert!(!packed.is_empty(), "Packed message should not be empty");
+
+    // Create another agent with the same private key
+    let (agent2, did2) = TapAgent::from_private_key(&private_key_bytes, KeyType::Ed25519, false)
+        .await
+        .unwrap();
+
+    // Verify that both agents have the same DID
+    assert_eq!(
+        did, did2,
+        "DIDs should be identical for the same private key"
+    );
+
+    // Verify that the second agent can unpack the message packed by the first
+    let received_presentation: Presentation = agent2.receive_message(&packed).await.unwrap();
+
+    // Verify the received message is the same as the sent message
+    assert_eq!(
+        presentation.presentation_id,
+        received_presentation.presentation_id
+    );
+}
+
+#[tokio::test]
+async fn test_from_private_key_p256() {
+    use chrono::Utc;
+    use p256::ecdsa::SigningKey as P256SigningKey;
+    use rand::rngs::OsRng;
+    use tap_agent::KeyType;
+    use tap_msg::message::Presentation;
+    use uuid::Uuid;
+
+    // Generate a random P-256 key
+    let mut rng = OsRng;
+    let signing_key = P256SigningKey::random(&mut rng);
+    let private_key_bytes = signing_key.to_bytes().to_vec();
+
+    // Create a TapAgent from the private key
+    let (agent, did) = TapAgent::from_private_key(&private_key_bytes, KeyType::P256, true)
+        .await
+        .unwrap();
+
+    // Verify the agent was created correctly
+    assert!(did.starts_with("did:key:z"), "DID should be a did:key");
+    assert_eq!(agent.get_agent_did(), &did);
+
+    // Create a simple presentation message to test with
+    let presentation = Presentation::builder()
+        .presentation_id(Uuid::new_v4().to_string())
+        .thread_id(Uuid::new_v4().to_string())
+        .created_time(Utc::now())
+        .from(did.clone())
+        .to(vec!["did:example:123".to_string()])
+        .build()
+        .unwrap();
+
+    // Pack the message (no delivery)
+    let (packed, _) = agent
+        .send_message(&presentation, vec!["did:example:123"], false)
+        .await
+        .unwrap();
+
+    // Verify that the packed message is not empty
+    assert!(!packed.is_empty(), "Packed message should not be empty");
+
+    // Create another agent with the same private key
+    let (agent2, did2) = TapAgent::from_private_key(&private_key_bytes, KeyType::P256, false)
+        .await
+        .unwrap();
+
+    // Verify that both agents have the same DID
+    assert_eq!(
+        did, did2,
+        "DIDs should be identical for the same private key"
+    );
+
+    // Verify that the second agent can unpack the message packed by the first
+    let received_presentation: Presentation = agent2.receive_message(&packed).await.unwrap();
+
+    // Verify the received message is the same as the sent message
+    assert_eq!(
+        presentation.presentation_id,
+        received_presentation.presentation_id
+    );
+}

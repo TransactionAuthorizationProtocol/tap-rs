@@ -7,8 +7,6 @@ use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tokio::test;
 
-
-
 // Define a simple EmptyMessage for testing if it doesn't exist
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct EmptyMessage {}
