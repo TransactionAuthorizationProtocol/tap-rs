@@ -626,23 +626,24 @@ impl TapAgent {
     ///
     /// # Returns
     /// The appropriate SecurityMode for the message type
-    fn determine_security_mode<T: TapMessageBody>(&self) -> crate::message::SecurityMode {
+    #[cfg(not(target_arch = "wasm32"))]
+    fn determine_security_mode<T: TapMessageBody>(&self) -> SecurityMode {
         // If security mode is explicitly configured, use that
         if let Some(ref mode) = self.config.security_mode {
             if mode.to_uppercase() == "AUTHCRYPT" {
-                return crate::message::SecurityMode::AuthCrypt;
+                return SecurityMode::AuthCrypt;
             } else {
                 // Default to Signed for any other value
-                return crate::message::SecurityMode::Signed;
+                return SecurityMode::Signed;
             }
         }
 
         // Otherwise use type-based rules
         let message_type = T::message_type();
         if message_type == crate::message::PRESENTATION_MESSAGE_TYPE {
-            crate::message::SecurityMode::AuthCrypt
+            SecurityMode::AuthCrypt
         } else {
-            crate::message::SecurityMode::Signed
+            SecurityMode::Signed
         }
     }
 
