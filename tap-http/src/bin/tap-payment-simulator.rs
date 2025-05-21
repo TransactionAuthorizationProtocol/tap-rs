@@ -89,11 +89,14 @@ fn print_help() {
 }
 
 /// Send a TAP message to the server
-async fn send_tap_message<'a, T: tap_msg::message::tap_message_trait::TapMessageBody
+async fn send_tap_message<
+    'a,
+    T: tap_msg::message::tap_message_trait::TapMessageBody
         + serde::Serialize
         + Send
         + Sync
-        + std::fmt::Debug + 'static,
+        + std::fmt::Debug
+        + 'static,
 >(
     agent: &'a TapAgent,
     recipient_did: &'a str,

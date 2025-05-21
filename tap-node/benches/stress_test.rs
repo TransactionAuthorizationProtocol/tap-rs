@@ -89,7 +89,7 @@ fn stress_test(c: &mut Criterion) {
                     // Create two ephemeral agents for the test
                     let (agent1, agent1_did) = TapAgent::from_ephemeral_key().await.unwrap();
                     let (agent2, agent2_did) = TapAgent::from_ephemeral_key().await.unwrap();
-                    
+
                     let agent1 = Arc::new(agent1);
                     let agent2 = Arc::new(agent2);
 

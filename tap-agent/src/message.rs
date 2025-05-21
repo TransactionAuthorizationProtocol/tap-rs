@@ -55,7 +55,7 @@ pub struct JwsHeader {
 }
 
 // Structure for decoded JWS protected field
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct JwsProtected {
     #[serde(default = "default_didcomm_signed")]
     pub typ: String,

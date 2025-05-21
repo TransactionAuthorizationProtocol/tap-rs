@@ -161,7 +161,6 @@ async fn test_send_message_to_multiple_recipients() {
 }
 
 #[tokio::test]
-#[ignore = "Ignored until from_private_key is implemented"]
 async fn test_from_private_key_ed25519() {
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
@@ -187,7 +186,7 @@ async fn test_from_private_key_ed25519() {
     let presentation = Presentation::new(
         "test_challenge".to_string(),
         vec![serde_json::json!({"test": "credential"})],
-        Some(Uuid::new_v4().to_string())
+        Some(Uuid::new_v4().to_string()),
     );
 
     // Pack the message (no delivery)
@@ -214,14 +213,11 @@ async fn test_from_private_key_ed25519() {
     let received_presentation: Presentation = agent2.receive_message(&packed).await.unwrap();
 
     // Verify the received message is the same as the sent message
-    assert_eq!(
-        presentation.id,
-        received_presentation.id
-    );
+    assert_eq!(presentation.id, received_presentation.id);
 }
 
 #[tokio::test]
-#[ignore = "Ignored until from_private_key is implemented"]
+#[ignore = "P-256 key signature verification needs to be fixed"]
 async fn test_from_private_key_p256() {
     use p256::ecdsa::SigningKey as P256SigningKey;
     use rand::rngs::OsRng;
@@ -247,7 +243,7 @@ async fn test_from_private_key_p256() {
     let presentation = Presentation::new(
         "test_challenge".to_string(),
         vec![serde_json::json!({"test": "credential"})],
-        Some(Uuid::new_v4().to_string())
+        Some(Uuid::new_v4().to_string()),
     );
 
     // Pack the message (no delivery)
@@ -274,8 +270,5 @@ async fn test_from_private_key_p256() {
     let received_presentation: Presentation = agent2.receive_message(&packed).await.unwrap();
 
     // Verify the received message is the same as the sent message
-    assert_eq!(
-        presentation.id,
-        received_presentation.id
-    );
+    assert_eq!(presentation.id, received_presentation.id);
 }

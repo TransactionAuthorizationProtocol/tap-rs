@@ -52,6 +52,27 @@ impl AgentKeyManager {
         }
     }
 
+    /// Get the key type for a signing key (for debugging)
+    pub async fn get_signing_key_type(&self, did: &str) -> Result<String> {
+        // Try to find a signing key for this DID
+        if let Ok(signing_keys) = self.signing_keys.read() {
+            for (kid, key) in signing_keys.iter() {
+                if kid.starts_with(did) {
+                    if let Ok(jwk) = key.public_key_jwk() {
+                        let kty = jwk.get("kty").and_then(|v| v.as_str());
+                        let crv = jwk.get("crv").and_then(|v| v.as_str());
+                        return Ok(format!("kty: {:?}, crv: {:?}", kty, crv));
+                    }
+                }
+            }
+        }
+
+        Err(Error::KeyNotFound(format!(
+            "No signing key found for DID: {}",
+            did
+        )))
+    }
+
     /// Create a LocalAgentKey from a GeneratedKey
     pub fn agent_key_from_generated(&self, key: &GeneratedKey) -> Result<LocalAgentKey> {
         // Create a secret for the key

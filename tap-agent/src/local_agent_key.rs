@@ -490,11 +490,17 @@ impl SigningKey for LocalAgentKey {
         // Base64 encode the payload
         let payload_b64 = base64::engine::general_purpose::STANDARD.encode(payload);
 
-        // Create the protected header if not provided
-        let protected = protected_header.unwrap_or_else(|| JwsProtected {
-            typ: crate::message::DIDCOMM_SIGNED.to_string(),
-            alg: self.recommended_jws_alg().as_str().to_string(),
-        });
+        // Create the protected header if not provided, respecting the key type
+        let protected = if let Some(mut header) = protected_header {
+            // Override the algorithm to match the key type
+            header.alg = self.recommended_jws_alg().as_str().to_string();
+            header
+        } else {
+            JwsProtected {
+                typ: crate::message::DIDCOMM_SIGNED.to_string(),
+                alg: self.recommended_jws_alg().as_str().to_string(),
+            }
+        };
 
         // Serialize and encode the protected header
         let protected_json = serde_json::to_string(&protected).map_err(|e| {

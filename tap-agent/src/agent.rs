@@ -299,23 +299,317 @@ impl TapAgent {
     /// # Returns
     ///
     /// A Result containing either the created agent or an error
-    /// Currently disabled - this will be improved in a future version
-    ///
-    /// Creates a new TapAgent from an existing private key
-    ///
-    /// This function creates a new TapAgent using a provided private key,
-    /// which can be useful for integrating with external key management systems
-    /// or when keys are generated outside the TAP agent.
-    #[allow(unused_variables)]
     pub async fn from_private_key(
         private_key: &[u8],
         key_type: crate::did::KeyType,
         debug: bool,
     ) -> Result<(Self, String)> {
-        // For now, fallback to ephemeral key instead
-        Err(Error::NotImplemented(
-            "from_private_key is not yet implemented".to_string(),
-        ))
+        use crate::did::{DIDKeyGenerator, GeneratedKey};
+        use crate::did::{VerificationMaterial, VerificationMethod, VerificationMethodType};
+        use curve25519_dalek::edwards::CompressedEdwardsY;
+        use multibase::{encode, Base};
+
+        // Create a key manager to hold our key
+        let key_manager = AgentKeyManager::new();
+
+        // Generate the appropriate key and DID based on the key type
+        let generated_key = match key_type {
+            crate::did::KeyType::Ed25519 => {
+                if private_key.len() != 32 {
+                    return Err(Error::Validation(format!(
+                        "Invalid Ed25519 private key length: {}, expected 32 bytes",
+                        private_key.len()
+                    )));
+                }
+
+                // For Ed25519, we need to derive the public key from the private key
+                let mut private_key_bytes = [0u8; 32];
+                private_key_bytes.copy_from_slice(&private_key[0..32]);
+
+                let signing_key = ed25519_dalek::SigningKey::from_bytes(&private_key_bytes);
+
+                // Get the public key
+                let verifying_key = ed25519_dalek::VerifyingKey::from(&signing_key);
+                let public_key = verifying_key.to_bytes().to_vec();
+
+                // Create did:key identifier
+                // Multicodec prefix for Ed25519: 0xed01
+                let mut prefixed_key = vec![0xed, 0x01];
+                prefixed_key.extend_from_slice(&public_key);
+
+                // Encode the key with multibase (base58btc with 'z' prefix)
+                let multibase_encoded = encode(Base::Base58Btc, &prefixed_key);
+                let did = format!("did:key:{}", multibase_encoded);
+
+                // Create the verification method ID
+                let vm_id = format!("{}#{}", did, multibase_encoded);
+
+                // Create the verification method
+                let verification_method = VerificationMethod {
+                    id: vm_id.clone(),
+                    type_: VerificationMethodType::Ed25519VerificationKey2018,
+                    controller: did.clone(),
+                    verification_material: VerificationMaterial::Multibase {
+                        public_key_multibase: multibase_encoded.clone(),
+                    },
+                };
+
+                // Create X25519 key for key agreement - Implement the ed25519_to_x25519 conversion directly
+                let x25519_method_and_agreement = {
+                    // Only Ed25519 public keys must be exactly 32 bytes
+                    if public_key.len() != 32 {
+                        None
+                    } else {
+                        // Try to create a CompressedEdwardsY from the bytes
+                        let edwards_y = match CompressedEdwardsY::from_slice(&public_key) {
+                            Ok(point) => point,
+                            Err(_) => {
+                                return Err(Error::Cryptography(
+                                    "Failed to create Edwards point".to_string(),
+                                ))
+                            }
+                        };
+
+                        // Try to decompress to get the Edwards point
+                        let edwards_point = match edwards_y.decompress() {
+                            Some(point) => point,
+                            None => {
+                                return Err(Error::Cryptography(
+                                    "Failed to decompress Edwards point".to_string(),
+                                ))
+                            }
+                        };
+
+                        // Convert to Montgomery form
+                        let montgomery_point = edwards_point.to_montgomery();
+
+                        // Get the raw bytes representation of the X25519 key
+                        let x25519_key = montgomery_point.to_bytes();
+
+                        // Prefix for X25519: 0xEC01
+                        let mut x25519_prefixed = vec![0xEC, 0x01];
+                        x25519_prefixed.extend_from_slice(&x25519_key);
+
+                        // Encode the prefixed X25519 key with multibase
+                        let x25519_multibase = encode(Base::Base58Btc, &x25519_prefixed);
+
+                        // Create the X25519 verification method ID
+                        let x25519_vm_id = format!("{}#{}", did, x25519_multibase);
+
+                        // Create the X25519 verification method
+                        let x25519_verification_method = VerificationMethod {
+                            id: x25519_vm_id.clone(),
+                            type_: VerificationMethodType::X25519KeyAgreementKey2019,
+                            controller: did.clone(),
+                            verification_material: VerificationMaterial::Multibase {
+                                public_key_multibase: x25519_multibase,
+                            },
+                        };
+
+                        Some((x25519_verification_method, x25519_vm_id))
+                    }
+                };
+
+                // Build verification methods array
+                let mut verification_methods = vec![verification_method.clone()];
+                let mut key_agreement = Vec::new();
+
+                if let Some((x25519_vm, x25519_id)) = x25519_method_and_agreement {
+                    verification_methods.push(x25519_vm);
+                    key_agreement.push(x25519_id);
+                }
+
+                // Create the DID document
+                let did_doc = crate::did::DIDDoc {
+                    id: did.clone(),
+                    verification_method: verification_methods,
+                    authentication: vec![vm_id],
+                    key_agreement,
+                    assertion_method: Vec::new(),
+                    capability_invocation: Vec::new(),
+                    capability_delegation: Vec::new(),
+                    service: Vec::new(),
+                };
+
+                // Create a GeneratedKey with all necessary fields
+                GeneratedKey {
+                    key_type: crate::did::KeyType::Ed25519,
+                    did: did.clone(),
+                    public_key,
+                    private_key: private_key.to_vec(),
+                    did_doc,
+                }
+            }
+            crate::did::KeyType::P256 => {
+                if private_key.len() != 32 {
+                    return Err(Error::Validation(format!(
+                        "Invalid P-256 private key length: {}, expected 32 bytes",
+                        private_key.len()
+                    )));
+                }
+
+                // For P-256, create a signing key from the private key
+                let signing_key = match p256::ecdsa::SigningKey::from_slice(private_key) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        return Err(Error::Cryptography(format!(
+                            "Failed to create P-256 signing key: {:?}",
+                            e
+                        )))
+                    }
+                };
+
+                // Get the public key in uncompressed form
+                let public_key = signing_key
+                    .verifying_key()
+                    .to_encoded_point(false)
+                    .to_bytes()
+                    .to_vec();
+
+                // Create did:key identifier
+                // Multicodec prefix for P-256: 0x1200
+                let mut prefixed_key = vec![0x12, 0x00];
+                prefixed_key.extend_from_slice(&public_key);
+
+                // Encode the key with multibase (base58btc with 'z' prefix)
+                let multibase_encoded = encode(Base::Base58Btc, &prefixed_key);
+                let did = format!("did:key:{}", multibase_encoded);
+
+                // Create the verification method ID
+                let vm_id = format!("{}#{}", did, multibase_encoded);
+
+                // Create the verification method
+                let verification_method = VerificationMethod {
+                    id: vm_id.clone(),
+                    type_: VerificationMethodType::EcdsaSecp256k1VerificationKey2019, // Using the available type
+                    controller: did.clone(),
+                    verification_material: VerificationMaterial::Multibase {
+                        public_key_multibase: multibase_encoded.clone(),
+                    },
+                };
+
+                // Create the DID document
+                let did_doc = crate::did::DIDDoc {
+                    id: did.clone(),
+                    verification_method: vec![verification_method],
+                    authentication: vec![vm_id],
+                    key_agreement: Vec::new(),
+                    assertion_method: Vec::new(),
+                    capability_invocation: Vec::new(),
+                    capability_delegation: Vec::new(),
+                    service: Vec::new(),
+                };
+
+                // Create a GeneratedKey with all necessary fields
+                GeneratedKey {
+                    key_type: crate::did::KeyType::P256,
+                    did: did.clone(),
+                    public_key,
+                    private_key: private_key.to_vec(),
+                    did_doc,
+                }
+            }
+            crate::did::KeyType::Secp256k1 => {
+                if private_key.len() != 32 {
+                    return Err(Error::Validation(format!(
+                        "Invalid Secp256k1 private key length: {}, expected 32 bytes",
+                        private_key.len()
+                    )));
+                }
+
+                // For Secp256k1, create a signing key from the private key
+                let signing_key = match k256::ecdsa::SigningKey::from_slice(private_key) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        return Err(Error::Cryptography(format!(
+                            "Failed to create Secp256k1 signing key: {:?}",
+                            e
+                        )))
+                    }
+                };
+
+                // Get the public key in uncompressed form
+                let public_key = signing_key
+                    .verifying_key()
+                    .to_encoded_point(false)
+                    .to_bytes()
+                    .to_vec();
+
+                // Create did:key identifier
+                // Multicodec prefix for Secp256k1: 0xe701
+                let mut prefixed_key = vec![0xe7, 0x01];
+                prefixed_key.extend_from_slice(&public_key);
+
+                // Encode the key with multibase (base58btc with 'z' prefix)
+                let multibase_encoded = encode(Base::Base58Btc, &prefixed_key);
+                let did = format!("did:key:{}", multibase_encoded);
+
+                // Create the verification method ID
+                let vm_id = format!("{}#{}", did, multibase_encoded);
+
+                // Create the verification method
+                let verification_method = VerificationMethod {
+                    id: vm_id.clone(),
+                    type_: VerificationMethodType::EcdsaSecp256k1VerificationKey2019,
+                    controller: did.clone(),
+                    verification_material: VerificationMaterial::Multibase {
+                        public_key_multibase: multibase_encoded.clone(),
+                    },
+                };
+
+                // Create the DID document
+                let did_doc = crate::did::DIDDoc {
+                    id: did.clone(),
+                    verification_method: vec![verification_method],
+                    authentication: vec![vm_id],
+                    key_agreement: Vec::new(),
+                    assertion_method: Vec::new(),
+                    capability_invocation: Vec::new(),
+                    capability_delegation: Vec::new(),
+                    service: Vec::new(),
+                };
+
+                // Create a GeneratedKey with all necessary fields
+                GeneratedKey {
+                    key_type: crate::did::KeyType::Secp256k1,
+                    did: did.clone(),
+                    public_key,
+                    private_key: private_key.to_vec(),
+                    did_doc,
+                }
+            }
+        };
+
+        // Create secret from the generated key and use it to add to the key manager
+        let did_generator = DIDKeyGenerator::new();
+        let _secret = did_generator.create_secret_from_key(&generated_key);
+
+        // Add the key to the key manager
+        key_manager.add_key(&generated_key)?;
+
+        // Create a config with the new DID
+        let config = AgentConfig::new(generated_key.did.clone()).with_debug(debug);
+
+        // Create the agent
+        #[cfg(all(not(target_arch = "wasm32"), test))]
+        {
+            // Create a default resolver
+            let resolver = Arc::new(crate::did::MultiResolver::default());
+            let agent = Self::new_with_resolver(config, Arc::new(key_manager), resolver);
+            Ok((agent, generated_key.did))
+        }
+
+        #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+        {
+            let agent = Self::new(config, Arc::new(key_manager));
+            Ok((agent, generated_key.did))
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            let agent = Self::new(config, Arc::new(key_manager));
+            Ok((agent, generated_key.did))
+        }
     }
 
     /// Determine the appropriate security mode for a message type

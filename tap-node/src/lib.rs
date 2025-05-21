@@ -55,13 +55,13 @@ use tap_agent::{Agent, TapAgent};
 // use tap_agent::message_packing::PackOptions;
 use tap_msg::didcomm::PlainMessage;
 
-use agent::AgentRegistry;
-use event::EventBus;
+use crate::message::processor::PlainMessageProcessor;
 use crate::message::{
     CompositePlainMessageProcessor, CompositePlainMessageRouter, PlainMessageProcessorType,
     PlainMessageRouterType,
 };
-use crate::message::processor::PlainMessageProcessor;
+use agent::AgentRegistry;
+use event::EventBus;
 use resolver::NodeResolver;
 
 use async_trait::async_trait;
@@ -98,14 +98,12 @@ impl TapAgentExt for TapAgent {
         _to_did: &str,
     ) -> Result<String> {
         // Serialize the PlainMessage to JSON first to work around the TapMessageBody trait constraint
-        let json_value = serde_json::to_value(message)
-            .map_err(Error::Serialization)?;
-            
+        let json_value = serde_json::to_value(message).map_err(Error::Serialization)?;
+
         // Use JSON string for transportation instead of direct message passing
         // This bypasses the need for PlainMessage to implement TapMessageBody
-        let serialized = serde_json::to_string(&json_value)
-            .map_err(Error::Serialization)?;
-        
+        let serialized = serde_json::to_string(&json_value).map_err(Error::Serialization)?;
+
         Ok(serialized)
     }
 }
@@ -333,13 +331,13 @@ impl TapNode {
         message: PlainMessage,
     ) -> Result<String> {
         // Process the outgoing message
-        let processed_message = match self
-            .outgoing_processor
-            .process_outgoing(message)
-            .await?
-        {
+        let processed_message = match self.outgoing_processor.process_outgoing(message).await? {
             Some(msg) => msg,
-            None => return Err(Error::MessageDropped("PlainMessage dropped during processing".to_string())),
+            None => {
+                return Err(Error::MessageDropped(
+                    "PlainMessage dropped during processing".to_string(),
+                ))
+            }
         };
 
         // Get the sender agent
@@ -374,7 +372,9 @@ impl TapNode {
         self.agents.unregister_agent(did).await?;
 
         // Publish event about agent registration
-        self.event_bus.publish_agent_unregistered(did.to_string()).await;
+        self.event_bus
+            .publish_agent_unregistered(did.to_string())
+            .await;
 
         Ok(())
     }

@@ -93,7 +93,7 @@ async fn simulate_agent_setup(event_logger: &Arc<EventLogger>) {
 
     // 2. Create an agent key manager builder
     let mut key_manager_builder = tap_agent::agent_key_manager::AgentKeyManagerBuilder::new();
-    
+
     // 3. Add a test secret
     let secret = Secret {
         id: "did:example:alice".to_string(),
@@ -107,12 +107,14 @@ async fn simulate_agent_setup(event_logger: &Arc<EventLogger>) {
             }),
         },
     };
-    
+
     // 4. Add the secret to the builder
     key_manager_builder = key_manager_builder.add_secret("did:example:alice".to_string(), secret);
-    
+
     // 5. Build the key manager
-    let _agent_key_manager = key_manager_builder.build().expect("Failed to build key manager");
+    let _agent_key_manager = key_manager_builder
+        .build()
+        .expect("Failed to build key manager");
 
     // 4. Create an agent configuration
     let _config = tap_agent::config::AgentConfig::new("did:example:alice".to_string())

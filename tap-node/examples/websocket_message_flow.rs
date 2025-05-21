@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use tap_agent::TapAgent;
+use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
 use tap_agent::did::{DIDKeyGenerator, MultiResolver};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
-use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
+use tap_agent::TapAgent;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create agent key managers
     let mut alice_builder = AgentKeyManagerBuilder::new();
     let mut bob_builder = AgentKeyManagerBuilder::new();
-    
+
     // Create Alice's secret
     let alice_secret = Secret {
         id: alice_key.did.clone(),
@@ -44,7 +44,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         },
     };
-    
+
     // Create Bob's secret
     let bob_secret = Secret {
         id: bob_key.did.clone(),
@@ -58,14 +58,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         },
     };
-    
+
     // Add secrets to builders
     alice_builder = alice_builder.add_secret(alice_key.did.clone(), alice_secret);
     bob_builder = bob_builder.add_secret(bob_key.did.clone(), bob_secret);
-    
+
     // Build the key managers
-    let alice_key_manager = alice_builder.build().expect("Failed to build Alice's key manager");
-    let bob_key_manager = bob_builder.build().expect("Failed to build Bob's key manager");
+    let alice_key_manager = alice_builder
+        .build()
+        .expect("Failed to build Alice's key manager");
+    let bob_key_manager = bob_builder
+        .build()
+        .expect("Failed to build Bob's key manager");
 
     // Create Agent configurations for Alice and Bob
     let alice_config = AgentConfig::new(alice_key.did.clone())
