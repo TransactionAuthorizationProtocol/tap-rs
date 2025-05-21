@@ -1,18 +1,18 @@
 //! Binary executable for the TAP HTTP server.
 
-use base64::Engine;
 use env_logger::Env;
 use std::env;
 use std::error::Error;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
+use tap_agent::Agent;
+use tap_agent::TapAgent;
 use tap_agent::storage::KeyStorage;
-use tap_agent::{Agent, AgentConfig, Secret, SecretMaterial, SecretType, TapAgent};
 use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 // For command line argument parsing
 struct Args {
@@ -162,7 +162,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create the actual agent
     let agent = TapAgent::from_stored_keys(None, true).await.unwrap();
-    let agent_did = agent.get_agent_did();
+    let agent_did = agent.get_agent_did().to_string(); // Clone to a String to avoid borrowing issues
 
     let agent_arc = Arc::new(agent);
     info!("Using agent with DID: {}", agent_did);

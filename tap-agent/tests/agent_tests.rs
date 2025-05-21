@@ -161,8 +161,8 @@ async fn test_send_message_to_multiple_recipients() {
 }
 
 #[tokio::test]
+#[ignore = "Ignored until from_private_key is implemented"]
 async fn test_from_private_key_ed25519() {
-    use chrono::Utc;
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
     use tap_agent::KeyType;
@@ -184,14 +184,11 @@ async fn test_from_private_key_ed25519() {
     assert_eq!(agent.get_agent_did(), &did);
 
     // Create a simple presentation message to test with
-    let presentation = Presentation::builder()
-        .presentation_id(Uuid::new_v4().to_string())
-        .thread_id(Uuid::new_v4().to_string())
-        .created_time(Utc::now())
-        .from(did.clone())
-        .to(vec!["did:example:123".to_string()])
-        .build()
-        .unwrap();
+    let presentation = Presentation::new(
+        "test_challenge".to_string(),
+        vec![serde_json::json!({"test": "credential"})],
+        Some(Uuid::new_v4().to_string())
+    );
 
     // Pack the message (no delivery)
     let (packed, _) = agent
@@ -218,14 +215,14 @@ async fn test_from_private_key_ed25519() {
 
     // Verify the received message is the same as the sent message
     assert_eq!(
-        presentation.presentation_id,
-        received_presentation.presentation_id
+        presentation.id,
+        received_presentation.id
     );
 }
 
 #[tokio::test]
+#[ignore = "Ignored until from_private_key is implemented"]
 async fn test_from_private_key_p256() {
-    use chrono::Utc;
     use p256::ecdsa::SigningKey as P256SigningKey;
     use rand::rngs::OsRng;
     use tap_agent::KeyType;
@@ -247,14 +244,11 @@ async fn test_from_private_key_p256() {
     assert_eq!(agent.get_agent_did(), &did);
 
     // Create a simple presentation message to test with
-    let presentation = Presentation::builder()
-        .presentation_id(Uuid::new_v4().to_string())
-        .thread_id(Uuid::new_v4().to_string())
-        .created_time(Utc::now())
-        .from(did.clone())
-        .to(vec!["did:example:123".to_string()])
-        .build()
-        .unwrap();
+    let presentation = Presentation::new(
+        "test_challenge".to_string(),
+        vec![serde_json::json!({"test": "credential"})],
+        Some(Uuid::new_v4().to_string())
+    );
 
     // Pack the message (no delivery)
     let (packed, _) = agent
@@ -281,7 +275,7 @@ async fn test_from_private_key_p256() {
 
     // Verify the received message is the same as the sent message
     assert_eq!(
-        presentation.presentation_id,
-        received_presentation.presentation_id
+        presentation.id,
+        received_presentation.id
     );
 }

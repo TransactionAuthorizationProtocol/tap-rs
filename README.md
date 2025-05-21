@@ -67,6 +67,44 @@ cargo build
 cargo test
 ```
 
+### Installing Command-line Tools
+
+TAP-RS includes several useful command-line tools that can be installed from crates.io or from source:
+
+```bash
+# Install tools from crates.io
+cargo install tap-agent tap-http
+
+# Or install from the repository
+cargo install --path tap-rs/tap-agent
+cargo install --path tap-rs/tap-http
+```
+
+Available command-line tools:
+
+1. **tap-agent-cli**: Manage DIDs and keys for TAP protocol
+   ```bash
+   # Generate a new did:key with Ed25519
+   tap-agent-cli generate
+
+   # List stored keys
+   tap-agent-cli keys list
+   ```
+
+2. **tap-http**: Run a TAP HTTP server for DIDComm messaging
+   ```bash
+   # Start a server with default settings
+   tap-http
+   ```
+
+3. **tap-payment-simulator**: Test TAP payment flows against a server
+   ```bash
+   # Send a test payment flow to a server
+   tap-payment-simulator --url http://localhost:8000/didcomm --did <server-agent-did>
+   ```
+
+See individual tool READMEs for detailed usage instructions.
+
 ## Key Features
 
 - **Complete TAP Implementation**: Support for all TAP message types (Transfer, Authorize, Reject, Settle, etc.)
@@ -153,17 +191,25 @@ TAP-RS provides comprehensive tools for DID generation and key management:
 ### Using the Command-line CLI
 
 ```bash
+# Install the tap-agent CLI
+cargo install tap-agent
+
 # Generate a did:key with Ed25519 key type
-cargo run --bin tap-agent-cli -- generate --method key --key-type ed25519 --output did-document.json --key-output private-key.json
+tap-agent-cli generate --method key --key-type ed25519 --output did-document.json --key-output private-key.json
 
 # Generate a did:web for a specific domain
-cargo run --bin tap-agent-cli -- generate --method web --domain example.com --output web-did.json
+tap-agent-cli generate --method web --domain example.com --output web-did.json
 
 # Look up and resolve a DID to its DID Document
-cargo run --bin tap-agent-cli -- lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 
 # Look up a DID and save the result to a file
-cargo run --bin tap-agent-cli -- lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --output did-document.json
+tap-agent-cli lookup did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --output did-document.json
+
+# Key management operations
+tap-agent-cli keys list
+tap-agent-cli keys view did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli keys set-default did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 ```
 
 ### Using the TypeScript API
@@ -231,6 +277,38 @@ cargo fmt
 
 # Lint code
 cargo clippy
+
+# Install command-line tools
+cargo install --path tap-agent
+cargo install --path tap-http
+```
+
+## Running TAP HTTP Server
+
+The TAP HTTP server provides a DIDComm messaging endpoint for the TAP protocol:
+
+```bash
+# Install the server
+cargo install tap-http
+
+# Run with default settings (creates ephemeral agent)
+tap-http
+
+# Run with custom settings
+tap-http --host 0.0.0.0 --port 8080 --endpoint /didcomm --logs-dir /var/log/tap
+
+# Use a stored key from tap-agent-cli
+tap-http --use-stored-key
+```
+
+You can test the server using the payment simulator:
+
+```bash
+# Install the simulator
+cargo install tap-http
+
+# Run a test payment flow (using the DID printed when starting the server)
+tap-payment-simulator --url http://localhost:8000/didcomm --did did:key:z6Mk...
 ```
 
 ## License

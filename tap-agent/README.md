@@ -104,7 +104,6 @@ The cryptographic system provides:
 
 - `MessagePacker` - A trait for packing and unpacking secure messages
 - `DefaultMessagePacker` - Standards-compliant implementation of JWS/JWE formats
-- `DebugSecretsResolver` - A trait for resolving cryptographic secrets
 - `BasicSecretResolver` - A simple in-memory implementation for development
 - `KeyManager` - A component for generating and managing cryptographic keys
 - `KeyStorage` - Persistent storage for cryptographic keys and metadata
@@ -302,10 +301,9 @@ let (packed_message, delivery_results) = agent.send_message(&transfer, recipient
 // Check delivery results
 for result in delivery_results {
     if let Some(status) = result.status {
-        println!("Message delivered to {} at endpoint {}, status: {}",
-                 result.did, result.endpoint, status);
+        println!("Delivery status: {}", status);
     } else if let Some(error) = &result.error {
-        println!("Failed to deliver message to {}: {}", result.did, error);
+        println!("Error delivering to {}: {}", result.did, error);
     }
 }
 
@@ -357,6 +355,8 @@ if let Some(beneficiary) = &transfer.beneficiary {
 ```
 
 The agent handles the entire verification and decryption process, allowing you to focus on processing the message content rather than worrying about cryptographic details.
+
+Both `TapAgent` and `DefaultAgent` implement the `Agent` trait, so the receiving API is the same regardless of which agent implementation you use.
 
 ### Using DID Resolvers
 
@@ -555,43 +555,50 @@ The `tap-agent` crate includes a command-line interface (CLI) for generating and
 
 ### Installation
 
-If you have the tap-rs repository cloned:
+The CLI tool can be installed in several ways:
 
 ```bash
-cargo install --path tap-agent
-```
-
-Or from crates.io:
-
-```bash
+# From crates.io (recommended for most users)
 cargo install tap-agent
+
+# From the repository (if you have it cloned)
+cargo install --path tap-agent
+
+# Build without installing
+cargo build --package tap-agent
 ```
 
-### Generate Command
+After installation, the following commands will be available:
+- `tap-agent-cli` - Command-line tool for DID and key management
+
+### Command Reference
+
+After installation, you can use the `tap-agent-cli` command to manage DIDs and keys. Here's a complete reference of available commands:
+
+#### Generate Command
 
 The `generate` command creates new DIDs with different key types and methods:
 
 ```bash
-# Generate a did:key with Ed25519
+# Generate a did:key with Ed25519 (default)
+tap-agent-cli generate
+
+# Specify method and key type
 tap-agent-cli generate --method key --key-type ed25519
-
-# Generate a did:key with P-256
 tap-agent-cli generate --method key --key-type p256
-
-# Generate a did:key with Secp256k1
 tap-agent-cli generate --method key --key-type secp256k1
 
 # Generate a did:web for a domain
 tap-agent-cli generate --method web --domain example.com
 
-# Save DID document to did.json and key to key.json
+# Save outputs to files
 tap-agent-cli generate --output did.json --key-output key.json
 
-# Save key to default storage and set as default
+# Save key to default storage (~/.tap/keys.json) and set as default
 tap-agent-cli generate --save --default
 ```
 
-### Lookup Command
+#### Lookup Command
 
 The `lookup` command resolves DIDs to their DID documents:
 
@@ -611,7 +618,7 @@ The resolver supports the following DID methods by default:
 - `did:key` - Resolves DIDs based on public keys
 - `did:web` - Resolves DIDs from web domains
 
-### Keys Command
+#### Keys Command
 
 The `keys` command manages stored keys:
 
@@ -632,9 +639,9 @@ tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2d
 tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --force
 ```
 
-Keys are stored in `~/.tap/keys.json` by default.
+Keys are stored in `~/.tap/keys.json` by default. This storage location is shared with other TAP tools like `tap-http` for consistent key management.
 
-### Import Command
+#### Import Command
 
 The `import` command imports existing keys:
 
@@ -644,6 +651,22 @@ tap-agent-cli import key.json
 
 # Import and set as default
 tap-agent-cli import key.json --default
+```
+
+### Help and Documentation
+
+```bash
+# Display general help
+tap-agent-cli --help
+
+# Display help for a specific command
+tap-agent-cli generate --help
+tap-agent-cli lookup --help
+tap-agent-cli keys --help
+tap-agent-cli import --help
+
+# Display help for a subcommand
+tap-agent-cli keys delete --help
 ```
 
 ### Using Generated DIDs
@@ -801,13 +824,15 @@ The delivery mechanism is designed to be resilient - failures with one recipient
 
 ## Creating Ephemeral DIDs
 
-For testing or short-lived processes, the `DefaultAgent` can create ephemeral DIDs that exist only in memory:
+For testing or short-lived processes, you can create ephemeral DIDs that exist only in memory:
 
 ```rust
-// Create an agent with an ephemeral did:key (Ed25519)
-let (agent, did) = DefaultAgent::new_ephemeral()?;
+// Option 1: Create an ephemeral agent with TapAgent (recommended, async API)
+let (agent, did) = TapAgent::from_ephemeral_key().await?;
+println!("TapAgent DID: {}", did);
 
-// The agent is ready to use with the generated did:key
+// Option 2: Create an ephemeral agent with DefaultAgent
+let (agent, did) = DefaultAgent::new_ephemeral()?;
 println!("Agent DID: {}", did);
 
 // This agent has a fully functional private key and can be used immediately
