@@ -7,7 +7,7 @@ use crate::key_manager::KeyManager; // Add KeyManager trait
 #[cfg(not(target_arch = "wasm32"))]
 use crate::message::SecurityMode;
 #[cfg(not(target_arch = "wasm32"))]
-use crate::message_packing::{PackOptions, UnpackOptions, Unpackable};
+use crate::message_packing::{PackOptions, Packable, UnpackOptions, Unpackable};
 use async_trait::async_trait;
 #[cfg(feature = "native")]
 use reqwest::Client;
@@ -200,19 +200,19 @@ impl TapAgent {
             // Create a default resolver
             let resolver = Arc::new(crate::did::MultiResolver::default());
             let agent = Self::new_with_resolver(config, Arc::new(key_manager), resolver);
-            return Ok((agent, key.did));
+            Ok((agent, key.did))
         }
 
         #[cfg(all(not(target_arch = "wasm32"), not(test)))]
         {
             let agent = Self::new(config, Arc::new(key_manager));
-            return Ok((agent, key.did));
+            Ok((agent, key.did))
         }
 
         #[cfg(target_arch = "wasm32")]
         {
             let agent = Self::new(config, Arc::new(key_manager));
-            return Ok((agent, key.did));
+            Ok((agent, key.did))
         }
     }
 
@@ -266,21 +266,21 @@ impl TapAgent {
         {
             // Create a default resolver
             let resolver = Arc::new(crate::did::MultiResolver::default());
-            return Ok(TapAgent::new_with_resolver(
+            Ok(TapAgent::new_with_resolver(
                 config,
                 Arc::new(key_manager),
                 resolver,
-            ));
+            ))
         }
 
         #[cfg(all(not(target_arch = "wasm32"), not(test)))]
         {
-            return Ok(TapAgent::new(config, Arc::new(key_manager)));
+            Ok(TapAgent::new(config, Arc::new(key_manager)))
         }
 
         #[cfg(target_arch = "wasm32")]
         {
-            return Ok(TapAgent::new(config, Arc::new(key_manager)));
+            Ok(TapAgent::new(config, Arc::new(key_manager)))
         }
     }
 
@@ -437,6 +437,10 @@ impl crate::agent::Agent for TapAgent {
             serde_json::to_string_pretty(message).unwrap_or_else(|_| format!("{:?}", message))
         );
 
+        // Convert the TapMessageBody to a PlainMessage with explicit routing
+        let plain_message =
+            message.to_didcomm_with_route(self.get_agent_did(), to.iter().copied())?;
+
         // Determine the appropriate security mode
         let security_mode = self.determine_security_mode::<T>();
         println!("Security Mode: {:?}", security_mode);
@@ -448,8 +452,7 @@ impl crate::agent::Agent for TapAgent {
             }
         }
 
-        // Use the Packable trait to pack the message
-        // Create pack options
+        // Create pack options for the plaintext message
         let pack_options = PackOptions {
             security_mode,
             sender_kid: Some(format!("{}#keys-1", self.get_agent_did())),
@@ -460,12 +463,8 @@ impl crate::agent::Agent for TapAgent {
             },
         };
 
-        // Pack the message
-        // Use the pack_any helper function instead of trait method
-        let packed =
-            crate::message_packing::pack_any(message, self.key_manager.as_ref(), pack_options)
-                .await
-                .map_err(|e| Error::Cryptography(format!("Failed to pack message: {}", e)))?;
+        // Pack the plain message using the Packable trait
+        let packed = plain_message.pack(&*self.key_manager, pack_options).await?;
 
         // Log the packed message
         println!("--- PACKED MESSAGE ---");
@@ -580,8 +579,7 @@ impl crate::agent::Agent for TapAgent {
             &*self.key_manager,
             unpack_options,
         )
-        .await
-        .map_err(|e| Error::Cryptography(format!("Failed to unpack message: {}", e)))?;
+        .await?;
 
         // Log the unpacked message
         println!("--- UNPACKED CONTENT ---");
