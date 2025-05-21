@@ -89,6 +89,12 @@ Available command-line tools:
 
    # List stored keys
    tap-agent-cli keys list
+   
+   # Pack a plaintext DIDComm message
+   tap-agent-cli pack --input message.json --output packed.json --mode signed
+   
+   # Unpack a signed or encrypted DIDComm message
+   tap-agent-cli unpack --input packed.json --output unpacked.json
    ```
 
 2. **tap-http**: Run a TAP HTTP server for DIDComm messaging

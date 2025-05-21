@@ -653,6 +653,58 @@ tap-agent-cli import key.json
 tap-agent-cli import key.json --default
 ```
 
+#### Pack Command
+
+The `pack` command securely packs a plaintext DIDComm message for transmission:
+
+```bash
+# Pack a message with the default security mode (signed)
+tap-agent-cli pack --input plaintext.json --output packed.json
+
+# Pack using a specific security mode
+tap-agent-cli pack --input plaintext.json --mode plain
+tap-agent-cli pack --input plaintext.json --mode signed
+tap-agent-cli pack --input plaintext.json --mode authcrypt --recipient did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Specify sender and recipient DIDs
+tap-agent-cli pack --input plaintext.json --sender did:key:z6Mky... --recipient did:key:z6Mkh...
+
+# Display the packed message in the console (no output file)
+tap-agent-cli pack --input plaintext.json
+```
+
+The `pack` command supports the following options:
+- `--input, -i`: The input file containing the plaintext DIDComm message (required)
+- `--output, -o`: The output file to save the packed message (optional, displays in console if not provided)
+- `--sender, -s`: The DID of the sender (optional, uses default key if not provided)
+- `--recipient, -r`: The DID of the recipient (required for authcrypt mode, optional for other modes)
+- `--mode, -m`: The security mode to use: `plain`, `signed`, or `authcrypt` (default: `signed`)
+
+Security modes:
+- `plain`: No security, message is sent as plaintext (use for testing only)
+- `signed`: Message is digitally signed but not encrypted (integrity protection)
+- `authcrypt`: Message is authenticated and encrypted (confidentiality and integrity)
+
+#### Unpack Command
+
+The `unpack` command decrypts and verifies packed DIDComm messages:
+
+```bash
+# Unpack a message using the default key
+tap-agent-cli unpack --input packed.json --output unpacked.json
+
+# Specify a recipient DID (whose key should be used for decryption)
+tap-agent-cli unpack --input packed.json --recipient did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+
+# Display the unpacked message in the console (no output file)
+tap-agent-cli unpack --input packed.json
+```
+
+The `unpack` command supports the following options:
+- `--input, -i`: The input file containing the packed DIDComm message (required)
+- `--output, -o`: The output file to save the unpacked message (optional, displays in console if not provided)
+- `--recipient, -r`: The DID of the recipient whose key should be used for unpacking (optional, uses default key if not provided)
+
 ### Help and Documentation
 
 ```bash
@@ -664,6 +716,8 @@ tap-agent-cli generate --help
 tap-agent-cli lookup --help
 tap-agent-cli keys --help
 tap-agent-cli import --help
+tap-agent-cli pack --help
+tap-agent-cli unpack --help
 
 # Display help for a subcommand
 tap-agent-cli keys delete --help

@@ -103,4 +103,8 @@ pub enum Error {
     /// Networking error
     #[error("Networking error: {0}")]
     Networking(String),
+
+    /// Runtime error
+    #[error("Runtime error: {0}")]
+    Runtime(String),
 }
