@@ -1,7 +1,7 @@
 use js_sys::{Array, Reflect};
 use std::collections::HashMap;
-use wasm_bindgen::prelude::*;
 use tap_msg::didcomm::PlainMessage;
+use wasm_bindgen::prelude::*;
 
 /// Converts a JavaScript message object to a TapMessageBody
 pub fn js_to_tap_message(js_message: &JsValue) -> Result<PlainMessage, String> {
@@ -44,7 +44,7 @@ pub fn js_to_tap_message(js_message: &JsValue) -> Result<PlainMessage, String> {
             .map_err(|_| "Failed to stringify body".to_string())?
             .as_string()
             .ok_or_else(|| "Body is not a string".to_string())?;
-        
+
         serde_json::from_str(&body_str)
             .map_err(|e| format!("Failed to parse body as JSON: {}", e))?
     } else {
@@ -58,30 +58,32 @@ pub fn js_to_tap_message(js_message: &JsValue) -> Result<PlainMessage, String> {
     let pthid = get_string_prop(js_message, "pthid");
 
     // Extract created time
-    let created_time = if let Ok(created_js) = Reflect::get(js_message, &JsValue::from_str("created")) {
-        if created_js.is_null() || created_js.is_undefined() {
-            Some(js_sys::Date::now() as u64 / 1000)
-        } else if let Some(created) = created_js.as_f64() {
-            Some(created as u64 / 1000)
+    let created_time =
+        if let Ok(created_js) = Reflect::get(js_message, &JsValue::from_str("created")) {
+            if created_js.is_null() || created_js.is_undefined() {
+                Some(js_sys::Date::now() as u64 / 1000)
+            } else if let Some(created) = created_js.as_f64() {
+                Some(created as u64 / 1000)
+            } else {
+                Some(js_sys::Date::now() as u64 / 1000)
+            }
         } else {
             Some(js_sys::Date::now() as u64 / 1000)
-        }
-    } else {
-        Some(js_sys::Date::now() as u64 / 1000)
-    };
+        };
 
     // Extract expires time
-    let expires_time = if let Ok(expires_js) = Reflect::get(js_message, &JsValue::from_str("expires")) {
-        if expires_js.is_null() || expires_js.is_undefined() {
-            None
-        } else if let Some(expires) = expires_js.as_f64() {
-            Some(expires as u64 / 1000)
+    let expires_time =
+        if let Ok(expires_js) = Reflect::get(js_message, &JsValue::from_str("expires")) {
+            if expires_js.is_null() || expires_js.is_undefined() {
+                None
+            } else if let Some(expires) = expires_js.as_f64() {
+                Some(expires as u64 / 1000)
+            } else {
+                None
+            }
         } else {
             None
-        }
-    } else {
-        None
-    };
+        };
 
     // Create the PlainMessage
     Ok(PlainMessage {
@@ -111,7 +113,7 @@ fn get_string_prop(js_obj: &JsValue, prop_name: &str) -> Option<String> {
 }
 
 /// Converts Vec<u8> to a JavaScript Uint8Array
-/// 
+///
 /// This function is kept for future binary message handling support
 #[allow(dead_code)]
 pub fn vec_u8_to_js_array(data: &[u8]) -> js_sys::Uint8Array {
@@ -121,7 +123,7 @@ pub fn vec_u8_to_js_array(data: &[u8]) -> js_sys::Uint8Array {
 }
 
 /// Converts a JavaScript Uint8Array to Vec<u8>
-/// 
+///
 /// This function is kept for future binary message handling support
 #[allow(dead_code)]
 pub fn js_array_to_vec_u8(array: &js_sys::Uint8Array) -> Vec<u8> {

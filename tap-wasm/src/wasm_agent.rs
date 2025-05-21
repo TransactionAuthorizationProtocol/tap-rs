@@ -2,12 +2,13 @@ use crate::util::js_to_tap_message;
 use js_sys::{Array, Function, Object, Promise, Reflect};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tap_agent::{
-    AgentConfig, AgentKeyManager, AgentKeyManagerBuilder, KeyType,
-    message_packing::{PackOptions, UnpackOptions}, message::SecurityMode, did::DIDGenerationOptions,
-    Packable, Unpackable
-};
 use tap_agent::agent::TapAgent;
+use tap_agent::{
+    did::DIDGenerationOptions,
+    message::SecurityMode,
+    message_packing::{PackOptions, UnpackOptions},
+    AgentConfig, AgentKeyManager, AgentKeyManagerBuilder, KeyType, Packable, Unpackable,
+};
 
 // Extension trait for TapAgent in WASM context
 trait WasmTapAgentExt {
@@ -28,10 +29,10 @@ impl WasmTapAgentExt for TapAgent {
     }
 }
 use tap_msg::didcomm::PlainMessage;
+use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
-use uuid::Uuid;
 
 /// TAP Agent implementation for WASM bindings
 #[wasm_bindgen]
@@ -56,11 +57,12 @@ impl WasmTapAgent {
     pub fn new(config: JsValue) -> std::result::Result<WasmTapAgent, JsValue> {
         console_error_panic_hook::set_once();
 
-        let nickname = if let Ok(nickname_prop) = Reflect::get(&config, &JsValue::from_str("nickname")) {
-            nickname_prop.as_string()
-        } else {
-            None
-        };
+        let nickname =
+            if let Ok(nickname_prop) = Reflect::get(&config, &JsValue::from_str("nickname")) {
+                nickname_prop.as_string()
+            } else {
+                None
+            };
 
         let debug = if let Ok(debug_prop) = Reflect::get(&config, &JsValue::from_str("debug")) {
             debug_prop.is_truthy()
@@ -84,19 +86,26 @@ impl WasmTapAgent {
         let key_manager_builder = AgentKeyManagerBuilder::new();
         let key_manager = match key_manager_builder.build() {
             Ok(km) => km,
-            Err(e) => return Err(JsValue::from_str(&format!("Failed to build key manager: {}", e))),
+            Err(e) => {
+                return Err(JsValue::from_str(&format!(
+                    "Failed to build key manager: {}",
+                    e
+                )))
+            }
         };
 
         let agent = if let Some(did) = did_string {
             // Create a config with the provided DID
             let agent_config = AgentConfig::new(did).with_debug(debug);
-            
+
             // Create the agent with the provided DID
             TapAgent::new(agent_config, Arc::new(key_manager))
         } else {
             // For WASM, we'll create a simple agent with a default key
             // We can't use from_ephemeral_key which is async
-            let agent_config = AgentConfig::new(format!("did:key:z6Mk{}", uuid::Uuid::new_v4().simple())).with_debug(debug);
+            let agent_config =
+                AgentConfig::new(format!("did:key:z6Mk{}", uuid::Uuid::new_v4().simple()))
+                    .with_debug(debug);
             TapAgent::new(agent_config, Arc::new(key_manager))
         };
 
@@ -136,7 +145,12 @@ impl WasmTapAgent {
             // Convert JS message to a TapMessageBody
             let tap_message = match js_to_tap_message(&message_js) {
                 Ok(msg) => msg,
-                Err(e) => return Err(JsValue::from_str(&format!("Failed to convert JS message: {}", e))),
+                Err(e) => {
+                    return Err(JsValue::from_str(&format!(
+                        "Failed to convert JS message: {}",
+                        e
+                    )))
+                }
             };
 
             // Create pack options
@@ -166,7 +180,11 @@ impl WasmTapAgent {
 
             // Create a JS object to return with the packed message
             let result = Object::new();
-            Reflect::set(&result, &JsValue::from_str("message"), &JsValue::from_str(&packed))?;
+            Reflect::set(
+                &result,
+                &JsValue::from_str("message"),
+                &JsValue::from_str(&packed),
+            )?;
 
             // Add metadata
             let metadata = Object::new();
@@ -204,10 +222,16 @@ impl WasmTapAgent {
 
             // Unpack the message
             let key_manager = agent.agent_key_manager();
-            let plain_message: PlainMessage = match String::unpack(&packed_message, &*key_manager, unpack_options).await {
-                Ok(msg) => msg,
-                Err(e) => return Err(JsValue::from_str(&format!("Failed to unpack message: {}", e))),
-            };
+            let plain_message: PlainMessage =
+                match String::unpack(&packed_message, &*key_manager, unpack_options).await {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        return Err(JsValue::from_str(&format!(
+                            "Failed to unpack message: {}",
+                            e
+                        )))
+                    }
+                };
 
             if debug {
                 console::log_1(&JsValue::from_str(&format!(
@@ -228,49 +252,77 @@ impl WasmTapAgent {
 
             // Convert the unpacked message to a JS object
             let result = Object::new();
-            
+
             // Add message ID
-            Reflect::set(&result, &JsValue::from_str("id"), &JsValue::from_str(&plain_message.id))?;
-            
+            Reflect::set(
+                &result,
+                &JsValue::from_str("id"),
+                &JsValue::from_str(&plain_message.id),
+            )?;
+
             // Add message type
-            Reflect::set(&result, &JsValue::from_str("type"), &JsValue::from_str(&plain_message.type_))?;
-            
+            Reflect::set(
+                &result,
+                &JsValue::from_str("type"),
+                &JsValue::from_str(&plain_message.type_),
+            )?;
+
             // Add from and to
-            Reflect::set(&result, &JsValue::from_str("from"), &JsValue::from_str(&plain_message.from))?;
-            
+            Reflect::set(
+                &result,
+                &JsValue::from_str("from"),
+                &JsValue::from_str(&plain_message.from),
+            )?;
+
             let to_array = Array::new();
             for to_did in &plain_message.to {
                 to_array.push(&JsValue::from_str(to_did));
             }
             Reflect::set(&result, &JsValue::from_str("to"), &to_array)?;
-            
+
             // Add body as a JS object
             let body_str = serde_json::to_string(&plain_message.body)
                 .map_err(|e| JsValue::from_str(&format!("Failed to serialize body: {}", e)))?;
-            
+
             let body_js = js_sys::JSON::parse(&body_str)
                 .map_err(|e| JsValue::from_str(&format!("Failed to parse body: {:?}", e)))?;
-            
+
             Reflect::set(&result, &JsValue::from_str("body"), &body_js)?;
-            
+
             // Add created time if available
             if let Some(created) = plain_message.created_time {
-                Reflect::set(&result, &JsValue::from_str("created"), &JsValue::from_f64(created as f64))?;
+                Reflect::set(
+                    &result,
+                    &JsValue::from_str("created"),
+                    &JsValue::from_f64(created as f64),
+                )?;
             }
-            
+
             // Add expires time if available
             if let Some(expires) = plain_message.expires_time {
-                Reflect::set(&result, &JsValue::from_str("expires"), &JsValue::from_f64(expires as f64))?;
+                Reflect::set(
+                    &result,
+                    &JsValue::from_str("expires"),
+                    &JsValue::from_f64(expires as f64),
+                )?;
             }
-            
+
             // Add thread ID if available
             if let Some(thid) = plain_message.thid {
-                Reflect::set(&result, &JsValue::from_str("thid"), &JsValue::from_str(&thid))?;
+                Reflect::set(
+                    &result,
+                    &JsValue::from_str("thid"),
+                    &JsValue::from_str(&thid),
+                )?;
             }
-            
+
             // Add parent thread ID if available
             if let Some(pthid) = plain_message.pthid {
-                Reflect::set(&result, &JsValue::from_str("pthid"), &JsValue::from_str(&pthid))?;
+                Reflect::set(
+                    &result,
+                    &JsValue::from_str("pthid"),
+                    &JsValue::from_str(&pthid),
+                )?;
             }
 
             Ok(result.into())
@@ -280,7 +332,8 @@ impl WasmTapAgent {
     /// Registers a message handler function for a specific message type
     #[wasm_bindgen(js_name = registerMessageHandler)]
     pub fn register_message_handler(&mut self, message_type: &str, handler: Function) {
-        self.message_handlers.insert(message_type.to_string(), handler);
+        self.message_handlers
+            .insert(message_type.to_string(), handler);
         if self.debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Registered handler for message type: {}",
@@ -300,11 +353,12 @@ impl WasmTapAgent {
         let metadata_clone = metadata.clone();
 
         future_to_promise(async move {
-            let message_type = if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
-                type_prop.as_string().unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let message_type =
+                if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
+                    type_prop.as_string().unwrap_or_default()
+                } else {
+                    String::new()
+                };
 
             // Notify all subscribers
             for subscriber in &message_subscribers {
@@ -354,7 +408,9 @@ impl WasmTapAgent {
 
         let _unsubscribe = move || {
             let agent = unsafe { &mut *agent_ptr };
-            agent.message_subscribers.retain(|cb| !Object::is(cb, &cb_ref));
+            agent
+                .message_subscribers
+                .retain(|cb| !Object::is(cb, &cb_ref));
         };
 
         Function::new_no_args("agent.message_subscribers.pop()")
@@ -368,19 +424,34 @@ impl WasmTapAgent {
 
         // Set basic message properties
         Reflect::set(&result, &JsValue::from_str("id"), &JsValue::from_str(&id)).unwrap();
-        Reflect::set(&result, &JsValue::from_str("type"), &JsValue::from_str(message_type)).unwrap();
-        Reflect::set(&result, &JsValue::from_str("from"), &JsValue::from_str(&self.agent.config.agent_did)).unwrap();
-        
+        Reflect::set(
+            &result,
+            &JsValue::from_str("type"),
+            &JsValue::from_str(message_type),
+        )
+        .unwrap();
+        Reflect::set(
+            &result,
+            &JsValue::from_str("from"),
+            &JsValue::from_str(&self.agent.config.agent_did),
+        )
+        .unwrap();
+
         // Create empty arrays/objects for other fields
         let to_array = Array::new();
         Reflect::set(&result, &JsValue::from_str("to"), &to_array).unwrap();
-        
+
         let body = Object::new();
         Reflect::set(&result, &JsValue::from_str("body"), &body).unwrap();
-        
+
         // Set created time
         let now = js_sys::Date::now();
-        Reflect::set(&result, &JsValue::from_str("created"), &JsValue::from_f64(now)).unwrap();
+        Reflect::set(
+            &result,
+            &JsValue::from_str("created"),
+            &JsValue::from_f64(now),
+        )
+        .unwrap();
 
         result.into()
     }
@@ -399,17 +470,13 @@ impl WasmTapAgent {
             "Secp256k1" => KeyType::Secp256k1,
             _ => {
                 let err_msg = format!("Unsupported key type: {}", key_type_str);
-                return future_to_promise(async move { 
-                    Err(JsValue::from_str(&err_msg)) 
-                });
-            },
+                return future_to_promise(async move { Err(JsValue::from_str(&err_msg)) });
+            }
         };
 
         future_to_promise(async move {
             // Create DID generation options
-            let _options = DIDGenerationOptions {
-                key_type,
-            };
+            let _options = DIDGenerationOptions { key_type };
 
             // Generate the key
             if debug {
@@ -423,11 +490,18 @@ impl WasmTapAgent {
             // Note: In a real implementation, we would need to access the key manager directly
             // This is a simplified example
             let result = Object::new();
-            Reflect::set(&result, &JsValue::from_str("keyType"), &JsValue::from_str(&key_type_str))?;
-            Reflect::set(&result, &JsValue::from_str("agentDid"), &JsValue::from_str(&agent.config.agent_did))?;
+            Reflect::set(
+                &result,
+                &JsValue::from_str("keyType"),
+                &JsValue::from_str(&key_type_str),
+            )?;
+            Reflect::set(
+                &result,
+                &JsValue::from_str("agentDid"),
+                &JsValue::from_str(&agent.config.agent_did),
+            )?;
 
             Ok(result.into())
         })
     }
 }
-

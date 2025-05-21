@@ -1404,7 +1404,8 @@ impl MultiResolver {
     }
 
     pub fn add_resolver(&mut self, resolver: Box<dyn WasmDIDMethodResolver>) {
-        self.resolvers.insert(resolver.method().to_string(), resolver);
+        self.resolvers
+            .insert(resolver.method().to_string(), resolver);
     }
 }
 
@@ -1557,7 +1558,9 @@ impl WasmDIDMethodResolver for JsDIDMethodResolver {
         // In WASM target mode, we can't use async/await in this interface
         // This implementation is a simplified version that just returns None
         // The proper implementation would be in the JavaScript binding
-        Err(Error::NotImplemented("JS resolver not supported in this context".to_string()))
+        Err(Error::NotImplemented(
+            "JS resolver not supported in this context".to_string(),
+        ))
     }
 
     #[cfg(not(feature = "wasm"))]

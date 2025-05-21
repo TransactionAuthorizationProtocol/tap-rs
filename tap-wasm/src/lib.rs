@@ -4,8 +4,8 @@
 //! browser and other JavaScript environments. It wraps the tap-agent crate's functionality
 //! with JavaScript-friendly interfaces.
 
-mod wasm_agent;
 mod util;
+mod wasm_agent;
 
 use js_sys::{Array, Object, Reflect};
 use std::collections::HashMap;
@@ -161,68 +161,75 @@ impl TapNode {
     #[wasm_bindgen(constructor)]
     pub fn new(config: JsValue) -> Self {
         console_error_panic_hook::set_once();
-        
+
         let debug = if let Ok(debug_prop) = Reflect::get(&config, &JsValue::from_str("debug")) {
             debug_prop.is_truthy()
         } else {
             false
         };
-        
+
         TapNode {
             agents: HashMap::new(),
             debug,
         }
     }
-    
+
     /// Adds an agent to this node
     pub fn add_agent(&mut self, agent: WasmTapAgent) -> Result<(), JsValue> {
         let did = agent.get_did();
         self.agents.insert(did.clone(), agent);
-        
+
         if self.debug {
-            console::log_1(&JsValue::from_str(&format!(
-                "Added agent {} to node",
-                did
-            )));
+            console::log_1(&JsValue::from_str(&format!("Added agent {} to node", did)));
         }
-        
+
         Ok(())
     }
-    
+
     /// Gets an agent by DID
     pub fn get_agent(&self, did: &str) -> Option<WasmTapAgent> {
         self.agents.get(did).cloned()
     }
-    
+
     /// Lists all agents in this node
     pub fn list_agents(&self) -> JsValue {
         let result = Array::new();
-        
+
         for (did, agent) in &self.agents {
             let agent_obj = Object::new();
-            Reflect::set(&agent_obj, &JsValue::from_str("did"), &JsValue::from_str(did)).unwrap();
-            
+            Reflect::set(
+                &agent_obj,
+                &JsValue::from_str("did"),
+                &JsValue::from_str(did),
+            )
+            .unwrap();
+
             if let Some(nickname) = agent.nickname() {
-                Reflect::set(&agent_obj, &JsValue::from_str("nickname"), &JsValue::from_str(&nickname)).unwrap();
+                Reflect::set(
+                    &agent_obj,
+                    &JsValue::from_str("nickname"),
+                    &JsValue::from_str(&nickname),
+                )
+                .unwrap();
             }
-            
+
             result.push(&agent_obj);
         }
-        
+
         result.into()
     }
-    
+
     /// Removes an agent from this node
     pub fn remove_agent(&mut self, did: &str) -> bool {
         let removed = self.agents.remove(did).is_some();
-        
+
         if removed && self.debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Removed agent {} from node",
                 did
             )));
         }
-        
+
         removed
     }
 }
