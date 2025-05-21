@@ -74,31 +74,47 @@ npm run build
 
 ```typescript
 // Import the TAP-TS library
-import { Agent, Message, MessageType } from '@tap-rs/tap-ts';
+import { TAPAgent, Message, MessageType } from '@taprsvp/tap-agent';
 
-// Create a participant
-const participant = new Agent({
-  nickname: 'Browser Wallet Participant',
-  // You can provide a custom key resolver or use the default
-});
+// Create a participant using the static factory method
+// IMPORTANT: Always use the async create() method, NOT the constructor directly
+async function setupParticipant() {
+  // This ensures WASM is properly initialized before agent creation
+  const participant = await TAPAgent.create({
+    nickname: 'Browser Wallet Participant',
+    // You can provide a custom key resolver or use the default
+  });
 
-console.log('Participant DID:', participant.did);
+  console.log('Participant DID:', participant.did);
+  return participant;
+}
+
+// Call the async function
+setupParticipant();
 ```
 
 ### Creating and Processing TAP Messages
 
 ```typescript
 // Create a transfer message
-function createTransferMessage(beneficiaryDid: string, amount: string, asset: string) {
-  const transfer = new Message({
-    type: MessageType.TRANSFER,
-  });
+async function createTransferMessage(participant, beneficiaryDid: string, amount: string, asset: string) {
+  // Ensure we have a valid TAPAgent instance
+  if (!participant) {
+    participant = await TAPAgent.create({ nickname: "Default Participant" });
+  }
   
-  transfer.setTransferData({
+  // Using the transfer helper method directly on the agent
+  const transfer = participant.transfer({
     asset: asset, // e.g., "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F"
     amount: amount, // e.g., "100.0"
-    originatorDid: participant.did,
-    beneficiaryDid: beneficiaryDid,
+    originator: {
+      '@id': participant.did,
+      role: "originator"
+    },
+    beneficiary: {
+      '@id': beneficiaryDid,
+      role: "beneficiary"
+    },
     memo: "Payment from web application"
   });
   
@@ -106,35 +122,35 @@ function createTransferMessage(beneficiaryDid: string, amount: string, asset: st
 }
 
 // Process an incoming message
-function processMessage(messageJson: string) {
+async function processMessage(participantPromise, messageJson: string) {
   try {
-    const message = Message.fromJson(messageJson);
+    // Ensure we have a valid TAPAgent instance
+    const participant = await participantPromise;
+    
+    // Parse the message
+    const message = await participant.parseMessage(messageJson);
     
     console.log('Received message type:', message.type);
     
     switch(message.type) {
-      case MessageType.TRANSFER:
-        const transferData = message.getTransferData();
-        console.log('Transfer request:', transferData);
+      case "https://tap.rsvp/schema/1.0#Transfer":
+        console.log('Transfer request:', message.body);
         
         // Process transfer request
         // ...
         
         // Create an authorize response
-        const authorize = new Message({
-          type: MessageType.AUTHORIZE,
-          correlation: message.id,
+        const authorize = participant.authorize({
+          reason: "Transfer authorized by web application"
         });
         
-        authorize.setAuthorizeData({
-          note: "Transfer authorized by web application"
-        });
+        // Link it to the original message
+        authorize.setThreadId(message.id);
         
         return authorize;
         
-      case MessageType.AUTHORIZE:
-        const authorizeData = message.getAuthorizeData();
-        console.log('Authorization received:', authorizeData);
+      case "https://tap.rsvp/schema/1.0#Authorize":
+        console.log('Authorization received:', message.body);
         
         // Handle authorization
         // ...
@@ -153,12 +169,13 @@ function processMessage(messageJson: string) {
 Here's how to integrate TAP-RS with a web wallet:
 
 ```typescript
-import { Agent, Message, MessageType } from '@tap-rs/tap-ts';
+import { TAPAgent } from '@taprsvp/tap-agent';
 import Web3 from 'web3';
 
 class WalletTapIntegration {
-  private participant: Agent;
+  private participant: TAPAgent | null = null;
   private web3: Web3;
+  private initialized: Promise<void>;
   
   constructor() {
     // Initialize Web3
@@ -168,14 +185,29 @@ class WalletTapIntegration {
       throw new Error("No Ethereum provider found");
     }
     
-    // Create TAP participant
-    this.participant = new Agent({
-      nickname: 'Web Wallet'
-    });
+    // Initialize TAPAgent asynchronously
+    this.initialized = this.init();
+  }
+  
+  // Async initialization method
+  private async init() {
+    try {
+      // Create TAP participant using the static factory method
+      this.participant = await TAPAgent.create({
+        nickname: 'Web Wallet'
+      });
+      console.log("TAP agent initialized with DID:", this.participant.did);
+    } catch (error) {
+      console.error("Failed to initialize TAP agent:", error);
+      throw error;
+    }
   }
   
   // Connect wallet and get accounts
   async connect() {
+    // Wait for TAP initialization to complete
+    await this.initialized;
+    
     try {
       const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
       return accounts[0];
@@ -187,15 +219,25 @@ class WalletTapIntegration {
   
   // Create a transfer message for sending funds
   async createTransfer(beneficiaryDid: string, asset: string, amount: string) {
-    const transfer = new Message({
-      type: MessageType.TRANSFER,
-    });
+    // Wait for TAP initialization to complete
+    await this.initialized;
     
-    transfer.setTransferData({
+    if (!this.participant) {
+      throw new Error("TAP agent not initialized");
+    }
+    
+    // Use the transfer helper method on the TAPAgent
+    const transfer = this.participant.transfer({
       asset: asset,
       amount: amount,
-      originatorDid: this.participant.did,
-      beneficiaryDid: beneficiaryDid,
+      originator: {
+        '@id': this.participant.did,
+        role: "originator"
+      },
+      beneficiary: {
+        '@id': beneficiaryDid,
+        role: "beneficiary"
+      },
       memo: "Transfer initiated from web wallet"
     });
     
@@ -203,10 +245,17 @@ class WalletTapIntegration {
   }
   
   // Execute an on-chain transaction after receiving authorization
-  async executeTransaction(authorizeMessage: Message) {
+  async executeTransaction(authorizeMessage: any) {
+    // Wait for TAP initialization to complete
+    await this.initialized;
+    
+    if (!this.participant) {
+      throw new Error("TAP agent not initialized");
+    }
+    
     try {
-      const authorizeData = authorizeMessage.getAuthorizeData();
-      const transferData = this.getOriginalTransfer(authorizeMessage.correlation);
+      // Get the original transfer from the thread ID
+      const transferData = this.getOriginalTransfer(authorizeMessage.thid);
       
       if (!transferData) {
         throw new Error("Original transfer data not found");
@@ -229,25 +278,24 @@ class WalletTapIntegration {
       const amount = this.web3.utils.toBN(parseFloat(transferData.amount) * 10**decimals);
       
       // Get the on-chain address for the beneficiary DID
-      const toAddress = this.didToAddress(transferData.beneficiaryDid);
+      const toAddress = this.didToAddress(transferData.beneficiary['@id']);
       
       // Send the transaction
       const tx = await tokenContract.methods.transfer(toAddress, amount.toString()).send({
         from: fromAddress
       });
       
-      // Create receipt message
-      const receipt = new Message({
-        type: MessageType.RECEIPT,
-        correlation: authorizeMessage.correlation,
-      });
-      
-      receipt.setReceiptData({
+      // Create settle message
+      const settle = this.participant.settle({
         settlementId: tx.transactionHash,
-        note: "Settlement transaction completed"
+        status: "completed",
+        note: "Settlement transaction completed on blockchain"
       });
       
-      return receipt;
+      // Link to the original transfer
+      settle.setThreadId(authorizeMessage.thid);
+      
+      return settle;
     } catch (error) {
       console.error('Transaction execution failed:', error);
       throw error;
@@ -277,15 +325,22 @@ class WalletTapIntegration {
 }
 
 // Usage
-const tapWallet = new WalletTapIntegration();
-tapWallet.connect().then(account => {
-  console.log('Connected account:', account);
-});
+async function main() {
+  try {
+    const tapWallet = new WalletTapIntegration();
+    const account = await tapWallet.connect();
+    console.log('Connected account:', account);
+  } catch (error) {
+    console.error("Failed to initialize wallet integration:", error);
+  }
+}
+
+main();
 ```
 
 ## Handling WASM Loading
 
-When using TAP-RS in a browser environment, you need to handle WASM loading correctly:
+When using TAP-RS in a browser environment, you need to handle WASM loading correctly. The static TAPAgent.create() method helps with this by ensuring WASM is properly initialized before creating agent instances:
 
 ```html
 <!DOCTYPE html>
@@ -297,43 +352,55 @@ When using TAP-RS in a browser environment, you need to handle WASM loading corr
   <div id="app">
     <h1>TAP-RS WASM Example</h1>
     <div>
-      <button id="createMessage">Create Transfer Message</button>
+      <div id="loading">Initializing TAP agent...</div>
+      <button id="createMessage" style="display: none;">Create Transfer Message</button>
       <pre id="messageOutput"></pre>
     </div>
   </div>
   
   <script type="module">
     // With bundlers like webpack or Parcel
-    import { Agent, Message, MessageType } from '@tap-rs/tap-ts';
+    import { TAPAgent } from '@taprsvp/tap-agent';
     
     // Initialize after the WASM is loaded
     async function initialize() {
       try {
-        const participant = new Agent({
+        // Create the agent using the static factory method
+        // This ensures WASM is properly initialized
+        const participant = await TAPAgent.create({
           nickname: 'Browser Demo Participant'
         });
         
-        document.getElementById('createMessage').addEventListener('click', () => {
-          const transfer = new Message({
-            type: MessageType.TRANSFER,
-          });
-          
-          transfer.setTransferData({
+        // Show the button and hide loading message once initialized
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('createMessage').style.display = 'block';
+        
+        document.getElementById('createMessage').addEventListener('click', async () => {
+          // Use the transfer helper method on the agent
+          const transfer = participant.transfer({
             asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F",
             amount: "10.0",
-            originatorDid: participant.did,
-            beneficiaryDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            originator: {
+              '@id': participant.did,
+              role: "originator"
+            },
+            beneficiary: {
+              '@id': "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+              role: "beneficiary"
+            },
             memo: "Demo transfer"
           });
           
-          const json = transfer.toJson();
-          document.getElementById('messageOutput').textContent = json;
+          // Pack the message for transport
+          const packed = await transfer.pack();
+          document.getElementById('messageOutput').textContent = JSON.stringify(packed, null, 2);
         });
         
         console.log('TAP-RS WASM loaded successfully');
         console.log('Participant DID:', participant.did);
       } catch (error) {
         console.error('Failed to initialize TAP-RS:', error);
+        document.getElementById('loading').textContent = 'Error loading TAP agent: ' + error.message;
       }
     }
     
@@ -346,37 +413,57 @@ When using TAP-RS in a browser environment, you need to handle WASM loading corr
 
 ## Usage in Node.js
 
-Using TAP-RS in Node.js is similar to browser usage:
+Using TAP-RS in Node.js is similar to browser usage, but make sure to use the async factory pattern:
 
 ```javascript
 // JavaScript/Node.js example
-const tap = require('@tap-rs/tap-ts');
+const { TAPAgent } = require('@taprsvp/tap-agent');
 
-// Create a participant
-const participant = new tap.Agent({
-  nickname: 'Node.js Participant'
-});
+async function main() {
+  try {
+    // Create a participant using the async factory method
+    const participant = await TAPAgent.create({
+      nickname: 'Node.js Participant'
+    });
+    
+    console.log('TAP agent initialized with DID:', participant.did);
+    
+    // Create a simple transfer message
+    const transfer = participant.transfer({
+      asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      amount: "100.0",
+      originator: {
+        '@id': participant.did,
+        role: "originator"
+      },
+      beneficiary: {
+        '@id': "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+        role: "beneficiary"
+      },
+      memo: "Node.js test transfer"
+    });
+    
+    // Convert to JSON
+    const json = transfer.toJSON();
+    console.log('Transfer message:');
+    console.log(json);
+    
+    // Pack the message for transport
+    const packed = await transfer.pack();
+    console.log('Packed message:');
+    console.log(packed);
+    
+    // You can also unpack messages received from elsewhere
+    const unpacked = await participant.unpackMessage(packed.message);
+    console.log('Unpacked message:');
+    console.log(unpacked);
+  } catch (error) {
+    console.error('Error:', error);
+  }
+}
 
-// Create a simple transfer message
-const transfer = new tap.Message({
-  type: tap.MessageType.TRANSFER,
-});
-
-transfer.setTransferData({
-  asset: "eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F",
-  amount: "100.0",
-  originatorDid: participant.did,
-  beneficiaryDid: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-  memo: "Node.js test transfer"
-});
-
-// Convert to JSON
-const json = transfer.toJson();
-console.log(json);
-
-// Parse from JSON
-const parsedMessage = tap.Message.fromJson(json);
-console.log(parsedMessage.getTransferData());
+// Run the async function
+main();
 ```
 
 ## Bundling in Modern Web Applications
@@ -428,41 +515,77 @@ WASM modules have some performance characteristics to be aware of:
 
 2. **Memory Management**: WASM modules manage memory differently. Large message processing might require more memory.
 
-3. **Async Nature**: All WASM functions are inherently asynchronous during loading. Design your application flow to account for this.
+3. **Async Nature**: WASM initialization is inherently asynchronous. The `TAPAgent.create()` static factory method helps manage this asynchronous nature correctly, but you need to design your application flow to account for this.
 
-Example of handling the asynchronous loading:
+Example of handling the asynchronous loading with the factory pattern:
 
 ```typescript
-// Loading state management
-let tapInitialized = false;
-let pendingMessages = [];
+// Better approach using the factory method and async/await
+import { TAPAgent } from '@taprsvp/tap-agent';
 
-// Initialize TAP-RS
-import('@tap-rs/tap-ts').then(tap => {
-  const participant = new tap.Agent({
-    nickname: 'Async Loading Example'
-  });
-  
-  // Process any pending messages
-  pendingMessages.forEach(msg => processMessage(msg));
-  pendingMessages = [];
-  tapInitialized = true;
-}).catch(error => {
-  console.error('Failed to load TAP-RS:', error);
-});
+// Queue for messages received before initialization
+const pendingMessages = [];
+let agent = null;
 
-// Message handler
-function handleIncomingMessage(message) {
-  if (tapInitialized) {
-    processMessage(message);
-  } else {
-    pendingMessages.push(message);
+// Function to initialize the agent
+async function initializeAgent() {
+  try {
+    // Create an agent with the static factory method
+    agent = await TAPAgent.create({
+      nickname: 'Async Loading Example'
+    });
+    
+    console.log("Agent initialized with DID:", agent.did);
+    
+    // Process any messages that arrived before initialization
+    await Promise.all(pendingMessages.map(processMessage));
+    pendingMessages.length = 0; // Clear the queue
+    
+    return agent;
+  } catch (error) {
+    console.error("Failed to initialize agent:", error);
+    throw error;
   }
 }
 
-function processMessage(message) {
-  // Process with TAP-RS
-  // ...
+// Start initialization immediately
+const initPromise = initializeAgent();
+
+// Message handler
+async function handleIncomingMessage(message) {
+  if (agent) {
+    // Agent is already initialized
+    await processMessage(message);
+  } else {
+    // Wait for agent initialization and then process
+    pendingMessages.push(message);
+    
+    // Ensure initialization is happening
+    initPromise.catch(error => {
+      console.error("Agent initialization failed:", error);
+    });
+  }
+}
+
+async function processMessage(message) {
+  try {
+    // Make sure agent is initialized
+    if (!agent) {
+      agent = await initPromise;
+    }
+    
+    // Now process the message with the agent
+    const unpacked = await agent.unpackMessage(message);
+    console.log("Processing message:", unpacked);
+    
+    // Handle different message types
+    if (unpacked.type === "https://tap.rsvp/schema/1.0#Transfer") {
+      // Handle transfer message
+      // ...
+    }
+  } catch (error) {
+    console.error("Error processing message:", error);
+  }
 }
 ```
 
