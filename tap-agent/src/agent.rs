@@ -626,6 +626,7 @@ impl TapAgent {
     ///
     /// # Returns
     /// The appropriate SecurityMode for the message type
+    #[cfg(not(target_arch = "wasm32"))]
     fn determine_security_mode<T: TapMessageBody>(&self) -> SecurityMode {
         // If security mode is explicitly configured, use that
         if let Some(ref mode) = self.config.security_mode {

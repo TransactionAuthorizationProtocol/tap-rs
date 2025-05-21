@@ -1,10 +1,29 @@
-import { TAPAgent } from '../agent';
-import { Reject } from '@taprsvp/types';
-import { BaseMessageObject } from './base-message';
+import { TAPAgent } from "../agent";
+import { BaseMessage } from "./base-message";
 
 /**
- * Rejection message object with fluent response interface
+ * RejectMessage - Represents a TAP Reject message
  */
-export class RejectObject extends BaseMessageObject {
-  // No additional methods for now
+export class RejectMessage extends BaseMessage {
+  /**
+   * Create a new reject message
+   */
+  constructor(agent: TAPAgent, message: any) {
+    super(agent, message);
+  }
+
+  /**
+   * Get the reason for the rejection
+   */
+  get reason(): string {
+    return this.body.reason;
+  }
+
+  /**
+   * Set the reason for the rejection
+   */
+  setReason(reason: string): this {
+    this.body.reason = reason;
+    return this;
+  }
 }

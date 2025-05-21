@@ -8,7 +8,7 @@ async function main() {
   
   // Example 1: Using default resolver configuration
   console.log('\nExample 1: Default DID resolver configuration');
-  const agent1 = new TAPAgent({
+  const agent1 = await TAPAgent.create({
     nickname: 'Agent with Default Resolver'
   });
   console.log(`Agent 1 DID: ${agent1.did}`);
@@ -38,7 +38,7 @@ async function main() {
     }
   };
   
-  const agent2 = new TAPAgent({
+  const agent2 = await TAPAgent.create({
     nickname: 'Agent with Custom Resolver',
     resolverOptions
   });
@@ -65,7 +65,7 @@ async function main() {
     }
   });
   
-  const agent3 = new TAPAgent({
+  const agent3 = await TAPAgent.create({
     nickname: 'Agent with Direct Resolver',
     didResolver: customResolver
   });
@@ -103,7 +103,7 @@ async function main() {
     }
   }
   
-  const agent4 = new TAPAgent({
+  const agent4 = await TAPAgent.create({
     nickname: 'Agent with Custom Resolver Implementation',
     didResolver: new MyCustomResolver()
   });

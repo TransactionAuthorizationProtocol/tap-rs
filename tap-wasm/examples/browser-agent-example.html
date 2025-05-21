@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TAP Agent WASM Example</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        pre {
+            background-color: #f5f5f5;
+            padding: 10px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        .output {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+        }
+    </style>
+</head>
+<body>
+    <h1>TAP Agent WASM Example</h1>
+    
+    <div>
+        <button id="createAgent">Create Agent</button>
+        <button id="createTransferMessage">Create Transfer Message</button>
+        <button id="packMessage">Pack Message</button>
+        <button id="unpackMessage">Unpack Message</button>
+    </div>
+    
+    <div class="output">
+        <h2>Output</h2>
+        <pre id="output">// Results will appear here</pre>
+    </div>
+    
+    <script type="module">
+        // Import the WASM module
+        import init, { WasmTapAgent, TapNode, MessageType, generate_uuid_v4 } from './tap_wasm.js';
+        
+        // Initialize the WASM module
+        init().then(() => {
+            console.log('WASM module initialized');
+            document.getElementById('output').textContent = '// WASM module initialized';
+            
+            let agent = null;
+            let transferMessage = null;
+            let packedMessage = null;
+            
+            // Create Agent button
+            document.getElementById('createAgent').addEventListener('click', () => {
+                try {
+                    agent = new WasmTapAgent({
+                        debug: true,
+                        nickname: "Test Agent"
+                    });
+                    
+                    const agentInfo = {
+                        did: agent.get_did(),
+                        nickname: agent.nickname()
+                    };
+                    
+                    document.getElementById('output').textContent = `// Agent created:\n${JSON.stringify(agentInfo, null, 2)}`;
+                } catch (error) {
+                    document.getElementById('output').textContent = `// Error creating agent: ${error}`;
+                }
+            });
+            
+            // Create Transfer Message button
+            document.getElementById('createTransferMessage').addEventListener('click', () => {
+                if (!agent) {
+                    document.getElementById('output').textContent = '// Please create an agent first';
+                    return;
+                }
+                
+                try {
+                    transferMessage = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
+                    
+                    // Set some example fields
+                    transferMessage.body = {
+                        asset: 'eth:1:0x123456789abcdef',
+                        amount: '1.0',
+                        originator: {
+                            '@id': 'did:example:originator',
+                            role: 'originator'
+                        },
+                        beneficiary: {
+                            '@id': 'did:example:beneficiary',
+                            role: 'beneficiary'
+                        },
+                        agents: [
+                            {
+                                '@id': agent.get_did(),
+                                role: 'agent'
+                            }
+                        ]
+                    };
+                    
+                    document.getElementById('output').textContent = `// Transfer message created:\n${JSON.stringify(transferMessage, null, 2)}`;
+                } catch (error) {
+                    document.getElementById('output').textContent = `// Error creating transfer message: ${error}`;
+                }
+            });
+            
+            // Pack Message button
+            document.getElementById('packMessage').addEventListener('click', async () => {
+                if (!agent || !transferMessage) {
+                    document.getElementById('output').textContent = '// Please create an agent and a transfer message first';
+                    return;
+                }
+                
+                try {
+                    const result = await agent.packMessage(transferMessage);
+                    packedMessage = result.message;
+                    
+                    document.getElementById('output').textContent = `// Message packed:\n${packedMessage}`;
+                } catch (error) {
+                    document.getElementById('output').textContent = `// Error packing message: ${error}`;
+                }
+            });
+            
+            // Unpack Message button
+            document.getElementById('unpackMessage').addEventListener('click', async () => {
+                if (!agent || !packedMessage) {
+                    document.getElementById('output').textContent = '// Please pack a message first';
+                    return;
+                }
+                
+                try {
+                    const result = await agent.unpackMessage(packedMessage);
+                    
+                    document.getElementById('output').textContent = `// Message unpacked:\n${JSON.stringify(result, null, 2)}`;
+                } catch (error) {
+                    document.getElementById('output').textContent = `// Error unpacking message: ${error}`;
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -313,7 +313,7 @@ beforeAll(async () => {
 
 // A helper function to create DID keys for tests
 async function createTestDIDKey(keyType: DIDKeyType = DIDKeyType.Ed25519) {
-  const agent = new TAPAgent();
+  const agent = await TAPAgent.create();
   return agent.generateDID(keyType);
 }
 
@@ -322,19 +322,16 @@ async function createTestDIDWeb(
   domain: string,
   keyType: DIDKeyType = DIDKeyType.Ed25519,
 ) {
-  const agent = new TAPAgent();
+  const agent = await TAPAgent.create();
   return agent.generateWebDID(domain, keyType);
 }
 
 describe("DID Generation", () => {
   it("should create a TAPAgent with automatically generated DID", async () => {
-    const agent = new TAPAgent({
+    const agent = await TAPAgent.create({
       nickname: "Auto DID Agent",
       debug: true,
     });
-
-    // Wait for the agent to initialize
-    await new Promise((resolve) => setTimeout(resolve, 100));
 
     // Check the DID
     const did = agent.did;
@@ -388,7 +385,7 @@ describe("DID Generation", () => {
   });
 
   it("should generate and list DIDs through agent", async () => {
-    const agent = new TAPAgent();
+    const agent = await TAPAgent.create();
 
     // Generate a few DIDs
     await agent.generateDID(DIDKeyType.Ed25519);
@@ -403,7 +400,7 @@ describe("DID Generation", () => {
   });
 
   it("should get key info", async () => {
-    const agent = new TAPAgent();
+    const agent = await TAPAgent.create();
     const keyInfo = agent.getKeysInfo();
 
     expect(keyInfo).toBeDefined();

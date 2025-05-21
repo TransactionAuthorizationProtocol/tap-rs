@@ -1,76 +1,75 @@
-import { TAPAgent } from '../agent';
-import { Connect, Authorize, Reject } from '@taprsvp/types';
-import { BaseMessageObject } from './base-message';
-import { AuthorizeObject } from './authorize';
-import { RejectObject } from './reject';
-import { tapWasm, MessageType } from '../wasm-loader';
+import { TAPAgent } from "../agent";
+import { BaseMessage } from "./base-message";
+import { EntityReference } from "../types";
 
 /**
- * Connect message object with fluent response interface
+ * ConnectMessage - Represents a TAP Connect message
  */
-export class ConnectionObject extends BaseMessageObject {
+export class ConnectMessage extends BaseMessage {
   /**
-   * Create an authorization response to this connect request
+   * Create a new connect message
    */
-  authorize(params: Omit<Authorize, '@type' | '@context'>): AuthorizeObject {
-    // Create a message ID
-    const id = tapWasm.generate_uuid_v4();
-    
-    // Create a WASM message for the authorize response
-    const message = this.agent.getWasmAgent().create_message(MessageType.Authorize);
-    
-    // Set the from field
-    this.agent.getWasmAgent().set_from(message);
-    
-    // Set the to field to the requesting agent
-    if (this.from) {
-      this.agent.getWasmAgent().set_to(message, this.from);
-    }
-    
-    // Set authorize body
-    message.set_authorize_body({
-      settlementAddress: params.settlementAddress,
-      expiry: params.expiry,
-      '@type': 'Authorize',
-      '@context': 'https://tap.rsvp/schema/1.0'
-    });
-    
-    // Sign the message
-    this.agent.getWasmAgent().sign_message(message);
-    
-    // Create and return the authorize object
-    return new AuthorizeObject(this.agent, message);
+  constructor(agent: TAPAgent, message: any) {
+    super(agent, message);
   }
-  
+
   /**
-   * Create a rejection response to this connect request
+   * Get the agent making the connection
    */
-  reject(params: Omit<Reject, '@type' | '@context'>): RejectObject {
-    // Create a message ID
-    const id = tapWasm.generate_uuid_v4();
-    
-    // Create a WASM message for the reject response
-    const message = this.agent.getWasmAgent().create_message(MessageType.Reject);
-    
-    // Set the from field
-    this.agent.getWasmAgent().set_from(message);
-    
-    // Set the to field to the requesting agent
-    if (this.from) {
-      this.agent.getWasmAgent().set_to(message, this.from);
-    }
-    
-    // Set reject body
-    message.set_reject_body({
-      reason: params.reason,
-      '@type': 'Reject',
-      '@context': 'https://tap.rsvp/schema/1.0'
-    });
-    
-    // Sign the message
-    this.agent.getWasmAgent().sign_message(message);
-    
-    // Create and return the reject object
-    return new RejectObject(this.agent, message);
+  getConnectionAgent(): EntityReference | undefined {
+    return this.body.agent;
+  }
+
+  /**
+   * Set the agent making the connection
+   */
+  setConnectionAgent(agent: EntityReference): this {
+    this.body.agent = agent;
+    return this;
+  }
+
+  /**
+   * Get what the connection is for
+   */
+  get for(): string {
+    return this.body.for;
+  }
+
+  /**
+   * Set what the connection is for
+   */
+  setFor(forValue: string): this {
+    this.body.for = forValue;
+    return this;
+  }
+
+  /**
+   * Get the constraints for the connection
+   */
+  get constraints(): any {
+    return this.body.constraints;
+  }
+
+  /**
+   * Set the constraints for the connection
+   */
+  setConstraints(constraints: any): this {
+    this.body.constraints = constraints;
+    return this;
+  }
+
+  /**
+   * Get the expiry timestamp for the connection
+   */
+  get expiry(): string | undefined {
+    return this.body.expiry;
+  }
+
+  /**
+   * Set the expiry timestamp for the connection
+   */
+  setExpiry(expiry: string): this {
+    this.body.expiry = expiry;
+    return this;
   }
 }

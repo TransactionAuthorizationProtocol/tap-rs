@@ -1,6 +1,6 @@
 {
   "name": "@taprsvp/tap-agent",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "TypeScript wrapper for TAP-WASM library",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -8,7 +8,7 @@
     "tap-did": "dist/cli/did-generator.js"
   },
   "scripts": {
-    "build:wasm": "node scripts/build-wasm.js",
+    "build:wasm": "cd ../tap-wasm && wasm-pack build --target bundler --out-dir pkg",
     "copy:wasm": "node scripts/ensure-wasm-dir.js && node scripts/copy-wasm.js",
     "prebuild": "npm run build:wasm && npm run copy:wasm",
     "build": "tsc",

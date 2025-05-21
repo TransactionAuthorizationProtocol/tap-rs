@@ -1,10 +1,44 @@
-import { TAPAgent } from '../agent';
-import { Revert } from '@taprsvp/types';
-import { BaseMessageObject } from './base-message';
+import { TAPAgent } from "../agent";
+import { BaseMessage } from "./base-message";
 
 /**
- * Revert message object with fluent response interface
+ * RevertMessage - Represents a TAP Revert message
  */
-export class RevertObject extends BaseMessageObject {
-  // No additional methods for now
+export class RevertMessage extends BaseMessage {
+  /**
+   * Create a new revert message
+   */
+  constructor(agent: TAPAgent, message: any) {
+    super(agent, message);
+  }
+
+  /**
+   * Get the settlement address to revert
+   */
+  get settlementAddress(): string {
+    return this.body.settlementAddress;
+  }
+
+  /**
+   * Set the settlement address to revert
+   */
+  setSettlementAddress(settlementAddress: string): this {
+    this.body.settlementAddress = settlementAddress;
+    return this;
+  }
+
+  /**
+   * Get the reason for the reversion
+   */
+  get reason(): string {
+    return this.body.reason;
+  }
+
+  /**
+   * Set the reason for the reversion
+   */
+  setReason(reason: string): this {
+    this.body.reason = reason;
+    return this;
+  }
 }
