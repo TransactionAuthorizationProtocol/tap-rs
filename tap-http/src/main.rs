@@ -12,7 +12,7 @@ use tap_agent::TapAgent;
 use tap_http::event::{EventLoggerConfig, LogDestination};
 use tap_http::{TapHttpConfig, TapHttpServer};
 use tap_node::{NodeConfig, TapNode};
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
 // For command line argument parsing
 struct Args {
