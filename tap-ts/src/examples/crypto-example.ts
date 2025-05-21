@@ -1,5 +1,6 @@
 import { TAPAgent } from '../agent';
-import { DIDKeyType, createDIDKey } from '../wasm-loader';
+import { DIDKeyType } from '../wasm-loader';
+import { createDIDKey } from '../did-generation';
 
 /**
  * Example demonstrating the cryptographic functionality
@@ -16,19 +17,17 @@ async function cryptoExample() {
   console.log(`Public key (hex): ${didKey.getPublicKeyHex()}`);
   
   // Create an agent with the key
-  const agent = new TAPAgent({
-    did: didKey.did as `did:${string}:${string}`,
+  const agent = await TAPAgent.create({
+    did: didKey.did,
     nickname: 'Crypto Agent',
     debug: true
   });
   
   // Generate a simple message
   const message = agent.transfer({
-    asset: {
-      id: 'eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f',
-      quantity: '100.0'
-    },
-    initiator: {
+    asset: 'eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f',
+    amount: '100.0',
+    originator: {
       '@id': agent.did,
       role: 'originator',
       name: 'Crypto Test'
@@ -44,7 +43,7 @@ async function cryptoExample() {
   
   // Verify the message
   console.log('\nVerifying the signed message...');
-  const verified = await agent.verifyMessage(signedMessage);
+  const verified = await agent.verifyMessage(message.getMessage(), signedMessage);
   console.log(`Message verification result: ${verified ? 'Success' : 'Failed'}`);
   
   // Demonstrate direct key signing
@@ -53,11 +52,11 @@ async function cryptoExample() {
   console.log(`Data to sign: "${dataToSign}"`);
   
   // Sign with the key directly
-  const signature = didKey.signData(dataToSign);
+  const signature = await didKey.signData(dataToSign);
   console.log(`Signature: ${signature}`);
   
   // Verify with the key directly
-  const directVerification = didKey.verifySignature(dataToSign, signature);
+  const directVerification = await didKey.verifySignature(dataToSign, signature);
   console.log(`Direct verification result: ${directVerification ? 'Success' : 'Failed'}`);
   
   console.log('\nCryptographic functionality test completed');

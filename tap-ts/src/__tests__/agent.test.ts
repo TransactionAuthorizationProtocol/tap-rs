@@ -350,10 +350,8 @@ describe("TAPAgent", () => {
   let agent: TAPAgent;
 
   beforeEach(async () => {
-    agent = new TAPAgent({ nickname: "Test Agent" });
-
-    // Allow time for async initialization
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Use the static create method instead of the constructor
+    agent = await TAPAgent.create({ nickname: "Test Agent" });
   });
 
   it("should create an agent with default options", () => {

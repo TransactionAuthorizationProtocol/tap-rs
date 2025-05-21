@@ -7,13 +7,11 @@
 mod wasm_agent;
 mod util;
 
-use js_sys::{Array, Function, Object, Promise, Reflect};
-use serde::{Deserialize, Serialize};
+use js_sys::{Array, Object, Reflect};
 use std::collections::HashMap;
 use std::fmt;
 use tap_agent::did::KeyType as TapKeyType;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
 
 pub use wasm_agent::WasmTapAgent;

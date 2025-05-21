@@ -1,181 +1,416 @@
 /**
- * Type definition for DID identifiers
+ * Type definitions for TAP messages and entities
  */
-export type DID = `${string}:${string}` | `did:${string}:${string}`;
 
 /**
- * Message type enum for TAP messages
+ * DID type (a string that conforms to the DID specification)
  */
-export type MessageTypeUri =
-  | "https://tap.rsvp/schema/1.0#Transfer"
-  | "https://tap.rsvp/schema/1.0#Payment"
-  | "https://tap.rsvp/schema/1.0#Authorize"
-  | "https://tap.rsvp/schema/1.0#Settle"
-  | "https://tap.rsvp/schema/1.0#Reject"
-  | "https://tap.rsvp/schema/1.0#Cancel"
-  | "https://tap.rsvp/schema/1.0#Revert"
-  | "https://tap.rsvp/schema/1.0#Connect"
-  | "https://tap.rsvp/schema/1.0#Presentation"
-  | "https://tap.rsvp/schema/1.0#ConfirmRelationship"
-  | "https://tap.rsvp/schema/1.0#AddAgents"
-  | "https://tap.rsvp/schema/1.0#ReplaceAgent"
-  | "https://tap.rsvp/schema/1.0#RemoveAgent"
-  | "https://tap.rsvp/schema/1.0#UpdatePolicies"
-  | "https://tap.rsvp/schema/1.0#UpdateParty"
-  | "https://tap.rsvp/schema/1.0#Error"
-  | "https://tap.rsvp/schema/1.0#Complete";
+export type DID = string;
 
 /**
- * Basic interface for TAP messages
+ * Message type URI
  */
-export interface TAPMessage {
-  id: string;
-  type: MessageTypeUri;
-  from?: DID;
-  to?: DID[];
-  created_time: number;
-  body: any;
-}
+export type MessageTypeUri = string;
 
 /**
- * DIDComm message interface
+ * Asset identifier type
  */
-export interface DIDCommMessage {
-  id: string;
-  type: string;
-  from?: DID;
-  to?: DID[];
-  created_time: number;
-  body: any;
-}
+export type Asset = string;
 
 /**
- * Entity reference object
+ * Reference to an entity in a TAP message
  */
 export interface EntityReference {
-  '@id': DID;
-  name?: string;
+  /**
+   * The ID of the entity
+   */
+  '@id': string;
+
+  /**
+   * The role of the entity
+   */
   role?: string;
+
+  /**
+   * The name of the entity
+   */
+  name?: string;
+
+  /**
+   * The LEI code of the entity
+   */
+  leiCode?: string;
+
+  /**
+   * A hashed representation of the entity's name (for privacy)
+   */
+  nameHash?: string;
+
+  /**
+   * A reference to another entity this entity acts for
+   */
+  for?: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
 
 /**
- * Participant interface - generic participant with a type parameter
+ * Generic TAP message structure
  */
-export interface Participant<T extends string> {
-  '@type': T;
-  '@id': DID;
-  role?: string;
-  name?: string;
-}
-
-/**
- * CAIP19 Asset Identifier (Chain Agnostic Improvement Proposal 19)
- */
-export type CAIP19 = string;
-
-/**
- * Amount type for asset transfers
- */
-export type Amount = string;
-
-/**
- * Asset interface for transfers
- */
-export interface Asset {
+export interface TAPMessage {
+  /**
+   * Unique identifier for the message
+   */
   id: string;
-  quantity: string;
+
+  /**
+   * The type URI for the message
+   */
+  type: MessageTypeUri;
+
+  /**
+   * The DID of the sender
+   */
+  from?: DID;
+
+  /**
+   * The DIDs of the recipients
+   */
+  to?: DID[];
+
+  /**
+   * The message creation timestamp
+   */
+  created_time?: number;
+
+  /**
+   * The message expiry timestamp
+   */
+  expires_time?: number;
+
+  /**
+   * The thread ID (for message threading)
+   */
+  thid?: string;
+
+  /**
+   * The parent thread ID (for nested threading)
+   */
+  pthid?: string;
+
+  /**
+   * The message body containing type-specific data
+   */
+  body: any;
 }
 
 /**
- * Transfer message interface (TAIP-3)
+ * Transfer message body
  */
 export interface Transfer {
-  '@type': "https://tap.rsvp/schema/1.0#Transfer";
-  '@context': string;
-  initiator?: EntityReference;
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The asset being transferred
+   */
+  asset: Asset;
+
+  /**
+   * The amount being transferred
+   */
+  amount: string;
+
+  /**
+   * The originator of the transfer
+   */
+  originator: EntityReference;
+
+  /**
+   * The beneficiary of the transfer
+   */
   beneficiary?: EntityReference;
-  asset: {
-    id: string;
-    quantity: string;
-  };
+
+  /**
+   * The agents involved in the transfer
+   */
+  agents?: EntityReference[];
+
+  /**
+   * A memo for the transfer
+   */
   memo?: string;
-  expiry?: number;
-  agents?: any[];
+
+  /**
+   * The settlement ID for the transfer
+   */
+  settlementId?: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
 
 /**
- * Payment request message interface (TAIP-14)
+ * Payment message body
  */
 export interface Payment {
-  '@type': "https://tap.rsvp/schema/1.0#Payment";
-  '@context': string;
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The asset for the payment
+   */
+  asset?: string;
+
+  /**
+   * The currency for the payment
+   */
+  currency?: string;
+
+  /**
+   * The amount of the payment
+   */
+  amount: string;
+
+  /**
+   * The merchant for the payment
+   */
   merchant: EntityReference;
+
+  /**
+   * The customer for the payment
+   */
   customer?: EntityReference;
-  asset: {
-    id: string;
-    quantity: string;
-  };
-  memo?: string;
-  expiry?: number;
+
+  /**
+   * The invoice ID for the payment
+   */
+  invoice?: string;
+
+  /**
+   * The expiry timestamp for the payment
+   */
+  expiry?: string;
+
+  /**
+   * The supported assets for the payment
+   */
+  supportedAssets?: string[];
+
+  /**
+   * The agents involved in the payment
+   */
+  agents?: EntityReference[];
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
 
 /**
- * Connection message interface
+ * Connect message body
  */
 export interface Connect {
-  '@type': "https://tap.rsvp/schema/1.0#Connect";
-  '@context': string;
-  agent: EntityReference;
-  for?: string;
-  constraints?: Record<string, any>;
-  expiry?: number;
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The agent making the connection
+   */
+  agent?: EntityReference;
+
+  /**
+   * What the connection is for
+   */
+  for: string;
+
+  /**
+   * The constraints for the connection
+   */
+  constraints: any;
+
+  /**
+   * The expiry timestamp for the connection
+   */
+  expiry?: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
 
 /**
- * Authorization response interface (TAIP-4)
+ * Authorize message body
  */
 export interface Authorize {
-  '@type': "https://tap.rsvp/schema/1.0#Authorize";
-  '@context': string;
-  thread_id: string;
-  from: EntityReference;
-  approve: boolean;
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The reason for the authorization
+   */
   reason?: string;
+
+  /**
+   * The settlement address for the authorization
+   */
+  settlementAddress?: string;
+
+  /**
+   * The expiry timestamp for the authorization
+   */
+  expiry?: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
 
 /**
- * Reject response interface (TAIP-4)
+ * Reject message body
  */
 export interface Reject {
-  '@type': "https://tap.rsvp/schema/1.0#Reject";
-  '@context': string;
-  thread_id: string;
-  from: EntityReference;
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The reason for the rejection
+   */
   reason: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
 
 /**
- * Settlement notification interface (TAIP-4)
+ * Settle message body
  */
 export interface Settle {
-  '@type': "https://tap.rsvp/schema/1.0#Settle";
-  '@context': string;
-  thread_id: string;
-  from: EntityReference;
-  settlement: {
-    id: string;
-    network?: string;
-    timestamp: number;
-  };
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The settlement ID
+   */
+  settlementId: string;
+
+  /**
+   * The amount that was settled
+   */
+  amount?: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
 
 /**
- * Cancellation message interface
+ * Cancel message body
  */
 export interface Cancel {
-  '@type': "https://tap.rsvp/schema/1.0#Cancel";
-  '@context': string;
-  thread_id: string;
-  from: EntityReference;
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The reason for the cancellation
+   */
   reason?: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
 }
+
+/**
+ * Revert message body
+ */
+export interface Revert {
+  /**
+   * The type of the message (as a TAP URI)
+   */
+  '@type': MessageTypeUri;
+
+  /**
+   * The JSON-LD context
+   */
+  '@context'?: string;
+
+  /**
+   * The settlement address to revert
+   */
+  settlementAddress: string;
+
+  /**
+   * The reason for the reversion
+   */
+  reason: string;
+
+  /**
+   * Additional properties
+   */
+  [key: string]: any;
+}
+
+// Export other type definitions from the wasm.ts file
+export * from './wasm';

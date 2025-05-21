@@ -1,109 +1,131 @@
-import { TAPAgent } from '../agent';
-import { Transfer, Authorize, Reject, Cancel, TransferMessage, DID } from '@taprsvp/types';
-import { BaseMessageObject } from './base-message';
-import { AuthorizeObject } from './authorize';
-import { RejectObject } from './reject';
-import { CancelObject } from './cancel';
-import { tapWasm, MessageType } from '../wasm-loader';
+import { TAPAgent } from "../agent";
+import { BaseMessage } from "./base-message";
+import { DID, EntityReference, Asset } from "../types";
 
 /**
- * Transfer message object with fluent response interface
+ * TransferMessage - Represents a TAP Transfer message
  */
-export class TransferObject extends BaseMessageObject {
+export class TransferMessage extends BaseMessage {
   /**
-   * Create an authorization response to this transfer
+   * Create a new transfer message
    */
-  authorize(params: Omit<Authorize, '@type' | '@context'>): AuthorizeObject {
-    // Create a message ID
-    const id = tapWasm.generate_uuid_v4();
-    
-    // Create a WASM message for the authorize response
-    const message = this.agent.getWasmAgent().create_message(MessageType.Authorize);
-    
-    // Set the from field
-    this.agent.getWasmAgent().set_from(message);
-    
-    // Set the to field to the originator's DID
-    if (this.from) {
-      this.agent.getWasmAgent().set_to(message, this.from);
-    }
-    
-    // Set authorize body
-    message.set_authorize_body({
-      settlementAddress: params.settlementAddress,
-      expiry: params.expiry,
-      '@type': 'Authorize',
-      '@context': 'https://tap.rsvp/schema/1.0'
-    });
-    
-    // Sign the message
-    this.agent.getWasmAgent().sign_message(message);
-    
-    // Create and return the authorize object
-    return new AuthorizeObject(this.agent, message);
+  constructor(agent: TAPAgent, message: any) {
+    super(agent, message);
   }
-  
+
   /**
-   * Create a rejection response to this transfer
+   * Get the asset being transferred
    */
-  reject(params: Omit<Reject, '@type' | '@context'>): RejectObject {
-    // Create a message ID
-    const id = tapWasm.generate_uuid_v4();
-    
-    // Create a WASM message for the reject response
-    const message = this.agent.getWasmAgent().create_message(MessageType.Reject);
-    
-    // Set the from field
-    this.agent.getWasmAgent().set_from(message);
-    
-    // Set the to field to the sender's DID
-    if (this.from) {
-      this.agent.getWasmAgent().set_to(message, this.from);
-    }
-    
-    // Set reject body
-    message.set_reject_body({
-      reason: params.reason,
-      '@type': 'Reject',
-      '@context': 'https://tap.rsvp/schema/1.0'
-    });
-    
-    // Sign the message
-    this.agent.getWasmAgent().sign_message(message);
-    
-    // Create and return the reject object
-    return new RejectObject(this.agent, message);
+  get asset(): Asset {
+    return this.body.asset;
   }
-  
+
   /**
-   * Create a cancel response to this transfer
+   * Set the asset being transferred
    */
-  cancel(params: Omit<Cancel, '@type' | '@context'>): CancelObject {
-    // Create a message ID
-    const id = tapWasm.generate_uuid_v4();
-    
-    // Create a WASM message for the cancel response
-    const message = this.agent.getWasmAgent().create_message(MessageType.Cancel);
-    
-    // Set the from field
-    this.agent.getWasmAgent().set_from(message);
-    
-    // Set the to field to the recipients
-    if (this.to && this.to.length > 0) {
-      this.agent.getWasmAgent().set_to(message, this.to[0]);
+  setAsset(asset: Asset): this {
+    this.body.asset = asset;
+    return this;
+  }
+
+  /**
+   * Get the amount being transferred
+   */
+  get amount(): string {
+    return this.body.amount;
+  }
+
+  /**
+   * Set the amount being transferred
+   */
+  setAmount(amount: string): this {
+    this.body.amount = amount;
+    return this;
+  }
+
+  /**
+   * Get the originator of the transfer
+   */
+  get originator(): EntityReference {
+    return this.body.originator;
+  }
+
+  /**
+   * Set the originator of the transfer
+   */
+  setOriginator(originator: EntityReference): this {
+    this.body.originator = originator;
+    return this;
+  }
+
+  /**
+   * Get the beneficiary of the transfer
+   */
+  get beneficiary(): EntityReference | undefined {
+    return this.body.beneficiary;
+  }
+
+  /**
+   * Set the beneficiary of the transfer
+   */
+  setBeneficiary(beneficiary: EntityReference): this {
+    this.body.beneficiary = beneficiary;
+    if (beneficiary['@id']) {
+      this.setTo(beneficiary['@id'] as DID);
     }
-    
-    // Set cancel body
-    message.set_cancel_body({
-      reason: params.reason,
-      '@type': 'Cancel',
-      '@context': 'https://tap.rsvp/schema/1.0'
-    });
-    
-    // Sign the message
-    this.agent.getWasmAgent().sign_message(message);
-    
-    // Create and return the cancel object
-    return new CancelObject(this.agent, message);
+    return this;
+  }
+
+  /**
+   * Get the agents involved in the transfer
+   */
+  get agents(): EntityReference[] {
+    return this.body.agents || [];
+  }
+
+  /**
+   * Set the agents involved in the transfer
+   */
+  setAgents(agents: EntityReference[]): this {
+    this.body.agents = agents;
+    return this;
+  }
+
+  /**
+   * Get the memo for the transfer
+   */
+  get memo(): string | undefined {
+    return this.body.memo;
+  }
+
+  /**
+   * Set the memo for the transfer
+   */
+  setMemo(memo: string): this {
+    this.body.memo = memo;
+    return this;
+  }
+
+  /**
+   * Get the settlement ID for the transfer
+   */
+  get settlementId(): string | undefined {
+    return this.body.settlementId;
+  }
+
+  /**
+   * Set the settlement ID for the transfer
+   */
+  setSettlementId(settlementId: string): this {
+    this.body.settlementId = settlementId;
+    return this;
+  }
+
+  /**
+   * Get the raw message for signing
+   * @returns Raw message
+   */
+  getMessage(): any {
+    return this.message;
   }
 }

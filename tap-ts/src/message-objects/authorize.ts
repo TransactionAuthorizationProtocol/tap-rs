@@ -1,43 +1,59 @@
-import { TAPAgent } from '../agent';
-import { Authorize, Settle } from '@taprsvp/types';
-import { BaseMessageObject } from './base-message';
-import { SettleObject } from './settle';
-import { tapWasm, MessageType } from '../wasm-loader';
+import { TAPAgent } from "../agent";
+import { BaseMessage } from "./base-message";
 
 /**
- * Authorization message object with fluent response interface
+ * AuthorizeMessage - Represents a TAP Authorize message
  */
-export class AuthorizeObject extends BaseMessageObject {
+export class AuthorizeMessage extends BaseMessage {
   /**
-   * Create a settlement message for this authorization
+   * Create a new authorize message
    */
-  settle(params: Omit<Settle, '@type' | '@context'>): SettleObject {
-    // Create a message ID
-    const id = tapWasm.generate_uuid_v4();
-    
-    // Create a WASM message for the settle response
-    const message = this.agent.getWasmAgent().create_message(MessageType.Settle);
-    
-    // Set the from field
-    this.agent.getWasmAgent().set_from(message);
-    
-    // Set the to field to the original recipient
-    if (this.to && this.to.length > 0) {
-      this.agent.getWasmAgent().set_to(message, this.to[0]);
-    }
-    
-    // Set settle body
-    message.set_settle_body({
-      settlementId: params.settlementId,
-      amount: params.amount,
-      '@type': 'Settle',
-      '@context': 'https://tap.rsvp/schema/1.0'
-    });
-    
-    // Sign the message
-    this.agent.getWasmAgent().sign_message(message);
-    
-    // Create and return the settle object
-    return new SettleObject(this.agent, message);
+  constructor(agent: TAPAgent, message: any) {
+    super(agent, message);
+  }
+
+  /**
+   * Get the reason for the authorization
+   */
+  get reason(): string | undefined {
+    return this.body.reason;
+  }
+
+  /**
+   * Set the reason for the authorization
+   */
+  setReason(reason: string): this {
+    this.body.reason = reason;
+    return this;
+  }
+
+  /**
+   * Get the settlement address for the authorization
+   */
+  get settlementAddress(): string | undefined {
+    return this.body.settlementAddress;
+  }
+
+  /**
+   * Set the settlement address for the authorization
+   */
+  setSettlementAddress(settlementAddress: string): this {
+    this.body.settlementAddress = settlementAddress;
+    return this;
+  }
+
+  /**
+   * Get the expiry timestamp for the authorization
+   */
+  get expiry(): string | undefined {
+    return this.body.expiry;
+  }
+
+  /**
+   * Set the expiry timestamp for the authorization
+   */
+  setExpiry(expiry: string): this {
+    this.body.expiry = expiry;
+    return this;
   }
 }

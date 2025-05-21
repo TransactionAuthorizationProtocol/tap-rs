@@ -22,7 +22,7 @@ async function main() {
   
   // Create a new agent - it will automatically generate an Ed25519 DID key
   console.log('\nCreating agent with automatically generated DID...');
-  const autoAgent = new TAPAgent({
+  const autoAgent = await TAPAgent.create({
     nickname: "Auto DID Agent",
     debug: true
   });
@@ -43,7 +43,7 @@ async function main() {
   console.log('----------------------------');
   
   // Create a new agent
-  const agent = new TAPAgent({
+  const agent = await TAPAgent.create({
     nickname: "DID Generator Agent",
     debug: true
   });

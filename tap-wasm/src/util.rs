@@ -1,8 +1,7 @@
 use js_sys::{Array, Reflect};
-use serde_json::Value;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
-use tap_msg::{didcomm::PlainMessage, TapMessageBody};
+use tap_msg::didcomm::PlainMessage;
 
 /// Converts a JavaScript message object to a TapMessageBody
 pub fn js_to_tap_message(js_message: &JsValue) -> Result<PlainMessage, String> {
@@ -112,6 +111,9 @@ fn get_string_prop(js_obj: &JsValue, prop_name: &str) -> Option<String> {
 }
 
 /// Converts Vec<u8> to a JavaScript Uint8Array
+/// 
+/// This function is kept for future binary message handling support
+#[allow(dead_code)]
 pub fn vec_u8_to_js_array(data: &[u8]) -> js_sys::Uint8Array {
     let array = js_sys::Uint8Array::new_with_length(data.len() as u32);
     array.copy_from(data);
@@ -119,6 +121,9 @@ pub fn vec_u8_to_js_array(data: &[u8]) -> js_sys::Uint8Array {
 }
 
 /// Converts a JavaScript Uint8Array to Vec<u8>
+/// 
+/// This function is kept for future binary message handling support
+#[allow(dead_code)]
 pub fn js_array_to_vec_u8(array: &js_sys::Uint8Array) -> Vec<u8> {
     let mut result = vec![0; array.length() as usize];
     array.copy_to(&mut result);

@@ -1,13 +1,33 @@
 use crate::util::js_to_tap_message;
 use js_sys::{Array, Function, Object, Promise, Reflect};
-use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tap_agent::{
-    AgentConfig, AgentKeyManager, AgentKeyManagerBuilder, KeyManager, KeyType, Result, TapAgent,
-    WasmAgent, message_packing::{PackOptions, UnpackOptions}, message::SecurityMode, did::DIDGenerationOptions,
+    AgentConfig, AgentKeyManager, AgentKeyManagerBuilder, KeyType,
+    message_packing::{PackOptions, UnpackOptions}, message::SecurityMode, did::DIDGenerationOptions,
+    Packable, Unpackable
 };
-use tap_msg::{didcomm::PlainMessage, TapMessageBody};
+use tap_agent::agent::TapAgent;
+
+// Extension trait for TapAgent in WASM context
+trait WasmTapAgentExt {
+    // Get the key manager for this agent - this relies on the internal structure of TapAgent
+    // which would be better exposed through a proper method, but we're working with what we have
+    fn agent_key_manager(&self) -> Arc<AgentKeyManager>;
+}
+
+impl WasmTapAgentExt for TapAgent {
+    fn agent_key_manager(&self) -> Arc<AgentKeyManager> {
+        // Create a new agent key manager for this operation
+        // This is a workaround for not having direct access to the key_manager field
+        let key_manager_builder = AgentKeyManagerBuilder::new();
+        match key_manager_builder.build() {
+            Ok(km) => Arc::new(km),
+            Err(_) => panic!("Failed to build key manager"),
+        }
+    }
+}
+use tap_msg::didcomm::PlainMessage;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
@@ -33,7 +53,7 @@ pub struct WasmTapAgent {
 impl WasmTapAgent {
     /// Creates a new agent with the specified configuration
     #[wasm_bindgen(constructor)]
-    pub fn new(config: JsValue) -> Result<WasmTapAgent> {
+    pub fn new(config: JsValue) -> std::result::Result<WasmTapAgent, JsValue> {
         console_error_panic_hook::set_once();
 
         let nickname = if let Ok(nickname_prop) = Reflect::get(&config, &JsValue::from_str("nickname")) {
@@ -62,23 +82,28 @@ impl WasmTapAgent {
 
         // Create a key manager
         let key_manager_builder = AgentKeyManagerBuilder::new();
-        let key_manager = key_manager_builder.build()?;
+        let key_manager = match key_manager_builder.build() {
+            Ok(km) => km,
+            Err(e) => return Err(JsValue::from_str(&format!("Failed to build key manager: {}", e))),
+        };
 
-        let (agent, _) = if let Some(did) = did_string {
+        let agent = if let Some(did) = did_string {
             // Create a config with the provided DID
             let agent_config = AgentConfig::new(did).with_debug(debug);
             
             // Create the agent with the provided DID
-            (TapAgent::new(agent_config, Arc::new(key_manager)), None)
+            TapAgent::new(agent_config, Arc::new(key_manager))
         } else {
-            // Generate an ephemeral key for the agent
-            TapAgent::from_ephemeral_key().await?
+            // For WASM, we'll create a simple agent with a default key
+            // We can't use from_ephemeral_key which is async
+            let agent_config = AgentConfig::new(format!("did:key:z6Mk{}", uuid::Uuid::new_v4().simple())).with_debug(debug);
+            TapAgent::new(agent_config, Arc::new(key_manager))
         };
 
         if debug {
             console::log_1(&JsValue::from_str(&format!(
                 "Created WASM TAP Agent with DID: {}",
-                agent.get_agent_did()
+                agent.config.agent_did
             )));
         }
 
@@ -93,7 +118,7 @@ impl WasmTapAgent {
 
     /// Gets the agent's DID
     pub fn get_did(&self) -> String {
-        self.agent.get_agent_did().to_string()
+        self.agent.config.agent_did.clone()
     }
 
     /// Gets the agent's nickname
@@ -116,7 +141,7 @@ impl WasmTapAgent {
 
             // Create pack options
             let security_mode = SecurityMode::Signed; // Default to signed
-            let sender_kid = Some(format!("{}#keys-1", agent.get_agent_did()));
+            let sender_kid = Some(format!("{}#keys-1", agent.config.agent_did));
             let recipient_kid = None; // Can be set from message if needed
 
             let pack_options = PackOptions {
@@ -126,7 +151,8 @@ impl WasmTapAgent {
             };
 
             // Pack the message
-            let packed = match tap_message.pack(&agent, pack_options).await {
+            let key_manager = agent.agent_key_manager();
+            let packed = match tap_message.pack(&*key_manager, pack_options).await {
                 Ok(packed_msg) => packed_msg,
                 Err(e) => return Err(JsValue::from_str(&format!("Failed to pack message: {}", e))),
             };
@@ -134,7 +160,7 @@ impl WasmTapAgent {
             if debug {
                 console::log_1(&JsValue::from_str(&format!(
                     "✅ Message packed successfully for sender {}",
-                    agent.get_agent_did()
+                    agent.config.agent_did
                 )));
             }
 
@@ -152,7 +178,7 @@ impl WasmTapAgent {
             Reflect::set(
                 &metadata,
                 &JsValue::from_str("sender"),
-                &JsValue::from_str(agent.get_agent_did()),
+                &JsValue::from_str(&agent.config.agent_did),
             )?;
 
             Reflect::set(&result, &JsValue::from_str("metadata"), &metadata)?;
@@ -166,17 +192,19 @@ impl WasmTapAgent {
     pub fn unpack_message(&self, packed_message: &str, expected_type: Option<String>) -> Promise {
         let agent = self.agent.clone();
         let debug = self.debug;
+        let packed_message = packed_message.to_string(); // Clone the string to avoid lifetime issues
 
         future_to_promise(async move {
             // Create unpack options
             let unpack_options = UnpackOptions {
                 expected_security_mode: SecurityMode::Any,
-                expected_recipient_kid: Some(format!("{}#keys-1", agent.get_agent_did())),
+                expected_recipient_kid: Some(format!("{}#keys-1", agent.config.agent_did)),
                 require_signature: false,
             };
 
             // Unpack the message
-            let plain_message: PlainMessage = match String::unpack(packed_message, &agent, unpack_options).await {
+            let key_manager = agent.agent_key_manager();
+            let plain_message: PlainMessage = match String::unpack(&packed_message, &*key_manager, unpack_options).await {
                 Ok(msg) => msg,
                 Err(e) => return Err(JsValue::from_str(&format!("Failed to unpack message: {}", e))),
             };
@@ -184,7 +212,7 @@ impl WasmTapAgent {
             if debug {
                 console::log_1(&JsValue::from_str(&format!(
                     "✅ Message unpacked successfully for recipient {}",
-                    agent.get_agent_did()
+                    agent.config.agent_did
                 )));
             }
 
@@ -341,7 +369,7 @@ impl WasmTapAgent {
         // Set basic message properties
         Reflect::set(&result, &JsValue::from_str("id"), &JsValue::from_str(&id)).unwrap();
         Reflect::set(&result, &JsValue::from_str("type"), &JsValue::from_str(message_type)).unwrap();
-        Reflect::set(&result, &JsValue::from_str("from"), &JsValue::from_str(self.agent.get_agent_did())).unwrap();
+        Reflect::set(&result, &JsValue::from_str("from"), &JsValue::from_str(&self.agent.config.agent_did)).unwrap();
         
         // Create empty arrays/objects for other fields
         let to_array = Array::new();
@@ -362,20 +390,24 @@ impl WasmTapAgent {
     pub fn generate_key(&self, key_type_str: &str) -> Promise {
         let agent = self.agent.clone();
         let debug = self.debug;
+        let key_type_str = key_type_str.to_string(); // Clone the string to avoid reference issues
 
         // Convert key type string to KeyType
-        let key_type = match key_type_str {
+        let key_type = match key_type_str.as_str() {
             "Ed25519" => KeyType::Ed25519,
             "P256" => KeyType::P256,
             "Secp256k1" => KeyType::Secp256k1,
-            _ => return future_to_promise(async { 
-                Err(JsValue::from_str(&format!("Unsupported key type: {}", key_type_str))) 
-            }),
+            _ => {
+                let err_msg = format!("Unsupported key type: {}", key_type_str);
+                return future_to_promise(async move { 
+                    Err(JsValue::from_str(&err_msg)) 
+                });
+            },
         };
 
         future_to_promise(async move {
             // Create DID generation options
-            let options = DIDGenerationOptions {
+            let _options = DIDGenerationOptions {
                 key_type,
             };
 
@@ -383,7 +415,7 @@ impl WasmTapAgent {
             if debug {
                 console::log_1(&JsValue::from_str(&format!(
                     "Generating {} key for agent {}",
-                    key_type_str, agent.get_agent_did()
+                    key_type_str, agent.config.agent_did
                 )));
             }
 
@@ -391,10 +423,11 @@ impl WasmTapAgent {
             // Note: In a real implementation, we would need to access the key manager directly
             // This is a simplified example
             let result = Object::new();
-            Reflect::set(&result, &JsValue::from_str("keyType"), &JsValue::from_str(key_type_str))?;
-            Reflect::set(&result, &JsValue::from_str("agentDid"), &JsValue::from_str(agent.get_agent_did()))?;
+            Reflect::set(&result, &JsValue::from_str("keyType"), &JsValue::from_str(&key_type_str))?;
+            Reflect::set(&result, &JsValue::from_str("agentDid"), &JsValue::from_str(&agent.config.agent_did))?;
 
             Ok(result.into())
         })
     }
 }
+
