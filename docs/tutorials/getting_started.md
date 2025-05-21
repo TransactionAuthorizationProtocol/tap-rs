@@ -54,15 +54,15 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Generate or use a pre-existing DID
     let did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string();
-    
+
     // Create agent configuration with the DID
     let config = AgentConfig::new(did.clone());
-    
+
     // Set up DID resolver with support for did:key
     let mut did_resolver = MultiResolver::new();
     did_resolver.register_method("key", KeyResolver::new());
     let did_resolver = Arc::new(did_resolver);
-    
+
     // Set up secret resolver with the agent's key
     let mut secret_resolver = BasicSecretResolver::new();
     let secret = Secret {
@@ -79,15 +79,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     secret_resolver.add_secret(&did, secret);
     let secret_resolver = Arc::new(secret_resolver);
-    
+
     // Create message packer
     let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
-    
+
     // Create the agent
     let agent = DefaultAgent::new(config, message_packer);
-    
+
     println!("Created agent with DID: {}", did);
-    
+
     Ok(())
 }
 ```
@@ -104,9 +104,9 @@ use std::sync::Arc;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create an agent with an ephemeral did:key (generates a random Ed25519 key)
     let (agent, did) = DefaultAgent::new_ephemeral()?;
-    
+
     println!("Created ephemeral agent with DID: {}", did);
-    
+
     Ok(())
 }
 ```
@@ -152,6 +152,7 @@ async fn create_and_send_transfer(
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = MessageParticipant {
@@ -159,6 +160,7 @@ async fn create_and_send_transfer(
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a transfer message
@@ -176,9 +178,9 @@ async fn create_and_send_transfer(
     // Send the message
     let recipients = vec![to_did];
     let (packed_message, delivery_results) = agent.send_message(&transfer, recipients, true).await?;
-    
+
     println!("Message sent: {}", packed_message);
-    
+
     for result in delivery_results {
         if let Some(status) = result.status {
             println!("Delivered to {} with status {}", result.did, status);
@@ -186,7 +188,7 @@ async fn create_and_send_transfer(
             println!("Failed to deliver to {}: {}", result.did, error);
         }
     }
-    
+
     Ok(())
 }
 ```
@@ -279,25 +281,25 @@ async fn process_incoming_message(
 ) -> Result<(), Box<dyn std::error::Error>> {
     // Receive and unpack the message
     let transfer: Transfer = agent.receive_message(packed_message).await?;
-    
+
     println!("Received transfer:");
     println!("  From: {}", transfer.originator.id);
     println!("  Amount: {}", transfer.amount);
     println!("  Asset: {}", transfer.asset);
-    
+
     // Create an authorize response
     let authorize = Authorize {
         transfer_id: "transfer-123".to_string(), // In a real scenario, use the actual transfer ID
         note: Some("Transfer authorized".to_string()),
         metadata: HashMap::new(),
     };
-    
+
     // Send the authorize message back to the originator
     let recipient_did = &transfer.originator.id;
     let (packed_response, _) = agent.send_message(&authorize, vec![recipient_did], true).await?;
-    
+
     println!("Sent authorize response: {}", packed_response);
-    
+
     Ok(())
 }
 ```
@@ -353,16 +355,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create two ephemeral agents for simplicity
     let (alice_agent, alice_did) = DefaultAgent::new_ephemeral()?;
     let (bob_agent, bob_did) = DefaultAgent::new_ephemeral()?;
-    
+
     println!("Alice DID: {}", alice_did);
     println!("Bob DID: {}", bob_did);
-    
+
     // Alice creates and sends a transfer to Bob
     let originator = MessageParticipant {
         id: alice_did.clone(),
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = MessageParticipant {
@@ -370,6 +373,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let transfer = Transfer {
@@ -382,41 +386,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),
     };
-    
+
     println!("Alice is sending a transfer to Bob...");
     let (packed_transfer, _) = alice_agent.send_message(&transfer, vec![&bob_did], false).await?;
-    
+
     // In a real scenario, this message would be delivered over a transport layer
     // For simplicity, we directly give Bob the packed message
-    
+
     println!("Bob receives the transfer...");
     let received_transfer: Transfer = bob_agent.receive_message(&packed_transfer).await?;
-    
+
     println!("Bob unpacked the transfer:");
     println!("  From: {}", received_transfer.originator.id);
     println!("  Amount: {}", received_transfer.amount);
     println!("  Asset: {}", received_transfer.asset);
-    
+
     // Bob creates and sends an authorize response
     let authorize = Authorize {
         transfer_id: "transfer-123".to_string(), // In a real scenario, use the ID from the transfer
         note: Some("Transfer authorized".to_string()),
         metadata: HashMap::new(),
     };
-    
+
     println!("Bob is sending an authorize response to Alice...");
     let (packed_authorize, _) = bob_agent.send_message(&authorize, vec![&alice_did], false).await?;
-    
+
     // Alice receives Bob's response
     println!("Alice receives Bob's response...");
     let received_authorize: Authorize = alice_agent.receive_message(&packed_authorize).await?;
-    
+
     println!("Alice unpacked the authorize response:");
     println!("  Note: {}", received_authorize.note.unwrap_or_default());
-    
+
     // In a real scenario, Alice would now proceed with the on-chain transaction
     println!("Alice can now proceed with the on-chain transaction");
-    
+
     Ok(())
 }
 ```

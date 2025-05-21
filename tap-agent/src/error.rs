@@ -74,6 +74,10 @@ pub enum Error {
     #[error("Feature not implemented: {0}")]
     NotImplemented(String),
 
+    /// Key not found
+    #[error("Key not found: {0}")]
+    KeyNotFound(String),
+
     /// DIDComm specific errors
     #[error("DIDComm error: {0}")]
     DIDComm(String),
@@ -99,4 +103,8 @@ pub enum Error {
     /// Networking error
     #[error("Networking error: {0}")]
     Networking(String),
+
+    /// Runtime error
+    #[error("Runtime error: {0}")]
+    Runtime(String),
 }

@@ -28,12 +28,14 @@ fn test_create_reply() -> Result<()> {
             role: Some("originator".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         },
         beneficiary: Some(Participant {
             id: _bob_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -80,6 +82,7 @@ fn test_add_agents() -> Result<()> {
             role: Some("observer".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }],
     };
 
@@ -129,6 +132,7 @@ fn test_replace_agent() -> Result<()> {
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         },
     };
 
@@ -345,6 +349,7 @@ fn test_add_agents_missing_transfer_id() {
         id: "did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL".to_string(),
         role: Some("sender_agent".to_string()),
         leiCode: None,
+        name: None,
         policies: None,
     }];
 

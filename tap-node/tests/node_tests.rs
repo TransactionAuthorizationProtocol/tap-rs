@@ -1,38 +1,9 @@
 //! Tests for the TAP Node
 
-use std::collections::HashMap;
 use std::sync::Arc;
-use tap_agent::crypto::DebugSecretsResolver;
-use tap_agent::key_manager::Secret;
 use tap_node::event::logger::{EventLogger, EventLoggerConfig, LogDestination};
 use tap_node::event::EventBus;
 use tap_node::{EventSubscriber, NodeEvent};
-
-/// A simplified test secrets resolver
-#[derive(Debug)]
-#[allow(dead_code)]
-struct TestSecretsResolver {
-    secrets: HashMap<String, Secret>,
-}
-
-impl TestSecretsResolver {
-    #[allow(dead_code)]
-    fn new() -> Self {
-        Self {
-            secrets: HashMap::new(),
-        }
-    }
-}
-
-impl DebugSecretsResolver for TestSecretsResolver {
-    fn get_secret_by_id(&self, id: &str) -> Option<Secret> {
-        self.secrets.get(id).cloned()
-    }
-
-    fn get_secrets_map(&self) -> &HashMap<String, Secret> {
-        &self.secrets
-    }
-}
 
 /// A test event subscriber that tracks events
 #[derive(Debug, Default)]

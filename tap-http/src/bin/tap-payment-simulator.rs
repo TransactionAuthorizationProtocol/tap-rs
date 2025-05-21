@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 use std::error::Error;
 use std::process;
-use tap_agent::{Agent, DefaultAgent};
+use tap_agent::{Agent, TapAgent};
 use tap_msg::message::{Participant, Transfer};
 // No longer needed: use tap_node::DefaultAgentExt;
 use tracing::{debug, info};
@@ -90,16 +90,18 @@ fn print_help() {
 
 /// Send a TAP message to the server
 async fn send_tap_message<
+    'a,
     T: tap_msg::message::tap_message_trait::TapMessageBody
         + serde::Serialize
         + Send
         + Sync
-        + std::fmt::Debug,
+        + std::fmt::Debug
+        + 'static,
 >(
-    agent: &DefaultAgent,
-    recipient_did: &str,
-    recipient_url: &str,
-    message: &T,
+    agent: &'a TapAgent,
+    recipient_did: &'a str,
+    recipient_url: &'a str,
+    message: &'a T,
 ) -> Result<(), Box<dyn Error>> {
     // Create a DIDComm message from the TAP message using the agent's send_message method
     info!("Creating message for TAP type: {}", T::message_type());
@@ -150,8 +152,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create ephemeral agent
     info!("Creating ephemeral agent for payment simulation");
 
-    // Create multiple agents to verify they get different DIDs
-    let (agent, agent_did) = tap_agent::agent::DefaultAgent::new_ephemeral()?;
+    // Create ephemeral agent for the simulator
+    let (agent, agent_did) = TapAgent::from_ephemeral_key().await?;
 
     info!("Using agent with DID: {}", agent_did);
 
@@ -176,6 +178,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let _customer = Participant {
@@ -183,6 +186,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create agent participants
@@ -191,6 +195,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("sender".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let recipient_agent = Participant {
@@ -198,6 +203,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("recipient".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a settlement agent participant (required by validation)
@@ -213,6 +219,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a payment request using the proper struct and builder pattern
@@ -250,6 +257,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -257,6 +265,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a transfer using the proper struct

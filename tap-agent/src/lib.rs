@@ -7,14 +7,17 @@
 /// Agent implementation
 pub mod agent;
 
+/// Agent key abstraction
+pub mod agent_key;
+
+/// Agent key manager implementation
+pub mod agent_key_manager;
+
 /// Agent configuration
 pub mod config;
 
 /// Command-line interface for managing DIDs and keys
 pub mod cli;
-
-/// Cryptographic utilities
-pub mod crypto;
 
 /// DID utilities
 pub mod did;
@@ -25,8 +28,14 @@ pub mod error;
 /// Key management
 pub mod key_manager;
 
+/// Local agent key implementation
+pub mod local_agent_key;
+
 /// Message types and utilities
 pub mod message;
+
+/// Message packing and unpacking utilities
+pub mod message_packing;
 
 /// Key storage utilities
 pub mod storage;
@@ -44,15 +53,25 @@ impl<T: serde::Serialize> ErasedSerialize for T {
 }
 
 // Re-export key types for convenience
+pub use agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 pub use config::AgentConfig;
-pub use crypto::{DefaultMessagePacker, MessagePacker};
 pub use did::{
     DIDDoc, DIDGenerationOptions, DIDKeyGenerator, GeneratedKey, KeyResolver, KeyType,
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
-pub use key_manager::{DefaultKeyManager, KeyManager, Secret, SecretMaterial, SecretType};
+pub use key_manager::{KeyManager, Secret, SecretMaterial, SecretType};
 pub use storage::{KeyStorage, StoredKey};
+
+// Agent key re-exports
+pub use agent_key::{
+    AgentKey, DecryptionKey, EncryptionKey, JweAlgorithm, JweEncryption, JwsAlgorithm, SigningKey,
+    VerificationKey,
+};
+pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
+pub use message::SecurityMode;
+pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
+pub use tap_msg::didcomm::PlainMessage;
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]
@@ -60,15 +79,11 @@ pub use did::MultiResolver;
 
 // Native-only re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub use agent::{Agent, DefaultAgent, DeliveryResult};
-#[cfg(not(target_arch = "wasm32"))]
-pub use crypto::BasicSecretResolver;
+pub use agent::{Agent, DeliveryResult, TapAgent};
 #[cfg(not(target_arch = "wasm32"))]
 pub use did::{DIDMethodResolver, SyncDIDResolver};
 #[cfg(not(target_arch = "wasm32"))]
-pub use key_manager::KeyManagerSecretResolver;
-#[cfg(not(target_arch = "wasm32"))]
-pub use message::{SecurityMode, PRESENTATION_MESSAGE_TYPE};
+pub use message::PRESENTATION_MESSAGE_TYPE;
 
 // WASM-only re-exports
 #[cfg(target_arch = "wasm32")]

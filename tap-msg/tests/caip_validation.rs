@@ -14,6 +14,7 @@ fn test_valid_transfer_body() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -21,6 +22,7 @@ fn test_valid_transfer_body() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {
@@ -53,6 +55,7 @@ fn test_transfer_with_empty_asset() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -60,6 +63,7 @@ fn test_transfer_with_empty_asset() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Creating a body with valid values
@@ -89,6 +93,7 @@ fn test_transfer_with_empty_amount() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -96,6 +101,7 @@ fn test_transfer_with_empty_amount() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {

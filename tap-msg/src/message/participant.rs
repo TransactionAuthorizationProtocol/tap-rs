@@ -19,6 +19,9 @@ pub struct Participant {
     #[serde(default)]
     pub role: Option<String>,
 
+    // Name of the participant
+    pub name: Option<String>,
+
     /// Policies of the participant according to TAIP-7 (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(default)]
@@ -37,6 +40,7 @@ impl Participant {
             role: None,
             policies: None,
             leiCode: None,
+            name: None,
         }
     }
 
@@ -45,8 +49,10 @@ impl Participant {
         Self {
             id: id.to_string(),
             role: Some(role.to_string()),
+
             policies: None,
             leiCode: None,
+            name: None,
         }
     }
 }

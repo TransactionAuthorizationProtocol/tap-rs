@@ -347,11 +347,18 @@ The server uses a comprehensive error handling system with appropriate HTTP stat
 
 The tap-http package includes binary executables that can be run from the command line:
 
-### TAP HTTP Server
+# TAP HTTP Server
+
+## Installation
+
+The TAP HTTP server can be installed in several ways:
 
 ```bash
-# Install the package
-cargo install --path .
+# From crates.io (recommended for most users)
+cargo install tap-http
+
+# From the repository (if you have it cloned)
+cargo install --path tap-rs/tap-http
 
 # Run the HTTP server with default settings (creates ephemeral agent)
 tap-http
@@ -369,7 +376,9 @@ tap-http --use-stored-key --agent-did did:key:z6Mk...
 tap-http --logs-dir /var/log/tap --structured-logs
 ```
 
-### Command Line Options for tap-http
+## Command Line Options for tap-http
+
+After installation, you can use the `tap-http` command to run a TAP HTTP server:
 
 ```
 USAGE:
@@ -437,7 +446,9 @@ tap-payment-simulator --url http://localhost:8000/didcomm --did did:key:z6Mk...
 tap-payment-simulator --url http://localhost:8000/didcomm --did did:key:z6Mk... --amount 500 --currency EUR
 ```
 
-### Command Line Options for tap-payment-simulator
+## Command Line Options for tap-payment-simulator
+
+The payment simulator is installed together with the `tap-http` package. You can use it to test your TAP HTTP server:
 
 ```
 USAGE:
@@ -480,7 +491,13 @@ cargo run --example event_logger_demo
 
 Using the tap-payment-simulator tool, you can easily test a complete TAP payment flow:
 
-1. Start the tap-http server with an ephemeral agent:
+1. Install the HTTP server and payment simulator (if not already installed):
+   ```bash
+   cargo install tap-http
+   ```
+   This installs both `tap-http` and `tap-payment-simulator` binaries.
+
+2. Start the tap-http server with an ephemeral agent:
    ```bash
    tap-http --verbose
    ```
@@ -521,8 +538,27 @@ The TAP HTTP server leverages all the key features of the TAP Agent:
 The server can use any of the TAP Agent's key management approaches:
 
 - **Ephemeral keys** for testing and development (default)
-- **Stored keys** from the local key store (`~/.tap/keys.json`)
+- **Stored keys** from the local key store (`~/.tap/keys.json`) - shared with `tap-agent-cli`
 - **Generated keys** created at startup and optionally saved
+
+To generate and manage keys for use with `tap-http`, you can use the `tap-agent-cli` tool:
+
+```bash
+# Install the tap-agent CLI
+cargo install tap-agent
+
+# Generate and save a key for later use with tap-http
+tap-agent-cli generate --save
+
+# View your stored keys
+tap-agent-cli keys list
+
+# Then use a stored key with tap-http
+tap-http --use-stored-key
+
+# Use a specific stored key
+tap-http --use-stored-key --agent-did did:key:z6Mk...
+```
 
 ### DID Resolution
 

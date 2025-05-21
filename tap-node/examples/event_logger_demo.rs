@@ -1,9 +1,7 @@
 //! Example of using the TAP event logger
 
 use serde_json::json;
-use std::collections::HashMap;
 use std::sync::Arc;
-use tap_agent::crypto::DebugSecretsResolver;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_node::event::logger::EventLogger;
 use tap_node::event::EventBus;
@@ -88,60 +86,35 @@ async fn simulate_agent_setup(event_logger: &Arc<EventLogger>) {
 
     // Replace TestDIDResolver with MultiResolver
     // which already implements SyncDIDResolver
-    let did_resolver = Arc::new(tap_agent::did::MultiResolver::default());
-
-    // TestSecretsResolver - a mock secrets resolver
-    #[derive(Debug)]
-    struct TestSecretsResolver {
-        secrets: HashMap<String, Secret>,
-    }
-
-    impl TestSecretsResolver {
-        fn new() -> Self {
-            let mut secrets = HashMap::new();
-
-            // Add a test secret
-            let secret = Secret {
-                id: "did:example:alice".to_string(),
-                type_: SecretType::JsonWebKey2020,
-                secret_material: SecretMaterial::JWK {
-                    private_key_jwk: serde_json::json!({
-                        "kty": "OKP",
-                        "crv": "Ed25519",
-                        "x": "test1234",
-                        "d": "test1234"
-                    }),
-                },
-            };
-
-            secrets.insert("did:example:alice".to_string(), secret);
-
-            Self { secrets }
-        }
-    }
-
-    impl DebugSecretsResolver for TestSecretsResolver {
-        fn get_secret_by_id(&self, id: &str) -> Option<Secret> {
-            self.secrets.get(id).cloned()
-        }
-
-        fn get_secrets_map(&self) -> &HashMap<String, Secret> {
-            &self.secrets
-        }
-    }
+    let _did_resolver = Arc::new(tap_agent::did::MultiResolver::default());
 
     // In a real implementation, we would:
     // 1. We already created a DID resolver above
 
-    // 2. Create a secrets resolver
-    let secrets_resolver = Arc::new(TestSecretsResolver::new());
+    // 2. Create an agent key manager builder
+    let mut key_manager_builder = tap_agent::agent_key_manager::AgentKeyManagerBuilder::new();
 
-    // 3. Create a message packer
-    let _message_packer = Arc::new(tap_agent::crypto::DefaultMessagePacker::new(
-        did_resolver,
-        secrets_resolver,
-        true,
-    ));
+    // 3. Add a test secret
+    let secret = Secret {
+        id: "did:example:alice".to_string(),
+        type_: SecretType::JsonWebKey2020,
+        secret_material: SecretMaterial::JWK {
+            private_key_jwk: serde_json::json!({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "x": "test1234",
+                "d": "test1234"
+            }),
+        },
+    };
+
+    // 4. Add the secret to the builder
+    key_manager_builder = key_manager_builder.add_secret("did:example:alice".to_string(), secret);
+
+    // 5. Build the key manager
+    let _agent_key_manager = key_manager_builder
+        .build()
+        .expect("Failed to build key manager");
 
     // 4. Create an agent configuration
     let _config = tap_agent::config::AgentConfig::new("did:example:alice".to_string())

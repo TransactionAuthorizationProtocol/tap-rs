@@ -15,6 +15,7 @@ async fn test_pack_tap_body() -> Result<()> {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -22,6 +23,7 @@ async fn test_pack_tap_body() -> Result<()> {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {
@@ -80,6 +82,7 @@ async fn test_extract_tap_body() -> Result<()> {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -87,6 +90,7 @@ async fn test_extract_tap_body() -> Result<()> {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {

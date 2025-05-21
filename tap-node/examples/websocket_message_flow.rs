@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use tap_agent::agent::DefaultAgent;
+use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
-use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::{DIDKeyGenerator, MultiResolver};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_agent::TapAgent;
 use tokio::time::sleep;
 
 #[tokio::main]
@@ -25,12 +25,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("   - Bob DID: {}", bob_key.did);
 
     // Create a DID resolver that knows about both DIDs
-    let did_resolver = Arc::new(MultiResolver::default());
+    let _did_resolver = Arc::new(MultiResolver::default());
 
-    // Create a secrets resolver with both sets of keys
-    let mut secrets_resolver = BasicSecretResolver::new();
+    // Create agent key managers
+    let mut alice_builder = AgentKeyManagerBuilder::new();
+    let mut bob_builder = AgentKeyManagerBuilder::new();
 
-    // Create and add secrets for Alice and Bob
+    // Create Alice's secret
     let alice_secret = Secret {
         id: alice_key.did.clone(),
         type_: SecretType::JsonWebKey2020,
@@ -43,8 +44,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         },
     };
-    secrets_resolver.add_secret(&alice_key.did, alice_secret);
 
+    // Create Bob's secret
     let bob_secret = Secret {
         id: bob_key.did.clone(),
         type_: SecretType::JsonWebKey2020,
@@ -57,14 +58,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }),
         },
     };
-    secrets_resolver.add_secret(&bob_key.did, bob_secret);
 
-    // Create a message packer
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        did_resolver.clone(),
-        Arc::new(secrets_resolver.clone()),
-        true,
-    ));
+    // Add secrets to builders
+    alice_builder = alice_builder.add_secret(alice_key.did.clone(), alice_secret);
+    bob_builder = bob_builder.add_secret(bob_key.did.clone(), bob_secret);
+
+    // Build the key managers
+    let alice_key_manager = alice_builder
+        .build()
+        .expect("Failed to build Alice's key manager");
+    let bob_key_manager = bob_builder
+        .build()
+        .expect("Failed to build Bob's key manager");
 
     // Create Agent configurations for Alice and Bob
     let alice_config = AgentConfig::new(alice_key.did.clone())
@@ -76,8 +81,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_debug(true);
 
     // Create the agents
-    let _alice = Arc::new(DefaultAgent::new(alice_config, message_packer.clone()));
-    let _bob = Arc::new(DefaultAgent::new(bob_config, message_packer.clone()));
+    let _alice = Arc::new(TapAgent::new(alice_config, Arc::new(alice_key_manager)));
+    let _bob = Arc::new(TapAgent::new(bob_config, Arc::new(bob_key_manager)));
 
     // Create WebSocket message routers
     println!("2. Creating message routers...");

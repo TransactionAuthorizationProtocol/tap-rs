@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 ///     id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
 ///     role: Some("new_role".to_string()),
 ///     policies: None,
-///     leiCode: None,
+///     leiCode: None, name: None,
 /// };
 ///
 /// // Create an UpdateParty message

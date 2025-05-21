@@ -11,12 +11,15 @@ use crate::did::{
     VerificationMaterial,
 };
 use crate::error::{Error, Result};
+use crate::message::SecurityMode;
+use crate::message_packing::{PackOptions, Packable, Unpackable};
 use crate::storage::{KeyStorage, StoredKey};
 use base64::Engine;
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tap_msg::didcomm::PlainMessage;
 
 /// TAP Agent CLI Tool for DID and Key Management
 #[derive(Parser, Debug)]
@@ -92,6 +95,49 @@ pub enum Commands {
         #[arg(long)]
         default: bool,
     },
+
+    /// Pack a plaintext DIDComm message
+    #[command(name = "pack", about = "Pack a plaintext DIDComm message")]
+    Pack {
+        /// The input file containing the plaintext message
+        #[arg(short, long, required = true)]
+        input: PathBuf,
+
+        /// The output file for the packed message
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// The DID of the sender (uses default if not specified)
+        #[arg(short, long)]
+        sender: Option<String>,
+
+        /// The DID of the recipient
+        #[arg(short, long)]
+        recipient: Option<String>,
+
+        /// The security mode to use (plain, signed, or authcrypt)
+        #[arg(short, long, default_value = "signed")]
+        mode: String,
+    },
+
+    /// Unpack a signed or encrypted DIDComm message
+    #[command(
+        name = "unpack",
+        about = "Unpack a signed or encrypted DIDComm message"
+    )]
+    Unpack {
+        /// The input file containing the packed message
+        #[arg(short, long, required = true)]
+        input: PathBuf,
+
+        /// The output file for the unpacked message
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// The DID of the recipient (uses default if not specified)
+        #[arg(short, long)]
+        recipient: Option<String>,
+    },
 }
 
 /// Subcommands for key management
@@ -161,6 +207,22 @@ pub fn run() -> Result<()> {
         }
         Commands::Import { key_file, default } => {
             import_key(&key_file, default)?;
+        }
+        Commands::Pack {
+            input,
+            output,
+            sender,
+            recipient,
+            mode,
+        } => {
+            pack_message(&input, output, sender, recipient, &mode)?;
+        }
+        Commands::Unpack {
+            input,
+            output,
+            recipient,
+        } => {
+            unpack_message(&input, output, recipient)?;
         }
     }
 
@@ -684,4 +746,195 @@ fn lookup_did(did: &str, output: Option<PathBuf>) -> Result<()> {
             Err(Error::DIDResolution(format!("DID not found: {}", did)))
         }
     }
+}
+
+/// Pack a plaintext DIDComm message
+async fn pack_message_async(
+    input_file: &PathBuf,
+    output_file: Option<PathBuf>,
+    sender_did: Option<String>,
+    recipient_did: Option<String>,
+    mode: &str,
+) -> Result<()> {
+    // Read the plaintext message from the input file
+    let plaintext = fs::read_to_string(input_file).map_err(|e| Error::Io(e))?;
+
+    // Parse the plaintext message
+    let plain_message: PlainMessage = serde_json::from_str(&plaintext)
+        .map_err(|e| Error::Serialization(format!("Failed to parse plaintext message: {}", e)))?;
+
+    // Load keys from storage
+    let storage = KeyStorage::load_default()?;
+
+    // Get the sender DID
+    let sender = if let Some(did) = sender_did {
+        // Verify that the DID exists
+        if !storage.keys.contains_key(&did) {
+            return Err(Error::Storage(format!(
+                "Key with DID '{}' not found in storage",
+                did
+            )));
+        }
+        did
+    } else if let Some(default_did) = storage.default_did.clone() {
+        // Use default DID if available
+        default_did
+    } else if let Some(first_key) = storage.keys.keys().next() {
+        // Otherwise use first available DID
+        first_key.clone()
+    } else {
+        // No keys found
+        return Err(Error::Storage("No keys found in storage".to_string()));
+    };
+
+    println!("Using sender DID: {}", sender);
+
+    // Create key manager with the loaded keys
+    let key_manager_builder =
+        crate::agent_key_manager::AgentKeyManagerBuilder::new().load_from_default_storage();
+    let key_manager = Arc::new(key_manager_builder.build()?);
+
+    // Determine security mode
+    let security_mode = match mode.to_lowercase().as_str() {
+        "plain" => SecurityMode::Plain,
+        "signed" => SecurityMode::Signed,
+        "authcrypt" | "auth" | "encrypted" => SecurityMode::AuthCrypt,
+        _ => {
+            eprintln!(
+                "Unknown security mode: {}. Using 'signed' as default.",
+                mode
+            );
+            SecurityMode::Signed
+        }
+    };
+
+    // Create pack options
+    let pack_options = PackOptions {
+        security_mode,
+        sender_kid: Some(format!("{}#keys-1", sender)),
+        recipient_kid: recipient_did.map(|did| format!("{}#keys-1", did)),
+    };
+
+    // Pack the message directly using the PlainMessage's Packable implementation
+    let packed = plain_message.pack(&*key_manager, pack_options).await?;
+
+    // Write the packed message to the output file or display it
+    if let Some(output) = output_file {
+        fs::write(&output, &packed).map_err(Error::Io)?;
+        println!("Packed message saved to: {}", output.display());
+    } else {
+        // Try to pretty-print if it's valid JSON
+        match serde_json::from_str::<serde_json::Value>(&packed) {
+            Ok(json) => println!("{}", serde_json::to_string_pretty(&json).unwrap_or(packed)),
+            Err(_) => println!("{}", packed),
+        }
+    }
+
+    Ok(())
+}
+
+/// Pack a plaintext DIDComm message (synchronous wrapper)
+fn pack_message(
+    input_file: &PathBuf,
+    output_file: Option<PathBuf>,
+    sender_did: Option<String>,
+    recipient_did: Option<String>,
+    mode: &str,
+) -> Result<()> {
+    // Create a tokio runtime to run async function
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| Error::Runtime(format!("Failed to create runtime: {}", e)))?;
+
+    // Run the async function in the runtime
+    rt.block_on(pack_message_async(
+        input_file,
+        output_file,
+        sender_did,
+        recipient_did,
+        mode,
+    ))
+}
+
+/// Unpack a signed or encrypted DIDComm message
+async fn unpack_message_async(
+    input_file: &PathBuf,
+    output_file: Option<PathBuf>,
+    recipient_did: Option<String>,
+) -> Result<()> {
+    // Read the packed message from the input file
+    let packed = fs::read_to_string(input_file).map_err(|e| Error::Io(e))?;
+
+    // Load keys from storage
+    let storage = KeyStorage::load_default()?;
+
+    // Get the recipient DID
+    let recipient = if let Some(did) = recipient_did {
+        // Verify that the DID exists
+        if !storage.keys.contains_key(&did) {
+            return Err(Error::Storage(format!(
+                "Key with DID '{}' not found in storage",
+                did
+            )));
+        }
+        did
+    } else if let Some(default_did) = storage.default_did.clone() {
+        // Use default DID if available
+        default_did
+    } else if let Some(first_key) = storage.keys.keys().next() {
+        // Otherwise use first available DID
+        first_key.clone()
+    } else {
+        // No keys found
+        return Err(Error::Storage("No keys found in storage".to_string()));
+    };
+
+    println!("Using recipient DID: {}", recipient);
+
+    // Create key manager with the loaded keys
+    let key_manager_builder =
+        crate::agent_key_manager::AgentKeyManagerBuilder::new().load_from_default_storage();
+    let key_manager = Arc::new(key_manager_builder.build()?);
+
+    // Create unpack options
+    use crate::message_packing::UnpackOptions;
+    let unpack_options = UnpackOptions {
+        expected_security_mode: SecurityMode::Any,
+        expected_recipient_kid: Some(format!("{}#keys-1", recipient)),
+        require_signature: false,
+    };
+
+    // Unpack the message using the String's Unpackable implementation
+    let unpacked: PlainMessage = String::unpack(&packed, &*key_manager, unpack_options).await?;
+
+    // Convert to pretty JSON
+    let unpacked_json = serde_json::to_string_pretty(&unpacked)
+        .map_err(|e| Error::Serialization(format!("Failed to format unpacked message: {}", e)))?;
+
+    // Write the unpacked message to the output file or display it
+    if let Some(output) = output_file {
+        fs::write(&output, &unpacked_json).map_err(Error::Io)?;
+        println!("Unpacked message saved to: {}", output.display());
+    } else {
+        println!("{}", unpacked_json);
+    }
+
+    Ok(())
+}
+
+/// Unpack a signed or encrypted DIDComm message (synchronous wrapper)
+fn unpack_message(
+    input_file: &PathBuf,
+    output_file: Option<PathBuf>,
+    recipient_did: Option<String>,
+) -> Result<()> {
+    // Create a tokio runtime to run async function
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| Error::Runtime(format!("Failed to create runtime: {}", e)))?;
+
+    // Run the async function in the runtime
+    rt.block_on(unpack_message_async(input_file, output_file, recipient_did))
 }

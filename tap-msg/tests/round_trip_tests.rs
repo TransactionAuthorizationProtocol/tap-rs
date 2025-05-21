@@ -24,6 +24,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -31,6 +32,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {

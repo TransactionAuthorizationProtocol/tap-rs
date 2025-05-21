@@ -28,12 +28,14 @@ pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
             role: Some("originator".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         },
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }),
         amount: "100.00".to_string(),
         agents: vec![],
@@ -118,12 +120,14 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
             role: Some("originator".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         },
         beneficiary: Some(Participant {
             id: beneficiary_did.to_string(),
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }),
         amount: "100.00".to_string(),
         memo: None,
@@ -133,12 +137,14 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
                 role: Some("sender_vasp".to_string()),
                 policies: None,
                 leiCode: None,
+                name: None,
             },
             Participant {
                 id: receiver_vasp_did.to_string(),
                 role: Some("receiver_vasp".to_string()),
                 policies: None,
                 leiCode: None,
+                name: None,
             },
         ],
         settlement_id: None,
@@ -178,6 +184,7 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
             role: Some("compliance".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }],
     };
 
@@ -218,6 +225,7 @@ pub fn create_replace_agent_example(
         role: replacement_agent_role.map(ToString::to_string),
         policies: None, // No policies for this participant
         leiCode: None,
+        name: None,
     };
 
     // Call replace_agent on the Transfer instance
@@ -372,6 +380,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             role: Some("originator".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         },
         memo: None,
         beneficiary: Some(Participant {
@@ -379,6 +388,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -426,6 +436,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             role: Some("observer".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         }],
     };
 
@@ -455,6 +466,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             role: Some("beneficiary".to_string()),
             policies: None,
             leiCode: None,
+            name: None,
         },
     };
 

@@ -2,11 +2,11 @@
 
 use std::sync::Arc;
 use std::time::Duration;
-use tap_agent::agent::DefaultAgent;
+use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
-use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
 use tap_agent::did::MultiResolver;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
+use tap_agent::TapAgent;
 use tap_msg::didcomm::PlainMessage;
 use tokio::time::sleep;
 
@@ -18,30 +18,27 @@ struct TestDIDResolver;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a DID resolver
-    let resolver = Arc::new(MultiResolver::default());
+    let _resolver = Arc::new(MultiResolver::default());
 
-    // Create a secrets resolver
-    let mut secrets = BasicSecretResolver::new();
+    // Create the agent key managers
+    let mut alice_builder = AgentKeyManagerBuilder::new();
+    let mut bob_builder = AgentKeyManagerBuilder::new();
 
     // Add Alice's secret
     let alice_secret = create_test_secret("did:example:alice", "alice-key");
-    secrets.add_secret("did:example:alice", alice_secret);
+    alice_builder = alice_builder.add_secret("did:example:alice".to_string(), alice_secret);
 
     // Add Bob's secret
     let bob_secret = create_test_secret("did:example:bob", "bob-key");
-    secrets.add_secret("did:example:bob", bob_secret);
+    bob_builder = bob_builder.add_secret("did:example:bob".to_string(), bob_secret);
 
-    // Create the message packers
-    let alice_packer = Arc::new(DefaultMessagePacker::new(
-        resolver.clone(),
-        Arc::new(secrets.clone()),
-        true,
-    ));
-    let bob_packer = Arc::new(DefaultMessagePacker::new(
-        resolver.clone(),
-        Arc::new(secrets.clone()),
-        true,
-    ));
+    // Build the key managers
+    let alice_key_manager = alice_builder
+        .build()
+        .expect("Failed to build Alice's key manager");
+    let bob_key_manager = bob_builder
+        .build()
+        .expect("Failed to build Bob's key manager");
 
     // Create Agent configurations for Alice and Bob
     let alice_config = AgentConfig::new("did:example:alice".to_string())
@@ -53,8 +50,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_debug(true);
 
     // Create the agents
-    let _alice = DefaultAgent::new(alice_config, alice_packer);
-    let _bob = DefaultAgent::new(bob_config, bob_packer);
+    let _alice = TapAgent::new(alice_config, Arc::new(alice_key_manager));
+    let _bob = TapAgent::new(bob_config, Arc::new(bob_key_manager));
 
     // Let's create a PlainMessage to simulate a message flow
     let plain_message = PlainMessage {

@@ -28,6 +28,7 @@ fn create_transfer_body() -> Transfer {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -35,6 +36,7 @@ fn create_transfer_body() -> Transfer {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create asset ID properly - using a valid Ethereum address format

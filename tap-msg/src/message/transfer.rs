@@ -71,7 +71,7 @@ impl Transfer {
     ///     id: "did:example:alice".to_string(),
     ///     role: Some("originator".to_string()),
     ///     policies: None,
-    ///     leiCode: None,
+    ///     leiCode: None, name: None,
     /// };
     ///
     /// // Create a transfer with required fields

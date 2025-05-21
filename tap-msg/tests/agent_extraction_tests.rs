@@ -19,6 +19,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent2 = Participant {
@@ -26,6 +27,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent3 = Participant {
@@ -33,6 +35,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {
@@ -81,6 +84,7 @@ fn test_to_didcomm_filters_sender_when_specified() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent2 = Participant {
@@ -88,6 +92,7 @@ fn test_to_didcomm_filters_sender_when_specified() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent3 = Participant {
@@ -95,6 +100,7 @@ fn test_to_didcomm_filters_sender_when_specified() {
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {
@@ -139,6 +145,7 @@ fn test_to_didcomm_with_route() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent2 = Participant {
@@ -146,6 +153,7 @@ fn test_to_didcomm_with_route() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent3 = Participant {
@@ -153,6 +161,7 @@ fn test_to_didcomm_with_route() {
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {
@@ -198,6 +207,7 @@ fn test_create_tap_message() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent2 = Participant {
@@ -205,6 +215,7 @@ fn test_create_tap_message() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {
@@ -252,6 +263,7 @@ fn test_get_all_participants() {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent2 = Participant {
@@ -259,6 +271,7 @@ fn test_get_all_participants() {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let body = Transfer {

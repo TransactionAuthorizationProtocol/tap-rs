@@ -135,6 +135,7 @@ pub fn create_payment_request_with_invoice_example(
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a merchant agent (e.g., a payment processor)
@@ -143,6 +144,7 @@ pub fn create_payment_request_with_invoice_example(
         role: Some("agent".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create an invoice with tax
@@ -161,6 +163,7 @@ pub fn create_payment_request_with_invoice_example(
         role: Some("customer".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     });
 
     // Use the builder pattern to create the payment

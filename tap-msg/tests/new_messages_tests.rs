@@ -22,6 +22,7 @@ fn test_payment_request_with_asset() {
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent = Participant {
@@ -29,6 +30,7 @@ fn test_payment_request_with_asset() {
         role: Some("agent".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let transaction_id = uuid::Uuid::new_v4().to_string();
@@ -78,6 +80,7 @@ fn test_payment_request_with_currency() {
         role: Some("merchant".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agent = Participant {
@@ -85,6 +88,7 @@ fn test_payment_request_with_currency() {
         role: Some("agent".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a payment with USD currency

@@ -112,7 +112,7 @@
 //!     
 //!     // Create and subscribe the event logger
 //!     let event_logger = Arc::new(EventLogger::new(logger_config));
-//!     node.get_event_bus().subscribe(event_logger).await;
+//!     node.event_bus().subscribe(event_logger).await;
 //! }
 //! ```
 //!

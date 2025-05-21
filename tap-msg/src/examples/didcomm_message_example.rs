@@ -18,6 +18,7 @@ pub fn create_transfer_message_example() -> Result<PlainMessage> {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -25,6 +26,7 @@ pub fn create_transfer_message_example() -> Result<PlainMessage> {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create a transfer body

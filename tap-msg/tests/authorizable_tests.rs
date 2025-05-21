@@ -157,6 +157,7 @@ fn test_update_party_message() {
         role: Some("new_role".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create an UpdateParty message
@@ -221,6 +222,7 @@ fn create_test_transfer() -> Transfer {
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -228,6 +230,7 @@ fn create_test_transfer() -> Transfer {
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let agents = vec![Participant {
@@ -235,6 +238,7 @@ fn create_test_transfer() -> Transfer {
         role: None,
         policies: None,
         leiCode: None,
+        name: None,
     }];
 
     Transfer {

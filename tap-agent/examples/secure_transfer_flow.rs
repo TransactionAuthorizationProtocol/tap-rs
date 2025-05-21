@@ -12,10 +12,9 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
-use tap_agent::agent::{Agent, DefaultAgent};
+use tap_agent::agent::{Agent, TapAgent};
+use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
-use tap_agent::crypto::{BasicSecretResolver, DefaultMessagePacker};
-use tap_agent::did::{KeyResolver, MultiResolver};
 use tap_agent::error::{Error, Result};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
@@ -299,19 +298,14 @@ async fn create_agent(
     did: &str,
     public_key: &str,
     private_key: &str,
-) -> Result<(Arc<DefaultAgent>, String)> {
+) -> Result<(Arc<TapAgent>, String)> {
     // Create agent configuration
     let agent_config = AgentConfig::new(did.to_string());
 
-    // Create DID resolver with proper error handling
-    let mut did_resolver = MultiResolver::new();
-    did_resolver.register_method("key", KeyResolver::new());
-    let did_resolver = Arc::new(did_resolver);
+    // Create key manager builder
+    let mut builder = AgentKeyManagerBuilder::new();
 
-    // Create secret resolver with the agent's key
-    let mut secret_resolver = BasicSecretResolver::new();
-
-    // Create a proper Ed25519 key
+    // Add the agent's key
     let secret = Secret {
         id: format!("{}#keys-1", did),
         type_: SecretType::JsonWebKey2020,
@@ -325,21 +319,16 @@ async fn create_agent(
         },
     };
 
-    // Add the secret to the resolver
-    secret_resolver.add_secret(did, secret);
-    let secret_resolver = Arc::new(secret_resolver);
+    // Add the secret to the key manager
+    builder = builder.add_secret(did.to_string(), secret);
 
-    // Create message packer with proper DID and secret resolvers
-    let message_packer = Arc::new(DefaultMessagePacker::new(
-        did_resolver,
-        secret_resolver,
-        true,
-    ));
+    // Build the key manager
+    let key_manager = builder.build()?;
 
-    // Create agent
-    let agent = Arc::new(DefaultAgent::new(agent_config, message_packer));
+    // Create the agent
+    let agent = TapAgent::new(agent_config, Arc::new(key_manager));
 
-    Ok((agent, did.to_string()))
+    Ok((Arc::new(agent), did.to_string()))
 }
 
 /// Create a transfer message with validation
@@ -359,6 +348,7 @@ fn create_transfer_message(
         role: Some("originator".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     let beneficiary = Participant {
@@ -366,6 +356,7 @@ fn create_transfer_message(
         role: Some("beneficiary".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Create settlement agent
@@ -374,6 +365,7 @@ fn create_transfer_message(
         role: Some("settlementAddress".to_string()),
         policies: None,
         leiCode: None,
+        name: None,
     };
 
     // Validate asset ID
