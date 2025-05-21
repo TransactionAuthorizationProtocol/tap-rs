@@ -1,6 +1,6 @@
 use serde_json::Value;
 use tap_agent::{
-    agent_key::{AgentKey, JwsAlgorithm, SigningKey, VerificationKey},
+    agent_key::{AgentKey, VerificationKey},
     error::Result,
 };
 

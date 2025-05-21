@@ -749,6 +749,12 @@ pub struct AgentKeyManagerBuilder {
     storage_path: Option<PathBuf>,
 }
 
+impl Default for AgentKeyManagerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AgentKeyManagerBuilder {
     /// Create a new KeyManagerBuilder
     pub fn new() -> Self {

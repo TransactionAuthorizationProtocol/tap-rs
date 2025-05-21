@@ -82,6 +82,12 @@ pub struct PackOptions {
     pub sender_kid: Option<String>,
 }
 
+impl Default for PackOptions {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PackOptions {
     /// Create new default packing options
     pub fn new() -> Self {
@@ -133,6 +139,12 @@ pub struct UnpackOptions {
     pub expected_recipient_kid: Option<String>,
     /// Whether to require a valid signature
     pub require_signature: bool,
+}
+
+impl Default for UnpackOptions {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UnpackOptions {

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use tap_agent::agent::{Agent, TapAgent};
 use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
-use tap_agent::key_manager::{KeyManager, Secret, SecretMaterial, SecretType};
+use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tokio::test;
 
 #[derive(Debug)]

@@ -769,6 +769,12 @@ pub struct KeyManagerBuilder {
     storage_path: Option<std::path::PathBuf>,
 }
 
+impl Default for KeyManagerBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl KeyManagerBuilder {
     /// Create a new KeyManagerBuilder
     pub fn new() -> Self {

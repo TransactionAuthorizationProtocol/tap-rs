@@ -1,5 +1,3 @@
-use serde_json::Value;
-use std::sync::Arc;
 use tap_agent::error::Result;
 use tap_msg::didcomm::PlainMessage;
 

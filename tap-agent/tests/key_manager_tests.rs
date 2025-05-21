@@ -5,8 +5,6 @@ use tap_agent::{
     KeyManager,
 };
 
-use std::sync::Arc;
-
 #[tokio::test]
 async fn test_key_manager_builder() -> Result<()> {
     // Create a key manager with an auto-generated Ed25519 key

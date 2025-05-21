@@ -187,8 +187,8 @@ impl LocalAgentKey {
                     "kty": "OKP",
                     "kid": kid,
                     "crv": "Ed25519",
-                    "x": base64::engine::general_purpose::STANDARD.encode(&public_key),
-                    "d": base64::engine::general_purpose::STANDARD.encode(&private_key)
+                    "x": base64::engine::general_purpose::STANDARD.encode(public_key),
+                    "d": base64::engine::general_purpose::STANDARD.encode(private_key)
                 }),
             },
         };
@@ -902,7 +902,7 @@ impl EncryptionKey for LocalAgentKey {
             jwe_recipients.push(JweRecipient {
                 encrypted_key: base64::engine::general_purpose::STANDARD.encode(encrypted_key),
                 header: JweHeader {
-                    kid: (&**recipient).key_id().to_string(),
+                    kid: (**recipient).key_id().to_string(),
                     sender_kid: Some(crate::agent_key::AgentKey::key_id(self).to_string()),
                 },
             });
