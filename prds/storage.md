@@ -43,6 +43,10 @@
 | id | INTEGER PRIMARY KEY | |
 | type | TEXT NOT NULL | `"transfer"` or `"payment"` |
 | reference_id | TEXT NOT NULL | `TransferBody.transfer_id` or `PaymentBody.payment_id` |
+| from_did | TEXT | Sender DID (nullable for privacy) |
+| to_did | TEXT | Recipient DID (nullable for privacy) |
+| thread_id | TEXT | DIDComm thread ID |
+| message_type | TEXT NOT NULL | Full TAP message type URI |
 | status | TEXT NOT NULL DEFAULT 'pending' | |
 | message_json | TEXT NOT NULL | Full DIDComm message |
 | created_at | TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ','now')) | |
@@ -78,12 +82,21 @@ We will embed plain SQL migration files under `tap-node/migrations/` and apply t
 
 ```rust
 // tap-node/src/storage/mod.rs
-pub struct Storage { /* wraps rusqlite::Connection (or pooled) */ }
+use r2d2::Pool;
+use r2d2_sqlite::SqliteConnectionManager;
+
+pub struct Storage { 
+    pool: Pool<SqliteConnectionManager>,
+}
 
 impl Storage {
-    pub async fn new(path: &Path) -> Result<Self, StorageError>; // runs migrations
-
-    pub async fn insert_transaction(&self, message: &Message, transaction_type: &str) -> Result<(), StorageError>;
+    pub async fn new(path: Option<PathBuf>) -> Result<Self, StorageError>; // runs migrations
+    
+    pub async fn insert_transaction(&self, message: &Message) -> Result<(), StorageError>;
+    
+    // Future-ready query methods
+    pub async fn get_transaction_by_id(&self, reference_id: &str) -> Result<Option<Transaction>, StorageError>;
+    pub async fn list_transactions(&self, limit: u32, offset: u32) -> Result<Vec<Transaction>, StorageError>;
 }
 ```
 
@@ -119,9 +132,9 @@ Inserting uses `serde_json::to_string_pretty(&message)` to store the canonical J
 
 ## 13. Open Questions
 
-1. Do we need unique constraints on `reference_id`?  
-2. Where should the DB path be configured? (env var, CLI arg, config file)  
-3. How do we handle storage when compiled to WASM? (likely disabled)
+1. Do we need unique constraints on `reference_id`? **Answer: Yes, add UNIQUE constraint to prevent duplicates**
+2. Where should the DB path be configured? (env var, CLI arg, config file) **Answer: Use `TAP_NODE_DB_PATH` env var with CLI override**
+3. How do we handle storage when compiled to WASM? (likely disabled) **Answer: Feature-gate with `storage` feature, disabled for WASM**
 
 ## 14. Checklist (from prds/v1.md)
 

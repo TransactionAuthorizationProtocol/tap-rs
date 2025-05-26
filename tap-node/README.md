@@ -19,6 +19,7 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 - **Configurable Components**: Customize node behavior with pluggable components
 - **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
 - **WASM Compatibility**: Optional WASM support for browser environments
+- **Persistent Storage**: SQLite-based storage for Transfer and Payment transactions with automatic migrations
 
 ## Installation
 
@@ -36,6 +37,7 @@ tap-node = { path = "../tap-node", features = ["websocket"] } # Enable WebSocket
 tap-node = { path = "../tap-node", features = ["native-with-websocket"] } # Enable both HTTP and WebSocket
 tap-node = { path = "../tap-node", features = ["wasm"] } # Enable WASM support
 tap-node = { path = "../tap-node", features = ["wasm-with-websocket"] } # Enable WASM with WebSocket
+tap-node = { path = "../tap-node", features = ["storage"] } # Enable persistent storage (enabled by default)
 ```
 
 ## Architecture
@@ -43,16 +45,16 @@ tap-node = { path = "../tap-node", features = ["wasm-with-websocket"] } # Enable
 The TAP Node is built with a modular architecture:
 
 ```
-┌───────────────────────────────────────────────┐
-│                   TAP Node                     │
-├───────────────┬───────────────┬───────────────┤
-│ Agent Registry│ Message Router│  Event Bus    │
-├───────────────┼───────────────┼───────────────┤
-│ Message       │ Processor Pool│  Resolver     │
-│ Processors    │               │               │
-└───────────────┴───────────────┴───────────────┘
-        │               │               │
-        ▼               ▼               ▼
+┌─────────────────────────────────────────────────────────┐
+│                      TAP Node                            │
+├───────────────┬───────────────┬───────────────┬─────────┤
+│ Agent Registry│ Message Router│  Event Bus    │ Storage │
+├───────────────┼───────────────┼───────────────┼─────────┤
+│ Message       │ Processor Pool│  Resolver     │ SQLite  │
+│ Processors    │               │               │   DB    │
+└───────────────┴───────────────┴───────────────┴─────────┘
+        │               │               │               │
+        ▼               ▼               ▼               ▼
 ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
 │   TAP Agent   │ │   TAP Agent   │ │   TAP Agent   │
 └───────────────┘ └───────────────┘ └───────────────┘
@@ -79,6 +81,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         enable_message_logging: true,
         log_message_content: false,
         processor_pool: None,
+        #[cfg(feature = "storage")]
+        storage_path: None, // Uses default path: ./tap-node.db
     };
 
     // Create a new node
@@ -310,6 +314,84 @@ Key benefits of the WebSocket transport:
 - Bidirectional communication
 - Connection state awareness
 - Reduced overhead for frequent messages
+
+## Persistent Storage
+
+The TAP Node includes built-in support for persisting Transfer and Payment transactions to a SQLite database. This feature is enabled by default and provides automatic storage of all transactions processed by the node.
+
+### Storage Configuration
+
+Configure storage when creating the node:
+
+```rust
+use tap_node::{NodeConfig, TapNode};
+use std::path::PathBuf;
+
+// Use default storage location (./tap-node.db)
+let config = NodeConfig {
+    #[cfg(feature = "storage")]
+    storage_path: None,
+    ..Default::default()
+};
+
+// Or specify a custom path
+let config = NodeConfig {
+    #[cfg(feature = "storage")]
+    storage_path: Some(PathBuf::from("/path/to/database.db")),
+    ..Default::default()
+};
+
+// Or use environment variable
+std::env::set_var("TAP_NODE_DB_PATH", "/path/to/database.db");
+```
+
+### Accessing Stored Transactions
+
+```rust
+// Get storage handle from the node
+if let Some(storage) = node.storage() {
+    // Retrieve a specific transaction by message ID
+    let transaction = storage.get_transaction_by_id("msg_12345").await?;
+    
+    // List recent transactions with pagination
+    let transactions = storage.list_transactions(
+        10,  // limit: 10 transactions
+        0    // offset: 0 (first page)
+    ).await?;
+    
+    for tx in transactions {
+        println!("Transaction: {} - Type: {:?} - Status: {:?}", 
+            tx.reference_id, tx.transaction_type, tx.status);
+    }
+}
+```
+
+### Storage Features
+
+- **Automatic Migration**: Database schema is automatically created and migrated on startup
+- **Append-Only Design**: All transactions are stored for audit trail
+- **SQLite WAL Mode**: Optimized for concurrent reads and writes
+- **Connection Pooling**: Up to 10 concurrent database connections
+- **WASM Compatibility**: Storage is automatically disabled in WASM builds
+
+### Database Schema
+
+The storage system maintains a `transactions` table with the following information:
+- Transaction ID and type (Transfer/Payment)
+- Sender and recipient DIDs
+- Thread ID for conversation tracking
+- Full message content as JSON
+- Status tracking (pending/confirmed/failed/cancelled/reverted)
+- Timestamps for creation and updates
+
+### Disabling Storage
+
+To disable storage (for example, in memory-only deployments):
+
+```toml
+[dependencies]
+tap-node = { path = "../tap-node", default-features = false, features = ["native"] }
+```
 
 ## Integration with Other Crates
 

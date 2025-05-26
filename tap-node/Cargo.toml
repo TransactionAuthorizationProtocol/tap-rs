@@ -59,6 +59,12 @@ tokio-tungstenite = { version = "0.20", features = [
     "native-tls",
 ], optional = true }
 
+# Storage dependencies (native only)
+rusqlite = { version = "0.31", features = ["bundled"], optional = true }
+rusqlite_migration = { version = "1.2", optional = true }
+r2d2 = { version = "0.8", optional = true }
+r2d2_sqlite = { version = "0.24", optional = true }
+
 [dev-dependencies]
 tokio-test = { workspace = true }
 criterion = { version = "0.5", features = ["async_tokio"] }
@@ -71,8 +77,9 @@ name = "stress_test"
 harness = false
 
 [features]
-default = ["native"]
+default = ["native", "storage"]
 native = ["tokio/full", "reqwest"]
+storage = ["rusqlite", "rusqlite_migration", "r2d2", "r2d2_sqlite"]
 websocket = ["tokio-tungstenite"]
 native-with-websocket = ["native", "websocket"]
 wasm = [

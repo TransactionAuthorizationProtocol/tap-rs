@@ -9,7 +9,7 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 - **[tap-msg](./tap-msg/README.md)**: Core message processing for TAP with integrated DIDComm support
 - **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **[tap-caip](./tap-caip/README.md)**: Implementation of Chain Agnostic Identifier Standards
-- **[tap-node](./tap-node/README.md)**: TAP node orchestration and message routing
+- **[tap-node](./tap-node/README.md)**: TAP node orchestration, message routing, and transaction storage
 - **[tap-http](./tap-http/README.md)**: HTTP DIDComm server implementation
 - **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
 - **[tap-ts](./tap-ts/README.md)**: TypeScript/WASM wrapper for browser and Node.js environments
@@ -130,6 +130,7 @@ See individual tool READMEs for detailed usage instructions.
 - **WASM Compatibility**: Run in browsers and Node.js via WebAssembly
 - **TypeScript API**: Developer-friendly TypeScript wrapper for web integrations
 - **Comprehensive Validation**: All messages validated against TAP specifications
+- **Persistent Storage**: SQLite-based transaction storage with automatic migrations for audit trails
 
 ## Getting Started with tap-msg
 

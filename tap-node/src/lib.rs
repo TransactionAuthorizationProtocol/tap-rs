@@ -1,7 +1,7 @@
 //! TAP Node - A node implementation for the TAP protocol
 //!
 //! The TAP Node is the central component that manages TAP Agents, routes messages,
-//! processes events, and provides a scalable architecture for TAP deployments.
+//! processes events, stores transactions, and provides a scalable architecture for TAP deployments.
 //!
 //! # Key Components
 //!
@@ -10,6 +10,7 @@
 //! - **Message Processors**: Process incoming and outgoing messages
 //! - **Message Router**: Routes messages to the appropriate agent
 //! - **Processor Pool**: Provides scalable concurrent message processing
+//! - **Storage**: Persistent SQLite storage for Transfer and Payment transactions
 //!
 //! # Thread Safety and Concurrency
 //!
@@ -41,6 +42,7 @@ pub mod error;
 pub mod event;
 pub mod message;
 pub mod resolver;
+pub mod storage;
 
 pub use error::{Error, Result};
 pub use event::logger::{EventLogger, EventLoggerConfig, LogDestination};
@@ -123,6 +125,9 @@ pub struct NodeConfig {
     pub processor_pool: Option<ProcessorPoolConfig>,
     /// Configuration for the event logger
     pub event_logger: Option<EventLoggerConfig>,
+    /// Path to the storage database (None for default)
+    #[cfg(feature = "storage")]
+    pub storage_path: Option<std::path::PathBuf>,
 }
 
 /// # The TAP Node
@@ -169,6 +174,9 @@ pub struct TapNode {
     processor_pool: Option<ProcessorPool>,
     /// Node configuration
     config: NodeConfig,
+    /// Storage for transactions
+    #[cfg(feature = "storage")]
+    storage: Option<Arc<storage::Storage>>,
 }
 
 impl TapNode {
@@ -206,6 +214,21 @@ impl TapNode {
         // Create the resolver
         let resolver = Arc::new(NodeResolver::default());
 
+        // Initialize storage if feature is enabled
+        #[cfg(feature = "storage")]
+        let storage = {
+            let storage_path = config.storage_path.clone();
+            match tokio::task::block_in_place(|| {
+                tokio::runtime::Handle::current().block_on(storage::Storage::new(storage_path))
+            }) {
+                Ok(s) => Some(Arc::new(s)),
+                Err(e) => {
+                    log::error!("Failed to initialize storage: {}", e);
+                    None
+                }
+            }
+        };
+
         let node = Self {
             agents,
             event_bus,
@@ -215,6 +238,8 @@ impl TapNode {
             resolver,
             processor_pool: None,
             config,
+            #[cfg(feature = "storage")]
+            storage,
         };
 
         // Set up the event logger if configured
@@ -281,6 +306,19 @@ impl TapNode {
     /// # }
     /// ```
     pub async fn receive_message(&self, message: PlainMessage) -> Result<()> {
+        // Store the message if it's a Transfer or Payment and storage is available
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref storage) = self.storage {
+                if message.type_.contains("transfer") || message.type_.contains("payment") {
+                    match storage.insert_transaction(&message).await {
+                        Ok(_) => log::debug!("Stored transaction: {}", message.id),
+                        Err(e) => log::warn!("Failed to store transaction: {}", e),
+                    }
+                }
+            }
+        }
+
         // Process the incoming message
         let processed_message = match self.incoming_processor.process_incoming(message).await? {
             Some(msg) => msg,
@@ -330,6 +368,19 @@ impl TapNode {
         to_did: String,
         message: PlainMessage,
     ) -> Result<String> {
+        // Store the message if it's a Transfer or Payment and storage is available
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref storage) = self.storage {
+                if message.type_.contains("transfer") || message.type_.contains("payment") {
+                    match storage.insert_transaction(&message).await {
+                        Ok(_) => log::debug!("Stored outgoing transaction: {}", message.id),
+                        Err(e) => log::warn!("Failed to store outgoing transaction: {}", e),
+                    }
+                }
+            }
+        }
+
         // Process the outgoing message
         let processed_message = match self.outgoing_processor.process_outgoing(message).await? {
             Some(msg) => msg,
@@ -400,7 +451,7 @@ impl TapNode {
     }
 
     /// Get a mutable reference to the processor pool
-    /// This is a reference to Option<ProcessorPool> to allow starting the pool after node creation
+    /// This is a reference to `Option<ProcessorPool>` to allow starting the pool after node creation
     pub fn processor_pool_mut(&mut self) -> &mut Option<ProcessorPool> {
         &mut self.processor_pool
     }
@@ -408,6 +459,12 @@ impl TapNode {
     /// Get the node configuration
     pub fn config(&self) -> &NodeConfig {
         &self.config
+    }
+
+    /// Get a reference to the storage (if available)
+    #[cfg(feature = "storage")]
+    pub fn storage(&self) -> Option<&Arc<storage::Storage>> {
+        self.storage.as_ref()
     }
 }
 
