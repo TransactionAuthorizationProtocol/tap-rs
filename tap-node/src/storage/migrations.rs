@@ -12,8 +12,7 @@ pub fn run_migrations(conn: &mut Connection) -> Result<(), StorageError> {
     let migrations = Migrations::new(
         MIGRATIONS
             .iter()
-            .enumerate()
-            .map(|(_, sql)| M::up(sql).down(""))
+            .map(|sql| M::up(sql).down(""))
             .collect::<Vec<_>>(),
     );
 

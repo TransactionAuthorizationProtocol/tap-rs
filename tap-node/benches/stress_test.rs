@@ -72,6 +72,8 @@ fn stress_test(c: &mut Criterion) {
         log_message_content: false,
         processor_pool: Some(pool_config),
         event_logger: None,
+        #[cfg(feature = "storage")]
+        storage_path: None,
     };
 
     // For testing, we'll create some DIDs that don't rely on external resolvers
