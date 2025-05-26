@@ -9,26 +9,34 @@ use tracing::{debug, info};
 
 use super::error::StorageError;
 use super::migrations::run_migrations;
-use super::models::{Transaction, TransactionStatus, TransactionType};
+use super::models::{Transaction, TransactionStatus, TransactionType, Message, MessageDirection};
 
-/// Storage backend for TAP transactions
+/// Storage backend for TAP transactions and message audit trail
 ///
-/// This struct provides the main interface for storing and retrieving TAP transactions
-/// from a SQLite database. It uses connection pooling for efficient concurrent access
-/// and provides an async-friendly API.
+/// This struct provides the main interface for storing and retrieving TAP data
+/// from a SQLite database. It maintains two separate tables:
+/// - `transactions`: For Transfer and Payment messages requiring business logic
+/// - `messages`: For complete audit trail of all messages
+///
+/// It uses connection pooling for efficient concurrent access and provides
+/// an async-friendly API.
 ///
 /// # Example
 ///
 /// ```no_run
-/// use tap_node::storage::Storage;
+/// use tap_node::storage::{Storage, MessageDirection};
 /// use std::path::PathBuf;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 /// // Create storage with default path
 /// let storage = Storage::new(None).await?;
 ///
-/// // Or with custom path
-/// let storage = Storage::new(Some(PathBuf::from("./my-db.db"))).await?;
+/// // Query transactions
+/// let transactions = storage.list_transactions(10, 0).await?;
+///
+/// // Query audit trail
+/// let all_messages = storage.list_messages(20, 0, None).await?;
+/// let incoming_only = storage.list_messages(10, 0, Some(MessageDirection::Incoming)).await?;
 /// # Ok(())
 /// # }
 /// ```
@@ -258,6 +266,179 @@ impl Storage {
         .await
         .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
     }
+    
+    /// Log an incoming or outgoing message to the audit trail
+    ///
+    /// This method stores any DIDComm message for audit purposes, regardless of type.
+    ///
+    /// # Arguments
+    ///
+    /// * `message` - The DIDComm PlainMessage to log
+    /// * `direction` - Whether the message is incoming or outgoing
+    ///
+    /// # Errors
+    ///
+    /// Returns `StorageError` if:
+    /// - Database insertion fails
+    /// - The message already exists (duplicate message_id)
+    pub async fn log_message(&self, message: &PlainMessage, direction: MessageDirection) -> Result<(), StorageError> {
+        let message_json = serde_json::to_string_pretty(message)?;
+        let message_id = message.id.clone();
+        let message_type = message.type_.clone();
+        let from_did = message.from.clone();
+        let to_did = message.to.first().cloned();
+        let thread_id = message.thid.clone();
+        let parent_thread_id = message.pthid.clone();
+        
+        let pool = self.pool.clone();
+        
+        task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            
+            debug!("Logging {} message: {} ({})", direction, message_id, message_type);
+            
+            let result = conn.execute(
+                "INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    message_id.clone(),
+                    message_type,
+                    from_did,
+                    to_did,
+                    thread_id,
+                    parent_thread_id,
+                    direction.to_string(),
+                    message_json
+                ],
+            );
+            
+            match result {
+                Ok(_) => debug!("Successfully logged message: {}", message_id),
+                Err(e) => {
+                    if let rusqlite::Error::SqliteFailure(err, _) = &e {
+                        if err.code == rusqlite::ErrorCode::ConstraintViolation {
+                            // Message already logged, this is fine
+                            debug!("Message already logged: {}", message_id);
+                            return Ok(());
+                        }
+                    }
+                    return Err(StorageError::Database(e));
+                }
+            }
+            
+            Ok::<(), StorageError>(())
+        })
+        .await
+        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))??;
+        
+        Ok(())
+    }
+    
+    /// Retrieve a message by its ID
+    ///
+    /// # Arguments
+    ///
+    /// * `message_id` - The unique message ID
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(Message))` if found
+    /// * `Ok(None)` if not found
+    /// * `Err(StorageError)` on database error
+    pub async fn get_message_by_id(&self, message_id: &str) -> Result<Option<Message>, StorageError> {
+        let pool = self.pool.clone();
+        let message_id = message_id.to_string();
+        
+        task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            
+            let result = conn.query_row(
+                "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
+                 FROM messages WHERE message_id = ?1",
+                params![message_id],
+                |row| {
+                    Ok(Message {
+                        id: row.get(0)?,
+                        message_id: row.get(1)?,
+                        message_type: row.get(2)?,
+                        from_did: row.get(3)?,
+                        to_did: row.get(4)?,
+                        thread_id: row.get(5)?,
+                        parent_thread_id: row.get(6)?,
+                        direction: MessageDirection::try_from(row.get::<_, String>(7)?.as_str())
+                            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
+                        message_json: row.get(8)?,
+                        created_at: row.get(9)?,
+                    })
+                },
+            ).optional()?;
+            
+            Ok(result)
+        })
+        .await
+        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+    }
+    
+    /// List messages with pagination and optional filtering
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of messages to return
+    /// * `offset` - Number of messages to skip (for pagination)
+    /// * `direction` - Optional filter by message direction
+    ///
+    /// # Returns
+    ///
+    /// A vector of messages ordered by creation time descending
+    pub async fn list_messages(&self, limit: u32, offset: u32, direction: Option<MessageDirection>) -> Result<Vec<Message>, StorageError> {
+        let pool = self.pool.clone();
+        
+        task::spawn_blocking(move || {
+            let conn = pool.get()?;
+            
+            let query = if let Some(dir) = direction {
+                format!(
+                    "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
+                     FROM messages
+                     WHERE direction = '{}'
+                     ORDER BY created_at DESC
+                     LIMIT {} OFFSET {}",
+                    dir, limit, offset
+                )
+            } else {
+                format!(
+                    "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
+                     FROM messages
+                     ORDER BY created_at DESC
+                     LIMIT {} OFFSET {}",
+                    limit, offset
+                )
+            };
+            
+            let mut stmt = conn.prepare(&query)?;
+            
+            let messages = stmt.query_map([], |row| {
+                Ok(Message {
+                    id: row.get(0)?,
+                    message_id: row.get(1)?,
+                    message_type: row.get(2)?,
+                    from_did: row.get(3)?,
+                    to_did: row.get(4)?,
+                    thread_id: row.get(5)?,
+                    parent_thread_id: row.get(6)?,
+                    direction: MessageDirection::try_from(row.get::<_, String>(7)?.as_str())
+                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
+                    message_json: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+            
+            Ok(messages)
+        })
+        .await
+        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+    }
 }
 
 #[cfg(test)]
@@ -337,5 +518,72 @@ mod tests {
         assert_eq!(tx.reference_id, message_id);
         assert_eq!(tx.transaction_type, TransactionType::Transfer);
         assert_eq!(tx.status, TransactionStatus::Pending);
+    }
+    
+    #[tokio::test]
+    async fn test_log_and_retrieve_messages() {
+        let _ = env_logger::builder().is_test(true).try_init();
+        
+        let dir = tempdir().unwrap();
+        let db_path = dir.path().join("test.db");
+        let storage = Storage::new(Some(db_path)).await.unwrap();
+        
+        // Create test messages of different types
+        let connect_message = PlainMessage {
+            id: "msg_connect_123".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://tap-protocol.io/messages/connect/1.0".to_string(),
+            body: serde_json::json!({"constraints": ["test"]}),
+            from: "did:example:alice".to_string(),
+            to: vec!["did:example:bob".to_string()],
+            thid: Some("thread_123".to_string()),
+            pthid: None,
+            extra_headers: Default::default(),
+            attachments: None,
+            created_time: None,
+            expires_time: None,
+            from_prior: None,
+        };
+        
+        let authorize_message = PlainMessage {
+            id: "msg_auth_123".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://tap-protocol.io/messages/authorize/1.0".to_string(),
+            body: serde_json::json!({"transaction_id": "test_transfer_123"}),
+            from: "did:example:bob".to_string(),
+            to: vec!["did:example:alice".to_string()],
+            thid: Some("thread_123".to_string()),
+            pthid: None,
+            extra_headers: Default::default(),
+            attachments: None,
+            created_time: None,
+            expires_time: None,
+            from_prior: None,
+        };
+        
+        // Log messages
+        storage.log_message(&connect_message, MessageDirection::Incoming).await.unwrap();
+        storage.log_message(&authorize_message, MessageDirection::Outgoing).await.unwrap();
+        
+        // Retrieve specific message
+        let retrieved = storage.get_message_by_id("msg_connect_123").await.unwrap();
+        assert!(retrieved.is_some());
+        let msg = retrieved.unwrap();
+        assert_eq!(msg.message_id, "msg_connect_123");
+        assert_eq!(msg.direction, MessageDirection::Incoming);
+        
+        // List all messages
+        let all_messages = storage.list_messages(10, 0, None).await.unwrap();
+        assert_eq!(all_messages.len(), 2);
+        
+        // List only incoming messages
+        let incoming_messages = storage.list_messages(10, 0, Some(MessageDirection::Incoming)).await.unwrap();
+        assert_eq!(incoming_messages.len(), 1);
+        assert_eq!(incoming_messages[0].message_id, "msg_connect_123");
+        
+        // Test duplicate message handling (should not error)
+        storage.log_message(&connect_message, MessageDirection::Incoming).await.unwrap();
+        let all_messages_after = storage.list_messages(10, 0, None).await.unwrap();
+        assert_eq!(all_messages_after.len(), 2); // Should still be 2, not 3
     }
 }

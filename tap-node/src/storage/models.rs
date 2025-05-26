@@ -80,3 +80,45 @@ pub struct Transaction {
     pub created_at: String,
     pub updated_at: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageDirection {
+    Incoming,
+    Outgoing,
+}
+
+impl fmt::Display for MessageDirection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            MessageDirection::Incoming => write!(f, "incoming"),
+            MessageDirection::Outgoing => write!(f, "outgoing"),
+        }
+    }
+}
+
+impl TryFrom<&str> for MessageDirection {
+    type Error = String;
+    
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "incoming" => Ok(MessageDirection::Incoming),
+            "outgoing" => Ok(MessageDirection::Outgoing),
+            _ => Err(format!("Invalid message direction: {}", value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    pub id: i64,
+    pub message_id: String,
+    pub message_type: String,
+    pub from_did: Option<String>,
+    pub to_did: Option<String>,
+    pub thread_id: Option<String>,
+    pub parent_thread_id: Option<String>,
+    pub direction: MessageDirection,
+    pub message_json: String,
+    pub created_at: String,
+}

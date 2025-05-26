@@ -130,7 +130,9 @@ See individual tool READMEs for detailed usage instructions.
 - **WASM Compatibility**: Run in browsers and Node.js via WebAssembly
 - **TypeScript API**: Developer-friendly TypeScript wrapper for web integrations
 - **Comprehensive Validation**: All messages validated against TAP specifications
-- **Persistent Storage**: SQLite-based transaction storage with automatic migrations for audit trails
+- **Persistent Storage**: SQLite-based storage with automatic migrations providing:
+  - Transaction tracking for Transfer and Payment messages
+  - Complete audit trail of all messages for compliance and debugging
 
 ## Getting Started with tap-msg
 

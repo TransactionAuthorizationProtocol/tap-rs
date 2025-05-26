@@ -19,7 +19,9 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 - **Configurable Components**: Customize node behavior with pluggable components
 - **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
 - **WASM Compatibility**: Optional WASM support for browser environments
-- **Persistent Storage**: SQLite-based storage for Transfer and Payment transactions with automatic migrations
+- **Persistent Storage**: SQLite-based storage with dual functionality:
+  - Transaction tracking for Transfer and Payment messages
+  - Complete audit trail of all incoming/outgoing messages
 
 ## Installation
 
@@ -317,7 +319,10 @@ Key benefits of the WebSocket transport:
 
 ## Persistent Storage
 
-The TAP Node includes built-in support for persisting Transfer and Payment transactions to a SQLite database. This feature is enabled by default and provides automatic storage of all transactions processed by the node.
+The TAP Node includes built-in support for persistent storage using SQLite. This feature is enabled by default and provides:
+
+1. **Transaction Storage**: Automatic storage of Transfer and Payment messages for business logic processing
+2. **Message Audit Trail**: Complete logging of all incoming and outgoing messages for compliance and debugging
 
 ### Storage Configuration
 
@@ -345,11 +350,14 @@ let config = NodeConfig {
 std::env::set_var("TAP_NODE_DB_PATH", "/path/to/database.db");
 ```
 
-### Accessing Stored Transactions
+### Accessing Stored Data
 
 ```rust
+use tap_node::storage::MessageDirection;
+
 // Get storage handle from the node
 if let Some(storage) = node.storage() {
+    // === Transaction Operations ===
     // Retrieve a specific transaction by message ID
     let transaction = storage.get_transaction_by_id("msg_12345").await?;
     
@@ -359,9 +367,40 @@ if let Some(storage) = node.storage() {
         0    // offset: 0 (first page)
     ).await?;
     
-    for tx in transactions {
-        println!("Transaction: {} - Type: {:?} - Status: {:?}", 
-            tx.reference_id, tx.transaction_type, tx.status);
+    // === Message Audit Trail Operations ===
+    // Retrieve any message by ID
+    let message = storage.get_message_by_id("msg_12345").await?;
+    
+    // List all messages
+    let all_messages = storage.list_messages(
+        20,   // limit
+        0,    // offset
+        None  // no direction filter
+    ).await?;
+    
+    // List only incoming messages
+    let incoming = storage.list_messages(
+        10,
+        0,
+        Some(MessageDirection::Incoming)
+    ).await?;
+    
+    // List only outgoing messages
+    let outgoing = storage.list_messages(
+        10,
+        0,
+        Some(MessageDirection::Outgoing)
+    ).await?;
+    
+    // Examine message details
+    for msg in all_messages {
+        println!("Message: {} - Type: {} - Direction: {:?} - From: {:?} - To: {:?}", 
+            msg.message_id, 
+            msg.message_type,
+            msg.direction,
+            msg.from_did,
+            msg.to_did
+        );
     }
 }
 ```
@@ -369,20 +408,34 @@ if let Some(storage) = node.storage() {
 ### Storage Features
 
 - **Automatic Migration**: Database schema is automatically created and migrated on startup
-- **Append-Only Design**: All transactions are stored for audit trail
+- **Dual-Table Design**: Separate tables for transactions and message audit trail
+- **Append-Only Design**: All data is immutable for compliance and auditing
 - **SQLite WAL Mode**: Optimized for concurrent reads and writes
 - **Connection Pooling**: Up to 10 concurrent database connections
 - **WASM Compatibility**: Storage is automatically disabled in WASM builds
+- **Duplicate Handling**: Duplicate messages are silently ignored (idempotent)
 
 ### Database Schema
 
-The storage system maintains a `transactions` table with the following information:
+The storage system maintains two tables:
+
+#### `transactions` Table
+Business logic for Transfer and Payment messages:
 - Transaction ID and type (Transfer/Payment)
 - Sender and recipient DIDs
 - Thread ID for conversation tracking
 - Full message content as JSON
 - Status tracking (pending/confirmed/failed/cancelled/reverted)
 - Timestamps for creation and updates
+
+#### `messages` Table
+Complete audit trail of all messages:
+- Message ID and type (all TAP message types)
+- Direction (incoming/outgoing)
+- Sender and recipient DIDs
+- Thread IDs (including parent threads)
+- Full message content as JSON
+- Creation timestamp
 
 ### Disabling Storage
 

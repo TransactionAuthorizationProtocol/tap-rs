@@ -1,8 +1,14 @@
-//! Storage module for persisting TAP transactions
+//! Storage module for persisting TAP messages and transactions
 //!
-//! This module provides persistent storage capabilities for the TAP Node,
-//! allowing Transfer and Payment transactions to be stored in a SQLite database
-//! for audit trails, querying, and compliance purposes.
+//! This module provides comprehensive persistent storage capabilities for the TAP Node,
+//! maintaining both business transaction records and a complete message audit trail
+//! in a SQLite database for compliance, debugging, and operational purposes.
+//!
+//! # Architecture
+//!
+//! The storage system uses a dual-table design:
+//! - **transactions**: Stores Transfer and Payment messages for business logic
+//! - **messages**: Stores all messages (incoming/outgoing) for audit trail
 //!
 //! # Features
 //!
@@ -10,6 +16,9 @@
 //! - **Connection Pooling**: Uses r2d2 for efficient concurrent database access
 //! - **Async API**: All operations are async-friendly using tokio's spawn_blocking
 //! - **WASM Compatibility**: Storage is automatically disabled in WASM builds
+//! - **Idempotent Operations**: Duplicate messages are silently ignored
+//! - **Direction Tracking**: Messages are tagged as incoming or outgoing
+//! - **Thread Tracking**: Full support for DIDComm thread and parent thread IDs
 //!
 //! # Usage
 //!
@@ -17,8 +26,10 @@
 //!
 //! ```no_run
 //! use tap_node::{NodeConfig, TapNode};
+//! use tap_node::storage::MessageDirection;
 //! use std::path::PathBuf;
 //!
+//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
 //! let config = NodeConfig {
 //!     #[cfg(feature = "storage")]
 //!     storage_path: Some(PathBuf::from("./my-database.db")),
@@ -26,11 +37,29 @@
 //! };
 //!
 //! let node = TapNode::new(config);
+//!
+//! // Access storage functionality
+//! if let Some(storage) = node.storage() {
+//!     // Query transactions
+//!     let txs = storage.list_transactions(10, 0).await?;
+//!     
+//!     // Query message audit trail
+//!     let messages = storage.list_messages(20, 0, Some(MessageDirection::Incoming)).await?;
+//! }
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! # Environment Variables
 //!
 //! - `TAP_NODE_DB_PATH`: Override the default database path
+//!
+//! # Automatic Message Logging
+//!
+//! The TapNode automatically logs all messages:
+//! - Incoming messages are logged when `receive_message()` is called
+//! - Outgoing messages are logged when `send_message()` is called
+//! - Transfer and Payment messages are additionally stored in the transactions table
 
 #[cfg(feature = "storage")]
 pub mod db;
@@ -46,7 +75,7 @@ pub use db::Storage;
 #[cfg(feature = "storage")]
 pub use error::StorageError;
 #[cfg(feature = "storage")]
-pub use models::{Transaction, TransactionStatus, TransactionType};
+pub use models::{Transaction, TransactionStatus, TransactionType, Message, MessageDirection};
 
 #[cfg(not(feature = "storage"))]
 pub use mock::*;
@@ -54,6 +83,7 @@ pub use mock::*;
 #[cfg(not(feature = "storage"))]
 mod mock {
     use tap_msg::didcomm::PlainMessage;
+    use serde::{Deserialize, Serialize};
     
     #[derive(Debug, Clone)]
     pub struct Storage;
@@ -62,12 +92,22 @@ mod mock {
     #[error("Storage is not available in this build")]
     pub struct StorageError;
     
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+    pub enum MessageDirection {
+        Incoming,
+        Outgoing,
+    }
+    
     impl Storage {
         pub async fn new(_path: Option<std::path::PathBuf>) -> Result<Self, StorageError> {
             Ok(Storage)
         }
         
         pub async fn insert_transaction(&self, _message: &PlainMessage) -> Result<(), StorageError> {
+            Ok(())
+        }
+        
+        pub async fn log_message(&self, _message: &PlainMessage, _direction: MessageDirection) -> Result<(), StorageError> {
             Ok(())
         }
     }

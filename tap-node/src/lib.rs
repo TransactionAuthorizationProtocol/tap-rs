@@ -10,7 +10,9 @@
 //! - **Message Processors**: Process incoming and outgoing messages
 //! - **Message Router**: Routes messages to the appropriate agent
 //! - **Processor Pool**: Provides scalable concurrent message processing
-//! - **Storage**: Persistent SQLite storage for Transfer and Payment transactions
+//! - **Storage**: Persistent SQLite storage with:
+//!   - Transaction tracking for Transfer and Payment messages
+//!   - Complete audit trail of all incoming/outgoing messages
 //!
 //! # Thread Safety and Concurrency
 //!
@@ -24,10 +26,11 @@
 //! Messages in TAP Node follow a structured flow:
 //!
 //! 1. **Receipt**: Messages are received through the `receive_message` method
-//! 2. **Processing**: Each message is processed by the registered processors
-//! 3. **Routing**: The router determines which agent should handle the message
-//! 4. **Dispatch**: The message is delivered to the appropriate agent
-//! 5. **Response**: Responses are handled similarly in the reverse direction
+//! 2. **Storage**: All messages are logged to the audit trail, transactions are stored separately
+//! 3. **Processing**: Each message is processed by the registered processors
+//! 4. **Routing**: The router determines which agent should handle the message
+//! 5. **Dispatch**: The message is delivered to the appropriate agent
+//! 6. **Response**: Responses are handled similarly in the reverse direction
 //!
 //! # Scalability
 //!
@@ -306,10 +309,17 @@ impl TapNode {
     /// # }
     /// ```
     pub async fn receive_message(&self, message: PlainMessage) -> Result<()> {
-        // Store the message if it's a Transfer or Payment and storage is available
+        // Log all incoming messages for audit trail
         #[cfg(feature = "storage")]
         {
             if let Some(ref storage) = self.storage {
+                // Log the message to the audit trail
+                match storage.log_message(&message, storage::MessageDirection::Incoming).await {
+                    Ok(_) => log::debug!("Logged incoming message: {}", message.id),
+                    Err(e) => log::warn!("Failed to log incoming message: {}", e),
+                }
+                
+                // Store as transaction if it's a Transfer or Payment
                 if message.type_.contains("transfer") || message.type_.contains("payment") {
                     match storage.insert_transaction(&message).await {
                         Ok(_) => log::debug!("Stored transaction: {}", message.id),
@@ -368,10 +378,17 @@ impl TapNode {
         to_did: String,
         message: PlainMessage,
     ) -> Result<String> {
-        // Store the message if it's a Transfer or Payment and storage is available
+        // Log all outgoing messages for audit trail
         #[cfg(feature = "storage")]
         {
             if let Some(ref storage) = self.storage {
+                // Log the message to the audit trail
+                match storage.log_message(&message, storage::MessageDirection::Outgoing).await {
+                    Ok(_) => log::debug!("Logged outgoing message: {}", message.id),
+                    Err(e) => log::warn!("Failed to log outgoing message: {}", e),
+                }
+                
+                // Store as transaction if it's a Transfer or Payment
                 if message.type_.contains("transfer") || message.type_.contains("payment") {
                     match storage.insert_transaction(&message).await {
                         Ok(_) => log::debug!("Stored outgoing transaction: {}", message.id),

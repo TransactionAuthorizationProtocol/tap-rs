@@ -5,6 +5,7 @@ use super::error::StorageError;
 
 const MIGRATIONS: &[&str] = &[
     include_str!("../../migrations/0001_create_transactions.sql"),
+    include_str!("../../migrations/0002_create_messages.sql"),
 ];
 
 pub fn run_migrations(conn: &mut Connection) -> Result<(), StorageError> {

@@ -2,12 +2,15 @@
 
 ## Overview
 
-This document describes the storage implementation for TAP Node, which provides persistent storage for Transfer and Payment transactions.
+This document describes the storage implementation for TAP Node, which provides:
+1. Persistent storage for Transfer and Payment transactions
+2. Complete audit trail of all incoming and outgoing messages
 
 ## Features
 
 - **SQLite-based storage** with connection pooling via r2d2
-- **Append-only design** for transaction auditing
+- **Dual-table design**: Separate tables for transactions and message audit trail
+- **Append-only design** for auditing and compliance
 - **Automatic schema migrations** on startup
 - **WASM compatibility** through feature gates
 - **Async-friendly API** using tokio spawn_blocking
@@ -15,6 +18,7 @@ This document describes the storage implementation for TAP Node, which provides 
 ## Database Schema
 
 ### transactions table
+Stores Transfer and Payment transactions for business logic processing:
 - `id`: Auto-incrementing primary key
 - `type`: Transaction type (transfer/payment)
 - `reference_id`: Unique message ID
@@ -26,6 +30,19 @@ This document describes the storage implementation for TAP Node, which provides 
 - `message_json`: Full DIDComm message as JSON
 - `created_at`: Creation timestamp
 - `updated_at`: Last update timestamp
+
+### messages table
+Audit trail for all DIDComm messages:
+- `id`: Auto-incrementing primary key
+- `message_id`: Unique DIDComm message ID
+- `message_type`: TAP message type URI
+- `from_did`: Sender DID
+- `to_did`: Recipient DID (first in the 'to' array)
+- `thread_id`: DIDComm thread ID
+- `parent_thread_id`: Parent thread ID for nested conversations
+- `direction`: Message direction (incoming/outgoing)
+- `message_json`: Full DIDComm message as JSON
+- `created_at`: Timestamp when message was logged
 
 ## Usage
 
@@ -52,11 +69,17 @@ let node = TapNode::new(config);
 
 // Access storage
 if let Some(storage) = node.storage() {
-    // Get transaction by ID
+    // Transaction operations
     let tx = storage.get_transaction_by_id("msg_123").await?;
-    
-    // List recent transactions
     let txs = storage.list_transactions(10, 0).await?;
+    
+    // Message audit trail operations
+    let msg = storage.get_message_by_id("msg_123").await?;
+    let all_msgs = storage.list_messages(10, 0, None).await?;
+    let incoming_msgs = storage.list_messages(10, 0, Some(MessageDirection::Incoming)).await?;
+    
+    // Manual message logging (automatic for node operations)
+    storage.log_message(&message, MessageDirection::Incoming).await?;
 }
 ```
 
@@ -68,6 +91,8 @@ if let Some(storage) = node.storage() {
 ## Implementation Notes
 
 1. The `reference_id` uses the PlainMessage's `id` field as the unique identifier
-2. Transactions are automatically stored when Transfer or Payment messages are processed
-3. WAL mode is enabled for better concurrency
-4. Connection pooling supports up to 10 concurrent connections
+2. All incoming and outgoing messages are automatically logged to the messages table
+3. Transfer and Payment messages are additionally stored in the transactions table
+4. WAL mode is enabled for better concurrency
+5. Connection pooling supports up to 10 concurrent connections
+6. Duplicate messages are silently ignored (no error on re-insertion)
