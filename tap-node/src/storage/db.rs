@@ -40,6 +40,7 @@ use super::models::{Message, MessageDirection, Transaction, TransactionStatus, T
 /// # Ok(())
 /// # }
 /// ```
+#[derive(Clone)]
 pub struct Storage {
     pool: Pool<SqliteConnectionManager>,
 }
