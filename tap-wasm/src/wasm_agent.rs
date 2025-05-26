@@ -72,12 +72,7 @@ impl WasmTapAgent {
 
         // Get the DID from config
         let did_string = if let Ok(did_prop) = Reflect::get(&config, &JsValue::from_str("did")) {
-            if let Some(did_str) = did_prop.as_string() {
-                // Use the provided DID
-                Some(did_str)
-            } else {
-                None
-            }
+            did_prop.as_string()
         } else {
             None
         };

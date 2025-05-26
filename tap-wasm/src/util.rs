@@ -76,10 +76,8 @@ pub fn js_to_tap_message(js_message: &JsValue) -> Result<PlainMessage, String> {
         if let Ok(expires_js) = Reflect::get(js_message, &JsValue::from_str("expires")) {
             if expires_js.is_null() || expires_js.is_undefined() {
                 None
-            } else if let Some(expires) = expires_js.as_f64() {
-                Some(expires as u64 / 1000)
             } else {
-                None
+                expires_js.as_f64().map(|expires| expires as u64 / 1000)
             }
         } else {
             None
