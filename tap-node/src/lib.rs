@@ -314,11 +314,14 @@ impl TapNode {
         {
             if let Some(ref storage) = self.storage {
                 // Log the message to the audit trail
-                match storage.log_message(&message, storage::MessageDirection::Incoming).await {
+                match storage
+                    .log_message(&message, storage::MessageDirection::Incoming)
+                    .await
+                {
                     Ok(_) => log::debug!("Logged incoming message: {}", message.id),
                     Err(e) => log::warn!("Failed to log incoming message: {}", e),
                 }
-                
+
                 // Store as transaction if it's a Transfer or Payment
                 if message.type_.contains("transfer") || message.type_.contains("payment") {
                     match storage.insert_transaction(&message).await {
@@ -383,11 +386,14 @@ impl TapNode {
         {
             if let Some(ref storage) = self.storage {
                 // Log the message to the audit trail
-                match storage.log_message(&message, storage::MessageDirection::Outgoing).await {
+                match storage
+                    .log_message(&message, storage::MessageDirection::Outgoing)
+                    .await
+                {
                     Ok(_) => log::debug!("Logged outgoing message: {}", message.id),
                     Err(e) => log::warn!("Failed to log outgoing message: {}", e),
                 }
-                
+
                 // Store as transaction if it's a Transfer or Payment
                 if message.type_.contains("transfer") || message.type_.contains("payment") {
                     match storage.insert_transaction(&message).await {

@@ -9,7 +9,7 @@ use tracing::{debug, info};
 
 use super::error::StorageError;
 use super::migrations::run_migrations;
-use super::models::{Transaction, TransactionStatus, TransactionType, Message, MessageDirection};
+use super::models::{Message, MessageDirection, Transaction, TransactionStatus, TransactionType};
 
 /// Storage backend for TAP transactions and message audit trail
 ///
@@ -66,34 +66,32 @@ impl Storage {
                 .unwrap_or_else(|_| "tap-node.db".to_string())
                 .into()
         });
-        
+
         info!("Initializing storage at: {:?}", db_path);
-        
+
         // Create parent directory if it doesn't exist
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        
+
         // Initialize connection pool
         let manager = SqliteConnectionManager::file(&db_path);
-        let pool = Pool::builder()
-            .max_size(10)
-            .build(manager)?;
-        
+        let pool = Pool::builder().max_size(10).build(manager)?;
+
         // Run migrations
         {
             let mut conn = pool.get()?;
-            
+
             // Enable WAL mode for better concurrency
             conn.pragma_update(None, "journal_mode", "WAL")?;
             conn.pragma_update(None, "synchronous", "NORMAL")?;
-            
+
             run_migrations(&mut conn)?;
         }
-        
+
         Ok(Storage { pool })
     }
-    
+
     /// Insert a new transaction from a TAP message
     ///
     /// This method extracts transaction details from a Transfer or Payment message
@@ -112,24 +110,26 @@ impl Storage {
     pub async fn insert_transaction(&self, message: &PlainMessage) -> Result<(), StorageError> {
         let message_type = message.type_.clone();
         let message_json = serde_json::to_string_pretty(message)?;
-        
+
         // Extract transaction type and use message ID as reference
         let tx_type = if message.type_.contains("transfer") {
             TransactionType::Transfer
         } else if message.type_.contains("payment") {
             TransactionType::Payment
         } else {
-            return Err(StorageError::InvalidTransactionType(message_type.to_string()));
+            return Err(StorageError::InvalidTransactionType(
+                message_type.to_string(),
+            ));
         };
-        
+
         // Use the PlainMessage ID as the reference_id since transaction_id is not serialized
         let reference_id = message.id.clone();
         let from_did = message.from.clone();
         let to_did = message.to.first().cloned();
         let thread_id = message.thid.clone();
-        
+
         let pool = self.pool.clone();
-        
+
         // Execute in blocking task for async compatibility
         task::spawn_blocking(move || {
             let conn = pool.get()?;
@@ -166,10 +166,10 @@ impl Storage {
         })
         .await
         .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))??;
-        
+
         Ok(())
     }
-    
+
     /// Retrieve a transaction by its reference ID
     ///
     /// # Arguments
@@ -181,10 +181,13 @@ impl Storage {
     /// * `Ok(Some(Transaction))` if found
     /// * `Ok(None)` if not found
     /// * `Err(StorageError)` on database error
-    pub async fn get_transaction_by_id(&self, reference_id: &str) -> Result<Option<Transaction>, StorageError> {
+    pub async fn get_transaction_by_id(
+        &self,
+        reference_id: &str,
+    ) -> Result<Option<Transaction>, StorageError> {
         let pool = self.pool.clone();
         let reference_id = reference_id.to_string();
-        
+
         task::spawn_blocking(move || {
             let conn = pool.get()?;
             
@@ -216,7 +219,7 @@ impl Storage {
         .await
         .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
     }
-    
+
     /// List transactions with pagination
     ///
     /// Retrieves transactions ordered by creation time (newest first).
@@ -229,9 +232,13 @@ impl Storage {
     /// # Returns
     ///
     /// A vector of transactions ordered by creation time descending
-    pub async fn list_transactions(&self, limit: u32, offset: u32) -> Result<Vec<Transaction>, StorageError> {
+    pub async fn list_transactions(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Transaction>, StorageError> {
         let pool = self.pool.clone();
-        
+
         task::spawn_blocking(move || {
             let conn = pool.get()?;
             
@@ -266,7 +273,7 @@ impl Storage {
         .await
         .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
     }
-    
+
     /// Log an incoming or outgoing message to the audit trail
     ///
     /// This method stores any DIDComm message for audit purposes, regardless of type.
@@ -281,7 +288,11 @@ impl Storage {
     /// Returns `StorageError` if:
     /// - Database insertion fails
     /// - The message already exists (duplicate message_id)
-    pub async fn log_message(&self, message: &PlainMessage, direction: MessageDirection) -> Result<(), StorageError> {
+    pub async fn log_message(
+        &self,
+        message: &PlainMessage,
+        direction: MessageDirection,
+    ) -> Result<(), StorageError> {
         let message_json = serde_json::to_string_pretty(message)?;
         let message_id = message.id.clone();
         let message_type = message.type_.clone();
@@ -289,9 +300,9 @@ impl Storage {
         let to_did = message.to.first().cloned();
         let thread_id = message.thid.clone();
         let parent_thread_id = message.pthid.clone();
-        
+
         let pool = self.pool.clone();
-        
+
         task::spawn_blocking(move || {
             let conn = pool.get()?;
             
@@ -330,10 +341,10 @@ impl Storage {
         })
         .await
         .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))??;
-        
+
         Ok(())
     }
-    
+
     /// Retrieve a message by its ID
     ///
     /// # Arguments
@@ -345,10 +356,13 @@ impl Storage {
     /// * `Ok(Some(Message))` if found
     /// * `Ok(None)` if not found
     /// * `Err(StorageError)` on database error
-    pub async fn get_message_by_id(&self, message_id: &str) -> Result<Option<Message>, StorageError> {
+    pub async fn get_message_by_id(
+        &self,
+        message_id: &str,
+    ) -> Result<Option<Message>, StorageError> {
         let pool = self.pool.clone();
         let message_id = message_id.to_string();
-        
+
         task::spawn_blocking(move || {
             let conn = pool.get()?;
             
@@ -378,7 +392,7 @@ impl Storage {
         .await
         .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
     }
-    
+
     /// List messages with pagination and optional filtering
     ///
     /// # Arguments
@@ -390,9 +404,14 @@ impl Storage {
     /// # Returns
     ///
     /// A vector of messages ordered by creation time descending
-    pub async fn list_messages(&self, limit: u32, offset: u32, direction: Option<MessageDirection>) -> Result<Vec<Message>, StorageError> {
+    pub async fn list_messages(
+        &self,
+        limit: u32,
+        offset: u32,
+        direction: Option<MessageDirection>,
+    ) -> Result<Vec<Message>, StorageError> {
         let pool = self.pool.clone();
-        
+
         task::spawn_blocking(move || {
             let conn = pool.get()?;
             
@@ -444,27 +463,27 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use tap_msg::message::transfer::Transfer;
     use tap_msg::message::Participant;
-    
+    use tempfile::tempdir;
+
     #[tokio::test]
     async fn test_storage_creation() {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
-        
+
         let storage = Storage::new(Some(db_path)).await.unwrap();
         assert!(storage.pool.get().is_ok());
     }
-    
+
     #[tokio::test]
     async fn test_insert_and_retrieve_transaction() {
         let _ = env_logger::builder().is_test(true).try_init();
-        
+
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
         let storage = Storage::new(Some(db_path)).await.unwrap();
-        
+
         // Create a test transfer message
         let transfer_body = Transfer {
             transaction_id: "test_transfer_123".to_string(),
@@ -482,14 +501,16 @@ mod tests {
                 policies: None,
                 leiCode: None,
             }),
-            asset: "eip155:1/erc20:0x0000000000000000000000000000000000000000".parse().unwrap(),
+            asset: "eip155:1/erc20:0x0000000000000000000000000000000000000000"
+                .parse()
+                .unwrap(),
             amount: "1000000000000000000".to_string(),
             agents: vec![],
             memo: None,
             settlement_id: None,
             metadata: Default::default(),
         };
-        
+
         let message_id = "test_message_123";
         let message = PlainMessage {
             id: message_id.to_string(),
@@ -506,28 +527,28 @@ mod tests {
             expires_time: None,
             from_prior: None,
         };
-        
+
         // Insert transaction
         storage.insert_transaction(&message).await.unwrap();
-        
+
         // Retrieve transaction
         let retrieved = storage.get_transaction_by_id(message_id).await.unwrap();
         assert!(retrieved.is_some(), "Transaction not found");
-        
+
         let tx = retrieved.unwrap();
         assert_eq!(tx.reference_id, message_id);
         assert_eq!(tx.transaction_type, TransactionType::Transfer);
         assert_eq!(tx.status, TransactionStatus::Pending);
     }
-    
+
     #[tokio::test]
     async fn test_log_and_retrieve_messages() {
         let _ = env_logger::builder().is_test(true).try_init();
-        
+
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
         let storage = Storage::new(Some(db_path)).await.unwrap();
-        
+
         // Create test messages of different types
         let connect_message = PlainMessage {
             id: "msg_connect_123".to_string(),
@@ -544,7 +565,7 @@ mod tests {
             expires_time: None,
             from_prior: None,
         };
-        
+
         let authorize_message = PlainMessage {
             id: "msg_auth_123".to_string(),
             typ: "application/didcomm-plain+json".to_string(),
@@ -560,29 +581,41 @@ mod tests {
             expires_time: None,
             from_prior: None,
         };
-        
+
         // Log messages
-        storage.log_message(&connect_message, MessageDirection::Incoming).await.unwrap();
-        storage.log_message(&authorize_message, MessageDirection::Outgoing).await.unwrap();
-        
+        storage
+            .log_message(&connect_message, MessageDirection::Incoming)
+            .await
+            .unwrap();
+        storage
+            .log_message(&authorize_message, MessageDirection::Outgoing)
+            .await
+            .unwrap();
+
         // Retrieve specific message
         let retrieved = storage.get_message_by_id("msg_connect_123").await.unwrap();
         assert!(retrieved.is_some());
         let msg = retrieved.unwrap();
         assert_eq!(msg.message_id, "msg_connect_123");
         assert_eq!(msg.direction, MessageDirection::Incoming);
-        
+
         // List all messages
         let all_messages = storage.list_messages(10, 0, None).await.unwrap();
         assert_eq!(all_messages.len(), 2);
-        
+
         // List only incoming messages
-        let incoming_messages = storage.list_messages(10, 0, Some(MessageDirection::Incoming)).await.unwrap();
+        let incoming_messages = storage
+            .list_messages(10, 0, Some(MessageDirection::Incoming))
+            .await
+            .unwrap();
         assert_eq!(incoming_messages.len(), 1);
         assert_eq!(incoming_messages[0].message_id, "msg_connect_123");
-        
+
         // Test duplicate message handling (should not error)
-        storage.log_message(&connect_message, MessageDirection::Incoming).await.unwrap();
+        storage
+            .log_message(&connect_message, MessageDirection::Incoming)
+            .await
+            .unwrap();
         let all_messages_after = storage.list_messages(10, 0, None).await.unwrap();
         assert_eq!(all_messages_after.len(), 2); // Should still be 2, not 3
     }

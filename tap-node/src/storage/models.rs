@@ -19,7 +19,7 @@ impl fmt::Display for TransactionType {
 
 impl TryFrom<&str> for TransactionType {
     type Error = String;
-    
+
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "transfer" => Ok(TransactionType::Transfer),
@@ -53,7 +53,7 @@ impl fmt::Display for TransactionStatus {
 
 impl TryFrom<&str> for TransactionStatus {
     type Error = String;
-    
+
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "pending" => Ok(TransactionStatus::Pending),
@@ -99,7 +99,7 @@ impl fmt::Display for MessageDirection {
 
 impl TryFrom<&str> for MessageDirection {
     type Error = String;
-    
+
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         match value {
             "incoming" => Ok(MessageDirection::Incoming),

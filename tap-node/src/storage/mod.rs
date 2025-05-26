@@ -75,39 +75,46 @@ pub use db::Storage;
 #[cfg(feature = "storage")]
 pub use error::StorageError;
 #[cfg(feature = "storage")]
-pub use models::{Transaction, TransactionStatus, TransactionType, Message, MessageDirection};
+pub use models::{Message, MessageDirection, Transaction, TransactionStatus, TransactionType};
 
 #[cfg(not(feature = "storage"))]
 pub use mock::*;
 
 #[cfg(not(feature = "storage"))]
 mod mock {
-    use tap_msg::didcomm::PlainMessage;
     use serde::{Deserialize, Serialize};
-    
+    use tap_msg::didcomm::PlainMessage;
+
     #[derive(Debug, Clone)]
     pub struct Storage;
-    
+
     #[derive(Debug, thiserror::Error)]
     #[error("Storage is not available in this build")]
     pub struct StorageError;
-    
+
     #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     pub enum MessageDirection {
         Incoming,
         Outgoing,
     }
-    
+
     impl Storage {
         pub async fn new(_path: Option<std::path::PathBuf>) -> Result<Self, StorageError> {
             Ok(Storage)
         }
-        
-        pub async fn insert_transaction(&self, _message: &PlainMessage) -> Result<(), StorageError> {
+
+        pub async fn insert_transaction(
+            &self,
+            _message: &PlainMessage,
+        ) -> Result<(), StorageError> {
             Ok(())
         }
-        
-        pub async fn log_message(&self, _message: &PlainMessage, _direction: MessageDirection) -> Result<(), StorageError> {
+
+        pub async fn log_message(
+            &self,
+            _message: &PlainMessage,
+            _direction: MessageDirection,
+        ) -> Result<(), StorageError> {
             Ok(())
         }
     }
