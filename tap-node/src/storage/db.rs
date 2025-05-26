@@ -134,9 +134,9 @@ impl Storage {
         // Execute in blocking task for async compatibility
         task::spawn_blocking(move || {
             let conn = pool.get()?;
-            
+
             debug!("Inserting transaction: {} ({})", reference_id, tx_type);
-            
+
             let result = conn.execute(
                 "INSERT INTO transactions (type, reference_id, from_did, to_did, thread_id, message_type, message_json)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
@@ -150,7 +150,7 @@ impl Storage {
                     message_json
                 ],
             );
-            
+
             match result {
                 Ok(_) => debug!("Successfully inserted transaction: {}", reference_id),
                 Err(e) => {
@@ -162,7 +162,7 @@ impl Storage {
                     return Err(StorageError::Database(e));
                 }
             }
-            
+
             Ok::<(), StorageError>(())
         })
         .await
@@ -191,7 +191,7 @@ impl Storage {
 
         task::spawn_blocking(move || {
             let conn = pool.get()?;
-            
+
             let result = conn.query_row(
                 "SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
                  FROM transactions WHERE reference_id = ?1",
@@ -214,7 +214,7 @@ impl Storage {
                     })
                 },
             ).optional()?;
-            
+
             Ok(result)
         })
         .await
@@ -242,14 +242,14 @@ impl Storage {
 
         task::spawn_blocking(move || {
             let conn = pool.get()?;
-            
+
             let mut stmt = conn.prepare(
                 "SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
                  FROM transactions
                  ORDER BY created_at DESC
                  LIMIT ?1 OFFSET ?2"
             )?;
-            
+
             let transactions = stmt.query_map(params![limit, offset], |row| {
                 Ok(Transaction {
                     id: row.get(0)?,
@@ -268,7 +268,7 @@ impl Storage {
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
-            
+
             Ok(transactions)
         })
         .await
@@ -306,9 +306,9 @@ impl Storage {
 
         task::spawn_blocking(move || {
             let conn = pool.get()?;
-            
+
             debug!("Logging {} message: {} ({})", direction, message_id, message_type);
-            
+
             let result = conn.execute(
                 "INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
@@ -323,7 +323,7 @@ impl Storage {
                     message_json
                 ],
             );
-            
+
             match result {
                 Ok(_) => debug!("Successfully logged message: {}", message_id),
                 Err(e) => {
@@ -337,7 +337,7 @@ impl Storage {
                     return Err(StorageError::Database(e));
                 }
             }
-            
+
             Ok::<(), StorageError>(())
         })
         .await
@@ -366,7 +366,7 @@ impl Storage {
 
         task::spawn_blocking(move || {
             let conn = pool.get()?;
-            
+
             let result = conn.query_row(
                 "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
                  FROM messages WHERE message_id = ?1",
@@ -387,7 +387,7 @@ impl Storage {
                     })
                 },
             ).optional()?;
-            
+
             Ok(result)
         })
         .await
@@ -415,7 +415,7 @@ impl Storage {
 
         task::spawn_blocking(move || {
             let conn = pool.get()?;
-            
+
             let query = if let Some(dir) = direction {
                 format!(
                     "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
@@ -434,9 +434,9 @@ impl Storage {
                     limit, offset
                 )
             };
-            
+
             let mut stmt = conn.prepare(&query)?;
-            
+
             let messages = stmt.query_map([], |row| {
                 Ok(Message {
                     id: row.get(0)?,
@@ -453,7 +453,7 @@ impl Storage {
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
-            
+
             Ok(messages)
         })
         .await
