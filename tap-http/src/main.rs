@@ -25,6 +25,7 @@ struct Args {
     agent_key: Option<String>,
     logs_dir: Option<String>,
     structured_logs: bool,
+    db_path: Option<String>,
 }
 
 impl Args {
@@ -82,6 +83,9 @@ impl Args {
             structured_logs: args.contains("--structured-logs")
                 || env::var("TAP_STRUCTURED_LOGS").is_ok(),
             verbose: args.contains(["-v", "--verbose"]),
+            db_path: args
+                .opt_value_from_str("--db-path")?
+                .or_else(|| env::var("TAP_NODE_DB_PATH").ok()),
         };
 
         // Check for any remaining arguments (which would be invalid)
@@ -111,6 +115,7 @@ fn print_help() {
     println!("    --agent-key <KEY>            Private key for the TAP agent (required if agent-did is provided)");
     println!("    --logs-dir <DIR>             Directory for event logs [default: ./logs]");
     println!("    --structured-logs            Use structured JSON logging [default: true]");
+    println!("    --db-path <PATH>             Path to the database file [default: tap-http.db]");
     println!("    -v, --verbose                Enable verbose logging");
     println!("    --help                       Print help information");
     println!("    --version                    Print version information");
@@ -124,6 +129,7 @@ fn print_help() {
     println!("    TAP_AGENT_KEY                Private key for the TAP agent");
     println!("    TAP_LOGS_DIR                 Directory for event logs");
     println!("    TAP_STRUCTURED_LOGS          Use structured JSON logging");
+    println!("    TAP_NODE_DB_PATH             Path to the database file");
     println!();
     println!("NOTES:");
     println!("    - If no agent DID and key are provided, the server will:");
@@ -217,9 +223,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     debug!("  Event logging: {}", log_path.to_string_lossy());
     debug!("  Structured logs: {}", args.structured_logs);
 
-    // Create node configuration with the agent
-    let node_config = NodeConfig::default();
-    // Register the agent after creating the node
+    // Create node configuration with the agent and storage
+    let mut node_config = NodeConfig::default();
+
+    // Configure storage path
+    let storage_path = args
+        .db_path
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("tap-http.db"));
+    node_config.storage_path = Some(storage_path.clone());
+
+    info!("Using database at: {:?}", storage_path);
 
     // Create TAP Node
     let node = TapNode::new(node_config);

@@ -14,6 +14,7 @@ HTTP DIDComm server implementation for the Transaction Authorization Protocol (T
 - **Security**: Support for HTTPS/TLS and rate limiting (configurable)
 - **Comprehensive Error Handling**: Structured error responses with appropriate HTTP status codes
 - **Payment Flow Simulator**: Included CLI tool for simulating TAP payment flows
+- **Persistent Storage**: SQLite database for message audit trail and transaction tracking
 
 ## Usage
 
@@ -29,8 +30,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let agent = DefaultAgent::from_stored_or_ephemeral(None, true);
     println!("Server using agent with DID: {}", agent.get_agent_did());
     
+    // Create a TAP Node configuration with storage
+    let mut node_config = NodeConfig::default();
+    node_config.storage_path = Some("tap-http.db".into());
+    
     // Create a TAP Node for message processing
-    let node = TapNode::new(NodeConfig::default().with_agent(agent));
+    let node = TapNode::new(node_config);
+    node.register_agent(Arc::new(agent)).await?;
     
     // Configure the HTTP server with custom settings
     let config = TapHttpConfig {
@@ -395,6 +401,7 @@ OPTIONS:
     --key-type <TYPE>            Key type for generation [default: ed25519] [possible values: ed25519, p256, secp256k1]
     --logs-dir <DIR>             Directory for event logs [default: ./logs]
     --structured-logs            Use structured JSON logging [default: true]
+    --db-path <PATH>             Path to the database file [default: tap-http.db]
     --rate-limit <RATE>          Rate limit in requests per minute [default: 60]
     --tls-cert <PATH>            Path to TLS certificate file
     --tls-key <PATH>             Path to TLS private key file
@@ -424,6 +431,9 @@ export TAP_KEY_TYPE=ed25519
 export TAP_LOGS_DIR=/var/log/tap
 export TAP_STRUCTURED_LOGS=true
 export TAP_LOG_LEVEL=info
+
+# Storage configuration
+export TAP_NODE_DB_PATH=/var/lib/tap/tap-http.db
 
 # Security configuration
 export TAP_RATE_LIMIT=100
@@ -584,6 +594,62 @@ The server acts as a service endpoint for incoming messages:
 2. Other agents can discover this endpoint via DID resolution
 3. Messages will be automatically routed to your endpoint
 
+## Persistent Storage
+
+The TAP HTTP server includes built-in SQLite storage for:
+
+- **Message Audit Trail**: All incoming and outgoing messages are logged
+- **Transaction Tracking**: Transfer and Payment messages are tracked separately
+- **Automatic Schema Management**: Database migrations run automatically on startup
+
+### Storage Configuration
+
+By default, the server creates a database file at `tap-http.db` in the current directory. You can customize this location:
+
+```bash
+# Via command line
+tap-http --db-path /var/lib/tap/tap-http.db
+
+# Via environment variable
+export TAP_NODE_DB_PATH=/var/lib/tap/tap-http.db
+tap-http
+```
+
+### Database Schema
+
+The storage system maintains two tables:
+
+1. **messages** - Complete audit trail of all messages:
+   - message_id (unique identifier)
+   - message_type (TAP message type)
+   - from_did, to_did (sender and recipient DIDs)
+   - direction (incoming/outgoing)
+   - message_json (full message content)
+   - created_at (timestamp)
+
+2. **transactions** - Business logic for Transfer and Payment messages:
+   - type (transfer/payment)
+   - reference_id (message ID)
+   - status (pending/completed/failed/cancelled)
+   - from_did, to_did
+   - thread_id
+   - created_at, updated_at
+
+### Querying the Database
+
+You can query the database directly using SQLite tools:
+
+```bash
+# View recent messages
+sqlite3 tap-http.db "SELECT message_id, message_type, direction, created_at FROM messages ORDER BY created_at DESC LIMIT 10;"
+
+# Count messages by type
+sqlite3 tap-http.db "SELECT message_type, COUNT(*) FROM messages GROUP BY message_type;"
+
+# View pending transactions
+sqlite3 tap-http.db "SELECT * FROM transactions WHERE status = 'pending';"
+```
+
 ## Performance and Scaling
 
 The TAP HTTP server is designed for performance:
@@ -592,6 +658,7 @@ The TAP HTTP server is designed for performance:
 - **Connection Pooling** - Reuses connections for outgoing requests
 - **Minimal Copies** - Efficient handling of message payloads
 - **Horizontal Scaling** - Can be deployed across multiple instances
+- **Efficient Storage** - SQLite with connection pooling and WAL mode
 
 For high-volume deployments, consider:
 
@@ -599,3 +666,4 @@ For high-volume deployments, consider:
 - Using a Redis-backed rate limiter
 - Implementing a message queue for async processing
 - Setting up proper monitoring and alerts
+- Regular database maintenance and archival

@@ -11,7 +11,7 @@ use tempfile::tempdir;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_event_logging_config() {
     // Create a temporary directory for the log file
     let temp_dir = tempdir().unwrap();
@@ -30,8 +30,10 @@ async fn test_event_logging_config() {
         log_level: tracing::Level::INFO,
     });
 
-    // Create a TapNode
-    let node = TapNode::new(NodeConfig::default());
+    // Create a TapNode without storage for tests
+    let mut node_config = NodeConfig::default();
+    node_config.storage_path = None;
+    let node = TapNode::new(node_config);
 
     // Create the HTTP server
     let server = TapHttpServer::new(config, node);
@@ -40,7 +42,7 @@ async fn test_event_logging_config() {
     assert!(server.event_bus().subscriber_count() > 0);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_server_events() {
     // Create a custom subscriber to capture events
     struct TestSubscriber {
@@ -55,8 +57,10 @@ async fn test_server_events() {
         }
     }
 
-    // Create a TapNode
-    let node = TapNode::new(NodeConfig::default());
+    // Create a TapNode without storage for tests
+    let mut node_config = NodeConfig::default();
+    node_config.storage_path = None;
+    let node = TapNode::new(node_config);
 
     // Create configuration (without file logging)
     let config = TapHttpConfig::default();
@@ -104,7 +108,7 @@ async fn test_server_events() {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_json_event_logging() {
     // Create a temporary directory for the log file
     let temp_dir = tempdir().unwrap();
@@ -125,8 +129,10 @@ async fn test_json_event_logging() {
         log_level: tracing::Level::INFO,
     });
 
-    // Create a TapNode
-    let node = TapNode::new(NodeConfig::default());
+    // Create a TapNode without storage for tests
+    let mut node_config = NodeConfig::default();
+    node_config.storage_path = None;
+    let node = TapNode::new(node_config);
 
     // Create the HTTP server
     let mut server = TapHttpServer::new(config, node);

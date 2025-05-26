@@ -7,7 +7,8 @@ use tokio::time::sleep;
 
 // Helper function to create a mock TapNode for testing
 fn create_mock_node() -> TapNode {
-    let node_config = NodeConfig::default();
+    let mut node_config = NodeConfig::default();
+    node_config.storage_path = None; // Disable storage for tests
     TapNode::new(node_config)
 }
 
@@ -20,7 +21,7 @@ fn find_unused_port() -> Option<u16> {
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_server_startup() {
     // Create a mock TapNode and find an available port
     let node = create_mock_node();
@@ -44,7 +45,7 @@ async fn test_server_startup() {
     server.stop().await.expect("Server should stop");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_health_endpoint() {
     // Create a mock TapNode and find an available port
     let node = create_mock_node();
@@ -96,7 +97,7 @@ async fn test_health_endpoint() {
     server.stop().await.expect("Server should stop");
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn test_didcomm_endpoint() {
     // Create a mock TapNode and find an available port
     let node = create_mock_node();

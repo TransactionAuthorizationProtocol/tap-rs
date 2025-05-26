@@ -10,7 +10,7 @@ readme = "README.md"
 
 [dependencies]
 tap-msg = { version = "0.2.0", path = "../tap-msg" }
-tap-node = { version = "0.2.0", path = "../tap-node" }
+tap-node = { version = "0.2.0", path = "../tap-node", features = ["storage"] }
 tap-agent = { version = "0.2.0", path = "../tap-agent" }
 tap-caip = { version = "0.2.0", path = "../tap-caip" }
 warp = "0.3"
