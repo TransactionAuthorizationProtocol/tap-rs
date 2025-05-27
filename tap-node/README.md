@@ -19,7 +19,7 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 - **Configurable Components**: Customize node behavior with pluggable components
 - **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
 - **WASM Compatibility**: Optional WASM support for browser environments
-- **Persistent Storage**: SQLite-based storage with dual functionality:
+- **Persistent Storage**: SQLite-based storage using async SQLx with dual functionality:
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all incoming/outgoing messages
 
@@ -89,6 +89,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a new node
     let mut node = TapNode::new(config);
+    
+    // Initialize storage (if enabled)
+    #[cfg(feature = "storage")]
+    node.init_storage().await?;
 
     // Start processor pool for high throughput
     let pool_config = tap_node::message::processor_pool::ProcessorPoolConfig {
@@ -407,11 +411,13 @@ if let Some(storage) = node.storage() {
 
 ### Storage Features
 
+- **Async Database Operations**: Built on SQLx for native async support
 - **Automatic Migration**: Database schema is automatically created and migrated on startup
 - **Dual-Table Design**: Separate tables for transactions and message audit trail
 - **Append-Only Design**: All data is immutable for compliance and auditing
 - **SQLite WAL Mode**: Optimized for concurrent reads and writes
-- **Connection Pooling**: Up to 10 concurrent database connections
+- **Connection Pooling**: SQLx connection pool for efficient database access
+- **JSON Column Support**: Message content stored as validated JSON
 - **WASM Compatibility**: Storage is automatically disabled in WASM builds
 - **Duplicate Handling**: Duplicate messages are silently ignored (idempotent)
 
@@ -424,7 +430,7 @@ Business logic for Transfer and Payment messages:
 - Transaction ID and type (Transfer/Payment)
 - Sender and recipient DIDs
 - Thread ID for conversation tracking
-- Full message content as JSON
+- Full message content stored in JSON column type
 - Status tracking (pending/confirmed/failed/cancelled/reverted)
 - Timestamps for creation and updates
 
@@ -434,7 +440,7 @@ Complete audit trail of all messages:
 - Direction (incoming/outgoing)
 - Sender and recipient DIDs
 - Thread IDs (including parent threads)
-- Full message content as JSON
+- Full message content stored in JSON column type
 - Creation timestamp
 
 ### Disabling Storage

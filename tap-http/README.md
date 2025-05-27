@@ -14,7 +14,7 @@ HTTP DIDComm server implementation for the Transaction Authorization Protocol (T
 - **Security**: Support for HTTPS/TLS and rate limiting (configurable)
 - **Comprehensive Error Handling**: Structured error responses with appropriate HTTP status codes
 - **Payment Flow Simulator**: Included CLI tool for simulating TAP payment flows
-- **Persistent Storage**: SQLite database for message audit trail and transaction tracking
+- **Persistent Storage**: SQLite database using async SQLx for message audit trail and transaction tracking
 
 ## Usage
 
@@ -35,7 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node_config.storage_path = Some("tap-http.db".into());
     
     // Create a TAP Node for message processing
-    let node = TapNode::new(node_config);
+    let mut node = TapNode::new(node_config);
+    node.init_storage().await?;
     node.register_agent(Arc::new(agent)).await?;
     
     // Configure the HTTP server with custom settings
@@ -596,11 +597,12 @@ The server acts as a service endpoint for incoming messages:
 
 ## Persistent Storage
 
-The TAP HTTP server includes built-in SQLite storage for:
+The TAP HTTP server includes built-in SQLite storage using async SQLx for:
 
 - **Message Audit Trail**: All incoming and outgoing messages are logged
 - **Transaction Tracking**: Transfer and Payment messages are tracked separately
 - **Automatic Schema Management**: Database migrations run automatically on startup
+- **JSON Column Support**: Message content is stored as validated JSON
 
 ### Storage Configuration
 
@@ -624,7 +626,7 @@ The storage system maintains two tables:
    - message_type (TAP message type)
    - from_did, to_did (sender and recipient DIDs)
    - direction (incoming/outgoing)
-   - message_json (full message content)
+   - message_json (full message content as JSON column type)
    - created_at (timestamp)
 
 2. **transactions** - Business logic for Transfer and Payment messages:
@@ -658,7 +660,7 @@ The TAP HTTP server is designed for performance:
 - **Connection Pooling** - Reuses connections for outgoing requests
 - **Minimal Copies** - Efficient handling of message payloads
 - **Horizontal Scaling** - Can be deployed across multiple instances
-- **Efficient Storage** - SQLite with connection pooling and WAL mode
+- **Efficient Storage** - SQLite with async SQLx connection pooling and WAL mode
 
 For high-volume deployments, consider:
 
