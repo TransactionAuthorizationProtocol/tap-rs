@@ -130,53 +130,12 @@ pub async fn handle_didcomm(
         }
     };
 
-    // Parse the DIDComm message
-    debug!("Parsing DIDComm message");
-    let didcomm_message: PlainMessage = match serde_json::from_str(message_str) {
-        Ok(msg) => msg,
-        Err(e) => {
-            error!("Failed to parse DIDComm message: {}", e);
+    // The message could be either encrypted/signed or plain
+    // Pass the raw message string to the TAP Node for processing
+    debug!("Processing DIDComm message (encrypted or plain)");
 
-            // Log message error event
-            event_bus
-                .publish_message_error(
-                    "parse_error".to_string(),
-                    format!("Failed to parse DIDComm message: {}", e),
-                    None,
-                )
-                .await;
-
-            // Calculate response size and duration
-            let response =
-                json_error_response(StatusCode::BAD_REQUEST, "Invalid DIDComm message format");
-            let response_size = 200; // Approximate size
-            let duration_ms = start_time.elapsed().as_millis() as u64;
-
-            // Log response sent event
-            event_bus
-                .publish_response_sent(StatusCode::BAD_REQUEST, response_size, duration_ms)
-                .await;
-
-            return Ok(response);
-        }
-    };
-
-    // Log message received event
-    event_bus
-        .publish_message_received(
-            didcomm_message.id.clone(),
-            didcomm_message.typ.clone(),
-            Some(didcomm_message.from.clone()),
-            if didcomm_message.to.is_empty() {
-                None
-            } else {
-                Some(didcomm_message.to.join(", "))
-            },
-        )
-        .await;
-
-    // Process the message using the TAP Node
-    match process_tap_message(didcomm_message, node).await {
+    // Process the raw message using the TAP Node
+    match process_tap_message_raw(message_str, node, event_bus.clone()).await {
         Ok(_) => {
             info!("DIDComm message processed successfully");
 
@@ -243,7 +202,83 @@ pub async fn handle_didcomm(
     }
 }
 
-/// Process a TAP message using the TAP Node.
+/// Process a raw TAP message using the TAP Node.
+///
+/// This function handles both encrypted/signed and plain DIDComm messages.
+/// For encrypted messages, it will be forwarded to the appropriate agent for decryption.
+///
+/// # Parameters
+/// * `message_str` - The raw message string (could be encrypted or plain)
+/// * `node` - The TAP Node instance that will process the message
+/// * `event_bus` - The event bus for logging
+///
+/// # Returns
+/// * `Ok(())` if processing succeeded
+/// * `Err(Error)` if validation fails or message processing failed
+async fn process_tap_message_raw(
+    message_str: &str,
+    node: Arc<TapNode>,
+    event_bus: Arc<EventBus>,
+) -> Result<()> {
+    // Try to parse as JSON to check if it's encrypted or plain
+    let json_value: serde_json::Value = serde_json::from_str(message_str)
+        .map_err(|e| Error::Json(format!("Failed to parse message as JSON: {}", e)))?;
+
+    // Check if it's an encrypted/signed message (has "protected" field) or plain message
+    let is_encrypted = json_value.get("protected").is_some();
+
+    if is_encrypted {
+        // This is an encrypted message - we need to route it to an agent for decryption
+        // For now, we'll pass it to the node's receive_encrypted_message method
+        match node
+            .receive_encrypted_message(message_str.to_string())
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                let error_str = e.to_string();
+
+                // Categorize TapNode errors
+                if error_str.contains("authentication") || error_str.contains("unauthorized") {
+                    Err(Error::Authentication(format!(
+                        "Authentication failed: {}",
+                        error_str
+                    )))
+                } else if error_str.contains("validation") || error_str.contains("invalid") {
+                    Err(Error::Validation(format!(
+                        "Node validation failed: {}",
+                        error_str
+                    )))
+                } else {
+                    Err(Error::Node(error_str))
+                }
+            }
+        }
+    } else {
+        // Parse as PlainMessage
+        let message: PlainMessage = serde_json::from_value(json_value)
+            .map_err(|e| Error::Json(format!("Failed to parse as PlainMessage: {}", e)))?;
+
+        // Log message received event
+        event_bus
+            .publish_message_received(
+                message.id.clone(),
+                message.typ.clone(),
+                Some(message.from.clone()),
+                if message.to.is_empty() {
+                    None
+                } else {
+                    Some(message.to.join(", "))
+                },
+            )
+            .await;
+
+        // Process as before
+        process_tap_message(message, node).await
+    }
+}
+
+/// Process a plain TAP message using the TAP Node.
 ///
 /// This function performs pre-processing validation on DIDComm messages before
 /// forwarding them to the TAP Node for processing. The validation includes:

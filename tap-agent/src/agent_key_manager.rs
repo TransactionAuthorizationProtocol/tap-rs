@@ -627,7 +627,7 @@ impl KeyManager for AgentKeyManager {
         let signature = if let Some(kid) = expected_kid {
             jws.signatures
                 .iter()
-                .find(|s| s.header.kid == kid)
+                .find(|s| s.get_kid().as_deref() == Some(kid))
                 .ok_or_else(|| {
                     Error::Cryptography(format!("No signature found with kid: {}", kid))
                 })?
@@ -638,21 +638,16 @@ impl KeyManager for AgentKeyManager {
                 .ok_or_else(|| Error::Cryptography("No signatures in JWS".to_string()))?
         };
 
-        // Decode the protected header
-        let protected_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&signature.protected)
-            .map_err(|e| {
-                Error::Cryptography(format!("Failed to decode protected header: {}", e))
-            })?;
-
-        // Parse the protected header
-        let protected: JwsProtected = serde_json::from_slice(&protected_bytes).map_err(|e| {
-            Error::Serialization(format!("Failed to parse protected header: {}", e))
+        // Get the protected header
+        let protected = signature.get_protected_header().map_err(|e| {
+            Error::Cryptography(format!("Failed to decode protected header: {}", e))
         })?;
 
-        // Resolve the verification key
-        let verification_key =
-            KeyManager::resolve_verification_key(self, &signature.header.kid).await?;
+        // Get the verification key using kid from protected header
+        let kid = signature
+            .get_kid()
+            .ok_or_else(|| Error::Cryptography("No kid found in JWS signature".to_string()))?;
+        let verification_key = KeyManager::resolve_verification_key(self, &kid).await?;
 
         // Decode the signature
         let signature_bytes = base64::engine::general_purpose::STANDARD

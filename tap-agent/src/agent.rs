@@ -92,6 +92,11 @@ pub struct TapAgent {
 }
 
 impl TapAgent {
+    /// Returns a reference to the agent's key manager
+    pub fn key_manager(&self) -> &Arc<AgentKeyManager> {
+        &self.key_manager
+    }
+
     /// Creates a new TapAgent with the given configuration and AgentKeyManager
     pub fn new(config: AgentConfig, key_manager: Arc<AgentKeyManager>) -> Self {
         #[cfg(all(feature = "native", not(target_arch = "wasm32")))]
@@ -761,10 +766,6 @@ impl crate::agent::Agent for TapAgent {
         println!("\n==== SENDING TAP MESSAGE ====");
         println!("Message Type: {}", T::message_type());
         println!("Recipients: {:?}", to);
-        println!(
-            "--- PLAINTEXT CONTENT ---\n{}",
-            serde_json::to_string_pretty(message).unwrap_or_else(|_| format!("{:?}", message))
-        );
 
         // Convert the TapMessageBody to a PlainMessage with explicit routing
         let plain_message =

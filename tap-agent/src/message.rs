@@ -3,6 +3,7 @@
 //! This module provides constants and types for working with TAP messages,
 //! including security modes and message type identifiers.
 
+use base64::{engine::general_purpose, Engine};
 use serde::{Deserialize, Serialize};
 // Value is not used in this file
 
@@ -46,12 +47,6 @@ pub struct Jws {
 pub struct JwsSignature {
     pub protected: String,
     pub signature: String,
-    pub header: JwsHeader,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct JwsHeader {
-    pub kid: String,
 }
 
 // Structure for decoded JWS protected field
@@ -60,11 +55,32 @@ pub struct JwsProtected {
     #[serde(default = "default_didcomm_signed")]
     pub typ: String,
     pub alg: String,
+    pub kid: String,
 }
 
 // Helper function for JwsProtected typ default
 fn default_didcomm_signed() -> String {
     DIDCOMM_SIGNED.to_string()
+}
+
+impl JwsSignature {
+    /// Extracts the kid (key identifier) from the protected header
+    pub fn get_kid(&self) -> Option<String> {
+        // Decode the protected header and extract kid
+        if let Ok(protected_bytes) = general_purpose::STANDARD.decode(&self.protected) {
+            if let Ok(protected) = serde_json::from_slice::<JwsProtected>(&protected_bytes) {
+                return Some(protected.kid);
+            }
+        }
+        None
+    }
+
+    /// Decodes and returns the protected header
+    pub fn get_protected_header(&self) -> Result<JwsProtected, Box<dyn std::error::Error>> {
+        let protected_bytes = general_purpose::STANDARD.decode(&self.protected)?;
+        let protected = serde_json::from_slice::<JwsProtected>(&protected_bytes)?;
+        Ok(protected)
+    }
 }
 // JWE-related types
 

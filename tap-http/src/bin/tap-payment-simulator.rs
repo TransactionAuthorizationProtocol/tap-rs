@@ -74,11 +74,11 @@ fn print_help() {
     );
     println!();
     println!("USAGE:");
-    println!("    tap-payment-simulator --url <server-url> --did <server-agent-did> [OPTIONS]");
+    println!("    tap-payment-simulator --url <server-url> --to <server-agent-did> [OPTIONS]");
     println!();
     println!("REQUIRED ARGUMENTS:");
     println!("    --url <URL>                 URL of the TAP HTTP server's DIDComm endpoint");
-    println!("    --did <DID>                 DID of the server's agent");
+    println!("    --to <DID>                  DID of the server's agent");
     println!();
     println!("OPTIONS:");
     println!("    --amount <AMOUNT>           Amount to transfer [default: 100.00]");
@@ -106,6 +106,14 @@ async fn send_tap_message<
     // Create a DIDComm message from the TAP message using the agent's send_message method
     info!("Creating message for TAP type: {}", T::message_type());
 
+    // Convert to DIDComm plain message first
+    let plain_message = message.to_didcomm(agent.get_agent_did())?;
+
+    // Output the plaintext message to stdout
+    println!("\n--- PLAINTEXT MESSAGE ---");
+    println!("{}", serde_json::to_string_pretty(&plain_message)?);
+    println!("--- END PLAINTEXT MESSAGE ---\n");
+
     // Send the message using the agent's send_message method
     info!("Packing message for recipient {}", recipient_did);
     let (packed, _) = agent
@@ -113,6 +121,11 @@ async fn send_tap_message<
         .await
         .map_err(|e| format!("Failed to pack message: {}", e))?;
     debug!("Packed message size: {} bytes", packed.len());
+
+    // Output the signed/encrypted message to stdout
+    println!("\n--- SIGNED/ENCRYPTED MESSAGE ---");
+    println!("{}", packed);
+    println!("--- END SIGNED/ENCRYPTED MESSAGE ---\n");
 
     // Send to the server
     info!("Sending message to {}", recipient_url);

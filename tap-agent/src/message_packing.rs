@@ -520,11 +520,14 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
                     Error::Serialization(format!("Failed to parse protected header: {}", e))
                 })?;
 
-            // Get the key ID
-            let kid = &signature.header.kid;
+            // Get the key ID from protected header
+            let kid = match signature.get_kid() {
+                Some(kid) => kid,
+                None => continue, // Skip if no kid found
+            };
 
             // Resolve the verification key
-            let verification_key = match key_manager.resolve_verification_key(kid).await {
+            let verification_key = match key_manager.resolve_verification_key(&kid).await {
                 Ok(key) => key,
                 Err(_) => continue, // Skip key if we can't resolve it
             };
