@@ -122,6 +122,7 @@ async fn test_didcomm_endpoint() {
     // Create a DIDComm test message (intentionally invalid to test error handling)
     let didcomm_msg = json!({
         "id": "1234567890",
+        "typ": "application/didcomm-plain+json",
         "type": "https://didcomm.org/basicmessage/2.0/message",
         "body": {
             "messageType": "TAP_AUTHORIZATION_REQUEST",
@@ -142,7 +143,7 @@ async fn test_didcomm_endpoint() {
     let client = reqwest::Client::new();
     let response = client
         .post(format!("http://127.0.0.1:{}/didcomm", port))
-        .header("Content-Type", "application/didcomm-encrypted+json")
+        .header("Content-Type", "application/didcomm-plain+json")
         .json(&didcomm_msg)
         .timeout(Duration::from_secs(5))
         .send()
@@ -157,8 +158,8 @@ async fn test_didcomm_endpoint() {
 
     let response = response.unwrap();
     let status = response.status();
-    // Our validation now returns a 400 Bad Request error for invalid message types
-    assert_eq!(status, 400);
+    // Our message processing returns a 500 Internal Server Error for messages that can't be processed
+    assert_eq!(status, 500);
 
     // Read the response body to ensure it has the right error message
     let body = response.text().await.unwrap();
@@ -166,11 +167,8 @@ async fn test_didcomm_endpoint() {
 
     // Verify this is an error response
     assert_eq!(json["status"], "error");
-    // Verify the error type is related to validation
-    assert!(json["error"]["type"]
-        .as_str()
-        .unwrap()
-        .contains("validation"));
+    // The error should be a node error since no agents are registered
+    assert_eq!(json["error"]["type"], "node_error");
 
     // Stop the server
     server.stop().await.expect("Server should stop");

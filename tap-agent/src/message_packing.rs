@@ -240,9 +240,16 @@ impl Packable for PlainMessage {
                 let payload =
                     serde_json::to_string(self).map_err(|e| Error::Serialization(e.to_string()))?;
 
+                // Create protected header with the sender_kid
+                let protected_header = crate::message::JwsProtected {
+                    typ: crate::message::DIDCOMM_SIGNED.to_string(),
+                    alg: String::new(), // Will be set by create_jws based on key type
+                    kid: sender_kid.clone(),
+                };
+
                 // Create a JWS
                 let jws = signing_key
-                    .create_jws(payload.as_bytes(), None)
+                    .create_jws(payload.as_bytes(), Some(protected_header))
                     .await
                     .map_err(|e| Error::Cryptography(format!("Failed to create JWS: {}", e)))?;
 
@@ -382,9 +389,16 @@ where
             let payload = serde_json::to_string(&plain_message)
                 .map_err(|e| Error::Serialization(e.to_string()))?;
 
+            // Create protected header with the sender_kid
+            let protected_header = crate::message::JwsProtected {
+                typ: crate::message::DIDCOMM_SIGNED.to_string(),
+                alg: String::new(), // Will be set by create_jws based on key type
+                kid: sender_kid.clone(),
+            };
+
             // Create a JWS
             let jws = signing_key
-                .create_jws(payload.as_bytes(), None)
+                .create_jws(payload.as_bytes(), Some(protected_header))
                 .await
                 .map_err(|e| Error::Cryptography(format!("Failed to create JWS: {}", e)))?;
 
@@ -696,5 +710,232 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<String, T> for String {
 
         // If not valid JSON, return an error
         Err(Error::Validation("Message is not valid JSON".to_string()))
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent_key_manager::AgentKeyManagerBuilder;
+    use crate::did::{DIDGenerationOptions, KeyType};
+    use crate::key_manager::KeyManager;
+    use std::sync::Arc;
+    use tap_msg::didcomm::PlainMessage;
+
+    #[tokio::test]
+    async fn test_plain_message_pack_unpack() {
+        // Create a key manager with a test key
+        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let key = key_manager
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        // Create a test message
+        let message = PlainMessage {
+            id: "test-message-1".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://example.org/test".to_string(),
+            body: serde_json::json!({
+                "content": "Hello, World!"
+            }),
+            from: key.did.clone(),
+            to: vec!["did:example:bob".to_string()],
+            thid: None,
+            pthid: None,
+            created_time: Some(1234567890),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: Default::default(),
+        };
+
+        // Pack in plain mode
+        let pack_options = PackOptions::new().with_plain();
+        let packed = message.pack(&*key_manager, pack_options).await.unwrap();
+
+        // Unpack
+        let unpack_options = UnpackOptions::new();
+        let unpacked: PlainMessage = String::unpack(&packed, &*key_manager, unpack_options)
+            .await
+            .unwrap();
+
+        // Verify
+        assert_eq!(unpacked.id, message.id);
+        assert_eq!(unpacked.type_, message.type_);
+        assert_eq!(unpacked.body, message.body);
+        assert_eq!(unpacked.from, message.from);
+        assert_eq!(unpacked.to, message.to);
+    }
+
+    #[tokio::test]
+    async fn test_jws_message_pack_unpack() {
+        // Create a key manager with a test key
+        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let key = key_manager
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        let sender_kid = format!("{}#keys-1", key.did);
+
+        // Create a test message
+        let message = PlainMessage {
+            id: "test-message-2".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://example.org/test".to_string(),
+            body: serde_json::json!({
+                "content": "Signed message"
+            }),
+            from: key.did.clone(),
+            to: vec!["did:example:bob".to_string()],
+            thid: None,
+            pthid: None,
+            created_time: Some(1234567890),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: Default::default(),
+        };
+
+        // Pack with signing
+        let pack_options = PackOptions::new().with_sign(&sender_kid);
+        let packed = message.pack(&*key_manager, pack_options).await.unwrap();
+
+        // Verify it's a JWS
+        let jws: Jws = serde_json::from_str(&packed).unwrap();
+        assert!(!jws.signatures.is_empty());
+
+        // Check the protected header has the correct kid
+        let protected_header = jws.signatures[0].get_protected_header().unwrap();
+        assert_eq!(protected_header.kid, sender_kid);
+        assert_eq!(protected_header.typ, "application/didcomm-signed+json");
+        assert_eq!(protected_header.alg, "EdDSA");
+
+        // Unpack
+        let unpack_options = UnpackOptions::new();
+        let unpacked: PlainMessage = String::unpack(&packed, &*key_manager, unpack_options)
+            .await
+            .unwrap();
+
+        // Verify
+        assert_eq!(unpacked.id, message.id);
+        assert_eq!(unpacked.type_, message.type_);
+        assert_eq!(unpacked.body, message.body);
+        assert_eq!(unpacked.from, message.from);
+        assert_eq!(unpacked.to, message.to);
+    }
+
+    #[tokio::test]
+    async fn test_different_key_types_jws() {
+        // Test with different key types
+        let key_types = vec![KeyType::Ed25519];
+
+        for key_type in key_types {
+            // Create a key manager with a test key
+            let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+            let key = key_manager
+                .generate_key(DIDGenerationOptions { key_type })
+                .unwrap();
+
+            let sender_kid = format!("{}#keys-1", key.did);
+
+            // Create a test message
+            let message = PlainMessage {
+                id: format!("test-{:?}", key_type),
+                typ: "application/didcomm-plain+json".to_string(),
+                type_: "https://example.org/test".to_string(),
+                body: serde_json::json!({
+                    "content": format!("Signed with {:?}", key_type)
+                }),
+                from: key.did.clone(),
+                to: vec!["did:example:bob".to_string()],
+                thid: None,
+                pthid: None,
+                created_time: Some(1234567890),
+                expires_time: None,
+                from_prior: None,
+                attachments: None,
+                extra_headers: Default::default(),
+            };
+
+            // Pack with signing
+            let pack_options = PackOptions::new().with_sign(&sender_kid);
+            let packed = message.pack(&*key_manager, pack_options).await.unwrap();
+
+            // Verify it's a JWS
+            let jws: Jws = serde_json::from_str(&packed).unwrap();
+            assert!(!jws.signatures.is_empty());
+
+            // Check the protected header
+            let protected_header = jws.signatures[0].get_protected_header().unwrap();
+            assert_eq!(protected_header.kid, sender_kid);
+
+            // Check algorithm matches key type
+            let expected_alg = match key_type {
+                KeyType::Ed25519 => "EdDSA",
+                KeyType::P256 => "ES256",
+                KeyType::Secp256k1 => "ES256K",
+            };
+            assert_eq!(protected_header.alg, expected_alg);
+
+            // Unpack and verify
+            let unpack_options = UnpackOptions::new();
+            let unpacked: PlainMessage = String::unpack(&packed, &*key_manager, unpack_options)
+                .await
+                .unwrap();
+
+            assert_eq!(unpacked.id, message.id);
+            assert_eq!(unpacked.body, message.body);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_unpack_with_wrong_signature() {
+        // Create two different key managers
+        let key_manager1 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let key1 = key_manager1
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        let key_manager2 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let _key2 = key_manager2
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        // Create and sign a message with key1
+        let message = PlainMessage {
+            id: "test-wrong-sig".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://example.org/test".to_string(),
+            body: serde_json::json!({
+                "content": "Test wrong signature"
+            }),
+            from: key1.did.clone(),
+            to: vec!["did:example:bob".to_string()],
+            thid: None,
+            pthid: None,
+            created_time: Some(1234567890),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: Default::default(),
+        };
+
+        let sender_kid = format!("{}#keys-1", key1.did);
+        let pack_options = PackOptions::new().with_sign(&sender_kid);
+        let packed = message.pack(&*key_manager1, pack_options).await.unwrap();
+
+        // Try to unpack with key_manager2 (should fail)
+        let unpack_options = UnpackOptions::new();
+        let result: Result<PlainMessage> =
+            String::unpack(&packed, &*key_manager2, unpack_options).await;
+
+        assert!(result.is_err());
     }
 }

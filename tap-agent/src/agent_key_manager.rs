@@ -467,8 +467,20 @@ impl KeyManager for AgentKeyManager {
             // Try to find a secret with this DID or kid
             let did = kid.split('#').next().unwrap_or(kid);
             if let Some(secret) = secrets.get(did) {
+                // Detect key type from the JWK
+                let key_type = match &secret.secret_material {
+                    SecretMaterial::JWK { private_key_jwk } => {
+                        let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                        let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                        match (kty, crv) {
+                            (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            (Some("EC"), Some("P-256")) => KeyType::P256,
+                            (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
+                            _ => KeyType::Ed25519, // Default
+                        }
+                    }
+                };
                 // Create a LocalAgentKey
-                let key_type = KeyType::Ed25519; // Default to Ed25519
                 let agent_key = LocalAgentKey::new(secret.clone(), key_type);
 
                 // Add to signing keys for next time
@@ -502,8 +514,20 @@ impl KeyManager for AgentKeyManager {
             // Try to find a secret with this DID or kid
             let did = kid.split('#').next().unwrap_or(kid);
             if let Some(secret) = secrets.get(did) {
+                // Detect key type from the JWK
+                let key_type = match &secret.secret_material {
+                    SecretMaterial::JWK { private_key_jwk } => {
+                        let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                        let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                        match (kty, crv) {
+                            (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            (Some("EC"), Some("P-256")) => KeyType::P256,
+                            (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
+                            _ => KeyType::Ed25519, // Default
+                        }
+                    }
+                };
                 // Create a LocalAgentKey
-                let key_type = KeyType::Ed25519; // Default to Ed25519
                 let agent_key = LocalAgentKey::new(secret.clone(), key_type);
 
                 // Add to encryption keys for next time
@@ -539,8 +563,20 @@ impl KeyManager for AgentKeyManager {
             // Try to find a secret with this DID or kid
             let did = kid.split('#').next().unwrap_or(kid);
             if let Some(secret) = secrets.get(did) {
+                // Detect key type from the JWK
+                let key_type = match &secret.secret_material {
+                    SecretMaterial::JWK { private_key_jwk } => {
+                        let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                        let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                        match (kty, crv) {
+                            (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            (Some("EC"), Some("P-256")) => KeyType::P256,
+                            (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
+                            _ => KeyType::Ed25519, // Default
+                        }
+                    }
+                };
                 // Create a LocalAgentKey
-                let key_type = KeyType::Ed25519; // Default to Ed25519
                 let agent_key = LocalAgentKey::new(secret.clone(), key_type);
 
                 // Add to decryption keys for next time

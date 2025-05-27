@@ -429,9 +429,9 @@ impl SigningKey for LocalAgentKey {
                 // Sign the message using ECDSA
                 let signature: P256Signature = signing_key.sign(data);
 
-                // Convert to bytes for JWS
-                let signature_bytes_der = signature.to_der();
-                Ok(signature_bytes_der.as_bytes().to_vec())
+                // Convert to raw bytes for JWS (R||S format, 64 bytes total)
+                let signature_bytes = signature.to_bytes();
+                Ok(signature_bytes.to_vec())
             }
             (Some("EC"), Some("secp256k1")) => {
                 // Extract the private key (d parameter in JWK)
@@ -462,9 +462,9 @@ impl SigningKey for LocalAgentKey {
                 // Sign the message using ECDSA
                 let signature: Secp256k1Signature = signing_key.sign(data);
 
-                // Convert to bytes for JWS
-                let signature_bytes_der = signature.to_der();
-                Ok(signature_bytes_der.as_bytes().to_vec())
+                // Convert to raw bytes for JWS (R||S format)
+                let signature_bytes = signature.to_bytes();
+                Ok(signature_bytes.to_vec())
             }
             // Handle unsupported key types
             _ => Err(Error::Cryptography(format!(
@@ -494,8 +494,10 @@ impl SigningKey for LocalAgentKey {
         let protected = if let Some(mut header) = protected_header {
             // Override the algorithm to match the key type
             header.alg = self.recommended_jws_alg().as_str().to_string();
-            // Ensure kid is set in protected header
-            header.kid = crate::agent_key::AgentKey::key_id(self).to_string();
+            // Only set kid if not already provided in the header
+            if header.kid.is_empty() {
+                header.kid = crate::agent_key::AgentKey::key_id(self).to_string();
+            }
             header
         } else {
             JwsProtected {
@@ -640,8 +642,8 @@ impl VerificationKey for LocalAgentKey {
                 }
                 let public_key = public_key_opt.unwrap();
 
-                // Parse the signature from DER format
-                let p256_signature = P256Signature::from_der(signature).map_err(|e| {
+                // Parse the signature from raw bytes (R||S format)
+                let p256_signature = P256Signature::from_slice(signature).map_err(|e| {
                     Error::Cryptography(format!("Failed to parse P-256 signature: {:?}", e))
                 })?;
 
@@ -687,8 +689,8 @@ impl VerificationKey for LocalAgentKey {
                         ))
                     })?;
 
-                // Parse the signature from DER format
-                let k256_signature = Secp256k1Signature::from_der(signature).map_err(|e| {
+                // Parse the signature from raw bytes (R||S format)
+                let k256_signature = Secp256k1Signature::from_slice(signature).map_err(|e| {
                     Error::Cryptography(format!("Failed to parse secp256k1 signature: {:?}", e))
                 })?;
 
