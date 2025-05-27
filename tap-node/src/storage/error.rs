@@ -3,10 +3,7 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum StorageError {
     #[error("Database error: {0}")]
-    Database(#[from] rusqlite::Error),
-
-    #[error("Connection pool error: {0}")]
-    Pool(#[from] r2d2::Error),
+    Database(#[from] sqlx::Error),
 
     #[error("Migration error: {0}")]
     Migration(String),

@@ -236,7 +236,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("Using database at: {:?}", storage_path);
 
     // Create TAP Node
-    let node = TapNode::new(node_config);
+    let mut node = TapNode::new(node_config);
+
+    // Initialize storage (tap-node has storage feature enabled by default)
+    if let Err(e) = node.init_storage().await {
+        error!("Failed to initialize storage: {}", e);
+        return Err(e.into());
+    }
 
     // Register the agent with the node
     if let Err(e) = node.register_agent(agent_arc.clone()).await {

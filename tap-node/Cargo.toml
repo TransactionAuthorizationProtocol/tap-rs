@@ -60,10 +60,7 @@ tokio-tungstenite = { version = "0.20", features = [
 ], optional = true }
 
 # Storage dependencies (native only)
-rusqlite = { version = "0.31", features = ["bundled"], optional = true }
-rusqlite_migration = { version = "1.2", optional = true }
-r2d2 = { version = "0.8", optional = true }
-r2d2_sqlite = { version = "0.24", optional = true }
+sqlx = { version = "0.7", features = ["runtime-tokio-native-tls", "sqlite", "migrate", "json"], optional = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
@@ -79,7 +76,7 @@ harness = false
 [features]
 default = ["native", "storage"]
 native = ["tokio/full", "reqwest"]
-storage = ["rusqlite", "rusqlite_migration", "r2d2", "r2d2_sqlite"]
+storage = ["sqlx"]
 websocket = ["tokio-tungstenite"]
 native-with-websocket = ["native", "websocket"]
 wasm = [

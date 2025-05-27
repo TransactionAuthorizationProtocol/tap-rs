@@ -13,8 +13,8 @@
 //! # Features
 //!
 //! - **Automatic Schema Migration**: Database schema is created and migrated automatically
-//! - **Connection Pooling**: Uses r2d2 for efficient concurrent database access
-//! - **Async API**: All operations are async-friendly using tokio's spawn_blocking
+//! - **Connection Pooling**: Uses sqlx's built-in async connection pool
+//! - **Async API**: Native async operations without blocking threads
 //! - **WASM Compatibility**: Storage is automatically disabled in WASM builds
 //! - **Idempotent Operations**: Duplicate messages are silently ignored
 //! - **Direction Tracking**: Messages are tagged as incoming or outgoing
@@ -65,8 +65,6 @@
 pub mod db;
 #[cfg(feature = "storage")]
 pub mod error;
-#[cfg(feature = "storage")]
-pub mod migrations;
 #[cfg(feature = "storage")]
 pub mod models;
 

@@ -1,14 +1,10 @@
-use r2d2::Pool;
-use r2d2_sqlite::SqliteConnectionManager;
-use rusqlite::{params, OptionalExtension};
+use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use std::env;
 use std::path::PathBuf;
 use tap_msg::didcomm::PlainMessage;
-use tokio::task;
 use tracing::{debug, info};
 
 use super::error::StorageError;
-use super::migrations::run_migrations;
 use super::models::{Message, MessageDirection, Transaction, TransactionStatus, TransactionType};
 
 /// Storage backend for TAP transactions and message audit trail
@@ -18,8 +14,8 @@ use super::models::{Message, MessageDirection, Transaction, TransactionStatus, T
 /// - `transactions`: For Transfer and Payment messages requiring business logic
 /// - `messages`: For complete audit trail of all messages
 ///
-/// It uses connection pooling for efficient concurrent access and provides
-/// an async-friendly API.
+/// It uses sqlx's built-in connection pooling for efficient concurrent access
+/// and provides a native async API.
 ///
 /// # Example
 ///
@@ -42,7 +38,7 @@ use super::models::{Message, MessageDirection, Transaction, TransactionStatus, T
 /// ```
 #[derive(Clone)]
 pub struct Storage {
-    pool: Pool<SqliteConnectionManager>,
+    pool: SqlitePool,
 }
 
 impl Storage {
@@ -75,20 +71,28 @@ impl Storage {
             std::fs::create_dir_all(parent)?;
         }
 
-        // Initialize connection pool
-        let manager = SqliteConnectionManager::file(&db_path);
-        let pool = Pool::builder().max_size(10).build(manager)?;
+        // Create connection URL for SQLite with create mode
+        let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+        // Create connection pool with optimizations
+        let pool = SqlitePoolOptions::new()
+            .max_connections(10)
+            .connect(&db_url)
+            .await?;
+
+        // Enable WAL mode and other optimizations
+        sqlx::query("PRAGMA journal_mode = WAL")
+            .execute(&pool)
+            .await?;
+        sqlx::query("PRAGMA synchronous = NORMAL")
+            .execute(&pool)
+            .await?;
 
         // Run migrations
-        {
-            let mut conn = pool.get()?;
-
-            // Enable WAL mode for better concurrency
-            conn.pragma_update(None, "journal_mode", "WAL")?;
-            conn.pragma_update(None, "synchronous", "NORMAL")?;
-
-            run_migrations(&mut conn)?;
-        }
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .map_err(|e| StorageError::Migration(e.to_string()))?;
 
         Ok(Storage { pool })
     }
@@ -110,7 +114,7 @@ impl Storage {
     /// - The transaction already exists (duplicate reference_id)
     pub async fn insert_transaction(&self, message: &PlainMessage) -> Result<(), StorageError> {
         let message_type = message.type_.clone();
-        let message_json = serde_json::to_string_pretty(message)?;
+        let message_json = serde_json::to_value(message)?;
 
         // Extract transaction type and use message ID as reference
         let tx_type = if message.type_.contains("transfer") {
@@ -129,46 +133,38 @@ impl Storage {
         let to_did = message.to.first().cloned();
         let thread_id = message.thid.clone();
 
-        let pool = self.pool.clone();
+        debug!("Inserting transaction: {} ({})", reference_id, tx_type);
 
-        // Execute in blocking task for async compatibility
-        task::spawn_blocking(move || {
-            let conn = pool.get()?;
+        let result = sqlx::query(
+            r#"
+            INSERT INTO transactions (type, reference_id, from_did, to_did, thread_id, message_type, message_json)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+            "#,
+        )
+        .bind(tx_type.to_string())
+        .bind(&reference_id)
+        .bind(from_did)
+        .bind(to_did)
+        .bind(thread_id)
+        .bind(message_type.to_string())
+        .bind(sqlx::types::Json(message_json))
+        .execute(&self.pool)
+        .await;
 
-            debug!("Inserting transaction: {} ({})", reference_id, tx_type);
-
-            let result = conn.execute(
-                "INSERT INTO transactions (type, reference_id, from_did, to_did, thread_id, message_type, message_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![
-                    tx_type.to_string(),
-                    reference_id.clone(),
-                    from_did,
-                    to_did,
-                    thread_id,
-                    message_type.to_string(),
-                    message_json
-                ],
-            );
-
-            match result {
-                Ok(_) => debug!("Successfully inserted transaction: {}", reference_id),
-                Err(e) => {
-                    if let rusqlite::Error::SqliteFailure(err, _) = &e {
-                        if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                            return Err(StorageError::DuplicateTransaction(reference_id));
-                        }
-                    }
-                    return Err(StorageError::Database(e));
+        match result {
+            Ok(_) => {
+                debug!("Successfully inserted transaction: {}", reference_id);
+                Ok(())
+            }
+            Err(sqlx::Error::Database(db_err)) => {
+                if db_err.message().contains("UNIQUE") {
+                    Err(StorageError::DuplicateTransaction(reference_id))
+                } else {
+                    Err(StorageError::Database(sqlx::Error::Database(db_err)))
                 }
             }
-
-            Ok::<(), StorageError>(())
-        })
-        .await
-        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))??;
-
-        Ok(())
+            Err(e) => Err(StorageError::Database(e)),
+        }
     }
 
     /// Retrieve a transaction by its reference ID
@@ -186,39 +182,58 @@ impl Storage {
         &self,
         reference_id: &str,
     ) -> Result<Option<Transaction>, StorageError> {
-        let pool = self.pool.clone();
-        let reference_id = reference_id.to_string();
+        let result = sqlx::query_as::<_, (
+            i64,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            String,
+            String,
+            serde_json::Value,
+            String,
+            String,
+        )>(
+            r#"
+            SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
+            FROM transactions WHERE reference_id = ?1
+            "#,
+        )
+        .bind(reference_id)
+        .fetch_optional(&self.pool)
+        .await?;
 
-        task::spawn_blocking(move || {
-            let conn = pool.get()?;
-
-            let result = conn.query_row(
-                "SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
-                 FROM transactions WHERE reference_id = ?1",
-                params![reference_id],
-                |row| {
-                    Ok(Transaction {
-                        id: row.get(0)?,
-                        transaction_type: TransactionType::try_from(row.get::<_, String>(1)?.as_str())
-                            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
-                        reference_id: row.get(2)?,
-                        from_did: row.get(3)?,
-                        to_did: row.get(4)?,
-                        thread_id: row.get(5)?,
-                        message_type: row.get(6)?,
-                        status: TransactionStatus::try_from(row.get::<_, String>(7)?.as_str())
-                            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
-                        message_json: row.get(8)?,
-                        created_at: row.get(9)?,
-                        updated_at: row.get(10)?,
-                    })
-                },
-            ).optional()?;
-
-            Ok(result)
-        })
-        .await
-        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+        match result {
+            Some((
+                id,
+                tx_type,
+                reference_id,
+                from_did,
+                to_did,
+                thread_id,
+                message_type,
+                status,
+                message_json,
+                created_at,
+                updated_at,
+            )) => Ok(Some(Transaction {
+                id,
+                transaction_type: TransactionType::try_from(tx_type.as_str())
+                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                reference_id,
+                from_did,
+                to_did,
+                thread_id,
+                message_type,
+                status: TransactionStatus::try_from(status.as_str())
+                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                message_json,
+                created_at,
+                updated_at,
+            })),
+            None => Ok(None),
+        }
     }
 
     /// List transactions with pagination
@@ -238,41 +253,64 @@ impl Storage {
         limit: u32,
         offset: u32,
     ) -> Result<Vec<Transaction>, StorageError> {
-        let pool = self.pool.clone();
+        let rows = sqlx::query_as::<_, (
+            i64,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            String,
+            String,
+            serde_json::Value,
+            String,
+            String,
+        )>(
+            r#"
+            SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
+            FROM transactions
+            ORDER BY created_at DESC
+            LIMIT ?1 OFFSET ?2
+            "#,
+        )
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
 
-        task::spawn_blocking(move || {
-            let conn = pool.get()?;
+        let mut transactions = Vec::new();
+        for (
+            id,
+            tx_type,
+            reference_id,
+            from_did,
+            to_did,
+            thread_id,
+            message_type,
+            status,
+            message_json,
+            created_at,
+            updated_at,
+        ) in rows
+        {
+            transactions.push(Transaction {
+                id,
+                transaction_type: TransactionType::try_from(tx_type.as_str())
+                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                reference_id,
+                from_did,
+                to_did,
+                thread_id,
+                message_type,
+                status: TransactionStatus::try_from(status.as_str())
+                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                message_json,
+                created_at,
+                updated_at,
+            });
+        }
 
-            let mut stmt = conn.prepare(
-                "SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
-                 FROM transactions
-                 ORDER BY created_at DESC
-                 LIMIT ?1 OFFSET ?2"
-            )?;
-
-            let transactions = stmt.query_map(params![limit, offset], |row| {
-                Ok(Transaction {
-                    id: row.get(0)?,
-                    transaction_type: TransactionType::try_from(row.get::<_, String>(1)?.as_str())
-                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
-                    reference_id: row.get(2)?,
-                    from_did: row.get(3)?,
-                    to_did: row.get(4)?,
-                    thread_id: row.get(5)?,
-                    message_type: row.get(6)?,
-                    status: TransactionStatus::try_from(row.get::<_, String>(7)?.as_str())
-                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
-                    message_json: row.get(8)?,
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(transactions)
-        })
-        .await
-        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+        Ok(transactions)
     }
 
     /// Log an incoming or outgoing message to the audit trail
@@ -294,7 +332,7 @@ impl Storage {
         message: &PlainMessage,
         direction: MessageDirection,
     ) -> Result<(), StorageError> {
-        let message_json = serde_json::to_string_pretty(message)?;
+        let message_json = serde_json::to_value(message)?;
         let message_id = message.id.clone();
         let message_type = message.type_.clone();
         let from_did = message.from.clone();
@@ -302,48 +340,44 @@ impl Storage {
         let thread_id = message.thid.clone();
         let parent_thread_id = message.pthid.clone();
 
-        let pool = self.pool.clone();
+        debug!(
+            "Logging {} message: {} ({})",
+            direction, message_id, message_type
+        );
 
-        task::spawn_blocking(move || {
-            let conn = pool.get()?;
+        let result = sqlx::query(
+            r#"
+            INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "#,
+        )
+        .bind(&message_id)
+        .bind(message_type)
+        .bind(from_did)
+        .bind(to_did)
+        .bind(thread_id)
+        .bind(parent_thread_id)
+        .bind(direction.to_string())
+        .bind(sqlx::types::Json(message_json))
+        .execute(&self.pool)
+        .await;
 
-            debug!("Logging {} message: {} ({})", direction, message_id, message_type);
-
-            let result = conn.execute(
-                "INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![
-                    message_id.clone(),
-                    message_type,
-                    from_did,
-                    to_did,
-                    thread_id,
-                    parent_thread_id,
-                    direction.to_string(),
-                    message_json
-                ],
-            );
-
-            match result {
-                Ok(_) => debug!("Successfully logged message: {}", message_id),
-                Err(e) => {
-                    if let rusqlite::Error::SqliteFailure(err, _) = &e {
-                        if err.code == rusqlite::ErrorCode::ConstraintViolation {
-                            // Message already logged, this is fine
-                            debug!("Message already logged: {}", message_id);
-                            return Ok(());
-                        }
-                    }
-                    return Err(StorageError::Database(e));
+        match result {
+            Ok(_) => {
+                debug!("Successfully logged message: {}", message_id);
+                Ok(())
+            }
+            Err(sqlx::Error::Database(db_err)) => {
+                if db_err.message().contains("UNIQUE") {
+                    // Message already logged, this is fine
+                    debug!("Message already logged: {}", message_id);
+                    Ok(())
+                } else {
+                    Err(StorageError::Database(sqlx::Error::Database(db_err)))
                 }
             }
-
-            Ok::<(), StorageError>(())
-        })
-        .await
-        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))??;
-
-        Ok(())
+            Err(e) => Err(StorageError::Database(e)),
+        }
     }
 
     /// Retrieve a message by its ID
@@ -361,37 +395,54 @@ impl Storage {
         &self,
         message_id: &str,
     ) -> Result<Option<Message>, StorageError> {
-        let pool = self.pool.clone();
-        let message_id = message_id.to_string();
+        let result = sqlx::query_as::<_, (
+            i64,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            String,
+            serde_json::Value,
+            String,
+        )>(
+            r#"
+            SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
+            FROM messages WHERE message_id = ?1
+            "#,
+        )
+        .bind(message_id)
+        .fetch_optional(&self.pool)
+        .await?;
 
-        task::spawn_blocking(move || {
-            let conn = pool.get()?;
-
-            let result = conn.query_row(
-                "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
-                 FROM messages WHERE message_id = ?1",
-                params![message_id],
-                |row| {
-                    Ok(Message {
-                        id: row.get(0)?,
-                        message_id: row.get(1)?,
-                        message_type: row.get(2)?,
-                        from_did: row.get(3)?,
-                        to_did: row.get(4)?,
-                        thread_id: row.get(5)?,
-                        parent_thread_id: row.get(6)?,
-                        direction: MessageDirection::try_from(row.get::<_, String>(7)?.as_str())
-                            .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
-                        message_json: row.get(8)?,
-                        created_at: row.get(9)?,
-                    })
-                },
-            ).optional()?;
-
-            Ok(result)
-        })
-        .await
-        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+        match result {
+            Some((
+                id,
+                message_id,
+                message_type,
+                from_did,
+                to_did,
+                thread_id,
+                parent_thread_id,
+                direction,
+                message_json,
+                created_at,
+            )) => Ok(Some(Message {
+                id,
+                message_id,
+                message_type,
+                from_did,
+                to_did,
+                thread_id,
+                parent_thread_id,
+                direction: MessageDirection::try_from(direction.as_str())
+                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                message_json,
+                created_at,
+            })),
+            None => Ok(None),
+        }
     }
 
     /// List messages with pagination and optional filtering
@@ -411,53 +462,88 @@ impl Storage {
         offset: u32,
         direction: Option<MessageDirection>,
     ) -> Result<Vec<Message>, StorageError> {
-        let pool = self.pool.clone();
+        let rows = if let Some(dir) = direction {
+            sqlx::query_as::<_, (
+                i64,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                String,
+                serde_json::Value,
+                String,
+            )>(
+                r#"
+                SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
+                FROM messages
+                WHERE direction = ?1
+                ORDER BY created_at DESC
+                LIMIT ?2 OFFSET ?3
+                "#,
+            )
+            .bind(dir.to_string())
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, (
+                i64,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                Option<String>,
+                String,
+                serde_json::Value,
+                String,
+            )>(
+                r#"
+                SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
+                FROM messages
+                ORDER BY created_at DESC
+                LIMIT ?1 OFFSET ?2
+                "#,
+            )
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        };
 
-        task::spawn_blocking(move || {
-            let conn = pool.get()?;
+        let mut messages = Vec::new();
+        for (
+            id,
+            message_id,
+            message_type,
+            from_did,
+            to_did,
+            thread_id,
+            parent_thread_id,
+            direction,
+            message_json,
+            created_at,
+        ) in rows
+        {
+            messages.push(Message {
+                id,
+                message_id,
+                message_type,
+                from_did,
+                to_did,
+                thread_id,
+                parent_thread_id,
+                direction: MessageDirection::try_from(direction.as_str())
+                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                message_json,
+                created_at,
+            });
+        }
 
-            let query = if let Some(dir) = direction {
-                format!(
-                    "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
-                     FROM messages
-                     WHERE direction = '{}'
-                     ORDER BY created_at DESC
-                     LIMIT {} OFFSET {}",
-                    dir, limit, offset
-                )
-            } else {
-                format!(
-                    "SELECT id, message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, created_at
-                     FROM messages
-                     ORDER BY created_at DESC
-                     LIMIT {} OFFSET {}",
-                    limit, offset
-                )
-            };
-
-            let mut stmt = conn.prepare(&query)?;
-
-            let messages = stmt.query_map([], |row| {
-                Ok(Message {
-                    id: row.get(0)?,
-                    message_id: row.get(1)?,
-                    message_type: row.get(2)?,
-                    from_did: row.get(3)?,
-                    to_did: row.get(4)?,
-                    thread_id: row.get(5)?,
-                    parent_thread_id: row.get(6)?,
-                    direction: MessageDirection::try_from(row.get::<_, String>(7)?.as_str())
-                        .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidData, e))))?,
-                    message_json: row.get(8)?,
-                    created_at: row.get(9)?,
-                })
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(messages)
-        })
-        .await
-        .map_err(|e| StorageError::Io(std::io::Error::new(std::io::ErrorKind::Other, e)))?
+        Ok(messages)
     }
 }
 
@@ -473,8 +559,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let db_path = dir.path().join("test.db");
 
-        let storage = Storage::new(Some(db_path)).await.unwrap();
-        assert!(storage.pool.get().is_ok());
+        let _storage = Storage::new(Some(db_path)).await.unwrap();
+        // Just verify we can create a storage instance
     }
 
     #[tokio::test]

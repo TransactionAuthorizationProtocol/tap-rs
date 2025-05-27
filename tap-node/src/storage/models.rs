@@ -76,7 +76,7 @@ pub struct Transaction {
     pub thread_id: Option<String>,
     pub message_type: String,
     pub status: TransactionStatus,
-    pub message_json: String,
+    pub message_json: serde_json::Value,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -119,6 +119,6 @@ pub struct Message {
     pub thread_id: Option<String>,
     pub parent_thread_id: Option<String>,
     pub direction: MessageDirection,
-    pub message_json: String,
+    pub message_json: serde_json::Value,
     pub created_at: String,
 }

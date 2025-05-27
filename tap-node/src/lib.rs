@@ -217,20 +217,9 @@ impl TapNode {
         // Create the resolver
         let resolver = Arc::new(NodeResolver::default());
 
-        // Initialize storage if feature is enabled
+        // Storage will be initialized on first use
         #[cfg(feature = "storage")]
-        let storage = {
-            let storage_path = config.storage_path.clone();
-            match tokio::task::block_in_place(|| {
-                tokio::runtime::Handle::current().block_on(storage::Storage::new(storage_path))
-            }) {
-                Ok(s) => Some(Arc::new(s)),
-                Err(e) => {
-                    log::error!("Failed to initialize storage: {}", e);
-                    None
-                }
-            }
-        };
+        let storage = None;
 
         let node = Self {
             agents,
@@ -260,6 +249,35 @@ impl TapNode {
         }
 
         node
+    }
+
+    /// Initialize storage asynchronously
+    #[cfg(feature = "storage")]
+    pub async fn init_storage(&mut self) -> Result<()> {
+        if let Some(storage_path) = self.config.storage_path.clone() {
+            match storage::Storage::new(Some(storage_path)).await {
+                Ok(s) => {
+                    self.storage = Some(Arc::new(s));
+                    Ok(())
+                }
+                Err(e) => {
+                    log::error!("Failed to initialize storage: {}", e);
+                    Err(Error::Storage(e.to_string()))
+                }
+            }
+        } else {
+            // Initialize with default path
+            match storage::Storage::new(None).await {
+                Ok(s) => {
+                    self.storage = Some(Arc::new(s));
+                    Ok(())
+                }
+                Err(e) => {
+                    log::error!("Failed to initialize storage: {}", e);
+                    Err(Error::Storage(e.to_string()))
+                }
+            }
+        }
     }
 
     /// Start the node

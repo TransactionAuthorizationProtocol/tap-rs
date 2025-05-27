@@ -52,6 +52,10 @@ pub enum Error {
     /// Message dropped during processing
     #[error("Message dropped: {0}")]
     MessageDropped(String),
+
+    /// Storage error
+    #[error("Storage error: {0}")]
+    Storage(String),
 }
 
 /// Result type for TAP Node

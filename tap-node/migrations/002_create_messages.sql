@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS messages (
     thread_id TEXT,
     parent_thread_id TEXT,
     direction TEXT NOT NULL CHECK (direction IN ('incoming', 'outgoing')),
-    message_json TEXT NOT NULL,
+    message_json JSON NOT NULL,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
 );
 
