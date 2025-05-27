@@ -220,14 +220,14 @@ impl Storage {
             )) => Ok(Some(Transaction {
                 id,
                 transaction_type: TransactionType::try_from(tx_type.as_str())
-                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                    .map_err(StorageError::InvalidTransactionType)?,
                 reference_id,
                 from_did,
                 to_did,
                 thread_id,
                 message_type,
                 status: TransactionStatus::try_from(status.as_str())
-                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                    .map_err(StorageError::InvalidTransactionType)?,
                 message_json,
                 created_at,
                 updated_at,
@@ -296,14 +296,14 @@ impl Storage {
             transactions.push(Transaction {
                 id,
                 transaction_type: TransactionType::try_from(tx_type.as_str())
-                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                    .map_err(StorageError::InvalidTransactionType)?,
                 reference_id,
                 from_did,
                 to_did,
                 thread_id,
                 message_type,
                 status: TransactionStatus::try_from(status.as_str())
-                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                    .map_err(StorageError::InvalidTransactionType)?,
                 message_json,
                 created_at,
                 updated_at,
@@ -437,7 +437,7 @@ impl Storage {
                 thread_id,
                 parent_thread_id,
                 direction: MessageDirection::try_from(direction.as_str())
-                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                    .map_err(StorageError::InvalidTransactionType)?,
                 message_json,
                 created_at,
             })),
@@ -537,7 +537,7 @@ impl Storage {
                 thread_id,
                 parent_thread_id,
                 direction: MessageDirection::try_from(direction.as_str())
-                    .map_err(|e| StorageError::InvalidTransactionType(e))?,
+                    .map_err(StorageError::InvalidTransactionType)?,
                 message_json,
                 created_at,
             });

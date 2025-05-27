@@ -317,9 +317,8 @@ mod storage_tests {
         assert_eq!(stored_msg.thread_id, Some("thread_123".to_string()));
         assert_eq!(stored_msg.direction, MessageDirection::Incoming);
 
-        // Verify the JSON content
-        let parsed: serde_json::Value = serde_json::from_str(&stored_msg.message_json).unwrap();
-        assert_eq!(parsed["body"]["test"], "data");
+        // Verify the JSON content - message_json is already a serde_json::Value
+        assert_eq!(stored_msg.message_json["body"]["test"], "data");
     }
 
     #[tokio::test]
@@ -597,7 +596,7 @@ mod storage_tests {
             .await
             .unwrap()
             .unwrap();
-        let parsed: PlainMessage = serde_json::from_str(&retrieved.message_json).unwrap();
+        let parsed: PlainMessage = serde_json::from_value(retrieved.message_json).unwrap();
 
         assert_eq!(parsed.body["nested"]["field"], "value");
         assert_eq!(parsed.body["nested"]["array"][1], 2);
