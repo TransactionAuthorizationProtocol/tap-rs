@@ -5,15 +5,18 @@
 This document describes the storage implementation for TAP Node, which provides:
 1. Persistent storage for Transfer and Payment transactions
 2. Complete audit trail of all incoming and outgoing messages
+3. DID-based storage organization with configurable root directory
 
 ## Features
 
-- **SQLite-based storage** with connection pooling via r2d2
+- **SQLite-based storage** with connection pooling via sqlx
 - **Dual-table design**: Separate tables for transactions and message audit trail
 - **Append-only design** for auditing and compliance
 - **Automatic schema migrations** on startup
 - **WASM compatibility** through feature gates
-- **Async-friendly API** using tokio spawn_blocking
+- **Native async API** using sqlx
+- **DID-based database paths** for multi-agent support
+- **Configurable TAP root directory** with sensible defaults
 
 ## Database Schema
 
@@ -48,7 +51,34 @@ Audit trail for all DIDComm messages:
 
 ### Configuration
 
-Set the database path via environment variable:
+#### Default DID-based Storage
+By default, storage uses a DID-based path structure under `~/.tap`:
+```rust
+let config = NodeConfig {
+    agent_did: Some("did:web:example.com".to_string()),
+    ..Default::default()
+};
+// Creates database at ~/.tap/did_web_example.com/transactions.db
+```
+
+#### Custom TAP Root Directory
+Set a custom root directory via environment variable:
+```bash
+export TAP_ROOT=/custom/tap/directory
+```
+
+Or configure in NodeConfig:
+```rust
+let config = NodeConfig {
+    agent_did: Some("did:web:example.com".to_string()),
+    tap_root: Some(PathBuf::from("/custom/tap/root")),
+    ..Default::default()
+};
+// Creates database at /custom/tap/root/did_web_example.com/transactions.db
+```
+
+#### Explicit Database Path
+For backward compatibility, you can still specify an explicit path:
 ```bash
 export TAP_NODE_DB_PATH=/path/to/database.db
 ```
@@ -64,8 +94,15 @@ let config = NodeConfig {
 ### API Examples
 
 ```rust
-// Storage is automatically initialized when creating a TapNode
-let node = TapNode::new(config);
+// Create a node with DID-based storage
+let config = NodeConfig {
+    agent_did: Some("did:web:example.com".to_string()),
+    ..Default::default()
+};
+let mut node = TapNode::new(config);
+
+// Initialize storage (required for async initialization)
+node.init_storage().await?;
 
 // Access storage
 if let Some(storage) = node.storage() {
@@ -81,6 +118,13 @@ if let Some(storage) = node.storage() {
     // Manual message logging (automatic for node operations)
     storage.log_message(&message, MessageDirection::Incoming).await?;
 }
+
+// Direct storage creation with DID
+let storage = Storage::new_with_did("did:web:example.com", None).await?;
+
+// Get default logs directory
+let logs_dir = Storage::default_logs_dir(None);
+// Returns ~/.tap/logs
 ```
 
 ## Feature Flags

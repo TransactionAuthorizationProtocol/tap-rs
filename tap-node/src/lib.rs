@@ -131,6 +131,12 @@ pub struct NodeConfig {
     /// Path to the storage database (None for default)
     #[cfg(feature = "storage")]
     pub storage_path: Option<std::path::PathBuf>,
+    /// Agent DID for storage organization
+    #[cfg(feature = "storage")]
+    pub agent_did: Option<String>,
+    /// Custom TAP root directory (defaults to ~/.tap)
+    #[cfg(feature = "storage")]
+    pub tap_root: Option<std::path::PathBuf>,
 }
 
 /// # The TAP Node
@@ -254,30 +260,37 @@ impl TapNode {
     /// Initialize storage asynchronously
     #[cfg(feature = "storage")]
     pub async fn init_storage(&mut self) -> Result<()> {
-        if let Some(storage_path) = self.config.storage_path.clone() {
-            match storage::Storage::new(Some(storage_path)).await {
-                Ok(s) => {
-                    self.storage = Some(Arc::new(s));
-                    Ok(())
+        let storage = if let Some(agent_did) = &self.config.agent_did {
+            // Use new DID-based storage structure
+            match storage::Storage::new_with_did(agent_did, self.config.tap_root.clone()).await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("Failed to initialize storage with DID: {}", e);
+                    return Err(Error::Storage(e.to_string()));
                 }
+            }
+        } else if let Some(storage_path) = self.config.storage_path.clone() {
+            // Use explicit path
+            match storage::Storage::new(Some(storage_path)).await {
+                Ok(s) => s,
                 Err(e) => {
                     log::error!("Failed to initialize storage: {}", e);
-                    Err(Error::Storage(e.to_string()))
+                    return Err(Error::Storage(e.to_string()));
                 }
             }
         } else {
             // Initialize with default path
             match storage::Storage::new(None).await {
-                Ok(s) => {
-                    self.storage = Some(Arc::new(s));
-                    Ok(())
-                }
+                Ok(s) => s,
                 Err(e) => {
                     log::error!("Failed to initialize storage: {}", e);
-                    Err(Error::Storage(e.to_string()))
+                    return Err(Error::Storage(e.to_string()));
                 }
             }
-        }
+        };
+
+        self.storage = Some(Arc::new(storage));
+        Ok(())
     }
 
     /// Start the node

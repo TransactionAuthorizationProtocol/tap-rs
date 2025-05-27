@@ -26,6 +26,7 @@ struct Args {
     logs_dir: Option<String>,
     structured_logs: bool,
     db_path: Option<String>,
+    tap_root: Option<String>,
 }
 
 impl Args {
@@ -86,6 +87,9 @@ impl Args {
             db_path: args
                 .opt_value_from_str("--db-path")?
                 .or_else(|| env::var("TAP_NODE_DB_PATH").ok()),
+            tap_root: args
+                .opt_value_from_str("--tap-root")?
+                .or_else(|| env::var("TAP_ROOT").ok()),
         };
 
         // Check for any remaining arguments (which would be invalid)
@@ -113,9 +117,10 @@ fn print_help() {
     println!("    -t, --timeout <SECONDS>      Request timeout in seconds [default: 30]");
     println!("    --agent-did <DID>            DID for the TAP agent (optional)");
     println!("    --agent-key <KEY>            Private key for the TAP agent (required if agent-did is provided)");
-    println!("    --logs-dir <DIR>             Directory for event logs [default: ./logs]");
+    println!("    --logs-dir <DIR>             Directory for event logs [default: ~/.tap/logs]");
     println!("    --structured-logs            Use structured JSON logging [default: true]");
-    println!("    --db-path <PATH>             Path to the database file [default: tap-http.db]");
+    println!("    --db-path <PATH>             Path to the database file [default: ~/.tap/<did>/transactions.db]");
+    println!("    --tap-root <DIR>             Custom TAP root directory [default: ~/.tap]");
     println!("    -v, --verbose                Enable verbose logging");
     println!("    --help                       Print help information");
     println!("    --version                    Print version information");
@@ -130,6 +135,7 @@ fn print_help() {
     println!("    TAP_LOGS_DIR                 Directory for event logs");
     println!("    TAP_STRUCTURED_LOGS          Use structured JSON logging");
     println!("    TAP_NODE_DB_PATH             Path to the database file");
+    println!("    TAP_ROOT                     Custom TAP root directory");
     println!();
     println!("NOTES:");
     println!("    - If no agent DID and key are provided, the server will:");
@@ -199,9 +205,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         event_logger: None,
     };
 
-    // Configure event logging
-    let logs_dir = args.logs_dir.unwrap_or_else(|| "./logs".to_string());
-    let log_path = PathBuf::from(&logs_dir).join("tap-http.log");
+    // Configure event logging - use TAP root-based default if not specified
+    let tap_root_path = args.tap_root.as_ref().map(PathBuf::from);
+    let logs_dir = args
+        .logs_dir
+        .map(PathBuf::from)
+        .unwrap_or_else(|| tap_node::storage::Storage::default_logs_dir(tap_root_path.clone()));
+    let log_path = logs_dir.join("tap-http.log");
 
     config.event_logger = Some(EventLoggerConfig {
         destination: LogDestination::File {
@@ -226,14 +236,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create node configuration with the agent and storage
     let mut node_config = NodeConfig::default();
 
-    // Configure storage path
-    let storage_path = args
-        .db_path
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("tap-http.db"));
-    node_config.storage_path = Some(storage_path.clone());
-
-    info!("Using database at: {:?}", storage_path);
+    // Configure storage
+    if let Some(db_path) = args.db_path {
+        // Use explicit database path
+        node_config.storage_path = Some(PathBuf::from(db_path));
+        info!(
+            "Using database at: {:?}",
+            node_config.storage_path.as_ref().unwrap()
+        );
+    } else {
+        // Use DID-based storage path
+        node_config.agent_did = Some(agent_did.clone());
+        node_config.tap_root = tap_root_path.clone();
+        let expected_path = tap_root_path
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .expect("Could not find home directory")
+                    .join(".tap")
+            })
+            .join(agent_did.replace(':', "_"))
+            .join("transactions.db");
+        info!("Using database at: {:?}", expected_path);
+    }
 
     // Create TAP Node
     let mut node = TapNode::new(node_config);

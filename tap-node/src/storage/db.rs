@@ -27,6 +27,14 @@ use super::models::{Message, MessageDirection, Transaction, TransactionStatus, T
 /// // Create storage with default path
 /// let storage = Storage::new(None).await?;
 ///
+/// // Create storage with DID-based path
+/// let agent_did = "did:web:example.com";
+/// let storage_with_did = Storage::new_with_did(agent_did, None).await?;
+///
+/// // Create storage with custom TAP root
+/// let custom_root = PathBuf::from("/custom/tap/root");
+/// let storage_custom = Storage::new_with_did(agent_did, Some(custom_root)).await?;
+///
 /// // Query transactions
 /// let transactions = storage.list_transactions(10, 0).await?;
 ///
@@ -42,6 +50,42 @@ pub struct Storage {
 }
 
 impl Storage {
+    /// Create a new Storage instance with an agent DID
+    ///
+    /// This will initialize a SQLite database in the TAP directory structure:
+    /// - Default: ~/.tap/{did}/transactions.db
+    /// - Custom root: {tap_root}/{did}/transactions.db
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_did` - The DID of the agent this storage is for
+    /// * `tap_root` - Optional custom root directory (defaults to ~/.tap)
+    ///
+    /// # Errors
+    ///
+    /// Returns `StorageError` if:
+    /// - Database initialization fails
+    /// - Migrations fail to run
+    /// - Connection pool cannot be created
+    pub async fn new_with_did(
+        agent_did: &str,
+        tap_root: Option<PathBuf>,
+    ) -> Result<Self, StorageError> {
+        let root_dir = tap_root.unwrap_or_else(|| {
+            env::var("TAP_ROOT").map(PathBuf::from).unwrap_or_else(|_| {
+                dirs::home_dir()
+                    .expect("Could not find home directory")
+                    .join(".tap")
+            })
+        });
+
+        // Sanitize the DID for use as a directory name
+        let sanitized_did = agent_did.replace(':', "_");
+        let db_path = root_dir.join(&sanitized_did).join("transactions.db");
+
+        Self::new(Some(db_path)).await
+    }
+
     /// Create a new Storage instance
     ///
     /// This will initialize a SQLite database at the specified path (or default location),
@@ -95,6 +139,27 @@ impl Storage {
             .map_err(|e| StorageError::Migration(e.to_string()))?;
 
         Ok(Storage { pool })
+    }
+
+    /// Get the default logs directory
+    ///
+    /// Returns the default directory for log files:
+    /// - Default: ~/.tap/logs
+    /// - Custom root: {tap_root}/logs
+    ///
+    /// # Arguments
+    ///
+    /// * `tap_root` - Optional custom root directory (defaults to ~/.tap)
+    pub fn default_logs_dir(tap_root: Option<PathBuf>) -> PathBuf {
+        let root_dir = tap_root.unwrap_or_else(|| {
+            env::var("TAP_ROOT").map(PathBuf::from).unwrap_or_else(|_| {
+                dirs::home_dir()
+                    .expect("Could not find home directory")
+                    .join(".tap")
+            })
+        });
+
+        root_dir.join("logs")
     }
 
     /// Insert a new transaction from a TAP message
@@ -561,6 +626,43 @@ mod tests {
 
         let _storage = Storage::new(Some(db_path)).await.unwrap();
         // Just verify we can create a storage instance
+    }
+
+    #[tokio::test]
+    async fn test_storage_with_did() {
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let dir = tempdir().unwrap();
+        let tap_root = dir.path().to_path_buf();
+        let agent_did = "did:web:example.com";
+
+        let storage = Storage::new_with_did(agent_did, Some(tap_root.clone()))
+            .await
+            .unwrap();
+
+        // Verify the database was created in the expected location
+        let expected_path = tap_root.join("did_web_example.com").join("transactions.db");
+        assert!(
+            expected_path.exists(),
+            "Database file not created at expected path"
+        );
+
+        // Test that we can use the storage
+        let messages = storage.list_messages(10, 0, None).await.unwrap();
+        assert_eq!(messages.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_default_logs_dir() {
+        let dir = tempdir().unwrap();
+        let tap_root = dir.path().to_path_buf();
+
+        let logs_dir = Storage::default_logs_dir(Some(tap_root.clone()));
+        assert_eq!(logs_dir, tap_root.join("logs"));
+
+        // Test with no tap_root (should use home dir)
+        let default_logs = Storage::default_logs_dir(None);
+        assert!(default_logs.to_string_lossy().contains(".tap/logs"));
     }
 
     #[tokio::test]
