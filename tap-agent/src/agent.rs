@@ -58,6 +58,9 @@ pub trait Agent {
         &self,
         packed_message: &str,
     ) -> Result<T>;
+
+    /// Receives a raw message (can be plain, JWE, or JWS) and returns the unpacked PlainMessage
+    async fn receive_raw_message(&self, raw_message: &str) -> Result<PlainMessage>;
 }
 
 /// A simplified Agent trait for WASM with relaxed bounds
@@ -941,5 +944,84 @@ impl crate::agent::Agent for TapAgent {
         // Deserialize the message body into the expected type
         serde_json::from_value::<T>(plain_message.body.clone())
             .map_err(|e| Error::Serialization(format!("Failed to deserialize message: {}", e)))
+    }
+
+    async fn receive_raw_message(&self, raw_message: &str) -> Result<PlainMessage> {
+        // Log the received raw message
+        println!("\n==== RECEIVING RAW MESSAGE ====");
+        println!("Agent DID: {}", self.get_agent_did());
+
+        // First try to parse as JSON to determine message type
+        let json_value: Value = serde_json::from_str(raw_message)
+            .map_err(|e| Error::Serialization(format!("Failed to parse message as JSON: {}", e)))?;
+
+        // Check if it's an encrypted message (JWE) or signed message (JWS)
+        let is_encrypted =
+            json_value.get("protected").is_some() && json_value.get("recipients").is_some();
+        let is_signed =
+            json_value.get("protected").is_some() && json_value.get("signatures").is_some();
+
+        println!(
+            "Message type detection: encrypted={}, signed={}",
+            is_encrypted, is_signed
+        );
+
+        if is_encrypted || is_signed {
+            println!(
+                "Detected {} message",
+                if is_encrypted { "encrypted" } else { "signed" }
+            );
+            println!("--- ENCRYPTED/SIGNED MESSAGE ---");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json_value).unwrap_or(raw_message.to_string())
+            );
+            println!("---------------------");
+
+            // Create unpack options
+            let unpack_options = UnpackOptions {
+                expected_security_mode: SecurityMode::Any,
+                expected_recipient_kid: Some(format!("{}#keys-1", self.get_agent_did())),
+                require_signature: false,
+            };
+
+            println!("Unpacking with options: {:?}", unpack_options);
+
+            // Unpack the message
+            let plain_message: PlainMessage =
+                match String::unpack(&raw_message.to_string(), &*self.key_manager, unpack_options)
+                    .await
+                {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        println!("Failed to unpack message: {}", e);
+                        return Err(e);
+                    }
+                };
+
+            // Log the unpacked message
+            println!("--- UNPACKED CONTENT ---");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&plain_message)
+                    .unwrap_or_else(|_| format!("{:?}", plain_message))
+            );
+            println!("------------------------");
+
+            Ok(plain_message)
+        } else {
+            // It's already a plain message
+            println!("Detected plain message");
+            println!("--- PLAIN MESSAGE ---");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json_value).unwrap_or(raw_message.to_string())
+            );
+            println!("---------------------");
+
+            // Parse directly as PlainMessage
+            serde_json::from_str::<PlainMessage>(raw_message)
+                .map_err(|e| Error::Serialization(format!("Failed to parse PlainMessage: {}", e)))
+        }
     }
 }

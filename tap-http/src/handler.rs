@@ -9,13 +9,12 @@
 use crate::error::{Error, Result};
 use crate::event::EventBus;
 use bytes::Bytes;
-use chrono;
 use serde::Serialize;
 use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Instant;
-use tap_msg::didcomm::PlainMessage;
+use tap_agent::Agent;
 use tap_node::TapNode;
 use tracing::{debug, error, info, warn};
 use warp::{self, hyper::StatusCode, reply::json, Reply};
@@ -220,190 +219,55 @@ async fn process_tap_message_raw(
     node: Arc<TapNode>,
     event_bus: Arc<EventBus>,
 ) -> Result<()> {
-    // Try to parse as JSON to check if it's encrypted or plain
-    let json_value: serde_json::Value = serde_json::from_str(message_str)
-        .map_err(|e| Error::Json(format!("Failed to parse message as JSON: {}", e)))?;
+    // Try to get the first agent to process the raw message
+    // In the future, we might want to be smarter about which agent to use
+    let agent_dids = node.agents().get_all_dids();
+    if agent_dids.is_empty() {
+        return Err(Error::Node("No agents registered".to_string()));
+    }
 
-    // Check if it's an encrypted/signed message (has "protected" field) or plain message
-    let is_encrypted = json_value.get("protected").is_some();
+    // Try each agent until one can process the message
+    for did in &agent_dids {
+        match node.agents().get_agent(did).await {
+            Ok(agent) => {
+                // Use the new receive_raw_message method
+                match agent.receive_raw_message(message_str).await {
+                    Ok(plain_message) => {
+                        // Successfully unpacked the message, now process it through the node
+                        debug!("Successfully unpacked message with agent {}", did);
 
-    if is_encrypted {
-        // This is an encrypted message - we need to route it to an agent for decryption
-        // For now, we'll pass it to the node's receive_encrypted_message method
-        match node
-            .receive_encrypted_message(message_str.to_string())
-            .await
-        {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                let error_str = e.to_string();
+                        // Log the plain message
+                        event_bus
+                            .publish_message_received(
+                                plain_message.id.clone(),
+                                plain_message.type_.clone(),
+                                Some(plain_message.from.clone()),
+                                Some(plain_message.to.join(", ")),
+                            )
+                            .await;
 
-                // Categorize TapNode errors
-                if error_str.contains("authentication") || error_str.contains("unauthorized") {
-                    Err(Error::Authentication(format!(
-                        "Authentication failed: {}",
-                        error_str
-                    )))
-                } else if error_str.contains("validation") || error_str.contains("invalid") {
-                    Err(Error::Validation(format!(
-                        "Node validation failed: {}",
-                        error_str
-                    )))
-                } else {
-                    Err(Error::Node(error_str))
+                        // Process the plain message through the node
+                        return node
+                            .receive_message(plain_message)
+                            .await
+                            .map_err(|e| Error::Node(e.to_string()));
+                    }
+                    Err(e) => {
+                        debug!("Agent {} couldn't process message: {}", did, e);
+                        continue;
+                    }
                 }
             }
-        }
-    } else {
-        // Parse as PlainMessage
-        let message: PlainMessage = serde_json::from_value(json_value)
-            .map_err(|e| Error::Json(format!("Failed to parse as PlainMessage: {}", e)))?;
-
-        // Log message received event
-        event_bus
-            .publish_message_received(
-                message.id.clone(),
-                message.typ.clone(),
-                Some(message.from.clone()),
-                if message.to.is_empty() {
-                    None
-                } else {
-                    Some(message.to.join(", "))
-                },
-            )
-            .await;
-
-        // Process as before
-        process_tap_message(message, node).await
-    }
-}
-
-/// Process a plain TAP message using the TAP Node.
-///
-/// This function performs pre-processing validation on DIDComm messages before
-/// forwarding them to the TAP Node for processing. The validation includes:
-///
-/// 1. Checking for required fields (id, type)
-/// 2. Validating the message type conforms to the TAP protocol
-///    - Must contain "tap.rsvp" or "https://tap.rsvp" in the type
-///
-/// After validation, the TapNode.receive_message method will:
-/// 1. Further validate and verify the message
-/// 2. Route the message to the appropriate agent
-/// 3. Process the message according to the TAP protocol
-///
-/// # Parameters
-/// * `message` - The DIDComm message to process
-/// * `node` - The TAP Node instance that will process the message
-///
-/// # Returns
-/// * `Ok(())` if processing succeeded
-/// * `Err(Error)` if validation fails or message processing failed
-///
-/// # Error Conditions
-/// The function will return an error if:
-/// * The message is missing required fields
-/// * The message type is not a valid TAP protocol message
-/// * The TAP Node encounters an error during processing
-async fn process_tap_message(message: PlainMessage, node: Arc<TapNode>) -> Result<()> {
-    // Basic validation for the message
-    // Ensure message has required fields
-    if message.typ.is_empty() || message.id.is_empty() {
-        return Err(Error::Validation(
-            "Missing required message fields: type or id".to_string(),
-        ));
-    }
-
-    // Check for missing from/to fields if required
-    if message.from.is_empty() || message.to.is_empty() {
-        return Err(Error::Validation(
-            "Message missing sender or recipient information".to_string(),
-        ));
-    }
-
-    // Log the complete message for debugging (always log this for now)
-    error!("RECEIVED DIDCOMM MESSAGE BEFORE PROCESSING:\n- id: {}\n- typ: {}\n- type_: {}\n- from: {}\n- to: {:?}\n- body: {}\n", 
-           message.id, message.typ, message.type_, message.from, message.to,
-           serde_json::to_string_pretty(&message.body).unwrap_or_default());
-
-    // Validate the message conforms to TAP protocol
-    // Check both type_ and typ fields for TAP protocol identifiers
-    let valid_types = ["tap.rsvp", "https://tap.rsvp"];
-
-    // Check if type_ field contains TAP protocol identifier
-    let is_valid_type = valid_types
-        .iter()
-        .any(|valid_type| message.type_.contains(valid_type));
-
-    if !is_valid_type {
-        error!(
-            "TYPE FIELD VALIDATION FAILED: message.type_ = '{}'",
-            message.type_
-        );
-    }
-
-    // Also check if typ field contains TAP protocol identifier
-    let is_valid_typ = valid_types
-        .iter()
-        .any(|valid_type| message.typ.contains(valid_type));
-
-    if !is_valid_typ {
-        error!(
-            "TYP FIELD VALIDATION FAILED: message.typ = '{}'",
-            message.typ
-        );
-    }
-
-    // If either field is valid, allow the message through
-    let is_valid = is_valid_type || is_valid_typ;
-
-    if !is_valid {
-        error!(
-            "MESSAGE TYPE VALIDATION FAILED: typ={}, type_={}",
-            message.typ, message.type_
-        );
-        return Err(Error::Validation(format!(
-            "Unsupported message type: {}, expected TAP protocol message",
-            message.typ
-        )));
-    }
-
-    // Validate that message has valid timestamps
-    if let Some(created_time) = message.created_time {
-        let current_time = chrono::Utc::now().timestamp() as u64;
-
-        // Check for future timestamps (within a small margin)
-        if created_time > current_time + 300 {
-            // 5 minute margin
-            return Err(Error::Validation(format!(
-                "Message has future timestamp: {} (current time: {})",
-                created_time, current_time
-            )));
-        }
-    }
-
-    // Process the message through the TAP Node using the receive_message method
-    match node.receive_message(message).await {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            let error_str = e.to_string();
-
-            // Categorize TapNode errors
-            if error_str.contains("authentication") || error_str.contains("unauthorized") {
-                Err(Error::Authentication(format!(
-                    "Authentication failed: {}",
-                    error_str
-                )))
-            } else if error_str.contains("validation") || error_str.contains("invalid") {
-                Err(Error::Validation(format!(
-                    "Node validation failed: {}",
-                    error_str
-                )))
-            } else {
-                Err(Error::Node(error_str))
+            Err(e) => {
+                warn!("Failed to get agent {}: {}", did, e);
+                continue;
             }
         }
     }
+
+    Err(Error::Node(
+        "No agent could process the message".to_string(),
+    ))
 }
 
 /// Create a JSON success response.
