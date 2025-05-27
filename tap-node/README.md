@@ -85,6 +85,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         processor_pool: None,
         #[cfg(feature = "storage")]
         storage_path: None, // Uses default path: ./tap-node.db
+        #[cfg(feature = "storage")]
+        agent_did: None,
+        #[cfg(feature = "storage")]
+        tap_root: None,
     };
 
     // Create a new node
