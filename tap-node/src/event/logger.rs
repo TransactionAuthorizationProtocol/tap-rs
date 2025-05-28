@@ -305,7 +305,7 @@ impl EventLogger {
         });
 
         // Serialize to a string
-        serde_json::to_string(&log_entry).map_err(Error::Serialization)
+        serde_json::to_string(&log_entry).map_err(|e| Error::Serialization(e.to_string()))
     }
 }
 

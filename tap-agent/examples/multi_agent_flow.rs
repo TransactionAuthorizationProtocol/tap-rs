@@ -194,9 +194,10 @@ fn main() -> Result<()> {
         println!("Step 3: Beneficiary VASP receives the transfer");
 
         // Receive at VASP
-        let received_transfer_vasp: Transfer = beneficiary_vasp
+        let plain_message = beneficiary_vasp
             .receive_message(&packed_transfer_vasp)
             .await?;
+        let received_transfer_vasp: Transfer = serde_json::from_value(plain_message.body)?;
 
         println!("Transfer received by beneficiary VASP");
         println!("  Transfer ID: {}", transfer_id);
@@ -244,8 +245,8 @@ fn main() -> Result<()> {
         println!("Step 5: Originator VASP receives the AddAgents message");
 
         // Receive AddAgents message
-        let received_add_agents: AddAgents =
-            originator_vasp.receive_message(&packed_add_agents).await?;
+        let plain_message = originator_vasp.receive_message(&packed_add_agents).await?;
+        let received_add_agents: AddAgents = serde_json::from_value(plain_message.body)?;
 
         println!("Originator VASP received AddAgents message:");
         println!("  Transfer ID: {}", received_add_agents.transaction_id);
@@ -281,7 +282,8 @@ fn main() -> Result<()> {
             .await?;
 
         // Originator receives the rejection
-        let received_reject: Reject = originator_vasp.receive_message(&packed_reject).await?;
+        let plain_message = originator_vasp.receive_message(&packed_reject).await?;
+        let received_reject: Reject = serde_json::from_value(plain_message.body)?;
         println!("Originator VASP received rejection:");
         println!("  Transfer ID: {}", received_reject.transaction_id);
         println!("  Reason: {}", received_reject.reason);
@@ -303,9 +305,10 @@ fn main() -> Result<()> {
             .await?;
 
         // Originator receives the authorization
-        let received_authorize: Authorize = originator_vasp
+        let plain_message = originator_vasp
             .receive_message(&packed_authorize_vasp)
             .await?;
+        let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator VASP received authorization:");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
         if let Some(note) = &received_authorize.note {
@@ -325,9 +328,10 @@ fn main() -> Result<()> {
             .await?;
 
         // Originator wallet receives the authorization
-        let received_authorize_wallet: Authorize = originator_wallet
+        let plain_message = originator_wallet
             .receive_message(&packed_authorize_wallet)
             .await?;
+        let received_authorize_wallet: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator wallet received authorization:");
         println!(
             "  Transfer ID: {}",
@@ -357,9 +361,10 @@ fn main() -> Result<()> {
             .await?;
 
         // Beneficiary wallet API receives the technical details
-        let received_api_authorize: Authorize = beneficiary_wallet_api
+        let plain_message = beneficiary_wallet_api
             .receive_message(&packed_api_authorize)
             .await?;
+        let received_api_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary wallet API received technical details:");
         println!("  Transfer ID: {}", received_api_authorize.transaction_id);
         if let Some(note) = &received_api_authorize.note {
@@ -408,9 +413,10 @@ fn main() -> Result<()> {
             .await?;
 
         // Beneficiary wallet API receives settlement confirmation
-        let received_api_settle: Settle = beneficiary_wallet_api
+        let plain_message = beneficiary_wallet_api
             .receive_message(&packed_api_settle)
             .await?;
+        let received_api_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary wallet API received settlement confirmation:");
         println!("  Transfer ID: {}", received_api_settle.transaction_id);
         println!("  Settlement ID: {}", received_api_settle.settlement_id);
@@ -422,12 +428,14 @@ fn main() -> Result<()> {
         println!("Step 12: Beneficiaries receive settlement confirmation");
 
         // Receive at VASP and wallet
-        let received_settle_vasp: Settle = beneficiary_vasp
+        let plain_message = beneficiary_vasp
             .receive_message(&packed_settle_vasp)
             .await?;
-        let _received_settle_wallet: Settle = beneficiary_wallet
+        let received_settle_vasp: Settle = serde_json::from_value(plain_message.body)?;
+        let plain_message_wallet = beneficiary_wallet
             .receive_message(&packed_settle_wallet)
             .await?;
+        let _received_settle_wallet: Settle = serde_json::from_value(plain_message_wallet.body)?;
 
         println!("Settlement received by beneficiary VASP and wallet:");
         println!("  Transfer ID: {}", received_settle_vasp.transaction_id);

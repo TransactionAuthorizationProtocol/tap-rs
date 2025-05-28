@@ -234,7 +234,10 @@ async fn test_didcomm_endpoint_content_types() {
 
     let response = client
         .post(format!("http://127.0.0.1:{}/didcomm", port))
-        .header("Content-Type", "application/didcomm-signed+json; charset=utf-8")
+        .header(
+            "Content-Type",
+            "application/didcomm-signed+json; charset=utf-8",
+        )
         .json(&signed_msg)
         .timeout(Duration::from_secs(5))
         .send()

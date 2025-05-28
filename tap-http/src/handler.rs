@@ -14,9 +14,8 @@ use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Instant;
-use tap_agent::Agent;
 use tap_node::TapNode;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use warp::{self, hyper::StatusCode, reply::json, Reply};
 
 /// Response structure for health checks.
@@ -101,49 +100,57 @@ pub async fn handle_didcomm(
         )
         .await;
 
-    // Convert bytes to string
+    // Validate content type
+    if let Err(e) = validate_message_security(content_type.as_deref()) {
+        error!("Content-Type validation failed: {}", e);
+
+        let response = e.to_response();
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        event_bus
+            .publish_response_sent(e.status_code(), 200, duration_ms)
+            .await;
+
+        return Ok(response);
+    }
+
+    // Parse to JSON
     let message_str = match std::str::from_utf8(&body) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to parse request body as UTF-8: {}", e);
 
-            // Log message error event
-            event_bus
-                .publish_message_error(
-                    "parse_error".to_string(),
-                    format!("Failed to parse request body as UTF-8: {}", e),
-                    None,
-                )
-                .await;
-
-            // Calculate response size and duration
             let response =
                 json_error_response(StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body");
-            let response_size = 200; // Approximate size
             let duration_ms = start_time.elapsed().as_millis() as u64;
 
-            // Log response sent event
             event_bus
-                .publish_response_sent(StatusCode::BAD_REQUEST, response_size, duration_ms)
+                .publish_response_sent(StatusCode::BAD_REQUEST, 200, duration_ms)
                 .await;
 
             return Ok(response);
         }
     };
 
-    // The message could be either encrypted/signed or plain
-    // Pass the raw message string to the TAP Node for processing
-    debug!("Processing DIDComm message (encrypted or plain)");
+    let message_value: serde_json::Value = match serde_json::from_str(message_str) {
+        Ok(v) => v,
+        Err(e) => {
+            error!("Failed to parse message as JSON: {}", e);
 
-    // Process the raw message using the TAP Node
-    match process_tap_message_raw(
-        content_type.as_deref(),
-        message_str,
-        node,
-        event_bus.clone(),
-    )
-    .await
-    {
+            let response =
+                json_error_response(StatusCode::BAD_REQUEST, "Invalid JSON in request body");
+            let duration_ms = start_time.elapsed().as_millis() as u64;
+
+            event_bus
+                .publish_response_sent(StatusCode::BAD_REQUEST, 200, duration_ms)
+                .await;
+
+            return Ok(response);
+        }
+    };
+
+    // Let the node handle routing
+    match node.receive_message(message_value).await {
         Ok(_) => {
             info!("DIDComm message processed successfully");
 
@@ -160,40 +167,19 @@ pub async fn handle_didcomm(
             Ok(response)
         }
         Err(e) => {
-            // Log error with appropriate severity
-            match e.severity() {
-                crate::error::ErrorSeverity::Info => debug!("Message processing error: {}", e),
-                crate::error::ErrorSeverity::Warning => warn!("Message processing warning: {}", e),
-                crate::error::ErrorSeverity::Critical => {
-                    error!("Critical error processing message: {}", e)
-                }
-            }
+            error!("Failed to process message: {}", e);
 
             // Log message error event
-            let error_type = match &e {
-                Error::DIDComm(_) => "didcomm_error",
-                Error::Validation(_) => "validation_error",
-                Error::Authentication(_) => "authentication_error",
-                Error::Json(_) => "json_error",
-                Error::Http(_) => "http_error",
-                Error::Node(_) => "node_error",
-                Error::Config(_) => "configuration_error",
-                Error::Io(_) => "io_error",
-                Error::RateLimit(_) => "rate_limit_error",
-                Error::Tls(_) => "tls_error",
-                Error::Unknown(_) => "unknown_error",
-            };
-
             event_bus
                 .publish_message_error(
-                    error_type.to_string(),
+                    "node_error".to_string(),
                     e.to_string(),
                     None, // We don't have message ID in this context
                 )
                 .await;
 
             // Create error response
-            let response = e.to_response();
+            let response = json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
 
             // Calculate response size and duration (approximate)
             let response_size = 200; // Approximate size
@@ -201,10 +187,14 @@ pub async fn handle_didcomm(
 
             // Log response sent event
             event_bus
-                .publish_response_sent(e.status_code(), response_size, duration_ms)
+                .publish_response_sent(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    response_size,
+                    duration_ms,
+                )
                 .await;
 
-            // Return the structured error response
+            // Return the error response
             Ok(response)
         }
     }
@@ -250,80 +240,6 @@ fn validate_message_security(content_type: Option<&str>) -> Result<()> {
             ))
         }
     }
-}
-
-/// Process a raw TAP message using the TAP Node.
-///
-/// This function handles encrypted/signed DIDComm messages only.
-/// Plain messages are rejected for security reasons.
-///
-/// # Parameters
-/// * `content_type` - The Content-Type header value
-/// * `message_str` - The raw message string (must be encrypted or signed)
-/// * `node` - The TAP Node instance that will process the message
-/// * `event_bus` - The event bus for logging
-///
-/// # Returns
-/// * `Ok(())` if processing succeeded
-/// * `Err(Error)` if validation fails or message processing failed
-async fn process_tap_message_raw(
-    content_type: Option<&str>,
-    message_str: &str,
-    node: Arc<TapNode>,
-    event_bus: Arc<EventBus>,
-) -> Result<()> {
-    // First, validate that the message has a valid content type for signed or encrypted messages
-    validate_message_security(content_type)?;
-
-    // Try to get the first agent to process the raw message
-    // In the future, we might want to be smarter about which agent to use
-    let agent_dids = node.agents().get_all_dids();
-    if agent_dids.is_empty() {
-        return Err(Error::Node("No agents registered".to_string()));
-    }
-
-    // Try each agent until one can process the message
-    for did in &agent_dids {
-        match node.agents().get_agent(did).await {
-            Ok(agent) => {
-                // Use the new receive_raw_message method
-                match agent.receive_raw_message(message_str).await {
-                    Ok(plain_message) => {
-                        // Successfully unpacked the message, now process it through the node
-                        debug!("Successfully unpacked message with agent {}", did);
-
-                        // Log the plain message
-                        event_bus
-                            .publish_message_received(
-                                plain_message.id.clone(),
-                                plain_message.type_.clone(),
-                                Some(plain_message.from.clone()),
-                                Some(plain_message.to.join(", ")),
-                            )
-                            .await;
-
-                        // Process the plain message through the node
-                        return node
-                            .receive_message(plain_message)
-                            .await
-                            .map_err(|e| Error::Node(e.to_string()));
-                    }
-                    Err(e) => {
-                        debug!("Agent {} couldn't process message: {}", did, e);
-                        continue;
-                    }
-                }
-            }
-            Err(e) => {
-                warn!("Failed to get agent {}: {}", did, e);
-                continue;
-            }
-        }
-    }
-
-    Err(Error::Node(
-        "No agent could process the message".to_string(),
-    ))
 }
 
 /// Create a JSON success response.
@@ -436,9 +352,14 @@ mod tests {
 
         // Test with invalid UTF-8 data
         let invalid_bytes = Bytes::from(vec![0xFF, 0xFF]);
-        let response = handle_didcomm(None, invalid_bytes, node.clone(), event_bus)
-            .await
-            .unwrap();
+        let response = handle_didcomm(
+            Some("application/didcomm-signed+json".to_string()),
+            invalid_bytes,
+            node.clone(),
+            event_bus,
+        )
+        .await
+        .unwrap();
 
         // Convert the response to bytes and parse as JSON
         let response_bytes = to_bytes(response.into_response().into_body())

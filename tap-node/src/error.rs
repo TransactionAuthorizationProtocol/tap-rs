@@ -23,7 +23,7 @@ pub enum Error {
 
     /// Serialization error
     #[error("Serialization error: {0}")]
-    Serialization(serde_json::Error),
+    Serialization(String),
 
     /// PlainMessage dispatch error
     #[error("PlainMessage dispatch error: {0}")]
@@ -56,6 +56,10 @@ pub enum Error {
     /// Storage error
     #[error("Storage error: {0}")]
     Storage(String),
+
+    /// Verification error
+    #[error("Verification error: {0}")]
+    Verification(String),
 }
 
 /// Result type for TAP Node

@@ -77,7 +77,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 2: Customer receives and processes the payment request
         println!("Step 2: Customer receives and processes the payment request");
 
-        let received_payment: Payment = customer_agent.receive_message(&packed_payment).await?;
+        let plain_message = customer_agent.receive_message(&packed_payment).await?;
+        let received_payment: Payment = serde_json::from_value(plain_message.body)?;
         println!("Customer received payment request:");
         println!("  Asset: {}", received_payment.asset.as_ref().unwrap());
         println!("  Amount: {}", received_payment.amount);
@@ -104,7 +105,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 4: Merchant receives the cancellation
         println!("Step 4: Merchant receives the cancellation");
 
-        let received_cancel: Cancel = merchant_agent.receive_message(&packed_cancel).await?;
+        let plain_message = merchant_agent.receive_message(&packed_cancel).await?;
+        let received_cancel: Cancel = serde_json::from_value(plain_message.body)?;
         println!("Merchant received cancellation:");
         println!("  Payment ID: {}", received_cancel.transaction_id);
         if let Some(reason) = &received_cancel.reason {

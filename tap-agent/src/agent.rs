@@ -11,7 +11,6 @@ use crate::message_packing::{PackOptions, Packable, UnpackOptions, Unpackable};
 use async_trait::async_trait;
 #[cfg(feature = "native")]
 use reqwest::Client;
-use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::sync::Arc;
 #[cfg(feature = "native")]
@@ -33,6 +32,35 @@ pub struct DeliveryResult {
 }
 
 /// The Agent trait defines the interface for all TAP agents
+///
+/// This trait supports both standalone agent usage and integration with TAP Node.
+/// The different receive methods are designed for different usage patterns:
+///
+/// # Usage Patterns
+///
+/// ## Node Integration
+/// - [`receive_encrypted_message`]: Called by TAP Node for encrypted messages
+/// - [`receive_plain_message`]: Called by TAP Node for verified/decrypted messages
+///
+/// ## Standalone Usage  
+/// - [`receive_message`]: Handles any message type (plain, signed, encrypted)
+///
+/// ## Message Sending
+/// - [`send_message`]: Sends messages to recipients with optional delivery
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use tap_agent::{Agent, TapAgent};
+/// use tap_msg::didcomm::PlainMessage;
+///
+/// async fn process_encrypted_message(agent: &dyn Agent, jwe_json: &serde_json::Value) {
+///     // This would typically be called by TAP Node
+///     if let Err(e) = agent.receive_encrypted_message(jwe_json).await {
+///         eprintln!("Failed to process encrypted message: {}", e);
+///     }
+/// }
+/// ```
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
 #[cfg(not(target_arch = "wasm32"))]
@@ -41,9 +69,22 @@ pub trait Agent {
     fn get_agent_did(&self) -> &str;
 
     /// Gets the service endpoint URL for a recipient
+    ///
+    /// This method resolves how to reach a given recipient, which could be:
+    /// - A direct URL if `to` is already a URL
+    /// - A DID resolution if `to` is a DID
     async fn get_service_endpoint(&self, to: &str) -> Result<Option<String>>;
 
     /// Sends a message to one or more recipients
+    ///
+    /// # Parameters
+    /// - `message`: The message to send (must implement TapMessageBody)
+    /// - `to`: List of recipient DIDs or URLs
+    /// - `deliver`: Whether to actually deliver the message or just pack it
+    ///
+    /// # Returns
+    /// - Packed message string
+    /// - Vector of delivery results (empty if deliver=false)
     async fn send_message<
         T: TapMessageBody + serde::Serialize + Send + Sync + std::fmt::Debug + 'static,
     >(
@@ -53,14 +94,42 @@ pub trait Agent {
         deliver: bool,
     ) -> Result<(String, Vec<DeliveryResult>)>;
 
-    /// Receives a message
-    async fn receive_message<T: TapMessageBody + DeserializeOwned + Send>(
-        &self,
-        packed_message: &str,
-    ) -> Result<T>;
+    /// Receives an encrypted message (decrypt and process)
+    ///
+    /// This method is typically called by TAP Node when routing encrypted
+    /// messages to agents. The agent should:
+    /// 1. Parse the JWE from the JSON value
+    /// 2. Attempt to decrypt using its private keys
+    /// 3. Process the resulting PlainMessage
+    ///
+    /// # Parameters
+    /// - `jwe_value`: JSON representation of the encrypted message (JWE)
+    async fn receive_encrypted_message(&self, jwe_value: &Value) -> Result<()>;
 
-    /// Receives a raw message (can be plain, JWE, or JWS) and returns the unpacked PlainMessage
-    async fn receive_raw_message(&self, raw_message: &str) -> Result<PlainMessage>;
+    /// Receives a plain message (already verified/decrypted)
+    ///
+    /// This method is called by TAP Node after signature verification
+    /// or by other agents after decryption. The message is ready for
+    /// business logic processing.
+    ///
+    /// # Parameters
+    /// - `message`: The verified/decrypted PlainMessage
+    async fn receive_plain_message(&self, message: PlainMessage) -> Result<()>;
+
+    /// Receives a raw message (for standalone usage - handles any message type)
+    ///
+    /// This method handles the complete message processing pipeline for
+    /// standalone agent usage. It can process:
+    /// - Plain messages (passed through)
+    /// - Signed messages (signature verified)
+    /// - Encrypted messages (decrypted)
+    ///
+    /// # Parameters
+    /// - `raw_message`: JSON string of any message type
+    ///
+    /// # Returns
+    /// - The processed PlainMessage
+    async fn receive_message(&self, raw_message: &str) -> Result<PlainMessage>;
 }
 
 /// A simplified Agent trait for WASM with relaxed bounds
@@ -620,6 +689,25 @@ impl TapAgent {
         }
     }
 
+    /// Internal method to process a PlainMessage
+    async fn process_message_internal(&self, message: PlainMessage) -> Result<()> {
+        // This is where actual message processing logic would go
+        // For now, just log that we processed it
+        println!(
+            "Processing message: {} of type {}",
+            message.id, message.type_
+        );
+
+        // TODO: Add actual message processing logic here
+        // This could include:
+        // - Validating the message against policies
+        // - Updating internal state
+        // - Triggering workflows
+        // - Generating responses
+
+        Ok(())
+    }
+
     /// Determine the appropriate security mode for a message type
     ///
     /// This method implements TAP protocol rules for which security modes
@@ -884,69 +972,40 @@ impl crate::agent::Agent for TapAgent {
         Ok((packed, delivery_results))
     }
 
-    async fn receive_message<T: TapMessageBody + DeserializeOwned + Send>(
-        &self,
-        packed_message: &str,
-    ) -> Result<T> {
-        // Log the received packed message
-        println!("\n==== RECEIVING TAP MESSAGE ====");
-        println!("--- PACKED MESSAGE ---");
-        println!(
-            "{}",
-            serde_json::from_str::<Value>(packed_message)
-                .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed_message.to_string()))
-                .unwrap_or(packed_message.to_string())
-        );
-        println!("---------------------");
+    async fn receive_encrypted_message(&self, jwe_value: &Value) -> Result<()> {
+        // Log the received encrypted message
+        println!("\n==== RECEIVING ENCRYPTED MESSAGE ====");
+        println!("Agent DID: {}", self.get_agent_did());
+
+        // Parse as JWE
+        let jwe: crate::message::Jwe = serde_json::from_value(jwe_value.clone())
+            .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
 
         // Create unpack options
         let unpack_options = UnpackOptions {
-            expected_security_mode: SecurityMode::Any,
+            expected_security_mode: SecurityMode::AuthCrypt,
             expected_recipient_kid: Some(format!("{}#keys-1", self.get_agent_did())),
             require_signature: false,
         };
 
-        // Unpack the message using the Unpackable trait
-        let plain_message: PlainMessage = String::unpack(
-            &packed_message.to_string(),
-            &*self.key_manager,
-            unpack_options,
-        )
-        .await?;
+        // Decrypt the message
+        let plain_message =
+            crate::message::Jwe::unpack(&jwe, &*self.key_manager, unpack_options).await?;
 
-        // Log the unpacked message
-        println!("--- UNPACKED CONTENT ---");
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&plain_message)
-                .unwrap_or_else(|_| format!("{:?}", plain_message))
-        );
-        println!("------------------------");
-
-        // Get the message type from the unpacked message
-        let message_type = &plain_message.type_;
-
-        // Validate the message type
-        if message_type != T::message_type() {
-            println!(
-                "❌ Message type validation failed: expected {}, got {}",
-                T::message_type(),
-                message_type
-            );
-            return Err(Error::Validation(format!(
-                "Expected message type {} but got {}",
-                T::message_type(),
-                message_type
-            )));
-        }
-        println!("✅ Message type validation passed: {}", message_type);
-
-        // Deserialize the message body into the expected type
-        serde_json::from_value::<T>(plain_message.body.clone())
-            .map_err(|e| Error::Serialization(format!("Failed to deserialize message: {}", e)))
+        // Process the decrypted message
+        self.process_message_internal(plain_message).await
     }
 
-    async fn receive_raw_message(&self, raw_message: &str) -> Result<PlainMessage> {
+    async fn receive_plain_message(&self, message: PlainMessage) -> Result<()> {
+        // Process already verified/decrypted message
+        println!("\n==== RECEIVING PLAIN MESSAGE ====");
+        println!("Message ID: {}", message.id);
+        println!("Message Type: {}", message.type_);
+
+        self.process_message_internal(message).await
+    }
+
+    async fn receive_message(&self, raw_message: &str) -> Result<PlainMessage> {
         // Log the received raw message
         println!("\n==== RECEIVING RAW MESSAGE ====");
         println!("Agent DID: {}", self.get_agent_did());
@@ -966,12 +1025,57 @@ impl crate::agent::Agent for TapAgent {
             is_encrypted, is_signed
         );
 
-        if is_encrypted || is_signed {
+        if is_signed {
+            println!("Detected signed message");
+            println!("--- SIGNED MESSAGE ---");
             println!(
-                "Detected {} message",
-                if is_encrypted { "encrypted" } else { "signed" }
+                "{}",
+                serde_json::to_string_pretty(&json_value).unwrap_or(raw_message.to_string())
             );
-            println!("--- ENCRYPTED/SIGNED MESSAGE ---");
+            println!("---------------------");
+
+            // Parse as JWS
+            let jws: crate::message::Jws = serde_json::from_value(json_value)
+                .map_err(|e| Error::Serialization(format!("Failed to parse JWS: {}", e)))?;
+
+            // Verify using our resolver
+            #[cfg(test)]
+            let plain_message = if let Some(resolver) = &self.resolver {
+                crate::verification::verify_jws(&jws, &**resolver).await?
+            } else {
+                // Fallback to unpacking with key manager for test compatibility
+                let unpack_options = UnpackOptions {
+                    expected_security_mode: SecurityMode::Signed,
+                    expected_recipient_kid: None,
+                    require_signature: true,
+                };
+                crate::message::Jws::unpack(&jws, &*self.key_manager, unpack_options).await?
+            };
+
+            #[cfg(not(test))]
+            let plain_message = {
+                // In production, we need a resolver - for now use unpacking
+                let unpack_options = UnpackOptions {
+                    expected_security_mode: SecurityMode::Signed,
+                    expected_recipient_kid: None,
+                    require_signature: true,
+                };
+                crate::message::Jws::unpack(&jws, &*self.key_manager, unpack_options).await?
+            };
+
+            // Log the unpacked message
+            println!("--- UNPACKED CONTENT ---");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&plain_message)
+                    .unwrap_or_else(|_| format!("{:?}", plain_message))
+            );
+            println!("------------------------");
+
+            Ok(plain_message)
+        } else if is_encrypted {
+            println!("Detected encrypted message");
+            println!("--- ENCRYPTED MESSAGE ---");
             println!(
                 "{}",
                 serde_json::to_string_pretty(&json_value).unwrap_or(raw_message.to_string())
@@ -980,7 +1084,7 @@ impl crate::agent::Agent for TapAgent {
 
             // Create unpack options
             let unpack_options = UnpackOptions {
-                expected_security_mode: SecurityMode::Any,
+                expected_security_mode: SecurityMode::AuthCrypt,
                 expected_recipient_kid: Some(format!("{}#keys-1", self.get_agent_did())),
                 require_signature: false,
             };

@@ -5,10 +5,11 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use base58::ToBase58;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tap_agent::did::SyncDIDResolver;
+use tap_agent::did::{DIDDoc, SyncDIDResolver};
 use tokio::sync::RwLock;
 
 use crate::error::{Error, Result};
@@ -43,7 +44,7 @@ fn hash_did(did: &str) -> Result<String> {
 ///
 /// The NodeResolver is thread-safe and can be safely shared across threads
 /// using `Arc<NodeResolver>`. All mutable state is protected by RwLock.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct NodeResolver {
     /// Resolvers for different DID methods
     resolvers: RwLock<HashMap<String, Arc<dyn SyncDIDResolver>>>,
@@ -130,7 +131,8 @@ impl NodeResolver {
             // Check if we got a DID Document
             if let Some(did_doc) = did_doc_option {
                 // Serialize the DID Document to JSON
-                return serde_json::to_value(did_doc).map_err(Error::Serialization);
+                return serde_json::to_value(did_doc)
+                    .map_err(|e| Error::Serialization(e.to_string()));
             }
         }
 
@@ -154,6 +156,24 @@ impl NodeResolver {
             ],
             "service": []
         }))
-        .map_err(Error::Serialization)
+        .map_err(|e| Error::Serialization(e.to_string()))
+    }
+}
+
+#[async_trait]
+impl SyncDIDResolver for NodeResolver {
+    async fn resolve(&self, did: &str) -> tap_agent::Result<Option<DIDDoc>> {
+        // Try to use the method-specific resolver directly
+        let method_parts: Vec<&str> = did.split(':').collect();
+        if method_parts.len() >= 3 && method_parts[0] == "did" {
+            // Get a resolver for this method
+            if let Some(resolver) = self.get_resolver(did).await {
+                // Delegate to the method-specific resolver
+                return resolver.resolve(did).await;
+            }
+        }
+
+        // If no specific resolver found, return None
+        Ok(None)
     }
 }

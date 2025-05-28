@@ -55,7 +55,7 @@ async fn test_create_ephemeral_agent() {
 
     // Test that the agent can receive messages
     let result = agent
-        .receive_message::<EmptyMessage>("{\"id\":\"test\",\"type\":\"test.message.type\"}")
+        .receive_message("{\"id\":\"test\",\"type\":\"test.message.type\"}")
         .await;
 
     // The actual receive should fail due to invalid packed message

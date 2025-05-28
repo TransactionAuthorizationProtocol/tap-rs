@@ -109,7 +109,8 @@ fn main() -> Result<()> {
             .receive_message(&packed_transfer)
             .await
         {
-            Ok(transfer) => transfer,
+            Ok(plain_message) => serde_json::from_value(plain_message.body)
+                .map_err(|e| Error::Validation(format!("Failed to deserialize transfer: {}", e)))?,
             Err(e) => {
                 println!("Error unpacking transfer message: {}", e);
 
@@ -170,14 +171,18 @@ fn main() -> Result<()> {
             println!("Rejection sent successfully\n");
 
             // Originator receives the rejection
-            let received_reject: Reject =
-                match originator_agent.receive_message(&packed_reject).await {
-                    Ok(reject) => reject,
-                    Err(e) => {
-                        println!("Error receiving rejection: {}", e);
-                        return Err(e);
-                    }
-                };
+            let received_reject: Reject = match originator_agent
+                .receive_message(&packed_reject)
+                .await
+            {
+                Ok(plain_message) => serde_json::from_value(plain_message.body).map_err(|e| {
+                    Error::Validation(format!("Failed to deserialize reject: {}", e))
+                })?,
+                Err(e) => {
+                    println!("Error receiving rejection: {}", e);
+                    return Err(e);
+                }
+            };
 
             println!("Originator received rejection:");
             println!("  Transfer ID: {}", received_reject.transaction_id);
@@ -217,7 +222,9 @@ fn main() -> Result<()> {
 
         let received_authorize: Authorize =
             match originator_agent.receive_message(&packed_authorize).await {
-                Ok(authorize) => authorize,
+                Ok(plain_message) => serde_json::from_value(plain_message.body).map_err(|e| {
+                    Error::Validation(format!("Failed to deserialize authorize: {}", e))
+                })?,
                 Err(e) => {
                     println!("Error receiving authorization: {}", e);
                     return Err(e);
@@ -272,7 +279,8 @@ fn main() -> Result<()> {
 
         let received_settle: Settle = match beneficiary_agent.receive_message(&packed_settle).await
         {
-            Ok(settle) => settle,
+            Ok(plain_message) => serde_json::from_value(plain_message.body)
+                .map_err(|e| Error::Validation(format!("Failed to deserialize settle: {}", e)))?,
             Err(e) => {
                 println!("Error receiving settlement: {}", e);
                 return Err(e);

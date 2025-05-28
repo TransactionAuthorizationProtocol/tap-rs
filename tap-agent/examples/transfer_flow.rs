@@ -51,8 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 2: Beneficiary receives and processes the transfer request
         println!("Step 2: Beneficiary receives and processes the transfer request");
 
-        let received_transfer: Transfer =
-            beneficiary_agent.receive_message(&packed_transfer).await?;
+        let plain_message = beneficiary_agent.receive_message(&packed_transfer).await?;
+        let received_transfer: Transfer = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary received transfer request:");
         println!("  Asset: {}", received_transfer.asset);
         println!("  Amount: {}", received_transfer.amount);
@@ -84,8 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 4: Originator receives the authorization
         println!("Step 4: Originator receives the authorization");
 
-        let received_authorize: Authorize =
-            originator_agent.receive_message(&packed_authorize).await?;
+        let plain_message = originator_agent.receive_message(&packed_authorize).await?;
+        let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator received authorization:");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
         if let Some(note) = received_authorize.note {
@@ -115,7 +115,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 6: Beneficiary receives the settlement confirmation
         println!("Step 6: Beneficiary receives the settlement confirmation");
 
-        let received_settle: Settle = beneficiary_agent.receive_message(&packed_settle).await?;
+        let plain_message = beneficiary_agent.receive_message(&packed_settle).await?;
+        let received_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary received settlement confirmation:");
         println!("  Transfer ID: {}", received_settle.transaction_id);
         println!("  Settlement ID: {}", received_settle.settlement_id);

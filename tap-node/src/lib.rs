@@ -3,16 +3,50 @@
 //! The TAP Node is the central component that manages TAP Agents, routes messages,
 //! processes events, stores transactions, and provides a scalable architecture for TAP deployments.
 //!
+//! # Architecture Overview
+//!
+//! The TAP Node acts as a message router and coordinator for multiple TAP Agents. It provides:
+//!
+//! - **Efficient Message Processing**: Different handling for plain, signed, and encrypted messages
+//! - **Centralized Verification**: Signed messages are verified once for all agents
+//! - **Smart Routing**: Encrypted messages are routed to appropriate recipient agents
+//! - **Scalable Design**: Supports multiple agents with concurrent message processing
+//!
 //! # Key Components
 //!
 //! - **Agent Registry**: Manages multiple TAP Agents
 //! - **Event Bus**: Publishes and distributes events throughout the system
 //! - **Message Processors**: Process incoming and outgoing messages
 //! - **Message Router**: Routes messages to the appropriate agent
-//! - **Processor Pool**: Provides scalable concurrent message processing
-//! - **Storage**: Persistent SQLite storage with:
-//!   - Transaction tracking for Transfer and Payment messages
-//!   - Complete audit trail of all incoming/outgoing messages
+//! - **DID Resolver**: Resolves DIDs for signature verification
+//! - **Storage**: Persistent SQLite storage with transaction tracking and audit trails
+//!
+//! # Message Processing Flow
+//!
+//! The TAP Node uses an optimized message processing flow based on message type:
+//!
+//! ## Signed Messages (JWS)
+//! 1. **Single Verification**: Signature verified once using DID resolver
+//! 2. **Routing**: Verified PlainMessage routed to appropriate agent
+//! 3. **Processing**: Agent receives verified message via `receive_plain_message()`
+//!
+//! ## Encrypted Messages (JWE)  
+//! 1. **Recipient Identification**: Extract recipient DIDs from JWE headers
+//! 2. **Agent Routing**: Send encrypted message to each matching agent
+//! 3. **Decryption**: Each agent attempts decryption via `receive_encrypted_message()`
+//! 4. **Processing**: Successfully decrypted messages are processed by the agent
+//!
+//! ## Plain Messages
+//! 1. **Direct Processing**: Plain messages processed through the pipeline
+//! 2. **Routing**: Routed to appropriate agent
+//! 3. **Delivery**: Agent receives via `receive_plain_message()`
+//!
+//! # Benefits of This Architecture
+//!
+//! - **Efficiency**: Signed messages verified once, not per-agent
+//! - **Scalability**: Encrypted messages naturally distributed to recipients
+//! - **Flexibility**: Agents remain fully functional standalone
+//! - **Security**: Centralized verification with distributed decryption
 //!
 //! # Thread Safety and Concurrency
 //!
@@ -21,24 +55,34 @@
 //! simultaneously. Most components within the node are either immutable or use interior
 //! mutability with appropriate synchronization.
 //!
-//! # Message Flow
+//! # Example Usage
 //!
-//! Messages in TAP Node follow a structured flow:
+//! ```rust,no_run
+//! use tap_node::{TapNode, NodeConfig};
+//! use tap_agent::TapAgent;
+//! use std::sync::Arc;
 //!
-//! 1. **Receipt**: Messages are received through the `receive_message` method
-//! 2. **Storage**: All messages are logged to the audit trail, transactions are stored separately
-//! 3. **Processing**: Each message is processed by the registered processors
-//! 4. **Routing**: The router determines which agent should handle the message
-//! 5. **Dispatch**: The message is delivered to the appropriate agent
-//! 6. **Response**: Responses are handled similarly in the reverse direction
-//!
-//! # Scalability
-//!
-//! The node supports scalable message processing through the optional processor pool,
-//! which uses a configurable number of worker threads to process messages concurrently.
-//! This allows a single node to handle high message throughput while maintaining
-//! shared between threads, with all mutable state protected by appropriate synchronization
-//! primitives.
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Create node
+//!     let config = NodeConfig::default();
+//!     let node = Arc::new(TapNode::new(config));
+//!     
+//!     // Create and register agent
+//!     let (agent, _did) = TapAgent::from_ephemeral_key().await?;
+//!     node.register_agent(Arc::new(agent)).await?;
+//!     
+//!     // Process incoming message (JSON Value)
+//!     let message_value = serde_json::json!({
+//!         "id": "msg-123",
+//!         "type": "test-message",
+//!         "body": {"content": "Hello"}
+//!     });
+//!     
+//!     node.receive_message(message_value).await?;
+//!     Ok(())
+//! }
+//! ```
 
 pub mod agent;
 pub mod error;
@@ -103,11 +147,13 @@ impl TapAgentExt for TapAgent {
         _to_did: &str,
     ) -> Result<String> {
         // Serialize the PlainMessage to JSON first to work around the TapMessageBody trait constraint
-        let json_value = serde_json::to_value(message).map_err(Error::Serialization)?;
+        let json_value =
+            serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
 
         // Use JSON string for transportation instead of direct message passing
         // This bypasses the need for PlainMessage to implement TapMessageBody
-        let serialized = serde_json::to_string(&json_value).map_err(Error::Serialization)?;
+        let serialized =
+            serde_json::to_string(&json_value).map_err(|e| Error::Serialization(e.to_string()))?;
 
         Ok(serialized)
     }
@@ -304,42 +350,87 @@ impl TapNode {
     ///
     /// This method handles the complete lifecycle of an incoming message:
     ///
-    /// 1. Processing the message through all registered processors
-    /// 2. Routing the message to determine the appropriate target agent
-    /// 3. Dispatching the message to the target agent
-    ///
-    /// The processing pipeline may transform or even drop the message based on
-    /// validation rules or other processing logic. If a message is dropped during
-    /// processing, this method will return Ok(()) without an error.
+    /// 1. Determining the message type (plain, signed, or encrypted)
+    /// 2. Verifying signatures or routing to agents for decryption
+    /// 3. Processing the resulting plain messages through the pipeline
+    /// 4. Routing and dispatching to the appropriate agents
     ///
     /// # Parameters
     ///
-    /// * `message` - The DIDComm message to be processed
+    /// * `message` - The message as a JSON Value (can be plain, JWS, or JWE)
     ///
     /// # Returns
     ///
-    /// * `Ok(())` if the message was successfully processed and dispatched (or intentionally dropped)
-    /// * `Err(Error)` if there was an error during processing, routing, or dispatching
-    ///
-    /// # Errors
-    ///
-    /// This method can return errors for several reasons:
-    /// * Processing errors from message processors
-    /// * Routing errors if no target agent can be determined
-    /// * Dispatch errors if the target agent cannot be found or fails to process the message
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use tap_node::{TapNode, NodeConfig};
-    /// # use tap_msg::didcomm::PlainMessage;
-    /// # async fn example(node: &TapNode, message: PlainMessage) -> Result<(), tap_node::Error> {
-    /// // Process an incoming message
-    /// node.receive_message(message).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn receive_message(&self, message: PlainMessage) -> Result<()> {
+    /// * `Ok(())` if the message was successfully processed
+    /// * `Err(Error)` if there was an error during processing
+    pub async fn receive_message(&self, message: serde_json::Value) -> Result<()> {
+        use tap_agent::{verify_jws, Jwe, Jws};
+
+        // Determine message type
+        let is_encrypted =
+            message.get("protected").is_some() && message.get("recipients").is_some();
+        let is_signed = message.get("payload").is_some() && message.get("signatures").is_some();
+
+        if is_signed {
+            // Verify signature once using resolver
+            let jws: Jws = serde_json::from_value(message)
+                .map_err(|e| Error::Serialization(format!("Failed to parse JWS: {}", e)))?;
+
+            let plain_message = verify_jws(&jws, &*self.resolver)
+                .await
+                .map_err(|e| Error::Verification(format!("JWS verification failed: {}", e)))?;
+
+            // Process the verified plain message
+            self.process_plain_message(plain_message).await
+        } else if is_encrypted {
+            // Route encrypted message to each matching agent
+            let jwe: Jwe = serde_json::from_value(message.clone())
+                .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
+
+            // Find agents that match recipients
+            let mut processed = false;
+            for recipient in &jwe.recipients {
+                if let Some(did) = recipient.header.kid.split('#').next() {
+                    if let Ok(agent) = self.agents.get_agent(did).await {
+                        // Let the agent handle decryption and processing
+                        match agent.receive_encrypted_message(&message).await {
+                            Ok(_) => {
+                                processed = true;
+                                log::debug!(
+                                    "Agent {} successfully processed encrypted message",
+                                    did
+                                );
+                            }
+                            Err(e) => {
+                                log::debug!(
+                                    "Agent {} couldn't process encrypted message: {}",
+                                    did,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !processed {
+                return Err(Error::Processing(
+                    "No agent could process the encrypted message".to_string(),
+                ));
+            }
+            Ok(())
+        } else {
+            // Plain message - parse and process
+            let plain_message: PlainMessage = serde_json::from_value(message).map_err(|e| {
+                Error::Serialization(format!("Failed to parse PlainMessage: {}", e))
+            })?;
+
+            self.process_plain_message(plain_message).await
+        }
+    }
+
+    /// Process a plain message through the pipeline
+    async fn process_plain_message(&self, message: PlainMessage) -> Result<()> {
         // Log all incoming messages for audit trail
         #[cfg(feature = "storage")]
         {
@@ -379,12 +470,21 @@ impl TapNode {
             }
         };
 
-        // Dispatch the message to the agent, handling any errors
-        match self.dispatch_message(target_did, processed_message).await {
+        // Get the agent
+        let agent = match self.agents.get_agent(&target_did).await {
+            Ok(a) => a,
+            Err(e) => {
+                log::warn!("Failed to get agent for dispatch: {}", e);
+                return Ok(());
+            }
+        };
+
+        // Let the agent process the plain message
+        match agent.receive_plain_message(processed_message).await {
             Ok(_) => Ok(()),
             Err(e) => {
                 // Log the error but don't fail the entire operation
-                log::warn!("Failed to dispatch message: {}", e);
+                log::warn!("Agent failed to process message: {}", e);
                 Ok(())
             }
         }
