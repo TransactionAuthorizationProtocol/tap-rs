@@ -42,7 +42,7 @@ pub struct DeliveryResult {
 /// - [`receive_encrypted_message`]: Called by TAP Node for encrypted messages
 /// - [`receive_plain_message`]: Called by TAP Node for verified/decrypted messages
 ///
-/// ## Standalone Usage  
+/// ## Standalone Usage
 /// - [`receive_message`]: Handles any message type (plain, signed, encrypted)
 ///
 /// ## Message Sending
@@ -745,46 +745,89 @@ impl TapAgent {
 
     /// Get the signing key ID for this agent
     ///
-    /// Returns the appropriate key ID based on the DID method
+    /// Resolves the DID document and returns the first authentication verification method ID
     pub async fn get_signing_kid(&self) -> Result<String> {
         let did = &self.config.agent_did;
 
+        // Try to get the DID document from our key manager first
+        if let Ok(agent_key) = self.key_manager.get_generated_key(did) {
+            // Get the first authentication method from the DID document
+            if let Some(auth_method_id) = agent_key.did_doc.authentication.first() {
+                return Ok(auth_method_id.clone());
+            }
+
+            // Fallback to first verification method
+            if let Some(vm) = agent_key.did_doc.verification_method.first() {
+                return Ok(vm.id.clone());
+            }
+        }
+
+        // Fallback to guessing based on DID method (for backward compatibility)
         if did.starts_with("did:key:") {
-            // For did:key, the key ID is the multibase part after did:key:
             let multibase = did.strip_prefix("did:key:").unwrap_or("");
             Ok(format!("{}#{}", did, multibase))
         } else if did.starts_with("did:web:") {
-            // For did:web, use #keys-1 pattern
             Ok(format!("{}#keys-1", did))
         } else {
-            // For other DID methods, use a generic pattern
             Ok(format!("{}#key-1", did))
         }
     }
 
     /// Get the encryption key ID for a recipient
     ///
-    /// Returns the appropriate key ID based on the recipient's DID method
+    /// Resolves the DID document and returns the appropriate key agreement method ID
     pub async fn get_encryption_kid(&self, recipient_did: &str) -> Result<String> {
-        // For now, return the signing key ID since our LocalAgentKey
-        // implementation doesn't distinguish between key types
-        // TODO: Properly implement X25519 key handling for did:key
         if recipient_did == self.config.agent_did {
-            // If asking for our own encryption key, use our signing key
-            self.get_signing_kid().await
-        } else {
-            // For other DIDs, construct the key ID based on DID method
-            if recipient_did.starts_with("did:key:") {
-                // For did:key, use the Ed25519 key ID format for now
-                let multibase = recipient_did.strip_prefix("did:key:").unwrap_or("");
-                Ok(format!("{}#{}", recipient_did, multibase))
-            } else if recipient_did.starts_with("did:web:") {
-                // For did:web, use #keys-1 pattern
-                Ok(format!("{}#keys-1", recipient_did))
-            } else {
-                // For other DID methods, use a generic pattern
-                Ok(format!("{}#key-1", recipient_did))
+            // If asking for our own encryption key, get it from our DID document
+            if let Ok(agent_key) = self.key_manager.get_generated_key(recipient_did) {
+                // Look for key agreement methods first
+                if let Some(agreement_method_id) = agent_key.did_doc.key_agreement.first() {
+                    return Ok(agreement_method_id.clone());
+                }
+
+                // Fallback to authentication method (for keys that do both)
+                if let Some(auth_method_id) = agent_key.did_doc.authentication.first() {
+                    return Ok(auth_method_id.clone());
+                }
+
+                // Fallback to first verification method
+                if let Some(vm) = agent_key.did_doc.verification_method.first() {
+                    return Ok(vm.id.clone());
+                }
             }
+
+            // Final fallback to signing key
+            return self.get_signing_kid().await;
+        }
+
+        // For external recipients, try to resolve their DID document
+        if let Some(resolver) = &self.resolver {
+            if let Ok(Some(did_doc)) = resolver.resolve(recipient_did).await {
+                // Look for key agreement methods first
+                if let Some(agreement_method_id) = did_doc.key_agreement.first() {
+                    return Ok(agreement_method_id.clone());
+                }
+
+                // Fallback to authentication method
+                if let Some(auth_method_id) = did_doc.authentication.first() {
+                    return Ok(auth_method_id.clone());
+                }
+
+                // Fallback to first verification method
+                if let Some(vm) = did_doc.verification_method.first() {
+                    return Ok(vm.id.clone());
+                }
+            }
+        }
+
+        // Fallback to guessing based on DID method (for backward compatibility)
+        if recipient_did.starts_with("did:key:") {
+            let multibase = recipient_did.strip_prefix("did:key:").unwrap_or("");
+            Ok(format!("{}#{}", recipient_did, multibase))
+        } else if recipient_did.starts_with("did:web:") {
+            Ok(format!("{}#keys-1", recipient_did))
+        } else {
+            Ok(format!("{}#key-1", recipient_did))
         }
     }
 

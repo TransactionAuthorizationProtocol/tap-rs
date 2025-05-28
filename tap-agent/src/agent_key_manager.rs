@@ -34,6 +34,8 @@ pub struct AgentKeyManager {
     decryption_keys: Arc<RwLock<HashMap<String, Arc<dyn DecryptionKey + Send + Sync>>>>,
     /// Verification keys
     verification_keys: Arc<RwLock<HashMap<String, Arc<dyn VerificationKey + Send + Sync>>>>,
+    /// Generated keys with DID documents (for key ID resolution)
+    generated_keys: Arc<RwLock<HashMap<String, GeneratedKey>>>,
     /// Storage path
     storage_path: Option<PathBuf>,
 }
@@ -48,8 +50,22 @@ impl AgentKeyManager {
             encryption_keys: Arc::new(RwLock::new(HashMap::new())),
             decryption_keys: Arc::new(RwLock::new(HashMap::new())),
             verification_keys: Arc::new(RwLock::new(HashMap::new())),
+            generated_keys: Arc::new(RwLock::new(HashMap::new())),
             storage_path: None,
         }
+    }
+
+    /// Get a generated key (with DID document) by DID
+    pub fn get_generated_key(&self, did: &str) -> Result<GeneratedKey> {
+        if let Ok(generated_keys) = self.generated_keys.read() {
+            if let Some(key) = generated_keys.get(did) {
+                return Ok(key.clone());
+            }
+        } else {
+            return Err(Error::FailedToAcquireResolverReadLock);
+        }
+        
+        Err(Error::KeyNotFound(format!("Generated key not found for DID: {}", did)))
     }
 
     /// Get the key type for a signing key (for debugging)
@@ -269,6 +285,13 @@ impl KeyManager for AgentKeyManager {
             return Err(Error::FailedToAcquireResolverWriteLock);
         }
 
+        // Store the generated key for DID document access
+        if let Ok(mut generated_keys) = self.generated_keys.write() {
+            generated_keys.insert(key.did.clone(), key.clone());
+        } else {
+            return Err(Error::FailedToAcquireResolverWriteLock);
+        }
+
         // Store in all collections
         self.store_agent_key(&agent_key, &key_id)?;
 
@@ -294,6 +317,13 @@ impl KeyManager for AgentKeyManager {
         // Store the legacy secret
         if let Ok(mut secrets) = self.secrets.write() {
             secrets.insert(key.did.clone(), agent_key.clone().secret);
+        } else {
+            return Err(Error::FailedToAcquireResolverWriteLock);
+        }
+
+        // Store the generated key for DID document access
+        if let Ok(mut generated_keys) = self.generated_keys.write() {
+            generated_keys.insert(key.did.clone(), key.clone());
         } else {
             return Err(Error::FailedToAcquireResolverWriteLock);
         }
@@ -874,6 +904,7 @@ impl AgentKeyManagerBuilder {
             encryption_keys: Arc::new(RwLock::new(self.encryption_keys)),
             decryption_keys: Arc::new(RwLock::new(self.decryption_keys)),
             verification_keys: Arc::new(RwLock::new(self.verification_keys)),
+            generated_keys: Arc::new(RwLock::new(HashMap::new())),
             storage_path: self.storage_path.clone(),
         };
 
