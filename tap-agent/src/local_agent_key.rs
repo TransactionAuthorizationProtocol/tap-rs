@@ -145,7 +145,18 @@ impl LocalAgentKey {
                 if let Some(kid) = private_key_jwk.get("kid").and_then(|k| k.as_str()) {
                     kid.to_string()
                 } else {
-                    format!("{}#keys-1", did)
+                    // Generate default key ID based on DID method
+                    if did.starts_with("did:key:") {
+                        // For did:key, we can't easily reconstruct the proper fragment here
+                        // without the full key material, so we'll use a placeholder
+                        // The proper kid should be set in the JWK
+                        eprintln!("Warning: did:key JWK missing kid field, using fallback");
+                        format!("{}#keys-1", did)
+                    } else if did.starts_with("did:web:") {
+                        format!("{}#keys-1", did)
+                    } else {
+                        format!("{}#key-1", did)
+                    }
                 }
             }
         };

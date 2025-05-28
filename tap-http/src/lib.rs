@@ -47,7 +47,7 @@
 //! async fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Create TAP Node
 //!     let node_config = NodeConfig::default();
-//!     let node = Arc::new(TapNode::new(node_config));
+//!     let mut node = TapNode::new(node_config);
 //!     
 //!     // Register an agent
 //!     let (agent, _did) = TapAgent::from_ephemeral_key().await?;

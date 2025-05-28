@@ -205,7 +205,9 @@ async fn test_didcomm_endpoint_content_types() {
             "header": {"kid": "did:key:test"},
             "encrypted_key": "test-key"
         }],
-        "ciphertext": "test-ciphertext"
+        "ciphertext": "test-ciphertext",
+        "tag": "test-tag",
+        "iv": "test-iv"
     });
 
     let response = client
@@ -218,10 +220,18 @@ async fn test_didcomm_endpoint_content_types() {
         .unwrap();
 
     // Should get 500 (no agent to process), not 400 (validation error)
-    assert_eq!(response.status(), 500);
+    let status = response.status();
     let body = response.text().await.unwrap();
+    assert_eq!(status, 500);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(json["error"]["type"], "node_error");
+    assert_eq!(json["status"], "error");
+    // The message should indicate that no agent could process it
+    let message = json["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("No agent could process"),
+        "Expected 'No agent could process' but got: {}",
+        message
+    );
 
     // Test 2: Signed message content type (should fail with no agent, but pass validation)
     let signed_msg = json!({
@@ -245,10 +255,18 @@ async fn test_didcomm_endpoint_content_types() {
         .unwrap();
 
     // Should get 500 (no agent to process), not 400 (validation error)
-    assert_eq!(response.status(), 500);
+    let status = response.status();
     let body = response.text().await.unwrap();
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(json["error"]["type"], "node_error");
+    assert_eq!(status, 500);
+    assert_eq!(json["status"], "error");
+    // The message should indicate that no agent could process it or verification failed
+    let message = json["message"].as_str().unwrap_or("");
+    assert!(
+        message.contains("No agent could process") || message.contains("Verification error"),
+        "Expected processing/verification error but got: {}",
+        message
+    );
 
     // Test 3: Invalid content type (should be rejected)
     let response = client

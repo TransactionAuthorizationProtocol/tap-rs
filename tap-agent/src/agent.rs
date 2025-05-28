@@ -54,7 +54,7 @@ pub struct DeliveryResult {
 /// use tap_agent::{Agent, TapAgent};
 /// use tap_msg::didcomm::PlainMessage;
 ///
-/// async fn process_encrypted_message(agent: &dyn Agent, jwe_json: &serde_json::Value) {
+/// async fn process_encrypted_message(agent: &TapAgent, jwe_json: &serde_json::Value) {
 ///     // This would typically be called by TAP Node
 ///     if let Err(e) = agent.receive_encrypted_message(jwe_json).await {
 ///         eprintln!("Failed to process encrypted message: {}", e);
@@ -743,6 +743,51 @@ impl TapAgent {
         }
     }
 
+    /// Get the signing key ID for this agent
+    ///
+    /// Returns the appropriate key ID based on the DID method
+    pub async fn get_signing_kid(&self) -> Result<String> {
+        let did = &self.config.agent_did;
+
+        if did.starts_with("did:key:") {
+            // For did:key, the key ID is the multibase part after did:key:
+            let multibase = did.strip_prefix("did:key:").unwrap_or("");
+            Ok(format!("{}#{}", did, multibase))
+        } else if did.starts_with("did:web:") {
+            // For did:web, use #keys-1 pattern
+            Ok(format!("{}#keys-1", did))
+        } else {
+            // For other DID methods, use a generic pattern
+            Ok(format!("{}#key-1", did))
+        }
+    }
+
+    /// Get the encryption key ID for a recipient
+    ///
+    /// Returns the appropriate key ID based on the recipient's DID method
+    pub async fn get_encryption_kid(&self, recipient_did: &str) -> Result<String> {
+        // For now, return the signing key ID since our LocalAgentKey
+        // implementation doesn't distinguish between key types
+        // TODO: Properly implement X25519 key handling for did:key
+        if recipient_did == self.config.agent_did {
+            // If asking for our own encryption key, use our signing key
+            self.get_signing_kid().await
+        } else {
+            // For other DIDs, construct the key ID based on DID method
+            if recipient_did.starts_with("did:key:") {
+                // For did:key, use the Ed25519 key ID format for now
+                let multibase = recipient_did.strip_prefix("did:key:").unwrap_or("");
+                Ok(format!("{}#{}", recipient_did, multibase))
+            } else if recipient_did.starts_with("did:web:") {
+                // For did:web, use #keys-1 pattern
+                Ok(format!("{}#keys-1", recipient_did))
+            } else {
+                // For other DID methods, use a generic pattern
+                Ok(format!("{}#key-1", recipient_did))
+            }
+        }
+    }
+
     /// Send a message to a specific endpoint
     ///
     /// # Parameters
@@ -873,15 +918,19 @@ impl crate::agent::Agent for TapAgent {
             }
         }
 
+        // Get the appropriate key IDs
+        let sender_kid = self.get_signing_kid().await?;
+        let recipient_kid = if to.len() == 1 && security_mode == SecurityMode::AuthCrypt {
+            Some(self.get_encryption_kid(to[0]).await?)
+        } else {
+            None
+        };
+
         // Create pack options for the plaintext message
         let pack_options = PackOptions {
             security_mode,
-            sender_kid: Some(format!("{}#keys-1", self.get_agent_did())),
-            recipient_kid: if to.len() == 1 {
-                Some(format!("{}#keys-1", to[0]))
-            } else {
-                None
-            },
+            sender_kid: Some(sender_kid),
+            recipient_kid,
         };
 
         // Pack the plain message using the Packable trait
@@ -981,10 +1030,13 @@ impl crate::agent::Agent for TapAgent {
         let jwe: crate::message::Jwe = serde_json::from_value(jwe_value.clone())
             .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
 
+        // Get our encryption key ID
+        let our_kid = self.get_signing_kid().await.ok();
+
         // Create unpack options
         let unpack_options = UnpackOptions {
             expected_security_mode: SecurityMode::AuthCrypt,
-            expected_recipient_kid: Some(format!("{}#keys-1", self.get_agent_did())),
+            expected_recipient_kid: our_kid,
             require_signature: false,
         };
 
@@ -1082,10 +1134,13 @@ impl crate::agent::Agent for TapAgent {
             );
             println!("---------------------");
 
+            // Get our encryption key ID
+            let our_kid = self.get_signing_kid().await.ok();
+
             // Create unpack options
             let unpack_options = UnpackOptions {
                 expected_security_mode: SecurityMode::AuthCrypt,
-                expected_recipient_kid: Some(format!("{}#keys-1", self.get_agent_did())),
+                expected_recipient_kid: our_kid,
                 require_signature: false,
             };
 
