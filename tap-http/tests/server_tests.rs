@@ -119,7 +119,7 @@ async fn test_didcomm_endpoint() {
     // Wait for server to fully start
     sleep(Duration::from_millis(500)).await;
 
-    // Create a DIDComm test message (intentionally invalid to test error handling)
+    // Create a plain DIDComm test message (should be rejected for security reasons)
     let didcomm_msg = json!({
         "id": "1234567890",
         "typ": "application/didcomm-plain+json",
@@ -158,8 +158,8 @@ async fn test_didcomm_endpoint() {
 
     let response = response.unwrap();
     let status = response.status();
-    // Our message processing returns a 500 Internal Server Error for messages that can't be processed
-    assert_eq!(status, 500);
+    // Plain messages should be rejected with a 400 Bad Request for security reasons
+    assert_eq!(status, 400);
 
     // Read the response body to ensure it has the right error message
     let body = response.text().await.unwrap();
@@ -167,8 +167,114 @@ async fn test_didcomm_endpoint() {
 
     // Verify this is an error response
     assert_eq!(json["status"], "error");
-    // The error should be a node error since no agents are registered
+    // The error should be a validation error since plain messages are not allowed
+    assert_eq!(json["error"]["type"], "validation_error");
+
+    // Stop the server
+    server.stop().await.expect("Server should stop");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_didcomm_endpoint_content_types() {
+    // Create a mock TapNode and find an available port
+    let node = create_mock_node();
+    let port = find_unused_port().expect("Unable to find unused port");
+
+    // Configure server with the available port
+    let config = TapHttpConfig {
+        host: "127.0.0.1".to_string(),
+        port,
+        ..TapHttpConfig::default()
+    };
+
+    // Create HTTP server
+    let mut server = TapHttpServer::new(config, node);
+
+    // Start the server
+    server.start().await.expect("Server should start");
+
+    // Wait for server to fully start
+    sleep(Duration::from_millis(500)).await;
+
+    let client = reqwest::Client::new();
+
+    // Test 1: Encrypted message content type (should fail with no agent, but pass validation)
+    let encrypted_msg = json!({
+        "protected": "eyJ0eXAiOiJhcHBsaWNhdGlvbi9kaWRjb21tLWVuY3J5cHRlZCtqc29uIn0=",
+        "recipients": [{
+            "header": {"kid": "did:key:test"},
+            "encrypted_key": "test-key"
+        }],
+        "ciphertext": "test-ciphertext"
+    });
+
+    let response = client
+        .post(format!("http://127.0.0.1:{}/didcomm", port))
+        .header("Content-Type", "application/didcomm-encrypted+json")
+        .json(&encrypted_msg)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .unwrap();
+
+    // Should get 500 (no agent to process), not 400 (validation error)
+    assert_eq!(response.status(), 500);
+    let body = response.text().await.unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(json["error"]["type"], "node_error");
+
+    // Test 2: Signed message content type (should fail with no agent, but pass validation)
+    let signed_msg = json!({
+        "payload": "eyJ0ZXN0IjoidGVzdCJ9",
+        "signatures": [{
+            "protected": "eyJ0eXAiOiJhcHBsaWNhdGlvbi9kaWRjb21tLXNpZ25lZCtqc29uIn0=",
+            "signature": "test-signature"
+        }]
+    });
+
+    let response = client
+        .post(format!("http://127.0.0.1:{}/didcomm", port))
+        .header("Content-Type", "application/didcomm-signed+json; charset=utf-8")
+        .json(&signed_msg)
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .unwrap();
+
+    // Should get 500 (no agent to process), not 400 (validation error)
+    assert_eq!(response.status(), 500);
+    let body = response.text().await.unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(json["error"]["type"], "node_error");
+
+    // Test 3: Invalid content type (should be rejected)
+    let response = client
+        .post(format!("http://127.0.0.1:{}/didcomm", port))
+        .header("Content-Type", "application/json")
+        .json(&json!({"test": "data"}))
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 400);
+    let body = response.text().await.unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(json["error"]["type"], "validation_error");
+
+    // Test 4: Missing content type (should be rejected)
+    let response = client
+        .post(format!("http://127.0.0.1:{}/didcomm", port))
+        .body(json!({"test": "data"}).to_string())
+        .timeout(Duration::from_secs(5))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), 400);
+    let body = response.text().await.unwrap();
+    let json: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(json["error"]["type"], "validation_error");
 
     // Stop the server
     server.stop().await.expect("Server should stop");

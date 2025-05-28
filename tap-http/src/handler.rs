@@ -77,12 +77,14 @@ pub async fn handle_health_check(
 /// Handler for DIDComm messages.
 ///
 /// This function processes incoming DIDComm messages by:
-/// 1. Converting the raw bytes to a UTF-8 string
-/// 2. Parsing the string as a DIDComm message
-/// 3. Forwarding the message to the TAP Node for further processing
+/// 1. Validating the Content-Type header
+/// 2. Converting the raw bytes to a UTF-8 string
+/// 3. Parsing the string as a DIDComm message
+/// 4. Forwarding the message to the TAP Node for further processing
 ///
 /// The handler returns appropriate success or error responses based on the outcome.
 pub async fn handle_didcomm(
+    content_type: Option<String>,
     body: Bytes,
     node: Arc<TapNode>,
     event_bus: Arc<EventBus>,
@@ -134,7 +136,14 @@ pub async fn handle_didcomm(
     debug!("Processing DIDComm message (encrypted or plain)");
 
     // Process the raw message using the TAP Node
-    match process_tap_message_raw(message_str, node, event_bus.clone()).await {
+    match process_tap_message_raw(
+        content_type.as_deref(),
+        message_str,
+        node,
+        event_bus.clone(),
+    )
+    .await
+    {
         Ok(_) => {
             info!("DIDComm message processed successfully");
 
@@ -145,7 +154,7 @@ pub async fn handle_didcomm(
 
             // Log response sent event
             event_bus
-                .publish_response_sent(StatusCode::OK, response_size, duration_ms)
+                .publish_response_sent(StatusCode::ACCEPTED, response_size, duration_ms)
                 .await;
 
             Ok(response)
@@ -201,13 +210,56 @@ pub async fn handle_didcomm(
     }
 }
 
-/// Process a raw TAP message using the TAP Node.
+/// Validate that a message has the correct Content-Type for signed or encrypted messages.
 ///
-/// This function handles both encrypted/signed and plain DIDComm messages.
-/// For encrypted messages, it will be forwarded to the appropriate agent for decryption.
+/// This function ensures that only secure messages are processed by the TAP HTTP server.
+/// Plain messages are rejected for security reasons.
 ///
 /// # Parameters
-/// * `message_str` - The raw message string (could be encrypted or plain)
+/// * `content_type` - The Content-Type header value
+///
+/// # Returns
+/// * `Ok(())` if the message has a valid signed or encrypted content type
+/// * `Err(Error)` if the message is plain or has an invalid content type
+fn validate_message_security(content_type: Option<&str>) -> Result<()> {
+    match content_type {
+        Some(ct) => {
+            // Parse the content type to handle parameters like charset
+            let ct_lower = ct.to_lowercase();
+
+            // Check for valid DIDComm content types
+            if ct_lower.contains("application/didcomm-signed+json") {
+                debug!("Message security validation passed: signed message");
+                Ok(())
+            } else if ct_lower.contains("application/didcomm-encrypted+json") {
+                debug!("Message security validation passed: encrypted message");
+                Ok(())
+            } else if ct_lower.contains("application/didcomm-plain+json") {
+                Err(Error::Validation(
+                    "Plain DIDComm messages are not allowed for security reasons. Only signed or encrypted messages are accepted.".to_string()
+                ))
+            } else {
+                Err(Error::Validation(
+                    format!("Invalid Content-Type '{}'. Expected 'application/didcomm-signed+json' or 'application/didcomm-encrypted+json'.", ct)
+                ))
+            }
+        }
+        None => {
+            Err(Error::Validation(
+                "Missing Content-Type header. Expected 'application/didcomm-signed+json' or 'application/didcomm-encrypted+json'.".to_string()
+            ))
+        }
+    }
+}
+
+/// Process a raw TAP message using the TAP Node.
+///
+/// This function handles encrypted/signed DIDComm messages only.
+/// Plain messages are rejected for security reasons.
+///
+/// # Parameters
+/// * `content_type` - The Content-Type header value
+/// * `message_str` - The raw message string (must be encrypted or signed)
 /// * `node` - The TAP Node instance that will process the message
 /// * `event_bus` - The event bus for logging
 ///
@@ -215,10 +267,14 @@ pub async fn handle_didcomm(
 /// * `Ok(())` if processing succeeded
 /// * `Err(Error)` if validation fails or message processing failed
 async fn process_tap_message_raw(
+    content_type: Option<&str>,
     message_str: &str,
     node: Arc<TapNode>,
     event_bus: Arc<EventBus>,
 ) -> Result<()> {
+    // First, validate that the message has a valid content type for signed or encrypted messages
+    validate_message_security(content_type)?;
+
     // Try to get the first agent to process the raw message
     // In the future, we might want to be smarter about which agent to use
     let agent_dids = node.agents().get_all_dids();
@@ -272,14 +328,14 @@ async fn process_tap_message_raw(
 
 /// Create a JSON success response.
 ///
-/// Returns a standardized success response with a 200 status code.
+/// Returns a standardized success response with a 202 Accepted status code.
 fn json_success_response() -> warp::reply::Response {
     warp::reply::with_status(
         json(&json!({
             "status": "success",
             "message": "Message received and processed"
         })),
-        StatusCode::OK,
+        StatusCode::ACCEPTED,
     )
     .into_response()
 }
@@ -328,6 +384,46 @@ mod tests {
         assert!(response_json["version"].is_string());
     }
 
+    #[test]
+    fn test_validate_message_security() {
+        // Test plain message content type (should be rejected)
+        let result = validate_message_security(Some("application/didcomm-plain+json"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Plain DIDComm messages are not allowed"));
+
+        // Test signed message content type (should pass)
+        let result = validate_message_security(Some("application/didcomm-signed+json"));
+        assert!(result.is_ok());
+
+        // Test encrypted message content type (should pass)
+        let result = validate_message_security(Some("application/didcomm-encrypted+json"));
+        assert!(result.is_ok());
+
+        // Test with charset parameter (should pass)
+        let result =
+            validate_message_security(Some("application/didcomm-signed+json; charset=utf-8"));
+        assert!(result.is_ok());
+
+        // Test invalid content type (should be rejected)
+        let result = validate_message_security(Some("application/json"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Content-Type"));
+
+        // Test missing content type (should be rejected)
+        let result = validate_message_security(None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing Content-Type header"));
+    }
+
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_invalid_didcomm() {
         // Create a TAP Node for testing without storage
@@ -340,7 +436,7 @@ mod tests {
 
         // Test with invalid UTF-8 data
         let invalid_bytes = Bytes::from(vec![0xFF, 0xFF]);
-        let response = handle_didcomm(invalid_bytes, node.clone(), event_bus)
+        let response = handle_didcomm(None, invalid_bytes, node.clone(), event_bus)
             .await
             .unwrap();
 

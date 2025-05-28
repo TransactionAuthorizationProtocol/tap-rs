@@ -959,7 +959,7 @@ impl crate::agent::Agent for TapAgent {
         let is_encrypted =
             json_value.get("protected").is_some() && json_value.get("recipients").is_some();
         let is_signed =
-            json_value.get("protected").is_some() && json_value.get("signatures").is_some();
+            json_value.get("payload").is_some() && json_value.get("signatures").is_some();
 
         println!(
             "Message type detection: encrypted={}, signed={}",
