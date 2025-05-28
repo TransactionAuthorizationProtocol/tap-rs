@@ -109,7 +109,8 @@ fn stress_test(c: &mut Criterion) {
 
                     for i in 0..batch_size {
                         let (message, _) = create_test_message(&agent1_did, &agent2_did, i).await;
-                        futures.push(node.receive_message(message));
+                        let message_value = serde_json::to_value(message).unwrap();
+                        futures.push(node.receive_message(message_value));
                     }
 
                     // Wait for all messages to be processed

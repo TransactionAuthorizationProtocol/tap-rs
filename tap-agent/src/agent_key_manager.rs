@@ -64,8 +64,11 @@ impl AgentKeyManager {
         } else {
             return Err(Error::FailedToAcquireResolverReadLock);
         }
-        
-        Err(Error::KeyNotFound(format!("Generated key not found for DID: {}", did)))
+
+        Err(Error::KeyNotFound(format!(
+            "Generated key not found for DID: {}",
+            did
+        )))
     }
 
     /// Get the key type for a signing key (for debugging)

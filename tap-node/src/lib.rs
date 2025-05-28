@@ -88,7 +88,6 @@ pub mod agent;
 pub mod error;
 pub mod event;
 pub mod message;
-pub mod resolver;
 pub mod storage;
 
 pub use error::{Error, Result};
@@ -111,7 +110,7 @@ use crate::message::{
 };
 use agent::AgentRegistry;
 use event::EventBus;
-use resolver::NodeResolver;
+use tap_agent::did::MultiResolver;
 
 use async_trait::async_trait;
 
@@ -224,7 +223,7 @@ pub struct TapNode {
     /// PlainMessage router
     router: CompositePlainMessageRouter,
     /// Resolver for DIDs
-    resolver: Arc<NodeResolver>,
+    resolver: Arc<MultiResolver>,
     /// Worker pool for handling messages
     processor_pool: Option<ProcessorPool>,
     /// Node configuration
@@ -267,7 +266,7 @@ impl TapNode {
         ]);
 
         // Create the resolver
-        let resolver = Arc::new(NodeResolver::default());
+        let resolver = Arc::new(MultiResolver::default());
 
         // Storage will be initialized on first use
         #[cfg(feature = "storage")]
@@ -600,7 +599,7 @@ impl TapNode {
     }
 
     /// Get a reference to the resolver
-    pub fn resolver(&self) -> &Arc<NodeResolver> {
+    pub fn resolver(&self) -> &Arc<MultiResolver> {
         &self.resolver
     }
 

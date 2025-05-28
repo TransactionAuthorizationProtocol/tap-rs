@@ -801,6 +801,7 @@ impl TapAgent {
         }
 
         // For external recipients, try to resolve their DID document
+        #[cfg(all(not(target_arch = "wasm32"), test))]
         if let Some(resolver) = &self.resolver {
             if let Ok(Some(did_doc)) = resolver.resolve(recipient_did).await {
                 // Look for key agreement methods first
