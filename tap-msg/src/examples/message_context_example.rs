@@ -6,25 +6,29 @@
 use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::{MessageContext, Participant, TapMessageBody, TransactionContext};
-use crate::{impl_message_context, impl_tap_message};
+use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Example transfer message using the new MessageContext pattern
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct ExampleTransfer {
     /// Originator participant - automatically extracted
+    #[tap(participant)]
     pub originator: Participant,
 
     /// Optional beneficiary participant - automatically extracted
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(participant)]
     pub beneficiary: Option<Participant>,
 
     /// List of agent participants - automatically extracted
     #[serde(default)]
+    #[tap(participant_list)]
     pub agents: Vec<Participant>,
 
     /// Transaction ID for tracking
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Transfer amount
@@ -84,12 +88,7 @@ impl TapMessageBody for ExampleTransfer {
     }
 }
 
-// Implement both TapMessage and MessageContext
-impl_tap_message!(ExampleTransfer);
-impl_message_context!(ExampleTransfer,
-    participants: [originator, (beneficiary optional), (agents list)],
-    transaction_id: transaction_id
-);
+// TapMessage and MessageContext are now automatically implemented via #[derive(TapMessage)]
 
 /// Example showing how to create and use messages with the new pattern
 pub fn example_usage() -> Result<()> {

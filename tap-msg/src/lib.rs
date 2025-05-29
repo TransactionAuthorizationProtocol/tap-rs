@@ -9,18 +9,14 @@
 //! cryptocurrency asset transfers.
 
 // Internal modules
-pub mod derive;
 pub mod didcomm;
 pub mod error;
 pub mod examples;
 pub mod message;
 pub mod utils;
 
-// Re-export the derive macro from tap-msg-derive
-pub use tap_msg_derive::TapMessage;
-
-// Note: impl_tap_message, impl_message_context, and impl_tap_message_with_context
-// are already exported at crate root via #[macro_export] in derive.rs
+// Re-export the derive macros from tap-msg-derive
+pub use tap_msg_derive::{TapMessage, TapMessageBody};
 
 // Re-export public types for easier access
 pub use didcomm::{
