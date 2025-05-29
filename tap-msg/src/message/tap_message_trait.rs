@@ -306,7 +306,6 @@ pub trait TapMessage {
         Ok(message)
     }
 
-
     /// Get the thread ID for this message
     fn thread_id(&self) -> Option<&str>;
 
@@ -398,7 +397,6 @@ impl TapMessage for PlainMessage {
 
         participants
     }
-
 
     fn thread_id(&self) -> Option<&str> {
         self.thid.as_deref()

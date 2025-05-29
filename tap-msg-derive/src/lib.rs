@@ -63,7 +63,7 @@ use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 ///     
 ///     pub amount: String,
 /// }
-/// 
+///
 /// // TapMessageBody is automatically implemented with:
 /// // - message_type() returning the specified string
 /// // - validate() with basic validation (can be overridden)
@@ -124,7 +124,7 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
         where_clause,
         is_internal,
     );
-    
+
     let message_context_impl = impl_message_context_trait(
         name,
         &field_info,
@@ -500,7 +500,10 @@ fn impl_tap_message_body_trait(
         quote! { ::tap_msg }
     };
 
-    let message_type = field_info.message_type.as_ref().expect("Message type should be present");
+    let message_type = field_info
+        .message_type
+        .as_ref()
+        .expect("Message type should be present");
     let to_didcomm_impl = generate_to_didcomm_impl(field_info, is_internal);
 
     quote! {
@@ -529,19 +532,19 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
     };
 
     // Generate participant extraction
-    let participant_extraction = if !field_info.participant_fields.is_empty() 
-        || !field_info.optional_participant_fields.is_empty() 
-        || !field_info.participant_list_fields.is_empty() {
-        
+    let participant_extraction = if !field_info.participant_fields.is_empty()
+        || !field_info.optional_participant_fields.is_empty()
+        || !field_info.participant_list_fields.is_empty()
+    {
         let mut extracts = Vec::new();
-        
+
         // Required participants
         for field in &field_info.participant_fields {
             extracts.push(quote! {
                 recipient_dids.push(self.#field.id.clone());
             });
         }
-        
+
         // Optional participants
         for field in &field_info.optional_participant_fields {
             extracts.push(quote! {
@@ -550,7 +553,7 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
                 }
             });
         }
-        
+
         // Participant lists
         for field in &field_info.participant_list_fields {
             extracts.push(quote! {
@@ -563,7 +566,7 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
         quote! {
             let mut recipient_dids = Vec::new();
             #(#extracts)*
-            
+
             // Remove duplicates and sender
             recipient_dids.sort();
             recipient_dids.dedup();

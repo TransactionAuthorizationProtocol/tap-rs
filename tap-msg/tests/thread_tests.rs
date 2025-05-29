@@ -221,8 +221,9 @@ fn test_confirm_relationship() -> Result<()> {
         role: Some("custodian".to_string()),
     };
 
-    // Validate the message
-    confirm_relationship.validate()?;
+    // Validate the message using the trait method (auto-generated)
+    use tap_msg::message::tap_message_trait::TapMessageBody;
+    TapMessageBody::validate(&confirm_relationship)?;
 
     // Create a DIDComm message from the confirm_relationship
     let mut message = confirm_relationship.to_didcomm(_alice_did)?;

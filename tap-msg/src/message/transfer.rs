@@ -3,12 +3,10 @@
 //! This module defines the Transfer message type and its builder, which is
 //! the foundational message type for initiating a transfer in the TAP protocol.
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tap_caip::AssetId;
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::tap_message_trait::{Authorizable, Connectable, TapMessageBody};
 use crate::message::{Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, UpdatePolicies};
@@ -290,6 +288,42 @@ impl Connectable for Transfer {
     }
 }
 
+impl Authorizable for Transfer {
+    fn authorize(&self, note: Option<String>) -> Authorize {
+        Authorize {
+            transaction_id: self.transaction_id.clone(),
+            note,
+        }
+    }
+
+    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies {
+        UpdatePolicies {
+            transaction_id,
+            policies,
+        }
+    }
+
+    fn replace_agent(
+        &self,
+        transaction_id: String,
+        original_agent: String,
+        replacement: Participant,
+    ) -> ReplaceAgent {
+        ReplaceAgent {
+            transaction_id,
+            original: original_agent,
+            replacement,
+        }
+    }
+
+    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
+        RemoveAgent {
+            transaction_id,
+            agent,
+        }
+    }
+}
+
 impl TapMessageBody for Transfer {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#transfer"
@@ -327,7 +361,7 @@ impl TapMessageBody for Transfer {
         Ok(())
     }
 
-    fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from: &str) -> Result<crate::didcomm::PlainMessage> {
         // Serialize the Transfer to a JSON value
         let mut body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
@@ -363,7 +397,7 @@ impl TapMessageBody for Transfer {
         // Remove the sender from the recipients list to avoid sending to self
         agent_dids.retain(|did| did != from);
 
-        let now = Utc::now().timestamp() as u64;
+        let now = chrono::Utc::now().timestamp() as u64;
 
         // Get the connection ID if this message is connected to a previous message
         let pthid = self
@@ -371,7 +405,7 @@ impl TapMessageBody for Transfer {
             .map(|connect_id| connect_id.to_string());
 
         // Create a new Message with required fields
-        let message = PlainMessage {
+        let message = crate::didcomm::PlainMessage {
             id: uuid::Uuid::new_v4().to_string(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
@@ -388,62 +422,5 @@ impl TapMessageBody for Transfer {
         };
 
         Ok(message)
-    }
-
-    fn to_didcomm_with_route<'a, I>(&self, from: &str, to: I) -> Result<PlainMessage>
-    where
-        I: IntoIterator<Item = &'a str>,
-    {
-        // First create a message with the sender, automatically extracting agent DIDs
-        let mut message = self.to_didcomm(from)?;
-
-        // Override with explicitly provided recipients if any
-        let to_vec: Vec<String> = to.into_iter().map(String::from).collect();
-        if !to_vec.is_empty() {
-            message.to = to_vec;
-        }
-
-        // Set the parent thread ID if this message is connected to a previous message
-        if let Some(connect_id) = self.connection_id() {
-            message.pthid = Some(connect_id.to_string());
-        }
-
-        Ok(message)
-    }
-}
-
-impl Authorizable for Transfer {
-    fn authorize(&self, note: Option<String>) -> Authorize {
-        Authorize {
-            transaction_id: self.transaction_id.clone(),
-            note,
-        }
-    }
-
-    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies {
-        UpdatePolicies {
-            transaction_id,
-            policies,
-        }
-    }
-
-    fn replace_agent(
-        &self,
-        transaction_id: String,
-        original_agent: String,
-        replacement: Participant,
-    ) -> ReplaceAgent {
-        ReplaceAgent {
-            transaction_id,
-            original: original_agent,
-            replacement,
-        }
-    }
-
-    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
-        RemoveAgent {
-            transaction_id,
-            agent,
-        }
     }
 }

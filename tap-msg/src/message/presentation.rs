@@ -6,12 +6,11 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::error::Result;
-use crate::message::tap_message_trait::TapMessageBody;
-use crate::TapMessage;
+use crate::{TapMessage, TapMessageBody};
 
 /// Request Presentation message body (TAIP-10).
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#request-presentation")]
 pub struct RequestPresentation {
     /// Transfer ID that this request is related to.
     #[tap(transaction_id)]
@@ -44,36 +43,9 @@ pub struct RequestPresentation {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl TapMessageBody for RequestPresentation {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#request-presentation"
-    }
-
-    fn validate(&self) -> Result<()> {
-        if self.transaction_id.is_empty() {
-            return Err(crate::error::Error::Validation(
-                "Transaction ID is required in RequestPresentation".to_string(),
-            ));
-        }
-
-        if self.presentation_definition.is_empty() {
-            return Err(crate::error::Error::Validation(
-                "Presentation definition is required in RequestPresentation".to_string(),
-            ));
-        }
-
-        if self.challenge.is_empty() {
-            return Err(crate::error::Error::Validation(
-                "Challenge is required in RequestPresentation".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
-}
-
 /// Presentation message body (TAIP-8, TAIP-10).
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[tap(message_type = "https://didcomm.org/present-proof/3.0/presentation")]
 pub struct Presentation {
     /// Challenge from the request.
     pub challenge: String,
@@ -114,27 +86,5 @@ impl Presentation {
     pub fn with_metadata(mut self, key: &str, value: serde_json::Value) -> Self {
         self.metadata.insert(key.to_string(), value);
         self
-    }
-}
-
-impl TapMessageBody for Presentation {
-    fn message_type() -> &'static str {
-        "https://didcomm.org/present-proof/3.0/presentation"
-    }
-
-    fn validate(&self) -> Result<()> {
-        if self.challenge.is_empty() {
-            return Err(crate::error::Error::Validation(
-                "Challenge is required in Presentation".to_string(),
-            ));
-        }
-
-        if self.credentials.is_empty() {
-            return Err(crate::error::Error::Validation(
-                "Credentials are required in Presentation".to_string(),
-            ));
-        }
-
-        Ok(())
     }
 }

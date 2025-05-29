@@ -3,15 +3,13 @@
 //! This module defines the Settle message type, which is used
 //! for settling transactions in the TAP protocol.
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::message::tap_message_trait::TapMessageBody;
-use crate::TapMessage;
-use chrono::Utc;
+use crate::{TapMessage, TapMessageBody};
 use serde::{Deserialize, Serialize};
 
 /// Settle message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#settle")]
 pub struct Settle {
     /// ID of the transaction being settled.
     #[tap(transaction_id)]
@@ -45,12 +43,9 @@ impl Settle {
     }
 }
 
-impl TapMessageBody for Settle {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#settle"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl Settle {
+    /// Custom validation for Settle messages
+    pub fn validate_settle(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in Settle".to_string(),
@@ -85,43 +80,5 @@ impl TapMessageBody for Settle {
         }
 
         Ok(())
-    }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Create a JSON representation of self with explicit type field
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            // Add or update the @type field with the message type
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Create a new message with a random ID
-        let id = uuid::Uuid::new_v4().to_string();
-        let created_time = Utc::now().timestamp() as u64;
-
-        // Create the message
-        let message = PlainMessage {
-            id,
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            from: from_did.to_string(),
-            to: Vec::new(), // Empty recipients, will be determined by the framework later
-            thid: Some(self.transaction_id.clone()),
-            pthid: None,
-            created_time: Some(created_time),
-            expires_time: None,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            body: body_json,
-            attachments: None,
-        };
-
-        Ok(message)
     }
 }

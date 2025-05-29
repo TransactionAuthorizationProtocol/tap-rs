@@ -8,12 +8,10 @@ use std::collections::HashMap;
 
 use tap_caip::AssetId;
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::tap_message_trait::{Authorizable, Connectable, TapMessageBody};
 use crate::message::{Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, UpdatePolicies};
 use crate::TapMessage;
-use chrono::Utc;
 
 /// Payment message body (TAIP-14).
 ///
@@ -234,173 +232,6 @@ impl Connectable for Payment {
     }
 }
 
-impl TapMessageBody for Payment {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#payment"
-    }
-
-    fn validate(&self) -> Result<()> {
-        // Validate either asset or currency_code is provided
-        if self.asset.is_none() && self.currency_code.is_none() {
-            return Err(Error::Validation(
-                "Either asset or currency_code must be provided".to_string(),
-            ));
-        }
-
-        // Validate asset ID if provided
-        if let Some(asset) = &self.asset {
-            if asset.namespace().is_empty() || asset.reference().is_empty() {
-                return Err(Error::Validation("Asset ID is invalid".to_string()));
-            }
-        }
-
-        // Validate amount
-        if self.amount.is_empty() {
-            return Err(Error::Validation("Amount is required".to_string()));
-        }
-
-        // Validate amount is a positive number
-        match self.amount.parse::<f64>() {
-            Ok(amount) if amount <= 0.0 => {
-                return Err(Error::Validation("Amount must be positive".to_string()));
-            }
-            Err(_) => {
-                return Err(Error::Validation(
-                    "Amount must be a valid number".to_string(),
-                ));
-            }
-            _ => {}
-        }
-
-        // Validate merchant
-        if self.merchant.id.is_empty() {
-            return Err(Error::Validation("Merchant ID is required".to_string()));
-        }
-
-        // Validate supported_assets if provided
-        if let Some(supported_assets) = &self.supported_assets {
-            if supported_assets.is_empty() {
-                return Err(Error::Validation(
-                    "Supported assets list cannot be empty".to_string(),
-                ));
-            }
-
-            // Validate each asset ID in the supported_assets list
-            for (i, asset) in supported_assets.iter().enumerate() {
-                if asset.namespace().is_empty() || asset.reference().is_empty() {
-                    return Err(Error::Validation(format!(
-                        "Supported asset at index {} is invalid",
-                        i
-                    )));
-                }
-            }
-        }
-
-        // If invoice is provided, validate it
-        if let Some(invoice) = &self.invoice {
-            // Call the validate method on the invoice
-            if let Err(e) = invoice.validate() {
-                return Err(Error::Validation(format!(
-                    "Invoice validation failed: {}",
-                    e
-                )));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Serialize the Payment to a JSON value
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Extract agent DIDs directly from the message
-        let mut agent_dids = Vec::new();
-
-        // Add merchant DID
-        agent_dids.push(self.merchant.id.clone());
-
-        // Add customer DID if present
-        if let Some(customer) = &self.customer {
-            agent_dids.push(customer.id.clone());
-        }
-
-        // Add DIDs from agents array
-        for agent in &self.agents {
-            agent_dids.push(agent.id.clone());
-        }
-
-        // Remove duplicates
-        agent_dids.sort();
-        agent_dids.dedup();
-
-        // Remove the sender from the recipients list to avoid sending to self
-        agent_dids.retain(|did| did != from_did);
-
-        let now = Utc::now().timestamp() as u64;
-
-        // Get the connection ID if this message is connected to a previous message
-        let pthid = self
-            .connection_id()
-            .map(|connect_id| connect_id.to_string());
-
-        // Set expires_time based on the expiry field if provided
-        let expires_time = self.expiry.as_ref().and_then(|expiry| {
-            // Try to parse ISO 8601 date to epoch seconds
-            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(expiry) {
-                Some(dt.timestamp() as u64)
-            } else {
-                None
-            }
-        });
-
-        // Create a new Message with required fields
-        let message = PlainMessage {
-            id: uuid::Uuid::new_v4().to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            body: body_json,
-            from: from_did.to_string(),
-            to: agent_dids,
-            thid: Some(self.transaction_id.clone()),
-            pthid,
-            created_time: Some(now),
-            expires_time,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            attachments: None,
-        };
-
-        Ok(message)
-    }
-
-    fn from_didcomm(message: &PlainMessage) -> Result<Self> {
-        // Validate message type
-        if message.type_ != Self::message_type() {
-            return Err(Error::InvalidMessageType(format!(
-                "Expected {} but got {}",
-                Self::message_type(),
-                message.type_
-            )));
-        }
-
-        // Extract fields from message body
-        let payment: Payment = serde_json::from_value(message.body.clone())
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        Ok(payment)
-    }
-}
-
 impl Authorizable for Payment {
     fn authorize(&self, note: Option<String>) -> Authorize {
         Authorize {
@@ -506,5 +337,155 @@ impl Payment {
             agents,
             metadata: HashMap::new(),
         }
+    }
+}
+
+impl TapMessageBody for Payment {
+    fn message_type() -> &'static str {
+        "https://tap.rsvp/schema/1.0#payment"
+    }
+
+    fn validate(&self) -> Result<()> {
+        // Validate either asset or currency_code is provided
+        if self.asset.is_none() && self.currency_code.is_none() {
+            return Err(Error::Validation(
+                "Either asset or currency_code must be provided".to_string(),
+            ));
+        }
+
+        // Validate asset ID if provided
+        if let Some(asset) = &self.asset {
+            if asset.namespace().is_empty() || asset.reference().is_empty() {
+                return Err(Error::Validation("Asset ID is invalid".to_string()));
+            }
+        }
+
+        // Validate amount
+        if self.amount.is_empty() {
+            return Err(Error::Validation("Amount is required".to_string()));
+        }
+
+        // Validate amount is a positive number
+        match self.amount.parse::<f64>() {
+            Ok(amount) if amount <= 0.0 => {
+                return Err(Error::Validation("Amount must be positive".to_string()));
+            }
+            Err(_) => {
+                return Err(Error::Validation(
+                    "Amount must be a valid number".to_string(),
+                ));
+            }
+            _ => {}
+        }
+
+        // Validate merchant
+        if self.merchant.id.is_empty() {
+            return Err(Error::Validation("Merchant ID is required".to_string()));
+        }
+
+        // Validate supported_assets if provided
+        if let Some(supported_assets) = &self.supported_assets {
+            if supported_assets.is_empty() {
+                return Err(Error::Validation(
+                    "Supported assets list cannot be empty".to_string(),
+                ));
+            }
+
+            // Validate each asset ID in the supported_assets list
+            for (i, asset) in supported_assets.iter().enumerate() {
+                if asset.namespace().is_empty() || asset.reference().is_empty() {
+                    return Err(Error::Validation(format!(
+                        "Supported asset at index {} is invalid",
+                        i
+                    )));
+                }
+            }
+        }
+
+        // If invoice is provided, validate it
+        if let Some(invoice) = &self.invoice {
+            // Call the validate method on the invoice
+            if let Err(e) = invoice.validate() {
+                return Err(Error::Validation(format!(
+                    "Invoice validation failed: {}",
+                    e
+                )));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn to_didcomm(&self, from_did: &str) -> Result<crate::didcomm::PlainMessage> {
+        // Serialize the Payment to a JSON value
+        let mut body_json =
+            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Extract agent DIDs directly from the message
+        let mut agent_dids = Vec::new();
+
+        // Add merchant DID
+        agent_dids.push(self.merchant.id.clone());
+
+        // Add customer DID if present
+        if let Some(customer) = &self.customer {
+            agent_dids.push(customer.id.clone());
+        }
+
+        // Add DIDs from agents array
+        for agent in &self.agents {
+            agent_dids.push(agent.id.clone());
+        }
+
+        // Remove duplicates
+        agent_dids.sort();
+        agent_dids.dedup();
+
+        // Remove the sender from the recipients list to avoid sending to self
+        agent_dids.retain(|did| did != from_did);
+
+        let now = chrono::Utc::now().timestamp() as u64;
+
+        // Get the connection ID if this message is connected to a previous message
+        let pthid = self
+            .connection_id()
+            .map(|connect_id| connect_id.to_string());
+
+        // Set expires_time based on the expiry field if provided
+        let expires_time = self.expiry.as_ref().and_then(|expiry| {
+            // Try to parse ISO 8601 date to epoch seconds
+            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(expiry) {
+                Some(dt.timestamp() as u64)
+            } else {
+                None
+            }
+        });
+
+        // Create a new Message with required fields
+        let message = crate::didcomm::PlainMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: from_did.to_string(),
+            to: agent_dids,
+            thid: Some(self.transaction_id.clone()),
+            pthid,
+            created_time: Some(now),
+            expires_time,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            attachments: None,
+        };
+
+        Ok(message)
     }
 }

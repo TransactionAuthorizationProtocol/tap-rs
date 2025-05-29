@@ -3,12 +3,9 @@
 //! This module defines the UpdatePolicies message type, which is used
 //! to update policies in an existing transaction.
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
-use crate::message::tap_message_trait::TapMessageBody;
-use crate::TapMessage;
-use chrono::Utc;
+use crate::{TapMessage, TapMessageBody};
 use serde::{Deserialize, Serialize};
 
 /// UpdatePolicies message body (TAIP-7).
@@ -32,8 +29,8 @@ impl UpdatePolicies {
         }
     }
 
-    /// Validates the UpdatePolicies message.
-    pub fn validate(&self) -> Result<()> {
+    /// Custom validation for UpdatePolicies messages
+    pub fn validate_update_policies(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "UpdatePolicies must have a transaction_id".to_string(),
@@ -60,44 +57,6 @@ impl TapMessageBody for UpdatePolicies {
     }
 
     fn validate(&self) -> Result<()> {
-        self.validate()
-    }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Serialize the UpdatePolicies to a JSON value
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        let now = Utc::now().timestamp() as u64;
-
-        // The from field is required in our PlainMessage
-        let from = from_did.to_string();
-
-        // Create a new Message with required fields
-        let message = PlainMessage {
-            id: uuid::Uuid::new_v4().to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            body: body_json,
-            from,
-            to: Vec::new(),
-            thid: Some(self.transaction_id.clone()),
-            pthid: None,
-            created_time: Some(now),
-            expires_time: None,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            attachments: None,
-        };
-
-        Ok(message)
+        self.validate_update_policies()
     }
 }
