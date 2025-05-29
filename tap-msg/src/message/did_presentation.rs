@@ -8,11 +8,20 @@ use crate::didcomm::Attachment;
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 use chrono::Utc;
 
+fn default_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
+
 /// DIDComm Presentation message body.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct DIDCommPresentation {
+    /// Message ID.
+    #[serde(default = "default_id")]
+    pub id: String,
+
     /// The format of the presentation (simplified from AttachmentFormat).
     pub formats: Vec<String>,
 
@@ -21,6 +30,7 @@ pub struct DIDCommPresentation {
 
     /// Thread ID for this presentation.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(thread_id)]
     pub thid: Option<String>,
 }
 
@@ -178,6 +188,7 @@ impl DIDCommPresentation {
     /// Create a new DIDCommPresentation message.
     pub fn new(formats: Vec<String>, attachments: Vec<Attachment>, thid: Option<String>) -> Self {
         Self {
+            id: default_id(),
             formats,
             attachments,
             thid,

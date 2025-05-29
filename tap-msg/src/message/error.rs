@@ -9,11 +9,12 @@ use std::collections::HashMap;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 
 /// Error message body.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(generated_id)]
 pub struct ErrorBody {
     /// Error code.
     pub code: String,
@@ -122,5 +123,3 @@ impl TapMessageBody for ErrorBody {
         Ok(message)
     }
 }
-
-impl_tap_message!(ErrorBody, generated_id);

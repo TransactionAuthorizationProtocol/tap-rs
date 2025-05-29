@@ -154,6 +154,85 @@ pub trait Agent {
         self.send_message(&body, to_vec, deliver).await
     }
 
+    /// Send a message with MessageContext support for automatic routing
+    ///
+    /// This method uses MessageContext to automatically extract participants
+    /// and routing hints for improved message delivery.
+    ///
+    /// # Parameters
+    /// - `message`: The message body that implements both TapMessageBody and MessageContext
+    /// - `deliver`: Whether to actually deliver the message
+    ///
+    /// # Returns
+    /// - Packed message string
+    /// - Vector of delivery results (empty if deliver=false)
+    async fn send_with_context<T>(
+        &self,
+        message: &T,
+        deliver: bool,
+    ) -> Result<(String, Vec<DeliveryResult>)>
+    where
+        T: TapMessageBody
+            + tap_msg::message::MessageContext
+            + Send
+            + Sync
+            + std::fmt::Debug
+            + 'static,
+    {
+        // Extract participants using MessageContext
+        let participant_dids = message.participant_dids();
+        let recipients: Vec<&str> = participant_dids
+            .iter()
+            .map(|s| s.as_str())
+            .filter(|&did| did != self.get_agent_did()) // Don't send to self
+            .collect();
+
+        // Get routing hints for enhanced delivery
+        let _routing_hints = message.routing_hints();
+
+        // TODO: Use routing_hints to optimize delivery
+        // For now, just use the standard send_message method
+        self.send_message(message, recipients, deliver).await
+    }
+
+    /// Send a typed message with automatic context routing
+    ///
+    /// # Parameters
+    /// - `message`: The typed message with MessageContext support
+    /// - `deliver`: Whether to actually deliver the message
+    ///
+    /// # Returns
+    /// - Packed message string
+    /// - Vector of delivery results (empty if deliver=false)
+    async fn send_typed_with_context<T>(
+        &self,
+        message: PlainMessage<T>,
+        deliver: bool,
+    ) -> Result<(String, Vec<DeliveryResult>)>
+    where
+        T: TapMessageBody
+            + tap_msg::message::MessageContext
+            + Send
+            + Sync
+            + std::fmt::Debug
+            + 'static,
+    {
+        // Use the enhanced participant extraction
+        let participants = message.extract_participants_with_context();
+        let _recipients: Vec<&str> = participants
+            .iter()
+            .map(|s| s.as_str())
+            .filter(|&did| did != self.get_agent_did()) // Don't send to self
+            .collect();
+
+        // Get routing hints
+        let _routing_hints = message.routing_hints();
+
+        // Extract the body and send using the context-aware method
+        let body = message.body;
+        self.send_with_context(&body, deliver).await
+    }
+
     /// Receive and parse a typed message
     ///
     /// # Parameters

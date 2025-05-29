@@ -5,15 +5,16 @@
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// Cancel message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Cancel {
     /// ID of the transfer being cancelled.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Optional reason for cancellation.
@@ -104,5 +105,3 @@ impl TapMessageBody for Cancel {
         Ok(message)
     }
 }
-
-impl_tap_message!(Cancel);

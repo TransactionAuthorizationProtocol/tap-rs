@@ -8,13 +8,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 
 /// Reject message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Reject {
     /// ID of the transaction being rejected.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Reason for rejection.
@@ -93,5 +94,3 @@ impl TapMessageBody for Reject {
         Ok(message)
     }
 }
-
-impl_tap_message!(Reject);

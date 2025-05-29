@@ -5,18 +5,19 @@
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// ConfirmRelationship message body (TAIP-9).
 ///
 /// This message type allows confirming a relationship between agents.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct ConfirmRelationship {
     /// ID of the transaction related to this message.
     #[serde(rename = "transfer_id")]
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// DID of the agent whose relationship is being confirmed.
@@ -116,5 +117,3 @@ impl TapMessageBody for ConfirmRelationship {
         Ok(message)
     }
 }
-
-impl_tap_message!(ConfirmRelationship);

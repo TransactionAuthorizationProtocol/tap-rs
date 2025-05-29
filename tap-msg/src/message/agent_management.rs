@@ -8,18 +8,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::Participant;
+use crate::TapMessage;
 
 /// Add agents message body (TAIP-5).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct AddAgents {
     /// ID of the transaction to add agents to.
     #[serde(rename = "transfer_id")]
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Agents to add.
+    #[tap(participant_list)]
     pub agents: Vec<Participant>,
 }
 
@@ -105,21 +107,21 @@ impl TapMessageBody for AddAgents {
     }
 }
 
-impl_tap_message!(AddAgents);
-
 /// Replace agent message body (TAIP-5).
 ///
 /// This message type allows replacing an agent with another agent in a transaction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct ReplaceAgent {
     /// ID of the transaction to replace agent in.
     #[serde(rename = "transfer_id")]
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// DID of the original agent to replace.
     pub original: String,
 
     /// Replacement agent.
+    #[tap(participant)]
     pub replacement: Participant,
 }
 
@@ -199,15 +201,14 @@ impl TapMessageBody for ReplaceAgent {
     }
 }
 
-impl_tap_message!(ReplaceAgent);
-
 /// Remove agent message body (TAIP-5).
 ///
 /// This message type allows removing an agent from a transaction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct RemoveAgent {
     /// ID of the transaction to remove agent from.
     #[serde(rename = "transfer_id")]
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// DID of the agent to remove.
@@ -282,5 +283,3 @@ impl TapMessageBody for RemoveAgent {
         Ok(message)
     }
 }
-
-impl_tap_message!(RemoveAgent);

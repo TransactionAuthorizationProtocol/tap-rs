@@ -8,8 +8,8 @@ use std::collections::HashMap;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::{Connectable, TapMessageBody};
+use crate::TapMessage;
 use chrono::Utc;
 
 /// Transaction limits for connection constraints.
@@ -33,9 +33,10 @@ pub struct ConnectionConstraints {
 }
 
 /// Connect message body (TAIP-2).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Connect {
     /// Transaction ID.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Agent DID.
@@ -200,8 +201,6 @@ impl TapMessageBody for Connect {
     }
 }
 
-impl_tap_message!(Connect);
-
 impl TapMessageBody for AuthorizationRequired {
     fn message_type() -> &'static str {
         "https://tap.rsvp/schema/1.0#authorizationrequired"
@@ -283,7 +282,8 @@ impl TapMessageBody for AuthorizationRequired {
 }
 
 /// Out of Band invitation for TAP connections.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(generated_id)]
 pub struct OutOfBand {
     /// The goal code for this invitation.
     pub goal_code: String,
@@ -392,7 +392,8 @@ impl TapMessageBody for OutOfBand {
 }
 
 /// Authorization Required message body.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(generated_id)]
 pub struct AuthorizationRequired {
     /// Authorization URL.
     pub url: String,

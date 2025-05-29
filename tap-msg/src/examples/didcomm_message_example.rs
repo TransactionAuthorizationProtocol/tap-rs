@@ -144,6 +144,7 @@ pub fn create_presentation_with_attachments_example() -> Result<PlainMessage> {
 
     // Create a DIDCommPresentation with format and attachment
     let presentation = DIDCommPresentation {
+        id: uuid::Uuid::new_v4().to_string(),
         formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
         attachments: vec![attachment],
         thid: Some("test-thread-id".to_string()),

@@ -16,6 +16,12 @@ pub mod examples;
 pub mod message;
 pub mod utils;
 
+// Re-export the derive macro from tap-msg-derive
+pub use tap_msg_derive::TapMessage;
+
+// Note: impl_tap_message, impl_message_context, and impl_tap_message_with_context
+// are already exported at crate root via #[macro_export] in derive.rs
+
 // Re-export public types for easier access
 pub use didcomm::{
     Attachment, AttachmentData, Base64AttachmentData, JsonAttachmentData, LinksAttachmentData,
@@ -24,8 +30,8 @@ pub use didcomm::{
 pub use error::{Error, Result};
 pub use message::{
     create_tap_message, AddAgents, Authorize, DocumentReference, ErrorBody, Invoice, LineItem,
-    OrderReference, Participant, Payment, Presentation, Reject, Settle, TapMessageBody,
-    TaxCategory, TaxSubtotal, TaxTotal, Transfer,
+    MessageContext, OrderReference, Participant, Payment, Presentation, Reject, Settle,
+    TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, TransactionContext, Transfer,
 };
 
 // Conditional compilation for WASM targets

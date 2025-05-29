@@ -1,0 +1,406 @@
+//! Procedural derive macro for implementing TAP message traits.
+//!
+//! This crate provides the `#[derive(TapMessage)]` macro that automatically
+//! implements both `TapMessage` and `MessageContext` traits based on field attributes.
+
+use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
+use quote::quote;
+use syn::{parse_macro_input, Data, DeriveInput, Field, Fields, Meta};
+
+/// Procedural derive macro for implementing TapMessage and MessageContext traits.
+///
+/// # Usage
+///
+/// ```rust
+/// use tap_msg::TapMessage;
+/// use tap_msg::message::Participant;
+/// use tap_caip::AssetId;
+///
+/// #[derive(TapMessage)]
+/// pub struct Transfer {
+///     #[tap(participant)]
+///     pub originator: Participant,
+///     
+///     #[tap(participant)]
+///     pub beneficiary: Option<Participant>,
+///     
+///     #[tap(participant_list)]
+///     pub agents: Vec<Participant>,
+///     
+///     #[tap(transaction_id)]
+///     pub transaction_id: String,
+///     
+///     // regular fields don't need attributes
+///     pub amount: String,
+///     pub asset: AssetId,
+/// }
+/// ```
+///
+/// # Supported Attributes
+///
+/// - `#[tap(participant)]` - Single participant field (required or optional)
+/// - `#[tap(participant_list)]` - Vec<Participant> field
+/// - `#[tap(transaction_id)]` - Transaction ID field
+/// - `#[tap(optional_transaction_id)]` - Optional transaction ID field
+/// - `#[tap(thread_id)]` - Thread ID field (for thread-based messages)
+/// - `#[tap(generated_id)]` - Indicates the message uses a generated ID
+#[proc_macro_derive(TapMessage, attributes(tap))]
+pub fn derive_tap_message(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let expanded = impl_tap_message(&input);
+    TokenStream::from(expanded)
+}
+
+fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+            _ => panic!("TapMessage can only be derived for structs with named fields"),
+        },
+        _ => panic!("TapMessage can only be derived for structs"),
+    };
+
+    let field_info = analyze_fields(fields, &input.attrs);
+
+    let tap_message_impl = impl_tap_message_trait(
+        name,
+        &field_info,
+        &impl_generics,
+        &ty_generics,
+        where_clause,
+    );
+    let message_context_impl = impl_message_context_trait(
+        name,
+        &field_info,
+        &impl_generics,
+        &ty_generics,
+        where_clause,
+    );
+
+    quote! {
+        #tap_message_impl
+        #message_context_impl
+    }
+}
+
+#[derive(Debug)]
+struct FieldInfo {
+    participant_fields: Vec<syn::Ident>,
+    optional_participant_fields: Vec<syn::Ident>,
+    participant_list_fields: Vec<syn::Ident>,
+    transaction_id_field: Option<syn::Ident>,
+    optional_transaction_id_field: Option<syn::Ident>,
+    thread_id_field: Option<syn::Ident>,
+    has_generated_id: bool,
+}
+
+fn analyze_fields(
+    fields: &syn::punctuated::Punctuated<Field, syn::Token![,]>,
+    struct_attrs: &[syn::Attribute],
+) -> FieldInfo {
+    let mut field_info = FieldInfo {
+        participant_fields: Vec::new(),
+        optional_participant_fields: Vec::new(),
+        participant_list_fields: Vec::new(),
+        transaction_id_field: None,
+        optional_transaction_id_field: None,
+        thread_id_field: None,
+        has_generated_id: false,
+    };
+
+    // First check struct-level attributes
+    for attr in struct_attrs {
+        if attr.path().is_ident("tap") {
+            let _ = attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("generated_id") {
+                    field_info.has_generated_id = true;
+                }
+                Ok(())
+            });
+        }
+    }
+
+    for field in fields {
+        let field_name = field.ident.as_ref().expect("Field must have a name");
+
+        for attr in &field.attrs {
+            if attr.path().is_ident("tap") {
+                let _ = attr.parse_nested_meta(|meta| {
+                    if meta.path.is_ident("participant") {
+                        // Check if the field type is Option<Participant>
+                        if is_optional_type(&field.ty) {
+                            field_info
+                                .optional_participant_fields
+                                .push(field_name.clone());
+                        } else {
+                            field_info.participant_fields.push(field_name.clone());
+                        }
+                    } else if meta.path.is_ident("participant_list") {
+                        field_info.participant_list_fields.push(field_name.clone());
+                    } else if meta.path.is_ident("transaction_id") {
+                        field_info.transaction_id_field = Some(field_name.clone());
+                    } else if meta.path.is_ident("optional_transaction_id") {
+                        field_info.optional_transaction_id_field = Some(field_name.clone());
+                    } else if meta.path.is_ident("thread_id") {
+                        field_info.thread_id_field = Some(field_name.clone());
+                    } else if meta.path.is_ident("generated_id") {
+                        field_info.has_generated_id = true;
+                    }
+                    Ok(())
+                });
+            }
+        }
+    }
+
+    field_info
+}
+
+fn is_optional_type(ty: &syn::Type) -> bool {
+    if let syn::Type::Path(type_path) = ty {
+        if let Some(segment) = type_path.path.segments.last() {
+            return segment.ident == "Option";
+        }
+    }
+    false
+}
+
+fn impl_tap_message_trait(
+    name: &syn::Ident,
+    field_info: &FieldInfo,
+    impl_generics: &syn::ImplGenerics,
+    ty_generics: &syn::TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
+) -> TokenStream2 {
+    let thread_id_impl = generate_thread_id_impl(field_info);
+    let message_id_impl = generate_message_id_impl(field_info);
+    let get_all_participants_impl = generate_get_all_participants_impl(field_info);
+
+    quote! {
+        impl #impl_generics crate::message::tap_message_trait::TapMessage for #name #ty_generics #where_clause {
+            fn validate(&self) -> crate::error::Result<()> {
+                <Self as crate::message::tap_message_trait::TapMessageBody>::validate(self)
+            }
+
+            fn is_tap_message(&self) -> bool {
+                false
+            }
+
+            fn get_tap_type(&self) -> Option<String> {
+                Some(
+                    <Self as crate::message::tap_message_trait::TapMessageBody>::message_type()
+                        .to_string(),
+                )
+            }
+
+            fn body_as<T: crate::message::tap_message_trait::TapMessageBody>(
+                &self,
+            ) -> crate::error::Result<T> {
+                unimplemented!()
+            }
+
+            fn get_all_participants(&self) -> Vec<String> {
+                #get_all_participants_impl
+            }
+
+            fn create_reply<T: crate::message::tap_message_trait::TapMessageBody>(
+                &self,
+                body: &T,
+                creator_did: &str,
+            ) -> crate::error::Result<crate::didcomm::PlainMessage> {
+                // Create the base message with creator as sender
+                let mut message = body.to_didcomm(creator_did)?;
+
+                // Set the thread ID to maintain the conversation thread
+                if let Some(thread_id) = self.thread_id() {
+                    message.thid = Some(thread_id.to_string());
+                } else {
+                    // If no thread ID exists, use the original message ID as the thread ID
+                    message.thid = Some(self.message_id().to_string());
+                }
+
+                // Set the parent thread ID if this thread is part of a larger transaction
+                if let Some(parent_thread_id) = self.parent_thread_id() {
+                    message.pthid = Some(parent_thread_id.to_string());
+                }
+
+                Ok(message)
+            }
+
+            fn message_type(&self) -> &'static str {
+                <Self as crate::message::tap_message_trait::TapMessageBody>::message_type()
+            }
+
+            fn thread_id(&self) -> Option<&str> {
+                #thread_id_impl
+            }
+
+            fn parent_thread_id(&self) -> Option<&str> {
+                None
+            }
+
+            fn message_id(&self) -> &str {
+                #message_id_impl
+            }
+        }
+    }
+}
+
+fn impl_message_context_trait(
+    name: &syn::Ident,
+    field_info: &FieldInfo,
+    impl_generics: &syn::ImplGenerics,
+    ty_generics: &syn::TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
+) -> TokenStream2 {
+    let participants_impl = generate_participants_impl(field_info);
+    let transaction_context_impl = generate_transaction_context_impl(field_info);
+
+    quote! {
+        impl #impl_generics crate::message::MessageContext for #name #ty_generics #where_clause {
+            fn participants(&self) -> Vec<&crate::message::Participant> {
+                #participants_impl
+            }
+
+            fn transaction_context(&self) -> Option<crate::message::TransactionContext> {
+                #transaction_context_impl
+            }
+        }
+    }
+}
+
+fn generate_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
+    let mut participant_pushes = Vec::new();
+
+    // Add required participants
+    for field in &field_info.participant_fields {
+        participant_pushes.push(quote! {
+            participants.push(&self.#field);
+        });
+    }
+
+    // Add optional participants
+    for field in &field_info.optional_participant_fields {
+        participant_pushes.push(quote! {
+            if let Some(ref participant) = self.#field {
+                participants.push(participant);
+            }
+        });
+    }
+
+    // Add participant lists
+    for field in &field_info.participant_list_fields {
+        participant_pushes.push(quote! {
+            participants.extend(&self.#field);
+        });
+    }
+
+    quote! {
+        let mut participants = Vec::new();
+        #(#participant_pushes)*
+        participants
+    }
+}
+
+fn generate_get_all_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
+    let mut participant_extracts = Vec::new();
+
+    // Add required participants
+    for field in &field_info.participant_fields {
+        participant_extracts.push(quote! {
+            participants.push(self.#field.id.clone());
+        });
+    }
+
+    // Add optional participants
+    for field in &field_info.optional_participant_fields {
+        participant_extracts.push(quote! {
+            if let Some(ref participant) = self.#field {
+                participants.push(participant.id.clone());
+            }
+        });
+    }
+
+    // Add participant lists
+    for field in &field_info.participant_list_fields {
+        participant_extracts.push(quote! {
+            for participant in &self.#field {
+                participants.push(participant.id.clone());
+            }
+        });
+    }
+
+    quote! {
+        let mut participants = Vec::new();
+        #(#participant_extracts)*
+        participants
+    }
+}
+
+fn generate_thread_id_impl(field_info: &FieldInfo) -> TokenStream2 {
+    if let Some(thread_field) = &field_info.thread_id_field {
+        quote! { self.#thread_field.as_deref() }
+    } else if let Some(tx_field) = &field_info.transaction_id_field {
+        quote! { Some(&self.#tx_field) }
+    } else if let Some(opt_tx_field) = &field_info.optional_transaction_id_field {
+        quote! { self.#opt_tx_field.as_deref() }
+    } else {
+        quote! { None }
+    }
+}
+
+fn generate_message_id_impl(field_info: &FieldInfo) -> TokenStream2 {
+    if let Some(tx_field) = &field_info.transaction_id_field {
+        quote! { &self.#tx_field }
+    } else if let Some(opt_tx_field) = &field_info.optional_transaction_id_field {
+        quote! {
+            if let Some(ref id) = self.#opt_tx_field {
+                id
+            } else {
+                &self.id
+            }
+        }
+    } else if let Some(thread_field) = &field_info.thread_id_field {
+        quote! {
+            if let Some(ref thid) = self.#thread_field {
+                thid
+            } else {
+                &self.id
+            }
+        }
+    } else if field_info.has_generated_id {
+        quote! {
+            // For types without an ID field, we'll use a static string
+            // This isn't ideal but it satisfies the API contract
+            static FALLBACK_ID: &str = "00000000-0000-0000-0000-000000000000";
+            FALLBACK_ID
+        }
+    } else {
+        quote! { &self.transaction_id }
+    }
+}
+
+fn generate_transaction_context_impl(field_info: &FieldInfo) -> TokenStream2 {
+    if let Some(tx_field) = &field_info.transaction_id_field {
+        quote! {
+            Some(crate::message::TransactionContext::new(
+                self.#tx_field.clone(),
+                <Self as crate::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
+            ))
+        }
+    } else if let Some(opt_tx_field) = &field_info.optional_transaction_id_field {
+        quote! {
+            self.#opt_tx_field.as_ref().map(|tx_id| {
+                crate::message::TransactionContext::new(
+                    tx_id.clone(),
+                    <Self as crate::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
+                )
+            })
+        }
+    } else {
+        quote! { None }
+    }
+}

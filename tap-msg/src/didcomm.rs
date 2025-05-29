@@ -202,12 +202,16 @@ where
 
     /// Extract recipients based on the message body participants
     pub fn extract_participants(&self) -> Vec<String> {
-        // This uses the same logic as TapMessageBody::to_didcomm
         let mut participants = vec![];
 
-        // Try to extract from the body using TapMessageBody trait
-        if let Ok(plain_msg) = self.body.to_didcomm(&self.from) {
-            participants = plain_msg.to;
+        // Try to extract from MessageContext first if implemented
+        if let Some(ctx_participants) = self.try_extract_from_context() {
+            participants = ctx_participants;
+        } else {
+            // Fallback to TapMessageBody::to_didcomm
+            if let Ok(plain_msg) = self.body.to_didcomm(&self.from) {
+                participants = plain_msg.to;
+            }
         }
 
         // Add any explicitly set recipients
@@ -218,6 +222,62 @@ where
         }
 
         participants
+    }
+
+    /// Try to extract participants using MessageContext if available
+    fn try_extract_from_context(&self) -> Option<Vec<String>> {
+        // This is a compile-time check - if T implements MessageContext,
+        // we can use it. Otherwise, this will return None.
+        //
+        // In practice, this would need to be implemented using trait objects
+        // or type erasure, but for now we'll use the TapMessageBody approach
+        // and let individual message types override this behavior.
+        None
+    }
+}
+
+// Implementation for PlainMessage<T> where T implements both TapMessageBody and MessageContext
+impl<T> PlainMessage<T>
+where
+    T: crate::message::TapMessageBody
+        + crate::message::MessageContext
+        + serde::Serialize
+        + serde::de::DeserializeOwned,
+{
+    /// Extract participants using MessageContext
+    pub fn extract_participants_with_context(&self) -> Vec<String> {
+        self.body.participant_dids()
+    }
+
+    /// Create a typed message with automatic recipient detection
+    pub fn new_typed_with_context(body: T, from: &str) -> Self {
+        let participants = body.participant_dids();
+
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: default_typ(),
+            type_: T::message_type().to_string(),
+            body,
+            from: from.to_string(),
+            to: participants.into_iter().filter(|did| did != from).collect(),
+            thid: None,
+            pthid: None,
+            created_time: Some(chrono::Utc::now().timestamp() as u64),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: HashMap::new(),
+        }
+    }
+
+    /// Get routing hints from the message body
+    pub fn routing_hints(&self) -> crate::message::RoutingHints {
+        self.body.routing_hints()
+    }
+
+    /// Get transaction context from the message body
+    pub fn transaction_context(&self) -> Option<crate::message::TransactionContext> {
+        self.body.transaction_context()
     }
 }
 

@@ -7,13 +7,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::Result;
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 
 /// Request Presentation message body (TAIP-10).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct RequestPresentation {
     /// Transfer ID that this request is related to.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Presentation definition identifier or URI.
@@ -71,10 +72,8 @@ impl TapMessageBody for RequestPresentation {
     }
 }
 
-impl_tap_message!(RequestPresentation);
-
 /// Presentation message body (TAIP-8, TAIP-10).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Presentation {
     /// Challenge from the request.
     pub challenge: String,
@@ -84,6 +83,7 @@ pub struct Presentation {
 
     /// Transfer ID that this presentation is related to (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(optional_transaction_id)]
     pub transaction_id: Option<String>,
 
     /// Identifier for this presentation (used for message_id)
@@ -138,5 +138,3 @@ impl TapMessageBody for Presentation {
         Ok(())
     }
 }
-
-impl_tap_message!(Presentation, optional_transaction_id);

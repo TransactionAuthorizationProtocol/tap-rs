@@ -325,3 +325,146 @@ macro_rules! impl_tap_message {
         }
     };
 }
+
+/// Implements MessageContext trait for structs with participant fields.
+///
+/// This macro generates MessageContext implementations based on the struct fields.
+/// It automatically detects Participant fields and provides participant extraction.
+///
+/// # Usage
+///
+/// ```ignore
+/// use tap_msg::{impl_message_context, MessageContext};
+///
+/// struct Transfer {
+///     originator: Participant,
+///     beneficiary: Option<Participant>,
+///     agents: Vec<Participant>,
+///     transaction_id: String,
+/// }
+///
+/// impl_message_context!(Transfer,
+///     participants: [originator, (beneficiary optional), (agents list)],
+///     transaction_id: transaction_id
+/// );
+/// ```
+///
+/// # Syntax
+///
+/// - `field` - Required Participant field
+/// - `(field optional)` - Optional Participant field (Option<Participant>)
+/// - `(field list)` - Participant list field (Vec<Participant>)
+/// - `transaction_id: field_name` - Transaction ID field
+#[macro_export]
+macro_rules! impl_message_context {
+    ($type:ty,
+        participants: [$($participant_spec:tt),*],
+        transaction_id: $tx_field:ident
+    ) => {
+        impl $crate::message::MessageContext for $type {
+            fn participants(&self) -> Vec<&$crate::message::Participant> {
+                let mut participants = Vec::new();
+
+                $(
+                    impl_message_context!(@add_participant participants, self, $participant_spec);
+                )*
+
+                participants
+            }
+
+            fn transaction_context(&self) -> Option<$crate::message::TransactionContext> {
+                Some($crate::message::TransactionContext::new(
+                    self.$tx_field.clone(),
+                    <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
+                ))
+            }
+        }
+    };
+
+    // Helper for adding single participants
+    (@add_participant $participants:ident, $self:ident, $field:ident) => {
+        $participants.push(&$self.$field);
+    };
+
+    // Helper for adding optional participants
+    (@add_participant $participants:ident, $self:ident, ($field:ident optional)) => {
+        if let Some(ref participant) = $self.$field {
+            $participants.push(participant);
+        }
+    };
+
+    // Helper for adding participant lists
+    (@add_participant $participants:ident, $self:ident, ($field:ident list)) => {
+        $participants.extend(&$self.$field);
+    };
+}
+
+/// Enhanced macro for implementing both TapMessage and MessageContext traits.
+///
+/// This macro combines TapMessage implementation with automatic MessageContext
+/// generation based on field analysis.
+///
+/// # Usage
+///
+/// ```ignore
+/// use tap_msg::impl_tap_message_with_context;
+///
+/// struct Transfer {
+///     originator: Participant,
+///     beneficiary: Option<Participant>,
+///     agents: Vec<Participant>,
+///     transaction_id: String,
+/// }
+///
+/// impl_tap_message_with_context!(Transfer,
+///     participants: [originator, (beneficiary optional), (agents list)],
+///     transaction_id: transaction_id
+/// );
+/// ```
+#[macro_export]
+macro_rules! impl_tap_message_with_context {
+    ($type:ty,
+        participants: [$($participant_spec:tt),*],
+        transaction_id: $tx_field:ident
+    ) => {
+        // Implement TapMessage first
+        $crate::impl_tap_message!($type);
+
+        // Then implement MessageContext
+        $crate::impl_message_context!($type,
+            participants: [$($participant_spec),*],
+            transaction_id: $tx_field
+        );
+    };
+
+    // Variant for optional transaction ID
+    ($type:ty,
+        participants: [$($participant_spec:tt),*],
+        transaction_id: ($tx_field:ident optional)
+    ) => {
+        // Implement TapMessage with optional transaction ID
+        $crate::impl_tap_message!($type, optional_transaction_id);
+
+        // Implement MessageContext with optional transaction
+        impl $crate::message::MessageContext for $type {
+            fn participants(&self) -> Vec<&$crate::message::Participant> {
+                let mut participants = Vec::new();
+
+                $(
+                    $crate::impl_message_context!(@add_participant participants, self, $participant_spec);
+                )*
+
+                participants
+            }
+
+            fn transaction_context(&self) -> Option<$crate::message::TransactionContext> {
+                self.$tx_field.as_ref().map(|tx_id| {
+                    $crate::message::TransactionContext::new(
+                        tx_id.clone(),
+                        <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
+                    )
+                })
+            }
+        }
+    };
+}

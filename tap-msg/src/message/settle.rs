@@ -5,15 +5,16 @@
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// Settle message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Settle {
     /// ID of the transaction being settled.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Settlement ID (CAIP-220 identifier of the underlying settlement transaction).
@@ -124,5 +125,3 @@ impl TapMessageBody for Settle {
         Ok(message)
     }
 }
-
-impl_tap_message!(Settle);

@@ -8,13 +8,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 
 /// Revert message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Revert {
     /// ID of the transfer being reverted.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Settlement address in CAIP-10 format to return the funds to.
@@ -122,5 +123,3 @@ impl TapMessageBody for Revert {
         Ok(message)
     }
 }
-
-impl_tap_message!(Revert);

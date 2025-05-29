@@ -94,6 +94,7 @@ async fn test_didcomm_presentation_deserialization() {
 async fn test_didcomm_presentation_validation() {
     // Create a valid presentation with the new structure
     let presentation = DIDCommPresentation {
+        id: uuid::Uuid::new_v4().to_string(),
         thid: Some("test-thread-id".to_string()),
         formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
         attachments: vec![Attachment {
@@ -122,6 +123,7 @@ async fn test_didcomm_presentation_validation() {
 
     // Create an invalid presentation (no attachments)
     let invalid_presentation = DIDCommPresentation {
+        id: uuid::Uuid::new_v4().to_string(),
         thid: Some("test-thread-id".to_string()),
         formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
         attachments: vec![],
@@ -132,6 +134,7 @@ async fn test_didcomm_presentation_validation() {
 
     // Create an invalid presentation (empty attachment ID)
     let invalid_presentation2 = DIDCommPresentation {
+        id: uuid::Uuid::new_v4().to_string(),
         thid: Some("test-thread-id".to_string()),
         formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
         attachments: vec![Attachment {
@@ -159,6 +162,7 @@ async fn test_didcomm_presentation_validation() {
 async fn test_didcomm_presentation_to_didcomm() {
     // Create a presentation
     let presentation = DIDCommPresentation {
+        id: uuid::Uuid::new_v4().to_string(),
         thid: Some("test-thread-id".to_string()),
         formats: vec!["dif/presentation-exchange/submission@v1.0".to_string()],
         attachments: vec![Attachment {

@@ -5,9 +5,9 @@
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
 use crate::message::Participant;
+use crate::TapMessage;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
@@ -49,9 +49,10 @@ use serde::{Deserialize, Serialize};
 ///     ..update_party
 /// };
 /// ```
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct UpdateParty {
     /// ID of the transaction this update relates to.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Type of party being updated (e.g., 'originator', 'beneficiary').
@@ -59,6 +60,7 @@ pub struct UpdateParty {
     pub party_type: String,
 
     /// Updated party information.
+    #[tap(participant)]
     pub party: Participant,
 
     /// Optional note regarding the update.
@@ -165,5 +167,3 @@ impl TapMessageBody for UpdateParty {
         Ok(message)
     }
 }
-
-impl_tap_message!(UpdateParty);

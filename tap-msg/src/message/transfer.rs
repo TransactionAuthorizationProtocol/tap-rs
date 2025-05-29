@@ -10,22 +10,24 @@ use tap_caip::AssetId;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::{Authorizable, Connectable, TapMessageBody};
 use crate::message::{Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, UpdatePolicies};
+use crate::TapMessage;
 
 /// Transfer message body (TAIP-3).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Transfer {
     /// Network asset identifier (CAIP-19 format).
     pub asset: AssetId,
 
     /// Originator information.
     #[serde(rename = "originator")]
+    #[tap(participant)]
     pub originator: Participant,
 
     /// Beneficiary information (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(participant)]
     pub beneficiary: Option<Participant>,
 
     /// Transfer amount.
@@ -33,6 +35,7 @@ pub struct Transfer {
 
     /// Agents involved in the transfer.
     #[serde(default)]
+    #[tap(participant_list)]
     pub agents: Vec<Participant>,
 
     /// Memo for the transfer (optional).
@@ -45,6 +48,7 @@ pub struct Transfer {
 
     /// Transaction identifier (not stored in the struct but accessible via the TapMessage trait).
     #[serde(skip)]
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Additional metadata for the transfer.
@@ -443,5 +447,3 @@ impl Authorizable for Transfer {
         }
     }
 }
-
-impl_tap_message!(Transfer);

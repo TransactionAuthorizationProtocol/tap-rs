@@ -5,10 +5,12 @@
 
 pub mod didcomm_message_example;
 pub mod invoice_examples;
+pub mod message_context_example;
 pub mod policy_examples;
 pub mod thread_examples;
 
 pub use didcomm_message_example::*;
 pub use invoice_examples::*;
+pub use message_context_example::*;
 pub use policy_examples::*;
 pub use thread_examples::*;

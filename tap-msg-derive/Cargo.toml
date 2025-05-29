@@ -1,0 +1,17 @@
+[package]
+name = "tap-msg-derive"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Derive macros for TAP message types"
+repository.workspace = true
+license.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+# Procedural macro dependencies
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full", "extra-traits"] }

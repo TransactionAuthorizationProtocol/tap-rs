@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "tap-msg",
+    "tap-msg-derive",
     "tap-agent",
     "tap-caip",
     "tap-node",

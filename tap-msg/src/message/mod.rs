@@ -8,6 +8,7 @@ pub mod agent_management;
 pub mod authorize;
 pub mod cancel;
 pub mod connection;
+pub mod context;
 pub mod did_presentation;
 pub mod error;
 pub mod invoice;
@@ -94,3 +95,8 @@ pub use tap_message_trait::{
 
 // Re-export the TapMessage enum
 pub use tap_message_enum::TapMessage;
+
+// Re-export context types
+pub use context::{
+    MessageContext, ParticipantExtractor, Priority, RoutingHints, TransactionContext,
+};

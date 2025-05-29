@@ -10,9 +10,9 @@ use tap_caip::AssetId;
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::{Authorizable, Connectable, TapMessageBody};
 use crate::message::{Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, UpdatePolicies};
+use crate::TapMessage;
 use chrono::Utc;
 
 /// Payment message body (TAIP-14).
@@ -21,7 +21,7 @@ use chrono::Utc;
 /// to the customer's agent to request a blockchain payment. It must include either
 /// an asset or a currency to denominate the payment, along with the amount and
 /// recipient information.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Payment {
     /// Asset identifier (CAIP-19 format).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -40,12 +40,15 @@ pub struct Payment {
 
     /// Customer (payer) details.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(participant)]
     pub customer: Option<Participant>,
 
     /// Merchant (payee) details.
+    #[tap(participant)]
     pub merchant: Participant,
 
     /// Transaction identifier.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Memo for the payment (optional).
@@ -62,6 +65,7 @@ pub struct Payment {
 
     /// Other agents involved in the payment.
     #[serde(default)]
+    #[tap(participant_list)]
     pub agents: Vec<Participant>,
 
     /// Additional metadata (optional).
@@ -504,5 +508,3 @@ impl Payment {
         }
     }
 }
-
-impl_tap_message!(Payment);

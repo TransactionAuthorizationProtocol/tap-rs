@@ -8,13 +8,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 
 /// Authorize message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct Authorize {
     /// ID of the transaction being authorized.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Optional note.
@@ -93,5 +94,3 @@ impl TapMessageBody for Authorize {
         Ok(message)
     }
 }
-
-impl_tap_message!(Authorize);

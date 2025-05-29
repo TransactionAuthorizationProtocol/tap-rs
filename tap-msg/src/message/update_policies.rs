@@ -5,18 +5,19 @@
 
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
 use crate::message::policy::Policy;
 use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 /// UpdatePolicies message body (TAIP-7).
 ///
 /// This message type allows agents to update their policies for a transaction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct UpdatePolicies {
     #[serde(rename = "transactionId")]
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     pub policies: Vec<Policy>,
@@ -100,5 +101,3 @@ impl TapMessageBody for UpdatePolicies {
         Ok(message)
     }
 }
-
-impl_tap_message!(UpdatePolicies);
