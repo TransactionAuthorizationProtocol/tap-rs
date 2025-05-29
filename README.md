@@ -130,6 +130,7 @@ See individual tool READMEs for detailed usage instructions.
 - **WASM Compatibility**: Run in browsers and Node.js via WebAssembly
 - **TypeScript API**: Developer-friendly TypeScript wrapper for web integrations
 - **Comprehensive Validation**: All messages validated against TAP specifications
+- **Generic Typed Messages**: Compile-time type safety with `PlainMessage<Transfer>` while maintaining backward compatibility
 - **Persistent Storage**: SQLite-based storage with automatic migrations providing:
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all messages for compliance and debugging
@@ -175,6 +176,42 @@ let message = transfer.to_didcomm_with_route(
 ```
 
 See the [tap-msg README](./tap-msg/README.md) for more detailed examples.
+
+## Typed Messages for Type Safety
+
+TAP-RS now supports generic typed messages for compile-time type safety while maintaining 100% backward compatibility:
+
+```rust
+use tap_msg::{PlainMessage, Transfer, Participant};
+use tap_agent::{Agent, TapAgent};
+
+// Create a strongly-typed message
+let transfer = Transfer {
+    asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse()?,
+    originator: Participant::new("did:example:alice"),
+    beneficiary: Some(Participant::new("did:example:bob")),
+    amount: "100".to_string(),
+    // ... other fields
+};
+
+// Type-safe message construction
+let typed_msg = PlainMessage::new_typed(transfer, "did:example:alice")
+    .with_recipient("did:example:bob")
+    .with_thread_id(Some("payment-123".to_string()));
+
+// Send with compile-time type checking
+let (packed, results) = agent.send_typed(typed_msg, true).await?;
+
+// Receive with type safety
+let received: PlainMessage<Transfer> = agent.receive_typed(&packed).await?;
+println!("Amount: {}", received.body.amount);
+
+// Backward compatibility - existing code unchanged
+let plain_msg: PlainMessage = serde_json::from_str(json_data)?;
+// This is now PlainMessage<Value> due to default type parameter
+```
+
+See [GENERIC_PLAINMESSAGE.md](./GENERIC_PLAINMESSAGE.md) for complete documentation.
 
 ## Getting Started with tap-agent
 

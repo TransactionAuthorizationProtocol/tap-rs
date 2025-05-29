@@ -5,6 +5,7 @@ Core message processing for the Transaction Authorization Protocol (TAP) providi
 ## Features
 
 - **TAP Message Types**: Complete implementation of all TAP message types
+- **Generic Typed Messages**: Compile-time type safety with `PlainMessage<Transfer>` while maintaining backward compatibility
 - **Message Security**: Support for secure message formats with JWS (signed) and JWE (encrypted) capabilities
 - **Attachments Support**: Full support for message attachments in Base64, JSON, and Links formats with optional JWS
 - **Validation**: Proper validation of all message fields and formats
@@ -327,6 +328,91 @@ let mut payment_request = Payment::with_currency(
 // Add the invoice to the payment request
 payment_request.invoice = Some(invoice);
 ```
+
+## Generic Typed Messages
+
+TAP-MSG now supports compile-time type safety through generic `PlainMessage<T>` while maintaining 100% backward compatibility:
+
+### Creating Typed Messages
+
+```rust
+use tap_msg::{PlainMessage, Transfer, Participant};
+use std::collections::HashMap;
+
+// Create a Transfer message body
+let transfer = Transfer {
+    asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse()?,
+    originator: Participant::new("did:example:alice"),
+    beneficiary: Some(Participant::new("did:example:bob")),
+    amount: "100".to_string(),
+    agents: vec![],
+    memo: Some("Payment for services".to_string()),
+    settlement_id: None,
+    transaction_id: "tx-123".to_string(),
+    metadata: HashMap::new(),
+};
+
+// Create a strongly-typed message with builder pattern
+let typed_msg = PlainMessage::new_typed(transfer, "did:example:alice")
+    .with_recipient("did:example:bob")
+    .with_thread_id(Some("payment-123".to_string()))
+    .with_expires_at(chrono::Utc::now().timestamp() as u64 + 3600);
+
+// Access the typed body with compile-time safety
+println!("Transfer amount: {}", typed_msg.body.amount);
+println!("Originator: {}", typed_msg.body.originator.id);
+```
+
+### Converting Between Typed and Untyped
+
+```rust
+// Convert typed message to untyped for serialization/transport
+let untyped_msg: PlainMessage<Value> = typed_msg.to_plain_message()?;
+
+// Parse untyped message to specific type
+let untyped_msg: PlainMessage<Value> = serde_json::from_str(json_data)?;
+let typed_msg: PlainMessage<Transfer> = untyped_msg.parse_body()?;
+
+// Alternative using parse_as method
+let typed_msg: PlainMessage<Transfer> = untyped_msg.parse_as()?;
+```
+
+### Runtime Dispatch with TapMessage Enum
+
+```rust
+use tap_msg::message::TapMessage;
+
+// Parse any TAP message for runtime dispatch
+let plain_msg: PlainMessage<Value> = serde_json::from_str(json_data)?;
+
+match plain_msg.parse_tap_message()? {
+    TapMessage::Transfer(transfer) => {
+        println!("Transfer amount: {}", transfer.amount);
+    },
+    TapMessage::Authorize(auth) => {
+        println!("Authorization for: {}", auth.transaction_id);
+    },
+    TapMessage::Reject(reject) => {
+        println!("Rejection reason: {}", reject.reason);
+    },
+    // ... handle other message types
+    _ => println!("Other message type"),
+}
+```
+
+### Backward Compatibility
+
+```rust
+// Existing code continues to work unchanged
+let plain_msg: PlainMessage = serde_json::from_str(json_data)?;
+// This is now PlainMessage<Value> due to default type parameter
+
+// All existing methods work unchanged
+println!("From: {}", plain_msg.from);
+println!("Type: {}", plain_msg.type_);
+```
+
+See [GENERIC_PLAINMESSAGE.md](../GENERIC_PLAINMESSAGE.md) for complete documentation.
 
 ## Message Security
 
