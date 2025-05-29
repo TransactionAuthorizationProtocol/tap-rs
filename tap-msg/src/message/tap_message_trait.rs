@@ -306,8 +306,6 @@ pub trait TapMessage {
         Ok(message)
     }
 
-    /// Get the message type for this message
-    fn message_type(&self) -> &'static str;
 
     /// Get the thread ID for this message
     fn thread_id(&self) -> Option<&str>;
@@ -401,28 +399,6 @@ impl TapMessage for PlainMessage {
         participants
     }
 
-    fn message_type(&self) -> &'static str {
-        match self.type_.as_str() {
-            "https://tap.rsvp/schema/1.0#transfer" => "https://tap.rsvp/schema/1.0#transfer",
-            "https://tap.rsvp/schema/1.0#payment-request" => {
-                "https://tap.rsvp/schema/1.0#payment-request"
-            }
-            "https://tap.rsvp/schema/1.0#connect" => "https://tap.rsvp/schema/1.0#connect",
-            "https://tap.rsvp/schema/1.0#authorize" => "https://tap.rsvp/schema/1.0#authorize",
-            "https://tap.rsvp/schema/1.0#reject" => "https://tap.rsvp/schema/1.0#reject",
-            "https://tap.rsvp/schema/1.0#settle" => "https://tap.rsvp/schema/1.0#settle",
-            "https://tap.rsvp/schema/1.0#update-party" => {
-                "https://tap.rsvp/schema/1.0#update-party"
-            }
-            "https://tap.rsvp/schema/1.0#update-policies" => {
-                "https://tap.rsvp/schema/1.0#update-policies"
-            }
-            "https://didcomm.org/present-proof/3.0/presentation" => {
-                "https://didcomm.org/present-proof/3.0/presentation"
-            }
-            _ => "unknown",
-        }
-    }
 
     fn thread_id(&self) -> Option<&str> {
         self.thid.as_deref()

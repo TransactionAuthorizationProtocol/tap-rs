@@ -8,9 +8,11 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 
-/// Procedural derive macro for implementing TapMessage and MessageContext traits.
+/// Procedural derive macro for implementing TapMessage, MessageContext, and optionally TapMessageBody traits.
 ///
 /// # Usage
+///
+/// ## Basic Usage (TapMessage + MessageContext only)
 ///
 /// ```ignore
 /// use tap_msg::TapMessage;
@@ -37,18 +39,60 @@ use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 /// }
 /// ```
 ///
+/// ## Full Usage (includes TapMessageBody with auto-generated to_didcomm)
+///
+/// ```ignore
+/// use tap_msg::TapMessage;
+/// use tap_msg::message::Participant;
+/// use serde::{Serialize, Deserialize};
+///
+/// #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+/// #[tap(message_type = "https://tap.rsvp/schema/1.0#transfer")]
+/// pub struct Transfer {
+///     #[tap(participant)]
+///     pub originator: Participant,
+///     
+///     #[tap(participant)]
+///     pub beneficiary: Option<Participant>,
+///     
+///     #[tap(participant_list)]
+///     pub agents: Vec<Participant>,
+///     
+///     #[tap(transaction_id)]
+///     pub transaction_id: String,
+///     
+///     pub amount: String,
+/// }
+/// 
+/// // TapMessageBody is automatically implemented with:
+/// // - message_type() returning the specified string
+/// // - validate() with basic validation (can be overridden)
+/// // - to_didcomm() with automatic participant extraction and message construction
+/// ```
+///
 /// # Supported Attributes
 ///
+/// ## Struct-level Attributes
+/// - `#[tap(message_type = "url")]` - TAP message type URL (enables TapMessageBody generation)
+/// - `#[tap(generated_id)]` - Indicates the message uses a generated ID
+///
+/// ## Field-level Attributes
 /// - `#[tap(participant)]` - Single participant field (required or optional)
 /// - `#[tap(participant_list)]` - Vec<Participant> field
 /// - `#[tap(transaction_id)]` - Transaction ID field
 /// - `#[tap(optional_transaction_id)]` - Optional transaction ID field
 /// - `#[tap(thread_id)]` - Thread ID field (for thread-based messages)
-/// - `#[tap(generated_id)]` - Indicates the message uses a generated ID
 #[proc_macro_derive(TapMessage, attributes(tap))]
 pub fn derive_tap_message(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let expanded = impl_tap_message(&input);
+    TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(TapMessageBody, attributes(tap))]
+pub fn derive_tap_message_body(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+    let expanded = impl_tap_message_body_only(&input);
     TokenStream::from(expanded)
 }
 
@@ -69,6 +113,9 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
     // Check if we're inside the tap-msg crate or external
     let is_internal = std::env::var("CARGO_CRATE_NAME").unwrap_or_default() == "tap_msg";
 
+    // TapMessageBody implementation is now handled by separate derive macro
+    let tap_message_body_impl: Option<TokenStream2> = None;
+
     let tap_message_impl = impl_tap_message_trait(
         name,
         &field_info,
@@ -77,6 +124,7 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
         where_clause,
         is_internal,
     );
+    
     let message_context_impl = impl_message_context_trait(
         name,
         &field_info,
@@ -87,6 +135,7 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
     );
 
     quote! {
+        #tap_message_body_impl
         #tap_message_impl
         #message_context_impl
     }
@@ -101,6 +150,7 @@ struct FieldInfo {
     optional_transaction_id_field: Option<syn::Ident>,
     thread_id_field: Option<syn::Ident>,
     has_generated_id: bool,
+    message_type: Option<String>,
 }
 
 fn analyze_fields(
@@ -115,6 +165,7 @@ fn analyze_fields(
         optional_transaction_id_field: None,
         thread_id_field: None,
         has_generated_id: false,
+        message_type: None,
     };
 
     // First check struct-level attributes
@@ -123,6 +174,12 @@ fn analyze_fields(
             let _ = attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("generated_id") {
                     field_info.has_generated_id = true;
+                } else if meta.path.is_ident("message_type") {
+                    if let Ok(lit) = meta.value() {
+                        if let Ok(lit_str) = lit.parse::<syn::LitStr>() {
+                            field_info.message_type = Some(lit_str.value());
+                        }
+                    }
                 }
                 Ok(())
             });
@@ -191,6 +248,8 @@ fn impl_tap_message_trait(
         quote! { ::tap_msg }
     };
 
+    // message_type is no longer part of TapMessage trait
+
     quote! {
         impl #impl_generics #crate_path::message::tap_message_trait::TapMessage for #name #ty_generics #where_clause {
             fn validate(&self) -> #crate_path::error::Result<()> {
@@ -242,9 +301,6 @@ fn impl_tap_message_trait(
                 Ok(message)
             }
 
-            fn message_type(&self) -> &'static str {
-                <Self as #crate_path::message::tap_message_trait::TapMessageBody>::message_type()
-            }
 
             fn thread_id(&self) -> Option<&str> {
                 #thread_id_impl
@@ -428,4 +484,181 @@ fn generate_transaction_context_impl(field_info: &FieldInfo, is_internal: bool) 
     } else {
         quote! { None }
     }
+}
+
+fn impl_tap_message_body_trait(
+    name: &syn::Ident,
+    field_info: &FieldInfo,
+    impl_generics: &syn::ImplGenerics,
+    ty_generics: &syn::TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
+    is_internal: bool,
+) -> TokenStream2 {
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
+
+    let message_type = field_info.message_type.as_ref().expect("Message type should be present");
+    let to_didcomm_impl = generate_to_didcomm_impl(field_info, is_internal);
+
+    quote! {
+        impl #impl_generics #crate_path::message::tap_message_trait::TapMessageBody for #name #ty_generics #where_clause {
+            fn message_type() -> &'static str {
+                #message_type
+            }
+
+            fn validate(&self) -> #crate_path::error::Result<()> {
+                // Basic validation - users can override this by implementing TapMessageBody manually
+                Ok(())
+            }
+
+            fn to_didcomm(&self, from_did: &str) -> #crate_path::error::Result<#crate_path::didcomm::PlainMessage> {
+                #to_didcomm_impl
+            }
+        }
+    }
+}
+
+fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenStream2 {
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
+
+    // Generate participant extraction
+    let participant_extraction = if !field_info.participant_fields.is_empty() 
+        || !field_info.optional_participant_fields.is_empty() 
+        || !field_info.participant_list_fields.is_empty() {
+        
+        let mut extracts = Vec::new();
+        
+        // Required participants
+        for field in &field_info.participant_fields {
+            extracts.push(quote! {
+                recipient_dids.push(self.#field.id.clone());
+            });
+        }
+        
+        // Optional participants
+        for field in &field_info.optional_participant_fields {
+            extracts.push(quote! {
+                if let Some(ref participant) = self.#field {
+                    recipient_dids.push(participant.id.clone());
+                }
+            });
+        }
+        
+        // Participant lists
+        for field in &field_info.participant_list_fields {
+            extracts.push(quote! {
+                for participant in &self.#field {
+                    recipient_dids.push(participant.id.clone());
+                }
+            });
+        }
+
+        quote! {
+            let mut recipient_dids = Vec::new();
+            #(#extracts)*
+            
+            // Remove duplicates and sender
+            recipient_dids.sort();
+            recipient_dids.dedup();
+            recipient_dids.retain(|did| did != from_did);
+        }
+    } else {
+        quote! {
+            let recipient_dids: Vec<String> = Vec::new();
+        }
+    };
+
+    // Generate thread ID assignment
+    let thread_assignment = if let Some(tx_field) = &field_info.transaction_id_field {
+        quote! {
+            thid: Some(self.#tx_field.clone()),
+        }
+    } else if let Some(opt_tx_field) = &field_info.optional_transaction_id_field {
+        quote! {
+            thid: self.#opt_tx_field.clone(),
+        }
+    } else if let Some(thread_field) = &field_info.thread_id_field {
+        quote! {
+            thid: self.#thread_field.clone(),
+        }
+    } else {
+        quote! {
+            thid: None,
+        }
+    };
+
+    quote! {
+        // Serialize the message body to JSON
+        let mut body_json = serde_json::to_value(self)
+            .map_err(|e| #crate_path::error::Error::SerializationError(e.to_string()))?;
+
+        // Ensure the @type field is correctly set in the body
+        if let Some(body_obj) = body_json.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                serde_json::Value::String(Self::message_type().to_string()),
+            );
+        }
+
+        // Extract recipient DIDs from participants
+        #participant_extraction
+
+        let now = chrono::Utc::now().timestamp() as u64;
+
+        // Create the PlainMessage
+        Ok(#crate_path::didcomm::PlainMessage {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: Self::message_type().to_string(),
+            body: body_json,
+            from: from_did.to_string(),
+            to: recipient_dids,
+            #thread_assignment
+            pthid: None,
+            created_time: Some(now),
+            expires_time: None,
+            extra_headers: std::collections::HashMap::new(),
+            from_prior: None,
+            attachments: None,
+        })
+    }
+}
+
+fn impl_tap_message_body_only(input: &DeriveInput) -> TokenStream2 {
+    let name = &input.ident;
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+
+    let fields = match &input.data {
+        Data::Struct(data) => match &data.fields {
+            Fields::Named(fields) => &fields.named,
+            _ => panic!("TapMessageBody can only be derived for structs with named fields"),
+        },
+        _ => panic!("TapMessageBody can only be derived for structs"),
+    };
+
+    let field_info = analyze_fields(fields, &input.attrs);
+
+    // Check if we're inside the tap-msg crate or external
+    let is_internal = std::env::var("CARGO_CRATE_NAME").unwrap_or_default() == "tap_msg";
+
+    // TapMessageBody can only be derived if message_type is specified
+    if field_info.message_type.is_none() {
+        panic!("TapMessageBody derive macro requires #[tap(message_type = \"...\")] attribute");
+    }
+
+    impl_tap_message_body_trait(
+        name,
+        &field_info,
+        &impl_generics,
+        &ty_generics,
+        where_clause,
+        is_internal,
+    )
 }

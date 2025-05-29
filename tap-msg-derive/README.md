@@ -69,7 +69,48 @@ impl TapMessageBody for Transfer {
 }
 ```
 
+## Enhanced Usage with TapMessageBody Derive
+
+For automatic generation of TapMessageBody implementation (including `to_didcomm()` with automatic participant routing), use the separate `TapMessageBody` derive macro:
+
+```rust
+use tap_msg::{TapMessage, TapMessageBody};
+use tap_msg::message::Participant;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#enhanced-transfer")]
+pub struct EnhancedTransfer {
+    #[tap(participant)]
+    pub originator: Participant,
+    
+    #[tap(participant)]
+    pub beneficiary: Option<Participant>,
+    
+    #[tap(participant_list)]
+    pub agents: Vec<Participant>,
+    
+    #[tap(transaction_id)]
+    pub transaction_id: String,
+    
+    pub amount: String,
+    pub asset_id: String,
+}
+
+// No need to manually implement TapMessageBody - it's automatically generated!
+// The generated implementation includes:
+// - message_type() returning the specified type
+// - validate() with basic validation (can be customized by implementing manually)  
+// - to_didcomm() with automatic participant extraction and routing
+```
+
+This approach eliminates boilerplate and automatically generates the `to_didcomm()` implementation with proper participant routing based on field attributes.
+
 ## Supported Attributes
+
+### Struct-level Attributes
+
+- `#[tap(message_type = "url")]` - TAP message type URL (required for TapMessageBody derive)
 
 ### Field-level Attributes
 
@@ -92,7 +133,6 @@ pub trait TapMessage {
     fn get_tap_type(&self) -> Option<String>;
     fn get_all_participants(&self) -> Vec<String>;
     fn create_reply<T: TapMessageBody>(&self, body: &T, creator_did: &str) -> Result<PlainMessage>;
-    fn message_type(&self) -> &'static str;
     fn thread_id(&self) -> Option<&str>;
     fn parent_thread_id(&self) -> Option<&str>;
     fn message_id(&self) -> &str;

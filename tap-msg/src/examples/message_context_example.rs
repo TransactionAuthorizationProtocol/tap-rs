@@ -256,9 +256,6 @@ impl crate::message::tap_message_trait::TapMessage for ExamplePresentation {
         }
         Ok(message)
     }
-    fn message_type(&self) -> &'static str {
-        <Self as crate::message::tap_message_trait::TapMessageBody>::message_type()
-    }
     fn thread_id(&self) -> Option<&str> {
         self.transaction_id.as_deref()
     }

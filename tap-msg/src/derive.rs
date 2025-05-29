@@ -129,9 +129,6 @@ macro_rules! impl_tap_message {
 
                 Ok(message)
             }
-            fn message_type(&self) -> &'static str {
-                <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
-            }
             fn thread_id(&self) -> Option<&str> {
                 // for types with transaction_id
                 Some(&self.transaction_id)
@@ -191,9 +188,6 @@ macro_rules! impl_tap_message {
 
                 Ok(message)
             }
-            fn message_type(&self) -> &'static str {
-                <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
-            }
             fn thread_id(&self) -> Option<&str> {
                 self.transaction_id.as_deref()
             }
@@ -251,9 +245,6 @@ macro_rules! impl_tap_message {
 
                 Ok(message)
             }
-            fn message_type(&self) -> &'static str {
-                <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
-            }
             fn thread_id(&self) -> Option<&str> {
                 self.thid.as_deref()
             }
@@ -304,9 +295,6 @@ macro_rules! impl_tap_message {
                 // For types without thread/transaction ID, we don't set thread ID on replies
 
                 Ok(message)
-            }
-            fn message_type(&self) -> &'static str {
-                <Self as $crate::message::tap_message_trait::TapMessageBody>::message_type()
             }
             fn thread_id(&self) -> Option<&str> {
                 None
