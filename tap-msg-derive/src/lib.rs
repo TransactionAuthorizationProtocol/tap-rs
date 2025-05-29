@@ -257,7 +257,8 @@ fn impl_tap_message_trait(
             }
 
             fn is_tap_message(&self) -> bool {
-                false
+                <Self as #crate_path::message::tap_message_trait::TapMessageBody>::message_type()
+                    .starts_with("https://tap.rsvp/schema/1.0#")
             }
 
             fn get_tap_type(&self) -> Option<String> {
