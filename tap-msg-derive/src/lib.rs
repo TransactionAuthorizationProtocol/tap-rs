@@ -6,13 +6,13 @@
 use proc_macro::TokenStream;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Field, Fields, Meta};
+use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 
 /// Procedural derive macro for implementing TapMessage and MessageContext traits.
 ///
 /// # Usage
 ///
-/// ```rust
+/// ```ignore
 /// use tap_msg::TapMessage;
 /// use tap_msg::message::Participant;
 /// use tap_caip::AssetId;
@@ -66,12 +66,16 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
 
     let field_info = analyze_fields(fields, &input.attrs);
 
+    // Check if we're inside the tap-msg crate or external
+    let is_internal = std::env::var("CARGO_CRATE_NAME").unwrap_or_default() == "tap_msg";
+
     let tap_message_impl = impl_tap_message_trait(
         name,
         &field_info,
         &impl_generics,
         &ty_generics,
         where_clause,
+        is_internal,
     );
     let message_context_impl = impl_message_context_trait(
         name,
@@ -79,6 +83,7 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
         &impl_generics,
         &ty_generics,
         where_clause,
+        is_internal,
     );
 
     quote! {
@@ -174,15 +179,22 @@ fn impl_tap_message_trait(
     impl_generics: &syn::ImplGenerics,
     ty_generics: &syn::TypeGenerics,
     where_clause: Option<&syn::WhereClause>,
+    is_internal: bool,
 ) -> TokenStream2 {
     let thread_id_impl = generate_thread_id_impl(field_info);
     let message_id_impl = generate_message_id_impl(field_info);
     let get_all_participants_impl = generate_get_all_participants_impl(field_info);
 
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
+
     quote! {
-        impl #impl_generics crate::message::tap_message_trait::TapMessage for #name #ty_generics #where_clause {
-            fn validate(&self) -> crate::error::Result<()> {
-                <Self as crate::message::tap_message_trait::TapMessageBody>::validate(self)
+        impl #impl_generics #crate_path::message::tap_message_trait::TapMessage for #name #ty_generics #where_clause {
+            fn validate(&self) -> #crate_path::error::Result<()> {
+                <Self as #crate_path::message::tap_message_trait::TapMessageBody>::validate(self)
             }
 
             fn is_tap_message(&self) -> bool {
@@ -191,14 +203,14 @@ fn impl_tap_message_trait(
 
             fn get_tap_type(&self) -> Option<String> {
                 Some(
-                    <Self as crate::message::tap_message_trait::TapMessageBody>::message_type()
+                    <Self as #crate_path::message::tap_message_trait::TapMessageBody>::message_type()
                         .to_string(),
                 )
             }
 
-            fn body_as<T: crate::message::tap_message_trait::TapMessageBody>(
+            fn body_as<T: #crate_path::message::tap_message_trait::TapMessageBody>(
                 &self,
-            ) -> crate::error::Result<T> {
+            ) -> #crate_path::error::Result<T> {
                 unimplemented!()
             }
 
@@ -206,11 +218,11 @@ fn impl_tap_message_trait(
                 #get_all_participants_impl
             }
 
-            fn create_reply<T: crate::message::tap_message_trait::TapMessageBody>(
+            fn create_reply<T: #crate_path::message::tap_message_trait::TapMessageBody>(
                 &self,
                 body: &T,
                 creator_did: &str,
-            ) -> crate::error::Result<crate::didcomm::PlainMessage> {
+            ) -> #crate_path::error::Result<#crate_path::didcomm::PlainMessage> {
                 // Create the base message with creator as sender
                 let mut message = body.to_didcomm(creator_did)?;
 
@@ -231,7 +243,7 @@ fn impl_tap_message_trait(
             }
 
             fn message_type(&self) -> &'static str {
-                <Self as crate::message::tap_message_trait::TapMessageBody>::message_type()
+                <Self as #crate_path::message::tap_message_trait::TapMessageBody>::message_type()
             }
 
             fn thread_id(&self) -> Option<&str> {
@@ -255,17 +267,24 @@ fn impl_message_context_trait(
     impl_generics: &syn::ImplGenerics,
     ty_generics: &syn::TypeGenerics,
     where_clause: Option<&syn::WhereClause>,
+    is_internal: bool,
 ) -> TokenStream2 {
     let participants_impl = generate_participants_impl(field_info);
-    let transaction_context_impl = generate_transaction_context_impl(field_info);
+    let transaction_context_impl = generate_transaction_context_impl(field_info, is_internal);
+
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
 
     quote! {
-        impl #impl_generics crate::message::MessageContext for #name #ty_generics #where_clause {
-            fn participants(&self) -> Vec<&crate::message::Participant> {
+        impl #impl_generics #crate_path::message::MessageContext for #name #ty_generics #where_clause {
+            fn participants(&self) -> Vec<&#crate_path::message::Participant> {
                 #participants_impl
             }
 
-            fn transaction_context(&self) -> Option<crate::message::TransactionContext> {
+            fn transaction_context(&self) -> Option<#crate_path::message::TransactionContext> {
                 #transaction_context_impl
             }
         }
@@ -383,20 +402,26 @@ fn generate_message_id_impl(field_info: &FieldInfo) -> TokenStream2 {
     }
 }
 
-fn generate_transaction_context_impl(field_info: &FieldInfo) -> TokenStream2 {
+fn generate_transaction_context_impl(field_info: &FieldInfo, is_internal: bool) -> TokenStream2 {
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
+
     if let Some(tx_field) = &field_info.transaction_id_field {
         quote! {
-            Some(crate::message::TransactionContext::new(
+            Some(#crate_path::message::TransactionContext::new(
                 self.#tx_field.clone(),
-                <Self as crate::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
+                <Self as #crate_path::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
             ))
         }
     } else if let Some(opt_tx_field) = &field_info.optional_transaction_id_field {
         quote! {
             self.#opt_tx_field.as_ref().map(|tx_id| {
-                crate::message::TransactionContext::new(
+                #crate_path::message::TransactionContext::new(
                     tx_id.clone(),
-                    <Self as crate::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
+                    <Self as #crate_path::message::tap_message_trait::TapMessageBody>::message_type().to_string(),
                 )
             })
         }

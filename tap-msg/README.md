@@ -6,6 +6,7 @@ Core message processing for the Transaction Authorization Protocol (TAP) providi
 
 - **TAP Message Types**: Complete implementation of all TAP message types
 - **Generic Typed Messages**: Compile-time type safety with `PlainMessage<Transfer>` while maintaining backward compatibility
+- **Derive Macro**: Automatic implementation of `TapMessage` and `MessageContext` traits with `#[derive(TapMessage)]`
 - **Message Security**: Support for secure message formats with JWS (signed) and JWE (encrypted) capabilities
 - **Attachments Support**: Full support for message attachments in Base64, JSON, and Links formats with optional JWS
 - **Validation**: Proper validation of all message fields and formats
@@ -549,15 +550,128 @@ pub trait Authorizable {
 }
 ```
 
+## Derive Macro for TAP Messages
+
+The `#[derive(TapMessage)]` macro automatically implements both `TapMessage` and `MessageContext` traits based on field attributes:
+
+### Basic Usage
+
+```rust
+use tap_msg::TapMessage;
+use tap_msg::message::{Participant, TapMessageBody};
+use tap_msg::didcomm::PlainMessage;
+use tap_msg::error::Result;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+pub struct CustomTransfer {
+    /// Originator participant - automatically extracted
+    #[tap(participant)]
+    pub originator: Participant,
+    
+    /// Optional beneficiary - automatically handled
+    #[tap(participant)]
+    pub beneficiary: Option<Participant>,
+    
+    /// List of agents - automatically extracted
+    #[tap(participant_list)]
+    pub agents: Vec<Participant>,
+    
+    /// Transaction ID for message threading
+    #[tap(transaction_id)]
+    pub transaction_id: String,
+    
+    // Regular fields don't need attributes
+    pub amount: String,
+    pub memo: Option<String>,
+}
+
+// You still need to implement TapMessageBody for message-specific logic
+impl TapMessageBody for CustomTransfer {
+    fn message_type() -> &'static str {
+        "https://example.com/custom-transfer"
+    }
+    
+    fn validate(&self) -> Result<()> {
+        if self.amount.is_empty() {
+            return Err(tap_msg::error::Error::Validation("Amount required".to_string()));
+        }
+        Ok(())
+    }
+    
+    fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
+        // Implementation details...
+    }
+}
+```
+
+### Supported Attributes
+
+- `#[tap(participant)]` - Single participant field (required or optional)
+- `#[tap(participant_list)]` - Vec<Participant> field
+- `#[tap(transaction_id)]` - Transaction ID field for threading
+- `#[tap(optional_transaction_id)]` - Optional transaction ID
+- `#[tap(thread_id)]` - Thread ID field for thread-based messages
+
+### What the Macro Provides
+
+The derive macro automatically implements:
+
+1. **TapMessage trait**:
+   - `thread_id()` - Returns transaction/thread ID
+   - `message_id()` - Returns appropriate message identifier
+   - `get_all_participants()` - Extracts all participant DIDs
+   - `create_reply()` - Creates properly threaded reply messages
+
+2. **MessageContext trait**:
+   - `participants()` - Returns references to all Participant objects
+   - `participant_dids()` - Returns all participant DIDs
+   - `transaction_context()` - Returns transaction context with ID and type
+
+### Example with Generated Methods
+
+```rust
+let transfer = CustomTransfer {
+    originator: Participant::new("did:example:alice"),
+    beneficiary: Some(Participant::new("did:example:bob")),
+    agents: vec![Participant::new("did:example:agent")],
+    transaction_id: "tx-123".to_string(),
+    amount: "100".to_string(),
+    memo: None,
+};
+
+// Automatically implemented methods:
+println!("Thread ID: {:?}", transfer.thread_id());  // Some("tx-123")
+println!("All participants: {:?}", transfer.get_all_participants());
+// ["did:example:alice", "did:example:bob", "did:example:agent"]
+
+// MessageContext methods:
+let participants = transfer.participants();  // Vec of &Participant
+let tx_context = transfer.transaction_context();  // TransactionContext
+```
+
 ## Adding New Message Types
 
-To add a new TAP message type, follow these steps:
+To add a new TAP message type, you have two options:
+
+### Option 1: Using the Derive Macro (Recommended)
+
+1. Define your message struct with appropriate field attributes
+2. Add `#[derive(TapMessage)]` to automatically implement traits
+3. Implement the `TapMessageBody` trait for message-specific logic
+4. Optional: Implement the `Authorizable` trait for messages that can be authorized
+
+### Option 2: Manual Implementation
+
+To add a new TAP message type manually, follow these steps:
 
 1. Define your message struct with required fields
 2. Implement the `TapMessageBody` trait for your struct
-3. Optional: Implement the `Authorizable` trait for messages that can be authorized
+3. Implement the `TapMessage` trait manually
+4. Optional: Implement the `MessageContext` trait for participant extraction
+5. Optional: Implement the `Authorizable` trait for messages that can be authorized
 
-Here's an example:
+Here's an example of manual implementation:
 
 ```rust
 use tap_msg::message::tap_message_trait::TapMessageBody;

@@ -7,6 +7,7 @@ This repository contains a Rust implementation of the Transaction Authorization 
 TAP-RS is organized as a Rust workspace with multiple crates:
 
 - **[tap-msg](./tap-msg/README.md)**: Core message processing for TAP with integrated DIDComm support
+- **[tap-msg-derive](./tap-msg-derive/README.md)**: Procedural derive macro for automatic TAP message trait implementation
 - **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **[tap-caip](./tap-caip/README.md)**: Implementation of Chain Agnostic Identifier Standards
 - **[tap-node](./tap-node/README.md)**: TAP node orchestration, message routing, and transaction storage
@@ -131,6 +132,7 @@ See individual tool READMEs for detailed usage instructions.
 - **TypeScript API**: Developer-friendly TypeScript wrapper for web integrations
 - **Comprehensive Validation**: All messages validated against TAP specifications
 - **Generic Typed Messages**: Compile-time type safety with `PlainMessage<Transfer>` while maintaining backward compatibility
+- **Derive Macro**: Automatic implementation of `TapMessage` and `MessageContext` traits with `#[derive(TapMessage)]`
 - **Persistent Storage**: SQLite-based storage with automatic migrations providing:
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all messages for compliance and debugging
@@ -212,6 +214,41 @@ let plain_msg: PlainMessage = serde_json::from_str(json_data)?;
 ```
 
 See [GENERIC_PLAINMESSAGE.md](./GENERIC_PLAINMESSAGE.md) for complete documentation.
+
+## Derive Macro for TAP Messages
+
+TAP-RS provides a procedural derive macro that automatically implements `TapMessage` and `MessageContext` traits:
+
+```rust
+use tap_msg::TapMessage;
+use tap_msg::message::{Participant, TapMessageBody};
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+pub struct CustomMessage {
+    #[tap(participant)]
+    pub sender: Participant,
+    
+    #[tap(participant)]
+    pub receiver: Option<Participant>,
+    
+    #[tap(participant_list)]
+    pub validators: Vec<Participant>,
+    
+    #[tap(transaction_id)]
+    pub transaction_id: String,
+    
+    pub data: String,
+}
+
+// The macro automatically provides:
+// - thread_id() -> transaction_id
+// - get_all_participants() -> extracts all participant DIDs
+// - participants() -> returns &Participant references
+// - transaction_context() -> creates context with ID and type
+```
+
+See the [tap-msg README](./tap-msg/README.md#derive-macro-for-tap-messages) for detailed documentation.
 
 ## Getting Started with tap-agent
 

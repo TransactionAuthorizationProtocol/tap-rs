@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 /// Enum encompassing all TAP message types
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)]
 pub enum TapMessage {
     /// Add agents message (TAIP-5)
     AddAgents(AddAgents),
