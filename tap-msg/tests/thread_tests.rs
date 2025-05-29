@@ -52,6 +52,8 @@ fn test_create_reply() -> Result<()> {
     // Create an authorize response from Bob to Alice
     let authorize = Authorize {
         transaction_id: transfer_message.id.clone(), // Get ID from message
+        settlement_address: None,
+        expiry: None,
         note: None,
     };
 

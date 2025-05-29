@@ -297,6 +297,8 @@ fn main() -> Result<()> {
         let _settlement_address = "eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
         let authorize = Authorize {
             transaction_id: transfer_id.to_string(),
+            settlement_address: None,
+            expiry: None,
             note: Some("Transfer authorized after compliance review".to_string()),
         };
 
@@ -320,6 +322,8 @@ fn main() -> Result<()> {
 
         let authorize_wallet = Authorize {
             transaction_id: transfer_id.to_string(),
+            settlement_address: None,
+            expiry: None,
             note: Some("Wallet ready to receive funds".to_string()),
         };
 
@@ -353,6 +357,8 @@ fn main() -> Result<()> {
 
         let api_authorize = Authorize {
             transaction_id: transfer_id.to_string(),
+            settlement_address: None,
+            expiry: None,
             note: Some(api_note.clone()),
         };
 

@@ -15,40 +15,31 @@ pub struct Cancel {
     #[tap(transaction_id)]
     pub transaction_id: String,
 
+    /// The party of the transaction wishing to cancel it.
+    /// (In case of a Transfer [TAIP3] `originator` or `beneficiary`)
+    pub by: String,
+
     /// Optional reason for cancellation.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
-
-    /// Optional note.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
 }
 
 impl Cancel {
     /// Create a new Cancel message
-    pub fn new(transaction_id: &str) -> Self {
+    pub fn new(transaction_id: &str, by: &str) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
+            by: by.to_string(),
             reason: None,
-            note: None,
         }
     }
 
     /// Create a new Cancel message with a reason
-    pub fn with_reason(transaction_id: &str, reason: &str) -> Self {
+    pub fn with_reason(transaction_id: &str, by: &str, reason: &str) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
+            by: by.to_string(),
             reason: Some(reason.to_string()),
-            note: None,
-        }
-    }
-
-    /// Create a new Cancel message with a reason and note
-    pub fn with_reason_and_note(transaction_id: &str, reason: &str, note: &str) -> Self {
-        Self {
-            transaction_id: transaction_id.to_string(),
-            reason: Some(reason.to_string()),
-            note: Some(note.to_string()),
         }
     }
 }
@@ -59,6 +50,11 @@ impl Cancel {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Cancel message must have a transaction_id".into(),
+            ));
+        }
+        if self.by.is_empty() {
+            return Err(Error::Validation(
+                "Cancel message must specify 'by' field".into(),
             ));
         }
         Ok(())

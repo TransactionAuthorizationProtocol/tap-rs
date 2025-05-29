@@ -65,6 +65,8 @@ fn create_transfer_body() -> Transfer {
 fn create_authorize_body() -> Authorize {
     Authorize {
         transaction_id: "test-transfer-id".to_string(),
+        settlement_address: None,
+        expiry: None,
         note: Some("Transfer authorized".to_string()),
     }
 }

@@ -19,22 +19,18 @@ fn test_transfer_authorizable() {
         .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
 
-    // Test authorize method - Now create Authorize struct manually
-    let note = Some("Authorization approved".to_string());
-    let auth = transfer.authorize(note.clone());
+    // Test authorize method - now returns PlainMessage
+    let note = Some("Authorization approved");
+    let auth_message = transfer
+        .authorize("did:example:sender", None, None, note)
+        .expect("Failed to create authorization");
 
-    // Create a new DIDComm message from the auth object to get its transfer_id
-    let auth_message = auth
-        .to_didcomm("did:example:sender")
-        .expect("Failed to convert auth to DIDComm");
-
-    // Update the auth object with the transfer_id from the original transfer message
-    let mut auth =
+    // Extract the body to verify
+    let auth =
         Authorize::from_didcomm(&auth_message).expect("Failed to convert DIDComm to Authorize");
-    auth.transaction_id = transfer_id.clone();
 
-    assert_eq!(auth.transaction_id, transfer_id);
-    assert_eq!(auth.note, note);
+    assert_eq!(auth.transaction_id, transfer.transaction_id);
+    assert_eq!(auth.note, Some("Authorization approved".to_string()));
 
     // Create Reject struct directly/manually since the trait is now at a different location
     let reject_code = "REJECT-001".to_string();
@@ -68,22 +64,18 @@ fn test_didcomm_message_authorizable() {
         .expect("Failed to convert to DIDComm message");
     let transfer_id = transfer_message.id.clone();
 
-    // Test authorize method - Create Authorize struct manually
-    let note = Some("Authorization approved".to_string());
-    let auth = transfer.authorize(note.clone());
+    // Test authorize method - now returns PlainMessage
+    let note = Some("Authorization approved");
+    let auth_message = transfer
+        .authorize("did:example:sender", None, None, note)
+        .expect("Failed to create authorization");
 
-    // Create a new DIDComm message from the auth object to get its transfer_id
-    let auth_message = auth
-        .to_didcomm("did:example:sender")
-        .expect("Failed to convert auth to DIDComm");
-
-    // Update the auth object with the transfer_id from the original transfer message
-    let mut auth =
+    // Extract the body to verify
+    let auth =
         Authorize::from_didcomm(&auth_message).expect("Failed to convert DIDComm to Authorize");
-    auth.transaction_id = transfer_id.clone();
 
-    assert_eq!(auth.note, note);
-    assert_eq!(auth.transaction_id, transfer_id);
+    assert_eq!(auth.note, Some("Authorization approved".to_string()));
+    assert_eq!(auth.transaction_id, transfer.transaction_id);
 
     // Create Reject struct directly/manually
     let reject_code = "REJECT-001".to_string();
@@ -116,14 +108,11 @@ fn test_full_flow() {
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
-    // Generate authorize response - Create Authorize struct manually
-    let note = Some("Transfer approved".to_string());
-    let auth = transfer.authorize(note.clone());
-
-    // Convert authorize to DIDComm message
-    let auth_message = auth
-        .to_didcomm("did:example:sender")
-        .expect("Failed to convert authorize to DIDComm message");
+    // Generate authorize response - now returns PlainMessage directly
+    let note = Some("Transfer approved");
+    let auth_message = transfer
+        .authorize("did:example:sender", None, None, note)
+        .expect("Failed to create authorization");
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
     // Create Settle struct directly

@@ -185,12 +185,11 @@ pub fn create_update_policies_using_authorizable_example(
         .map_err(|e| crate::error::Error::SerializationError(e.to_string()))?;
     // 3. Call update_policies on the Transfer struct (Authorizable trait impl)
     // Extract or generate a transaction ID
-    let transaction_id = transfer_body.transaction_id.clone();
     // Call update_policies on the Transfer struct (Authorizable trait impl)
-    let update_policies_message = transfer_body.update_policies(transaction_id, policies);
+    let update_policies_message = transfer_body.update_policies(creator_did, policies)?;
 
-    // Convert the update to a DIDComm message
-    let mut update_policies_reply = update_policies_message.to_didcomm(creator_did)?;
+    // The message is already a DIDComm message, so we can use it directly
+    let mut update_policies_reply = update_policies_message;
 
     // Set thread ID to maintain conversation
     update_policies_reply.thid = Some(original_message.as_ref().map_err(Clone::clone)?.id.clone());
@@ -287,11 +286,15 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 
     // Step 3: Create an authorization message in response to the updated policies
     // Use the Authorizable trait's authorize method
-    let authorize_body =
-        transfer.authorize(Some("Authorization with policy constraints".to_string()));
+    let authorize_body = transfer.authorize(
+        beneficiary_did,
+        None,
+        None,
+        Some("Authorization with policy constraints"),
+    )?;
 
     // Create a reply to the update policies message
-    let mut authorize_reply = authorize_body.to_didcomm(beneficiary_did)?;
+    let mut authorize_reply = authorize_body;
 
     // Set thread ID to maintain conversation
     authorize_reply.thid = Some(update_policies_message.id.clone());
@@ -309,6 +312,8 @@ pub fn create_authorize_example() -> Result<()> {
     // Create an example Authorize message body
     let authorize_message = Authorize {
         transaction_id: "transfer_12345".to_string(),
+        settlement_address: None,
+        expiry: None,
         note: Some("Authorized with policy constraints".to_string()),
     };
 

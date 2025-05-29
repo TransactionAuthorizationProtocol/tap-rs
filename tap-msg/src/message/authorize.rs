@@ -16,6 +16,18 @@ pub struct Authorize {
     #[tap(transaction_id)]
     pub transaction_id: String,
 
+    /// Optional settlement address in CAIP-10 format.
+    /// Required when sent by a VASP representing the beneficiary unless the original
+    /// request contains an agent with the settlementAddress role.
+    #[serde(rename = "settlementAddress", skip_serializing_if = "Option::is_none")]
+    pub settlement_address: Option<String>,
+
+    /// Optional expiry timestamp in ISO 8601 format.
+    /// After this time, if settlement has not occurred, the authorization should be
+    /// considered invalid and settlement should not proceed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiry: Option<String>,
+
     /// Optional note.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -26,6 +38,8 @@ impl Authorize {
     pub fn new(transaction_id: &str) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
+            settlement_address: None,
+            expiry: None,
             note: None,
         }
     }
@@ -34,7 +48,34 @@ impl Authorize {
     pub fn with_note(transaction_id: &str, note: &str) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
+            settlement_address: None,
+            expiry: None,
             note: Some(note.to_string()),
+        }
+    }
+
+    /// Create a new Authorize message with a settlement address
+    pub fn with_settlement_address(transaction_id: &str, settlement_address: &str) -> Self {
+        Self {
+            transaction_id: transaction_id.to_string(),
+            settlement_address: Some(settlement_address.to_string()),
+            expiry: None,
+            note: None,
+        }
+    }
+
+    /// Create a new Authorize message with all optional fields
+    pub fn with_all(
+        transaction_id: &str,
+        settlement_address: Option<&str>,
+        expiry: Option<&str>,
+        note: Option<&str>,
+    ) -> Self {
+        Self {
+            transaction_id: transaction_id.to_string(),
+            settlement_address: settlement_address.map(|s| s.to_string()),
+            expiry: expiry.map(|s| s.to_string()),
+            note: note.map(|s| s.to_string()),
         }
     }
 }

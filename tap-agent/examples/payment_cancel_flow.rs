@@ -93,8 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let cancel = Cancel {
             transaction_id: transaction_id.clone(),
+            by: "customer".to_string(),
             reason: Some("Changed my mind".to_string()),
-            note: Some("Will consider purchasing at a later date".to_string()),
         };
 
         let (packed_cancel, _delivery_results) = customer_agent
@@ -112,8 +112,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(reason) = &received_cancel.reason {
             println!("  Reason: {}", reason);
         }
-        if let Some(note) = &received_cancel.note {
-            println!("  Note: {}", note);
+        if let Some(reason) = &received_cancel.reason {
+            println!("  Reason: {}", reason);
         }
         println!();
 

@@ -145,6 +145,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let authorize = Authorize {
             transaction_id: transaction_id.clone(),
+            settlement_address: None,
+            expiry: None,
             note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
         };
 

@@ -9,9 +9,11 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
-use crate::message::tap_message_trait::{Authorizable, Connectable, TapMessageBody};
+use crate::message::tap_message_trait::{
+    Authorizable, Connectable, TapMessage as TapMessageTrait, TapMessageBody,
+};
 use crate::message::{Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, UpdatePolicies};
-use crate::TapMessage;
+use crate::{PlainMessage, TapMessage};
 
 /// Payment message body (TAIP-14).
 ///
@@ -233,38 +235,107 @@ impl Connectable for Payment {
 }
 
 impl Authorizable for Payment {
-    fn authorize(&self, note: Option<String>) -> Authorize {
-        Authorize {
-            transaction_id: self.transaction_id.clone(),
-            note,
-        }
+    fn authorize(
+        &self,
+        creator_did: &str,
+        settlement_address: Option<&str>,
+        expiry: Option<&str>,
+        note: Option<&str>,
+    ) -> Result<PlainMessage> {
+        let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry, note);
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&authorize, creator_did)
     }
 
-    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies {
-        UpdatePolicies {
-            transaction_id,
+    fn settle(
+        &self,
+        creator_did: &str,
+        settlement_id: &str,
+        amount: Option<&str>,
+    ) -> Result<PlainMessage> {
+        let settle = crate::message::Settle {
+            transaction_id: self.transaction_id.clone(),
+            settlement_id: settlement_id.to_string(),
+            amount: amount.map(|s| s.to_string()),
+        };
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&settle, creator_did)
+    }
+
+    fn reject(&self, creator_did: &str, reason: &str) -> Result<PlainMessage> {
+        let reject = crate::message::Reject {
+            transaction_id: self.transaction_id.clone(),
+            reason: reason.to_string(),
+        };
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&reject, creator_did)
+    }
+
+    fn cancel(&self, creator_did: &str, by: &str, reason: Option<&str>) -> Result<PlainMessage> {
+        let cancel = if let Some(reason) = reason {
+            crate::message::Cancel::with_reason(&self.transaction_id, by, reason)
+        } else {
+            crate::message::Cancel::new(&self.transaction_id, by)
+        };
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&cancel, creator_did)
+    }
+
+    fn revert(
+        &self,
+        creator_did: &str,
+        settlement_address: &str,
+        reason: &str,
+    ) -> Result<PlainMessage> {
+        let revert = crate::message::Revert {
+            transaction_id: self.transaction_id.clone(),
+            settlement_address: settlement_address.to_string(),
+            reason: reason.to_string(),
+            note: None,
+        };
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&revert, creator_did)
+    }
+
+    fn update_policies(&self, creator_did: &str, policies: Vec<Policy>) -> Result<PlainMessage> {
+        let update_policies = UpdatePolicies {
+            transaction_id: self.transaction_id.clone(),
             policies,
-        }
+        };
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&update_policies, creator_did)
     }
 
     fn replace_agent(
         &self,
-        transaction_id: String,
-        original_agent: String,
+        creator_did: &str,
+        original_agent: &str,
         replacement: Participant,
-    ) -> ReplaceAgent {
-        ReplaceAgent {
-            transaction_id,
-            original: original_agent,
+    ) -> Result<PlainMessage> {
+        let replace_agent = ReplaceAgent {
+            transaction_id: self.transaction_id.clone(),
+            original: original_agent.to_string(),
             replacement,
-        }
+        };
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&replace_agent, creator_did)
     }
 
-    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
-        RemoveAgent {
-            transaction_id,
-            agent,
-        }
+    fn remove_agent(&self, creator_did: &str, agent: &str) -> Result<PlainMessage> {
+        let remove_agent = RemoveAgent {
+            transaction_id: self.transaction_id.clone(),
+            agent: agent.to_string(),
+        };
+        // Create a PlainMessage from self first, then create the reply
+        let original_message = self.to_didcomm(creator_did)?;
+        original_message.create_reply(&remove_agent, creator_did)
     }
 }
 

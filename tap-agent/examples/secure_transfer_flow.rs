@@ -198,6 +198,8 @@ fn main() -> Result<()> {
         // Beneficiary VASP authorizes the transfer
         let authorize = Authorize {
             transaction_id: transfer_id.clone(),
+            settlement_address: None,
+            expiry: None,
             note: Some(format!(
                 "Authorizing transfer to settlement address: {}",
                 settlement_address

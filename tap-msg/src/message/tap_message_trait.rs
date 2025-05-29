@@ -6,7 +6,7 @@
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
-use crate::message::{Authorize, Participant, RemoveAgent, ReplaceAgent, UpdatePolicies};
+use crate::message::Participant;
 use chrono::Utc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -468,21 +468,87 @@ pub fn create_tap_message<T: TapMessageBody>(
 /// This module defines the Authorizable trait, which allows message types
 /// to be authorized, and implementations for relevant TAP message types.
 /// Authorizable trait for types that can be authorized or can generate authorization-related messages.
-pub trait Authorizable {
+pub trait Authorizable: TapMessage {
     /// Create an Authorize message for this object.
-    fn authorize(&self, note: Option<String>) -> Authorize;
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this authorization
+    /// * `settlement_address` - Optional settlement address in CAIP-10 format
+    /// * `expiry` - Optional expiry timestamp in ISO 8601 format
+    /// * `note` - Optional note
+    fn authorize(
+        &self,
+        creator_did: &str,
+        settlement_address: Option<&str>,
+        expiry: Option<&str>,
+        note: Option<&str>,
+    ) -> Result<PlainMessage>;
+
+    /// Create a Settle message for this object.
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this settlement
+    /// * `settlement_id` - CAIP-220 identifier of the underlying settlement transaction
+    /// * `amount` - Optional amount settled (must be <= original amount)
+    fn settle(
+        &self,
+        creator_did: &str,
+        settlement_id: &str,
+        amount: Option<&str>,
+    ) -> Result<PlainMessage>;
+
+    /// Create a Reject message for this object.
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this rejection
+    /// * `reason` - Reason for rejection
+    fn reject(&self, creator_did: &str, reason: &str) -> Result<PlainMessage>;
+
+    /// Create a Cancel message for this object.
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this cancellation
+    /// * `by` - The party wishing to cancel (e.g., "originator" or "beneficiary")
+    /// * `reason` - Optional reason for cancellation
+    fn cancel(&self, creator_did: &str, by: &str, reason: Option<&str>) -> Result<PlainMessage>;
+
+    /// Create a Revert message for this object.
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this reversal request
+    /// * `settlement_address` - CAIP-10 format address to return funds to
+    /// * `reason` - Reason for reversal request
+    fn revert(
+        &self,
+        creator_did: &str,
+        settlement_address: &str,
+        reason: &str,
+    ) -> Result<PlainMessage>;
 
     /// Create an UpdatePolicies message for this object.
-    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies;
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this update
+    /// * `policies` - New policies to apply
+    fn update_policies(&self, creator_did: &str, policies: Vec<Policy>) -> Result<PlainMessage>;
 
     /// Create a ReplaceAgent message for this object.
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this replacement
+    /// * `original_agent` - The agent DID to replace
+    /// * `replacement` - The replacement agent participant
     fn replace_agent(
         &self,
-        transaction_id: String,
-        original_agent: String,
+        creator_did: &str,
+        original_agent: &str,
         replacement: Participant,
-    ) -> ReplaceAgent;
+    ) -> Result<PlainMessage>;
 
     /// Create a RemoveAgent message for this object.
-    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this removal
+    /// * `agent` - The agent DID to remove
+    fn remove_agent(&self, creator_did: &str, agent: &str) -> Result<PlainMessage>;
 }
