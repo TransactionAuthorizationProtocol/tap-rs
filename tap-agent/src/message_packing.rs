@@ -16,7 +16,29 @@ use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tap_msg::didcomm::PlainMessage;
+use tap_msg::message::TapMessageEnum;
 use uuid::Uuid;
+
+/// Result of unpacking a message containing both the PlainMessage
+/// and the parsed TAP message
+#[derive(Debug, Clone)]
+pub struct UnpackedMessage {
+    /// The unpacked PlainMessage
+    pub plain_message: PlainMessage,
+    /// The parsed TAP message (if it could be parsed)
+    pub tap_message: Option<TapMessageEnum>,
+}
+
+impl UnpackedMessage {
+    /// Create a new UnpackedMessage
+    pub fn new(plain_message: PlainMessage) -> Self {
+        let tap_message = TapMessageEnum::from_plain_message(&plain_message).ok();
+        Self {
+            plain_message,
+            tap_message,
+        }
+    }
+}
 
 /// Error type specific to message packing and unpacking
 #[derive(Debug, thiserror::Error)]
@@ -712,6 +734,55 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<String, T> for String {
         Err(Error::Validation("Message is not valid JSON".to_string()))
     }
 }
+
+/// Implement Unpackable for String to UnpackedMessage
+#[async_trait]
+impl Unpackable<String, UnpackedMessage> for String {
+    async fn unpack(
+        packed_message: &String,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
+        options: UnpackOptions,
+    ) -> Result<UnpackedMessage> {
+        // First unpack to PlainMessage
+        let plain_message: PlainMessage =
+            String::unpack(packed_message, key_manager, options).await?;
+
+        // Then create UnpackedMessage which will try to parse the TAP message
+        Ok(UnpackedMessage::new(plain_message))
+    }
+}
+
+/// Implement Unpackable for JWS to UnpackedMessage
+#[async_trait]
+impl Unpackable<Jws, UnpackedMessage> for Jws {
+    async fn unpack(
+        packed_message: &Jws,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
+        options: UnpackOptions,
+    ) -> Result<UnpackedMessage> {
+        // First unpack to PlainMessage
+        let plain_message: PlainMessage = Jws::unpack(packed_message, key_manager, options).await?;
+
+        // Then create UnpackedMessage which will try to parse the TAP message
+        Ok(UnpackedMessage::new(plain_message))
+    }
+}
+
+/// Implement Unpackable for JWE to UnpackedMessage
+#[async_trait]
+impl Unpackable<Jwe, UnpackedMessage> for Jwe {
+    async fn unpack(
+        packed_message: &Jwe,
+        key_manager: &(impl KeyManagerPacking + ?Sized),
+        options: UnpackOptions,
+    ) -> Result<UnpackedMessage> {
+        // First unpack to PlainMessage
+        let plain_message: PlainMessage = Jwe::unpack(packed_message, key_manager, options).await?;
+
+        // Then create UnpackedMessage which will try to parse the TAP message
+        Ok(UnpackedMessage::new(plain_message))
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -937,5 +1008,120 @@ mod tests {
             String::unpack(&packed, &*key_manager2, unpack_options).await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_unpack_to_unpacked_message() {
+        // Create a key manager with a test key
+        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let key = key_manager
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        // Create a TAP transfer message
+        let message = PlainMessage {
+            id: "test-transfer-1".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+            body: serde_json::json!({
+                "@type": "https://tap.rsvp/schema/1.0#transfer",
+                "asset": {
+                    "chain_id": {
+                        "namespace": "eip155",
+                        "reference": "1"
+                    },
+                    "namespace": "slip44",
+                    "reference": "60"
+                },
+                "originator": {
+                    "id": key.did.clone(),
+                    "name": "Test Originator"
+                },
+                "amount": "100",
+                "agents": [],
+                "metadata": {}
+            }),
+            from: key.did.clone(),
+            to: vec!["did:example:bob".to_string()],
+            thid: None,
+            pthid: None,
+            created_time: Some(1234567890),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: Default::default(),
+        };
+
+        // Pack in plain mode
+        let pack_options = PackOptions::new().with_plain();
+        let packed = message.pack(&*key_manager, pack_options).await.unwrap();
+
+        // Unpack to UnpackedMessage
+        let unpack_options = UnpackOptions::new();
+        let unpacked: UnpackedMessage = String::unpack(&packed, &*key_manager, unpack_options)
+            .await
+            .unwrap();
+
+        // Verify PlainMessage
+        assert_eq!(unpacked.plain_message.id, message.id);
+        assert_eq!(unpacked.plain_message.type_, message.type_);
+
+        // Verify TAP message was parsed
+        assert!(unpacked.tap_message.is_some());
+        match unpacked.tap_message.unwrap() {
+            TapMessageEnum::Transfer(transfer) => {
+                assert_eq!(transfer.amount, "100");
+                assert_eq!(transfer.originator.id, key.did);
+            }
+            _ => panic!("Expected Transfer message"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_unpack_invalid_tap_message() {
+        // Create a key manager with a test key
+        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let key = key_manager
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        // Create a message with an unknown type
+        let message = PlainMessage {
+            id: "test-unknown-1".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://example.org/unknown#message".to_string(),
+            body: serde_json::json!({
+                "content": "Unknown message type"
+            }),
+            from: key.did.clone(),
+            to: vec!["did:example:bob".to_string()],
+            thid: None,
+            pthid: None,
+            created_time: Some(1234567890),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: Default::default(),
+        };
+
+        // Pack in plain mode
+        let pack_options = PackOptions::new().with_plain();
+        let packed = message.pack(&*key_manager, pack_options).await.unwrap();
+
+        // Unpack to UnpackedMessage
+        let unpack_options = UnpackOptions::new();
+        let unpacked: UnpackedMessage = String::unpack(&packed, &*key_manager, unpack_options)
+            .await
+            .unwrap();
+
+        // Verify PlainMessage was unpacked
+        assert_eq!(unpacked.plain_message.id, message.id);
+
+        // Verify TAP message parsing failed (unknown type)
+        assert!(unpacked.tap_message.is_none());
     }
 }

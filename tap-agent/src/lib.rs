@@ -136,7 +136,9 @@ pub use agent_key::{
 };
 pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
 pub use message::{Jwe, JweHeader, JweRecipient, Jws, JwsSignature, SecurityMode};
-pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
+pub use message_packing::{
+    KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable, UnpackedMessage,
+};
 pub use tap_msg::didcomm::PlainMessage;
 
 // Native-only DID resolver re-exports

@@ -19,6 +19,7 @@ pub mod reject;
 pub mod relationship;
 pub mod revert;
 pub mod settle;
+pub mod tap_message_enum;
 pub mod tap_message_trait;
 pub mod transfer;
 pub mod update_party;
@@ -88,3 +89,6 @@ pub use update_policies::UpdatePolicies;
 
 // Re-export the TapMessage trait and related functionality
 pub use tap_message_trait::{create_tap_message, Connectable, TapMessage, TapMessageBody};
+
+// Re-export the TapMessage enum
+pub use tap_message_enum::TapMessage as TapMessageEnum;
