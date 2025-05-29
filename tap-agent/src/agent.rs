@@ -15,7 +15,7 @@ use serde_json::Value;
 use std::sync::Arc;
 #[cfg(feature = "native")]
 use std::time::Duration;
-use tap_msg::didcomm::PlainMessage;
+use tap_msg::didcomm::{PlainMessage, PlainMessageExt};
 use tap_msg::TapMessageBody;
 
 /// Result of a message delivery attempt
@@ -130,6 +130,46 @@ pub trait Agent {
     /// # Returns
     /// - The processed PlainMessage
     async fn receive_message(&self, raw_message: &str) -> Result<PlainMessage>;
+
+    /// Send a strongly-typed message
+    ///
+    /// # Parameters
+    /// - `message`: The typed message to send
+    /// - `deliver`: Whether to actually deliver the message
+    ///
+    /// # Returns
+    /// - Packed message string
+    /// - Vector of delivery results (empty if deliver=false)
+    async fn send_typed<T: TapMessageBody + Send + Sync + std::fmt::Debug + 'static>(
+        &self,
+        message: PlainMessage<T>,
+        deliver: bool,
+    ) -> Result<(String, Vec<DeliveryResult>)> {
+        // Convert to plain message and use existing send infrastructure
+        let plain_message = message.to_plain_message()?;
+        let to_vec: Vec<&str> = plain_message.to.iter().map(|s| s.as_str()).collect();
+
+        // Extract the body and send using the existing method
+        let body = serde_json::from_value::<T>(plain_message.body)?;
+        self.send_message(&body, to_vec, deliver).await
+    }
+
+    /// Receive and parse a typed message
+    ///
+    /// # Parameters
+    /// - `raw_message`: The raw message string
+    ///
+    /// # Type Parameters
+    /// - `T`: The expected message body type
+    ///
+    /// # Returns
+    /// - The typed message if parsing succeeds
+    async fn receive_typed<T: TapMessageBody>(&self, raw_message: &str) -> Result<PlainMessage<T>> {
+        let plain_message = self.receive_message(raw_message).await?;
+        plain_message
+            .parse_as()
+            .map_err(|e| Error::Serialization(e.to_string()))
+    }
 }
 
 /// A simplified Agent trait for WASM with relaxed bounds

@@ -15,8 +15,8 @@ use serde_json::Value;
 use std::any::Any;
 use std::fmt::Debug;
 use std::sync::Arc;
-use tap_msg::didcomm::PlainMessage;
-use tap_msg::message::TapMessageEnum;
+use tap_msg::didcomm::{PlainMessage, PlainMessageExt};
+use tap_msg::message::TapMessage;
 use uuid::Uuid;
 
 /// Result of unpacking a message containing both the PlainMessage
@@ -26,17 +26,30 @@ pub struct UnpackedMessage {
     /// The unpacked PlainMessage
     pub plain_message: PlainMessage,
     /// The parsed TAP message (if it could be parsed)
-    pub tap_message: Option<TapMessageEnum>,
+    pub tap_message: Option<TapMessage>,
 }
 
 impl UnpackedMessage {
     /// Create a new UnpackedMessage
     pub fn new(plain_message: PlainMessage) -> Self {
-        let tap_message = TapMessageEnum::from_plain_message(&plain_message).ok();
+        let tap_message = TapMessage::from_plain_message(&plain_message).ok();
         Self {
             plain_message,
             tap_message,
         }
+    }
+
+    /// Try to get the message as a specific typed message
+    pub fn as_typed<T: tap_msg::TapMessageBody>(&self) -> Result<PlainMessage<T>> {
+        self.plain_message
+            .clone()
+            .parse_as()
+            .map_err(|e| Error::Serialization(e.to_string()))
+    }
+
+    /// Convert to a typed message with untyped body
+    pub fn into_typed(self) -> PlainMessage<Value> {
+        self.plain_message.into_typed()
     }
 }
 
@@ -1071,7 +1084,7 @@ mod tests {
         // Verify TAP message was parsed
         assert!(unpacked.tap_message.is_some());
         match unpacked.tap_message.unwrap() {
-            TapMessageEnum::Transfer(transfer) => {
+            TapMessage::Transfer(transfer) => {
                 assert_eq!(transfer.amount, "100");
                 assert_eq!(transfer.originator.id, key.did);
             }

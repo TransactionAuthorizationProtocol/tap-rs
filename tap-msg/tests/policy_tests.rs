@@ -2,7 +2,7 @@
 
 use tap_msg::message::{
     Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
-    TapMessage, TapMessageBody, UpdatePolicies,
+    TapMessageBody, TapMessageTrait, UpdatePolicies,
 };
 
 /// Test creating a participant with policies

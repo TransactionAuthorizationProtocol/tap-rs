@@ -19,7 +19,7 @@ pub mod utils;
 // Re-export public types for easier access
 pub use didcomm::{
     Attachment, AttachmentData, Base64AttachmentData, JsonAttachmentData, LinksAttachmentData,
-    OutOfBand, PlainMessage,
+    OutOfBand, PlainMessage, PlainMessageExt, UntypedPlainMessage,
 };
 pub use error::{Error, Result};
 pub use message::{

@@ -8,7 +8,7 @@ use tap_agent::message_packing::{
     PackOptions, Packable, UnpackOptions, Unpackable, UnpackedMessage,
 };
 use tap_msg::didcomm::PlainMessage;
-use tap_msg::message::TapMessageEnum;
+use tap_msg::message::TapMessage;
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(tap_message) = unpacked.tap_message {
         println!("\n--- Parsed TAP Message ---");
         match tap_message {
-            TapMessageEnum::Transfer(transfer) => {
+            TapMessage::Transfer(transfer) => {
                 println!("Message Type: Transfer");
                 println!("Asset: {}", transfer.asset);
                 println!("Amount: {}", transfer.amount);
