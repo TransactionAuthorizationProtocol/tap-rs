@@ -60,6 +60,10 @@ pub enum Error {
     /// Verification error
     #[error("Verification error: {0}")]
     Verification(String),
+
+    /// Validation error
+    #[error("Validation error: {0}")]
+    Validation(String),
 }
 
 /// Result type for TAP Node

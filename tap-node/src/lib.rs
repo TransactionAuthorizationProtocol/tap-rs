@@ -89,6 +89,8 @@ pub mod error;
 pub mod event;
 pub mod message;
 pub mod storage;
+#[cfg(feature = "storage")]
+pub mod validation;
 
 pub use error::{Error, Result};
 pub use event::logger::{EventLogger, EventLoggerConfig, LogDestination};
@@ -334,7 +336,23 @@ impl TapNode {
             }
         };
 
-        self.storage = Some(Arc::new(storage));
+        let storage_arc = Arc::new(storage);
+
+        // Subscribe event handlers
+        let message_status_handler = Arc::new(event::handlers::MessageStatusHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(message_status_handler).await;
+
+        let transaction_state_handler = Arc::new(event::handlers::TransactionStateHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(transaction_state_handler).await;
+
+        let transaction_audit_handler = Arc::new(event::handlers::TransactionAuditHandler::new());
+        self.event_bus.subscribe(transaction_audit_handler).await;
+
+        self.storage = Some(storage_arc);
         Ok(())
     }
 
@@ -438,6 +456,48 @@ impl TapNode {
         message: PlainMessage,
         raw_message: Option<&str>,
     ) -> Result<()> {
+        // Validate the message if storage/validation is available
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref storage) = self.storage {
+                // Create validator
+                let validator_config = validation::StandardValidatorConfig {
+                    max_timestamp_drift_secs: 60,
+                    storage: storage.clone(),
+                };
+                let validator = validation::create_standard_validator(validator_config).await;
+
+                // Validate the message
+                use crate::validation::{MessageValidator, ValidationResult};
+                match validator.validate(&message).await {
+                    ValidationResult::Accept => {
+                        // Publish accepted event
+                        self.event_bus
+                            .publish_message_accepted(
+                                message.id.clone(),
+                                message.type_.clone(),
+                                message.from.clone(),
+                                message.to.first().cloned().unwrap_or_default(),
+                            )
+                            .await;
+                    }
+                    ValidationResult::Reject(reason) => {
+                        // Publish rejected event
+                        self.event_bus
+                            .publish_message_rejected(
+                                message.id.clone(),
+                                reason.clone(),
+                                message.from.clone(),
+                                message.to.first().cloned().unwrap_or_default(),
+                            )
+                            .await;
+
+                        // Return error to stop processing
+                        return Err(Error::Validation(reason));
+                    }
+                }
+            }
+        }
         // Log all incoming messages for audit trail
         #[cfg(feature = "storage")]
         {
