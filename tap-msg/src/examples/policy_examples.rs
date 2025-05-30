@@ -4,7 +4,7 @@ use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::{
     policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl},
-    tap_message_trait::{Authorizable, TapMessageBody},
+    tap_message_trait::{Authorizable, TapMessageBody, Transaction},
     Authorize, Participant, Transfer, UpdatePolicies,
 };
 
@@ -183,9 +183,9 @@ pub fn create_update_policies_using_authorizable_example(
     // 2. Deserialize the body into a Transfer struct
     let transfer_body: Transfer = serde_json::from_value(body_json.clone())
         .map_err(|e| crate::error::Error::SerializationError(e.to_string()))?;
-    // 3. Call update_policies on the Transfer struct (Authorizable trait impl)
+    // 3. Call update_policies on the Transfer struct (Transaction trait impl)
     // Extract or generate a transaction ID
-    // Call update_policies on the Transfer struct (Authorizable trait impl)
+    // Call update_policies on the Transfer struct (Transaction trait impl)
     let update_policies_message = transfer_body.update_policies(creator_did, policies);
 
     // The message is already a DIDComm message, so we can use it directly

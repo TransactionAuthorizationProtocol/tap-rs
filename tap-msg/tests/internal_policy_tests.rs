@@ -5,8 +5,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::Result;
-use tap_msg::message::tap_message_trait::Authorizable;
-use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
+use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody, Transaction};
 use tap_msg::message::{
     AddAgents, Authorize, Participant, Policy as TapPolicy, RequireAuthorization,
     RequireProofOfControl, Transfer, UpdatePolicies,
@@ -178,9 +177,9 @@ fn test_authorizable_trait_methods() -> Result<()> {
         name: None,
     };
 
-    // Use the Authorizable trait methods on the Transfer struct
+    // Use the Transaction trait methods on the Transfer struct
     // replace_agent expects creator_did, original DID, and replacement Participant
-    let replace_agent_message = Authorizable::replace_agent(
+    let replace_agent_message = Transaction::replace_agent(
         &transfer,
         "test-transfer-123", // creator_did
         original_agent_did,
@@ -204,7 +203,7 @@ fn test_authorizable_trait_methods() -> Result<()> {
 
     // Test RemoveAgent
     // Pass creator_did and agent DID
-    let remove_agent_message = Authorizable::remove_agent(
+    let remove_agent_message = Transaction::remove_agent(
         &transfer,
         "test-transfer-123", // creator_did
         agent_to_remove,

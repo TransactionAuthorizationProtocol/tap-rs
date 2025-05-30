@@ -6,7 +6,10 @@
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
-use crate::message::{Participant, RemoveAgent, ReplaceAgent, UpdatePolicies};
+use crate::message::{
+    AddAgents, Authorize, Cancel, ConfirmRelationship, Participant, Reject, RemoveAgent,
+    ReplaceAgent, Revert, Settle, UpdateParty, UpdatePolicies,
+};
 use chrono::Utc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -427,6 +430,27 @@ impl Connectable for PlainMessage {
     }
 }
 
+/// Helper function to convert an untyped PlainMessage to a typed PlainMessage.
+///
+/// This is used internally to convert the result of create_reply to a typed message.
+pub fn typed_plain_message<T: TapMessageBody>(reply: PlainMessage, body: T) -> PlainMessage<T> {
+    PlainMessage {
+        id: reply.id,
+        typ: reply.typ,
+        type_: reply.type_,
+        body,
+        from: reply.from,
+        to: reply.to,
+        thid: reply.thid,
+        pthid: reply.pthid,
+        extra_headers: reply.extra_headers,
+        created_time: reply.created_time,
+        expires_time: reply.expires_time,
+        from_prior: reply.from_prior,
+        attachments: reply.attachments,
+    }
+}
+
 /// Creates a new TAP message from a message body.
 ///
 /// This function constructs a DIDComm message with the appropriate
@@ -464,12 +488,13 @@ pub fn create_tap_message<T: TapMessageBody>(
     Ok(message)
 }
 
-/// Authorizable trait implementation for various TAP message types.
-/// This module defines the Authorizable trait, which allows message types
-/// to be authorized, and implementations for relevant TAP message types.
-/// Authorizable trait for types that can be authorized or can generate authorization-related messages.
+/// Authorizable trait for TAIP-4 authorization messages.
+///
+/// This trait provides methods for creating authorization-related messages
+/// as defined in TAIP-4, excluding the Settle message which is handled
+/// separately in the Transaction trait.
 pub trait Authorizable: TapMessage {
-    /// Create an Authorize message for this object.
+    /// Create an Authorize message for this object (TAIP-4).
     ///
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this authorization
@@ -482,9 +507,31 @@ pub trait Authorizable: TapMessage {
         settlement_address: Option<&str>,
         expiry: Option<&str>,
         note: Option<&str>,
-    ) -> Result<PlainMessage>;
+    ) -> PlainMessage<Authorize>;
 
-    /// Create a Settle message for this object.
+    /// Create a Cancel message for this object (TAIP-4).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this cancellation
+    /// * `by` - The party wishing to cancel (e.g., "originator" or "beneficiary")
+    /// * `reason` - Optional reason for cancellation
+    fn cancel(&self, creator_did: &str, by: &str, reason: Option<&str>) -> PlainMessage<Cancel>;
+
+    /// Create a Reject message for this object (TAIP-4).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this rejection
+    /// * `reason` - Reason for rejection
+    fn reject(&self, creator_did: &str, reason: &str) -> PlainMessage<Reject>;
+}
+
+/// Transaction trait for managing transaction lifecycle operations.
+///
+/// This trait provides methods for transaction processing operations
+/// as defined in TAIPs 5-9, including agent management, party updates,
+/// policy management, and settlement.
+pub trait Transaction: TapMessage {
+    /// Create a Settle message for this object (TAIP-4).
     ///
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this settlement
@@ -495,24 +542,9 @@ pub trait Authorizable: TapMessage {
         creator_did: &str,
         settlement_id: &str,
         amount: Option<&str>,
-    ) -> Result<PlainMessage>;
+    ) -> PlainMessage<Settle>;
 
-    /// Create a Reject message for this object.
-    ///
-    /// # Arguments
-    /// * `creator_did` - The DID of the agent creating this rejection
-    /// * `reason` - Reason for rejection
-    fn reject(&self, creator_did: &str, reason: &str) -> Result<PlainMessage>;
-
-    /// Create a Cancel message for this object.
-    ///
-    /// # Arguments
-    /// * `creator_did` - The DID of the agent creating this cancellation
-    /// * `by` - The party wishing to cancel (e.g., "originator" or "beneficiary")
-    /// * `reason` - Optional reason for cancellation
-    fn cancel(&self, creator_did: &str, by: &str, reason: Option<&str>) -> Result<PlainMessage>;
-
-    /// Create a Revert message for this object.
+    /// Create a Revert message for this object (TAIP-4).
     ///
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this reversal request
@@ -523,16 +555,16 @@ pub trait Authorizable: TapMessage {
         creator_did: &str,
         settlement_address: &str,
         reason: &str,
-    ) -> Result<PlainMessage>;
+    ) -> PlainMessage<Revert>;
 
-    /// Create an UpdatePolicies message for this object.
+    /// Create an AddAgents message for this object (TAIP-5).
     ///
     /// # Arguments
-    /// * `creator_did` - The DID of the agent creating this update
-    /// * `policies` - New policies to apply
-    fn update_policies(&self, creator_did: &str, policies: Vec<Policy>) -> Result<PlainMessage>;
+    /// * `creator_did` - The DID of the agent creating this addition
+    /// * `agents` - List of agents to add
+    fn add_agents(&self, creator_did: &str, agents: Vec<Participant>) -> PlainMessage<AddAgents>;
 
-    /// Create a ReplaceAgent message for this object.
+    /// Create a ReplaceAgent message for this object (TAIP-5).
     ///
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this replacement
@@ -543,12 +575,49 @@ pub trait Authorizable: TapMessage {
         creator_did: &str,
         original_agent: &str,
         replacement: Participant,
-    ) -> Result<PlainMessage>;
+    ) -> PlainMessage<ReplaceAgent>;
 
-    /// Create a RemoveAgent message for this object.
+    /// Create a RemoveAgent message for this object (TAIP-5).
     ///
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this removal
     /// * `agent` - The agent DID to remove
-    fn remove_agent(&self, creator_did: &str, agent: &str) -> Result<PlainMessage>;
+    fn remove_agent(&self, creator_did: &str, agent: &str) -> PlainMessage<RemoveAgent>;
+
+    /// Create an UpdateParty message for this object (TAIP-6).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this update
+    /// * `party_type` - The type of party ("originator", "beneficiary", etc.)
+    /// * `party` - The party information to update
+    fn update_party(
+        &self,
+        creator_did: &str,
+        party_type: &str,
+        party: Participant,
+    ) -> PlainMessage<UpdateParty>;
+
+    /// Create an UpdatePolicies message for this object (TAIP-7).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this update
+    /// * `policies` - New policies to apply
+    fn update_policies(
+        &self,
+        creator_did: &str,
+        policies: Vec<Policy>,
+    ) -> PlainMessage<UpdatePolicies>;
+
+    /// Create a ConfirmRelationship message for this object (TAIP-9).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this confirmation
+    /// * `agent_did` - The agent DID confirming their relationship
+    /// * `relationship_type` - The type of relationship being confirmed
+    fn confirm_relationship(
+        &self,
+        creator_did: &str,
+        agent_did: &str,
+        relationship_type: &str,
+    ) -> PlainMessage<ConfirmRelationship>;
 }

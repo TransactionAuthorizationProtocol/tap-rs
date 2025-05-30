@@ -213,14 +213,13 @@ fn test_confirm_relationship() -> Result<()> {
     let transfer_id = "test-transfer-123";
     let _alice_did = "did:example:alice";
     let _bob_did = "did:example:bob";
-    let org_did = "did:example:organization";
+    let _org_did = "did:example:organization";
 
     // Create a ConfirmRelationship message to confirm Bob is acting on behalf of an organization
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        for_id: org_did.to_string(),
-        role: Some("custodian".to_string()),
+        relationship_type: "custodian".to_string(),
     };
 
     // Validate the message using the trait method (auto-generated)
@@ -248,8 +247,7 @@ fn test_confirm_relationship() -> Result<()> {
     let extracted_confirm = ConfirmRelationship::from_didcomm(&message_with_thread)?;
     assert_eq!(extracted_confirm.transaction_id, transfer_id);
     assert_eq!(extracted_confirm.agent_id, _bob_did);
-    assert_eq!(extracted_confirm.for_id, org_did);
-    assert_eq!(extracted_confirm.role, Some("custodian".to_string()));
+    assert_eq!(extracted_confirm.relationship_type, "custodian");
 
     // Test using the Authorizable trait
     let transfer = Transfer {
@@ -288,8 +286,7 @@ fn test_confirm_relationship() -> Result<()> {
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        for_id: org_did.to_string(),
-        role: Some("custodian".to_string()),
+        relationship_type: "custodian".to_string(),
     };
 
     // Create a DIDComm message from the confirm_relationship
@@ -302,8 +299,11 @@ fn test_confirm_relationship() -> Result<()> {
     // The thid should be set to the transaction_id
     assert_eq!(confirm_message.thid, Some(transfer_id.to_string()));
 
-    // Check body content (role)
-    assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian");
+    // Check body content (relationship_type)
+    assert_eq!(
+        confirm_message.body["relationship_type"].as_str().unwrap(),
+        "custodian"
+    );
 
     Ok(())
 }

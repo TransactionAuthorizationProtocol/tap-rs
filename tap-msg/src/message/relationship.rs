@@ -21,23 +21,17 @@ pub struct ConfirmRelationship {
     /// DID of the agent whose relationship is being confirmed.
     pub agent_id: String,
 
-    /// DID of the entity that the agent acts on behalf of.
-    #[serde(rename = "for")]
-    pub for_id: String,
-
-    /// Role of the agent in the transaction (optional).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub role: Option<String>,
+    /// Type of relationship being confirmed (e.g., "agent_for", "custodian", etc.).
+    pub relationship_type: String,
 }
 
 impl ConfirmRelationship {
     /// Creates a new ConfirmRelationship message body.
-    pub fn new(transaction_id: &str, agent_id: &str, for_id: &str, role: Option<String>) -> Self {
+    pub fn new(transaction_id: &str, agent_id: &str, relationship_type: &str) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             agent_id: agent_id.to_string(),
-            for_id: for_id.to_string(),
-            role,
+            relationship_type: relationship_type.to_string(),
         }
     }
 }
@@ -59,9 +53,9 @@ impl ConfirmRelationship {
             ));
         }
 
-        if self.for_id.is_empty() {
+        if self.relationship_type.is_empty() {
             return Err(Error::Validation(
-                "For ID is required in ConfirmRelationship".to_string(),
+                "Relationship type is required in ConfirmRelationship".to_string(),
             ));
         }
 

@@ -90,7 +90,8 @@ pub use update_policies::UpdatePolicies;
 
 // Re-export the TapMessage trait and related functionality
 pub use tap_message_trait::{
-    create_tap_message, Connectable, TapMessage as TapMessageTrait, TapMessageBody,
+    create_tap_message, typed_plain_message, Authorizable, Connectable,
+    TapMessage as TapMessageTrait, TapMessageBody, Transaction,
 };
 
 // Re-export the TapMessage enum

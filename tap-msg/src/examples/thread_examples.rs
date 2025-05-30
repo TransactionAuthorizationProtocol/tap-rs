@@ -2,7 +2,7 @@
 
 use crate::error::{Error, Result};
 use crate::message::policy::{Policy, RequireProofOfControl};
-use crate::message::tap_message_trait::{Authorizable, TapMessageBody};
+use crate::message::tap_message_trait::{TapMessageBody, Transaction};
 use crate::message::{
     AddAgents, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
 };
