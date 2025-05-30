@@ -244,9 +244,8 @@ impl Authorizable for Payment {
         creator_did: &str,
         settlement_address: Option<&str>,
         expiry: Option<&str>,
-        note: Option<&str>,
     ) -> PlainMessage<Authorize> {
-        let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry, note);
+        let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry);
         // Create a PlainMessage from self first, then create the reply
         let original_message = self
             .to_didcomm(creator_did)
@@ -321,7 +320,6 @@ impl Transaction for Payment {
             transaction_id: self.transaction_id.clone(),
             settlement_address: settlement_address.to_string(),
             reason: reason.to_string(),
-            note: None,
         };
         // Create a PlainMessage from self first, then create the reply
         let original_message = self
@@ -394,7 +392,6 @@ impl Transaction for Payment {
             transaction_id: self.transaction_id.clone(),
             party_type: party_type.to_string(),
             party,
-            note: None,
             context: None,
         };
         // Create a PlainMessage from self first, then create the reply
@@ -522,7 +519,7 @@ impl Payment {
 
 impl TapMessageBody for Payment {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#payment"
+        "https://tap.rsvp/schema/1.0#Payment"
     }
 
     fn validate(&self) -> Result<()> {

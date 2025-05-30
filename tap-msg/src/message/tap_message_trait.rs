@@ -500,13 +500,11 @@ pub trait Authorizable: TapMessage {
     /// * `creator_did` - The DID of the agent creating this authorization
     /// * `settlement_address` - Optional settlement address in CAIP-10 format
     /// * `expiry` - Optional expiry timestamp in ISO 8601 format
-    /// * `note` - Optional note
     fn authorize(
         &self,
         creator_did: &str,
         settlement_address: Option<&str>,
         expiry: Option<&str>,
-        note: Option<&str>,
     ) -> PlainMessage<Authorize>;
 
     /// Create a Cancel message for this object (TAIP-4).

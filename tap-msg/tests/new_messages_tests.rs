@@ -60,7 +60,7 @@ fn test_payment_request_with_asset() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#payment");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#Payment");
     assert!(message.created_time.is_some());
     assert_eq!(
         message.from,
@@ -167,7 +167,7 @@ fn test_connect_message() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#connect");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#Connect");
     assert!(message.created_time.is_some());
     assert_eq!(message.from, "did:example:b2b-service".to_string());
     assert_eq!(message.to, vec!["did:example:vasp".to_string()]);
@@ -214,7 +214,7 @@ fn test_authorization_required_message() {
     assert!(!message.id.is_empty());
     assert_eq!(
         message.type_,
-        "https://tap.rsvp/schema/1.0#authorizationrequired"
+        "https://tap.rsvp/schema/1.0#AuthorizationRequired"
     );
     assert!(message.created_time.is_some());
     assert_eq!(message.from, "did:example:vasp".to_string());
@@ -286,7 +286,7 @@ fn test_out_of_band_message() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#outofband");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#OutOfBand");
     assert!(message.created_time.is_some());
     assert_eq!(message.from, "did:example:sender".to_string());
     assert_eq!(message.to, vec!["did:example:recipient".to_string()]);

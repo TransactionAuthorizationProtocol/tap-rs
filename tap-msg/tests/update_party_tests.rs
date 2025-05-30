@@ -21,7 +21,6 @@ fn test_update_party_creation() {
         transaction_id: transaction_id.to_string(),
         party_type: "beneficiary".to_string(),
         party: updated_participant.clone(),
-        note: None,
         context: None,
     };
 
@@ -32,17 +31,6 @@ fn test_update_party_creation() {
     assert_eq!(update_party.party.role, updated_participant.role);
     assert_eq!(update_party.context, None);
 
-    // Create a new UpdateParty with a note
-    let update_party_with_note = UpdateParty {
-        note: Some("Updating party information".to_string()),
-        ..update_party.clone()
-    };
-
-    assert_eq!(
-        update_party_with_note.note,
-        Some("Updating party information".to_string())
-    );
-
     // Convert to DIDComm
     let didcomm_message = update_party
         .to_didcomm("did:example:1234567890abcdef")
@@ -50,17 +38,7 @@ fn test_update_party_creation() {
 
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#update-party"
-    );
-
-    // Convert to DIDComm
-    let didcomm_message = update_party_with_note
-        .to_didcomm("did:example:1234567890abcdef")
-        .expect("Failed to convert UpdateParty to DIDComm");
-
-    assert_eq!(
-        didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#update-party"
+        "https://tap.rsvp/schema/1.0#UpdateParty"
     );
 }
 
@@ -76,7 +54,6 @@ fn test_update_party_validation() {
             p.role = Some("beneficiary".to_string());
             p
         },
-        note: None,
         context: None,
     };
 
@@ -119,7 +96,6 @@ fn test_update_party_didcomm_conversion() {
             p.role = Some("updated_role".to_string());
             p
         },
-        note: None,
         context: None,
     };
 
@@ -131,7 +107,7 @@ fn test_update_party_didcomm_conversion() {
     // Verify fields
     assert_eq!(
         didcomm_message.type_,
-        "https://tap.rsvp/schema/1.0#update-party"
+        "https://tap.rsvp/schema/1.0#UpdateParty"
     );
 
     // Test from_didcomm
@@ -157,7 +133,6 @@ fn test_update_party_beneficiary() {
         transaction_id: transaction_id.clone(),
         party_type: "beneficiary".to_string(),
         party: updated_participant.clone(),
-        note: None,
         context: None,
     };
 
@@ -183,7 +158,6 @@ fn test_update_party_intermediary() {
         transaction_id: transaction_id.clone(),
         party_type: "intermediary".to_string(),
         party: updated_participant.clone(),
-        note: None,
         context: None,
     };
 
@@ -218,7 +192,6 @@ fn test_authorizable_with_update_party() {
         transaction_id: transfer_message.id.clone(), // Use the ID from the message
         party_type: "beneficiary".to_string(),
         party: updated_participant_1.clone(),
-        note: Some("Updated via manual struct creation".to_string()),
         context: None,
     };
 
@@ -236,7 +209,6 @@ fn test_authorizable_with_update_party() {
         transaction_id: transfer_message.id.clone(), // Still references the same transfer
         party_type: "originator".to_string(),
         party: updated_participant_2.clone(),
-        note: Some("Updated via DIDComm message".to_string()),
         context: None,
     };
 
@@ -246,10 +218,6 @@ fn test_authorizable_with_update_party() {
     assert_eq!(
         update_party_from_message.party.leiCode,
         updated_participant_2.leiCode
-    );
-    assert_eq!(
-        update_party_from_message.note,
-        Some("Updated via DIDComm message".to_string())
     );
 }
 

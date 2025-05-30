@@ -10,7 +10,7 @@ use crate::{TapMessage, TapMessageBody};
 
 /// Request Presentation message body (TAIP-10).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#request-presentation")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#RequestPresentation")]
 pub struct RequestPresentation {
     /// Transfer ID that this request is related to.
     #[tap(transaction_id)]
@@ -33,10 +33,6 @@ pub struct RequestPresentation {
     /// Whether the request is for the beneficiary's information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub for_beneficiary: Option<bool>,
-
-    /// Note for the request.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]

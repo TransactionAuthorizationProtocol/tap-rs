@@ -72,10 +72,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             transaction_id: transfer_id.clone(),
             settlement_address: None,
             expiry: None,
-            note: Some(format!(
-                "Authorizing transfer to settlement address: {}",
-                settlement_address
-            )),
         };
 
         let (packed_authorize, _delivery_results) = beneficiary_agent
@@ -90,9 +86,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator received authorization:");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
-        if let Some(note) = received_authorize.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 5: Originator settles the transfer
         println!("Step 5: Originator settles the transfer");

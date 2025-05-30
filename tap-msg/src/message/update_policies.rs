@@ -53,7 +53,7 @@ impl UpdatePolicies {
 
 impl TapMessageBody for UpdatePolicies {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#update-policies"
+        "https://tap.rsvp/schema/1.0#UpdatePolicies"
     }
 
     fn validate(&self) -> Result<()> {

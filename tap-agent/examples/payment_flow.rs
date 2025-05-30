@@ -94,7 +94,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             transaction_id: transaction_id.clone(),
             settlement_address: None,
             expiry: None,
-            note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
         };
 
         let (packed_authorize, _delivery_results) = customer_agent
@@ -109,9 +108,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Merchant received authorization:");
         println!("  Payment ID: {}", received_authorize.transaction_id);
-        if let Some(note) = received_authorize.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 5: Customer settles the payment
         println!("Step 5: Customer settles the payment");

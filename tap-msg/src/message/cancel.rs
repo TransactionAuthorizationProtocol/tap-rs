@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Cancel message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#cancel")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Cancel")]
 pub struct Cancel {
     /// ID of the transfer being cancelled.
     #[tap(transaction_id)]

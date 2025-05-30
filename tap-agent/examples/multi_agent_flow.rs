@@ -299,7 +299,6 @@ fn main() -> Result<()> {
             transaction_id: transfer_id.to_string(),
             settlement_address: None,
             expiry: None,
-            note: Some("Transfer authorized after compliance review".to_string()),
         };
 
         let (packed_authorize_vasp, _delivery_results) = beneficiary_vasp
@@ -313,9 +312,6 @@ fn main() -> Result<()> {
         let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator VASP received authorization:");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
-        if let Some(note) = &received_authorize.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 9: Beneficiary wallet also authorizes the transfer
         println!("Step 8: Beneficiary wallet also authorizes the transfer");
@@ -324,7 +320,6 @@ fn main() -> Result<()> {
             transaction_id: transfer_id.to_string(),
             settlement_address: None,
             expiry: None,
-            note: Some("Wallet ready to receive funds".to_string()),
         };
 
         let (packed_authorize_wallet, _delivery_results) = beneficiary_wallet
@@ -341,9 +336,6 @@ fn main() -> Result<()> {
             "  Transfer ID: {}",
             received_authorize_wallet.transaction_id
         );
-        if let Some(note) = &received_authorize_wallet.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 10: Wallet APIs exchange information
         println!("Step 9: Wallet APIs exchange technical information for settlement");
@@ -359,7 +351,6 @@ fn main() -> Result<()> {
             transaction_id: transfer_id.to_string(),
             settlement_address: None,
             expiry: None,
-            note: Some(api_note.clone()),
         };
 
         let (packed_api_authorize, _delivery_results) = originator_wallet_api
@@ -373,9 +364,6 @@ fn main() -> Result<()> {
         let received_api_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary wallet API received technical details:");
         println!("  Transfer ID: {}", received_api_authorize.transaction_id);
-        if let Some(note) = &received_api_authorize.note {
-            println!("  Technical details: {}\n", note);
-        }
 
         // Step 11: Originator wallet initiates settlement
         println!("Step 10: Originator wallet initiates settlement");

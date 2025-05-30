@@ -293,7 +293,6 @@ fn test_reply_chain() -> Result<()> {
         transaction_id: transfer_message.id.clone(),
         settlement_address: None,
         expiry: None,
-        note: Some("I authorize this transfer".to_string()),
     };
 
     // Pass sender DID as required by compiler here
@@ -327,7 +326,6 @@ fn test_reply_chain() -> Result<()> {
 
     let body2 = authorize_message.body_as::<Authorize>()?;
     assert_eq!(body2.transaction_id, transfer_message.id);
-    assert_eq!(body2.note, Some("I authorize this transfer".to_string()));
 
     let body3 = add_agents_message.body_as::<AddAgents>()?;
     assert_eq!(body3.transaction_id, transfer_message.id);

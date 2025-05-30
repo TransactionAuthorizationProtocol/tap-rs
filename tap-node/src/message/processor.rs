@@ -253,10 +253,25 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         if typ.starts_with("https://tap.rsvp/schema/") {
             // TAP-specific validations
             // Check that it's a valid TAP message type
-            if !typ.contains("transfer")
-                && !typ.contains("authorize")
-                && !typ.contains("reject")
-                && !typ.contains("settle")
+            if !typ.contains("Transfer")
+                && !typ.contains("Authorize")
+                && !typ.contains("Reject")
+                && !typ.contains("Settle")
+                && !typ.contains("Payment")
+                && !typ.contains("Connect")
+                && !typ.contains("Cancel")
+                && !typ.contains("Revert")
+                && !typ.contains("AddAgents")
+                && !typ.contains("ReplaceAgent")
+                && !typ.contains("RemoveAgent")
+                && !typ.contains("UpdateParty")
+                && !typ.contains("UpdatePolicies")
+                && !typ.contains("ConfirmRelationship")
+                && !typ.contains("OutOfBand")
+                && !typ.contains("AuthorizationRequired")
+                && !typ.contains("RequestPresentation")
+                && !typ.contains("Presentation")
+                && !typ.contains("Error")
             {
                 info!("Unknown TAP message type: {}", typ);
                 return Ok(None);

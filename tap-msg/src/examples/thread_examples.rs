@@ -52,7 +52,6 @@ pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
         transaction_id: transfer_message.id.clone(),
         settlement_address: None,
         expiry: None,
-        note: Some("I authorize this transfer".to_string()),
     };
 
     // Create a reply to the transfer message
@@ -83,7 +82,6 @@ pub fn create_reply_using_message_trait_example(
         transaction_id: original_message.id.clone(),
         settlement_address: None,
         expiry: None,
-        note: Some("Transfer authorized".to_string()),
     };
 
     // Create a reply using the Message trait extension
@@ -164,7 +162,6 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
         transaction_id: transfer_message.id.clone(),
         settlement_address: None,
         expiry: None,
-        note: Some("I authorize this transfer".to_string()),
     };
 
     // Create a reply from the originator to the beneficiary
@@ -404,7 +401,6 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         transaction_id: transfer_message.id.clone(),
         settlement_address: None,
         expiry: None,
-        note: Some("Transfer approved".to_string()),
     };
 
     // Create a reply from Bob to Alice

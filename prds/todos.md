@@ -1,6 +1,13 @@
 # Todos
 - [X] Make sure Authorizable trait implements only the required messages from TAIP-4 except for settle.
 - [X] Create a Transaction trait containing all required functions for transaction from TAIP-5, TAIP-6, TAIP-7, TAIP-8, TAIP-9 processing besides Authorizable, including agent handling, policies, settling, and managing parties.
+- Message review
+- - agent-management.rs remove boiler plate. Why rename transaction id to transfer_id
+remove TapMessageObject boilerplate
+- - Connect, UpdateParty and UpdatePolicies should remove TapMessageObject boilerplate
+- - There is both a did_presentation.rs and presentation.rs
+
+
 
 # Changes to tap-node
 - [ ] Create new NodeEvent types:

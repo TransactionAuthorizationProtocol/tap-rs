@@ -79,7 +79,6 @@ fn test_full_tap_flow() -> Result<()> {
         transaction_id: transfer_message.id.clone(), // Use the ID of the message being authorized
         settlement_address: None,
         expiry: None,
-        note: Some("Transfer authorized".to_string()),
     };
 
     // Convert to DIDComm message
@@ -172,7 +171,6 @@ fn test_payment_flow() {
         transaction_id: payment_message.id.clone(), // Use the ID of the message being authorized
         settlement_address: None,
         expiry: None,
-        note: Some("Payment authorized".to_string()),
     };
 
     // Convert to DIDComm message
@@ -300,7 +298,6 @@ fn test_complex_message_flow() -> Result<()> {
         transaction_id: transfer_messages[0].id.clone(),
         settlement_address: None,
         expiry: None,
-        note: Some("Transfer authorized".to_string()),
     };
 
     // Convert to DIDComm message
@@ -375,7 +372,6 @@ fn test_complex_message_flow() -> Result<()> {
         transaction_id: transfer_messages[2].id.clone(),
         party_type: "originator".to_string(),
         party: updated_originator.clone(),
-        note: Some("Originator LEI updated".to_string()),
         context: None,
     };
 

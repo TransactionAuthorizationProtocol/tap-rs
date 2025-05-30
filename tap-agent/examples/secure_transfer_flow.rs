@@ -200,10 +200,6 @@ fn main() -> Result<()> {
             transaction_id: transfer_id.clone(),
             settlement_address: None,
             expiry: None,
-            note: Some(format!(
-                "Authorizing transfer to settlement address: {}",
-                settlement_address
-            )),
         };
 
         let (packed_authorize, _delivery_results) = match beneficiary_agent
@@ -236,15 +232,7 @@ fn main() -> Result<()> {
         println!("Authorization received and validated successfully");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
 
-        if let Some(note) = &received_authorize.note {
-            println!("  Note: {}", note);
-
-            // Check if note contains expiry information (in a real implementation, this would be a proper field)
-            if note.contains("expiry time") {
-                // In a real implementation, we would parse and validate the expiry time
-                println!("  Note contains expiry information");
-            }
-        }
+        // In a real implementation, we would parse and validate the expiry time from the expiry field
 
         println!();
 

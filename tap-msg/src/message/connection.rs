@@ -92,7 +92,7 @@ impl Connectable for Connect {
 
 impl TapMessageBody for Connect {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#connect"
+        "https://tap.rsvp/schema/1.0#Connect"
     }
 
     fn validate(&self) -> Result<()> {
@@ -115,9 +115,8 @@ impl Authorizable for Connect {
         creator_did: &str,
         settlement_address: Option<&str>,
         expiry: Option<&str>,
-        note: Option<&str>,
     ) -> crate::didcomm::PlainMessage<Authorize> {
-        let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry, note);
+        let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry);
         // Create a PlainMessage from self first, then create the reply
         let original_message = self
             .to_didcomm(creator_did)
@@ -235,7 +234,7 @@ impl AuthorizationRequired {
 
 impl TapMessageBody for OutOfBand {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#outofband"
+        "https://tap.rsvp/schema/1.0#OutOfBand"
     }
 
     fn validate(&self) -> Result<()> {
@@ -253,7 +252,7 @@ impl TapMessageBody for OutOfBand {
 
 impl TapMessageBody for AuthorizationRequired {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#authorizationrequired"
+        "https://tap.rsvp/schema/1.0#AuthorizationRequired"
     }
 
     fn validate(&self) -> Result<()> {

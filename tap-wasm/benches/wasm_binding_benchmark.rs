@@ -92,7 +92,6 @@ fn bench_message_conversion(c: &mut Criterion) {
         transaction_id: "test-transfer-id".to_string(),
         settlement_address: None,
         expiry: None,
-        note: Some("Transfer authorized".to_string()),
     };
     let authorize_message = authorize_body.to_didcomm("did:example:alice").unwrap();
 

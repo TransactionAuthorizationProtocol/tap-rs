@@ -40,11 +40,6 @@ use serde::{Deserialize, Serialize};
 ///     updated_participant
 /// );
 ///
-/// // Add an optional note
-/// let update_party_with_note = UpdateParty {
-///     note: Some("Updating role after compliance check".to_string()),
-///     ..update_party
-/// };
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct UpdateParty {
@@ -60,10 +55,6 @@ pub struct UpdateParty {
     #[tap(participant)]
     pub party: Participant,
 
-    /// Optional note regarding the update.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
-
     /// Optional context for the update.
     #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
@@ -76,23 +67,6 @@ impl UpdateParty {
             transaction_id: transaction_id.to_string(),
             party_type: party_type.to_string(),
             party,
-            note: None,
-            context: None,
-        }
-    }
-
-    /// Creates a new UpdateParty message body with a note.
-    pub fn with_note(
-        transaction_id: &str,
-        party_type: &str,
-        party: Participant,
-        note: &str,
-    ) -> Self {
-        Self {
-            transaction_id: transaction_id.to_string(),
-            party_type: party_type.to_string(),
-            party,
-            note: Some(note.to_string()),
             context: None,
         }
     }
@@ -119,7 +93,7 @@ impl UpdateParty {
 
 impl TapMessageBody for UpdateParty {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#update-party"
+        "https://tap.rsvp/schema/1.0#UpdateParty"
     }
 
     fn validate(&self) -> Result<()> {

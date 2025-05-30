@@ -65,7 +65,7 @@ fn test_create_message() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#transfer");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#Transfer");
     assert!(message.created_time.is_some());
     assert_eq!(
         message.from,
@@ -189,19 +189,10 @@ mod payment_tests {
         let transaction_id = payment.transaction_id.clone();
 
         // Test authorize - now returns PlainMessage
-        let authorize_message = payment.authorize(
-            "did:example:creator",
-            None,
-            None,
-            Some("Authorized via manual struct creation"),
-        );
+        let _authorize_message = payment.authorize("did:example:creator", None, None);
 
         // The authorize_message is already a PlainMessage<Authorize>, so we can access the body directly
         // Don't assert on transfer_id as it's generated from message_id()
-        assert_eq!(
-            authorize_message.body.note,
-            Some("Authorized via manual struct creation".to_string())
-        );
 
         // Create a Reject directly since reject() method is removed
         let reject_code = "E001".to_string();
@@ -229,7 +220,6 @@ mod payment_tests {
             transaction_id: transaction_id.clone(),
             party_type: "beneficiary".to_string(),
             party: updated_participant.clone(),
-            note: Some("Updated via manual struct creation".to_string()),
             context: None,
         };
         assert_eq!(update_party.transaction_id, transaction_id);

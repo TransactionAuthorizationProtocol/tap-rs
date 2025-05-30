@@ -12,7 +12,7 @@ use crate::{TapMessage, TapMessageBody};
 /// Error message body.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
 #[tap(generated_id)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#error")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Error")]
 pub struct ErrorBody {
     /// Error code.
     pub code: String,

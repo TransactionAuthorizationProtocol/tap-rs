@@ -85,21 +85,21 @@ impl TapMessage {
 
         // Parse the message body based on the type
         match message_type {
-            "https://tap.rsvp/schema/1.0#add-agents" => {
+            "https://tap.rsvp/schema/1.0#AddAgents" => {
                 let msg: AddAgents =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse AddAgents: {}", e))
                     })?;
                 Ok(TapMessage::AddAgents(msg))
             }
-            "https://tap.rsvp/schema/1.0#authorize" => {
+            "https://tap.rsvp/schema/1.0#Authorize" => {
                 let msg: Authorize =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse Authorize: {}", e))
                     })?;
                 Ok(TapMessage::Authorize(msg))
             }
-            "https://tap.rsvp/schema/1.0#authorizationrequired" => {
+            "https://tap.rsvp/schema/1.0#AuthorizationRequired" => {
                 let msg: AuthorizationRequired = serde_json::from_value(plain_msg.body.clone())
                     .map_err(|e| {
                         Error::SerializationError(format!(
@@ -109,13 +109,13 @@ impl TapMessage {
                     })?;
                 Ok(TapMessage::AuthorizationRequired(msg))
             }
-            "https://tap.rsvp/schema/1.0#cancel" => {
+            "https://tap.rsvp/schema/1.0#Cancel" => {
                 let msg: Cancel = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                     Error::SerializationError(format!("Failed to parse Cancel: {}", e))
                 })?;
                 Ok(TapMessage::Cancel(msg))
             }
-            "https://tap.rsvp/schema/1.0#confirmrelationship" => {
+            "https://tap.rsvp/schema/1.0#ConfirmRelationship" => {
                 let msg: ConfirmRelationship = serde_json::from_value(plain_msg.body.clone())
                     .map_err(|e| {
                         Error::SerializationError(format!(
@@ -125,7 +125,7 @@ impl TapMessage {
                     })?;
                 Ok(TapMessage::ConfirmRelationship(msg))
             }
-            "https://tap.rsvp/schema/1.0#connect" => {
+            "https://tap.rsvp/schema/1.0#Connect" => {
                 let msg: Connect = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                     Error::SerializationError(format!("Failed to parse Connect: {}", e))
                 })?;
@@ -141,54 +141,54 @@ impl TapMessage {
                     })?;
                 Ok(TapMessage::DIDCommPresentation(msg))
             }
-            "https://tap.rsvp/schema/1.0#error" => {
+            "https://tap.rsvp/schema/1.0#Error" => {
                 let msg: ErrorBody =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse Error: {}", e))
                     })?;
                 Ok(TapMessage::Error(msg))
             }
-            "https://tap.rsvp/schema/1.0#outofband" => {
+            "https://tap.rsvp/schema/1.0#OutOfBand" => {
                 let msg: OutOfBand =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse OutOfBand: {}", e))
                     })?;
                 Ok(TapMessage::OutOfBand(msg))
             }
-            "https://tap.rsvp/schema/1.0#payment" => {
+            "https://tap.rsvp/schema/1.0#Payment" => {
                 let msg: Payment = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                     Error::SerializationError(format!("Failed to parse Payment: {}", e))
                 })?;
                 Ok(TapMessage::Payment(msg))
             }
-            "https://tap.rsvp/schema/1.0#presentation" => {
+            "https://tap.rsvp/schema/1.0#Presentation" => {
                 let msg: Presentation =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse Presentation: {}", e))
                     })?;
                 Ok(TapMessage::Presentation(msg))
             }
-            "https://tap.rsvp/schema/1.0#reject" => {
+            "https://tap.rsvp/schema/1.0#Reject" => {
                 let msg: Reject = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                     Error::SerializationError(format!("Failed to parse Reject: {}", e))
                 })?;
                 Ok(TapMessage::Reject(msg))
             }
-            "https://tap.rsvp/schema/1.0#remove-agent" => {
+            "https://tap.rsvp/schema/1.0#RemoveAgent" => {
                 let msg: RemoveAgent =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse RemoveAgent: {}", e))
                     })?;
                 Ok(TapMessage::RemoveAgent(msg))
             }
-            "https://tap.rsvp/schema/1.0#replace-agent" => {
+            "https://tap.rsvp/schema/1.0#ReplaceAgent" => {
                 let msg: ReplaceAgent =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse ReplaceAgent: {}", e))
                     })?;
                 Ok(TapMessage::ReplaceAgent(msg))
             }
-            "https://tap.rsvp/schema/1.0#request-presentation" => {
+            "https://tap.rsvp/schema/1.0#RequestPresentation" => {
                 let msg: RequestPresentation = serde_json::from_value(plain_msg.body.clone())
                     .map_err(|e| {
                         Error::SerializationError(format!(
@@ -198,33 +198,33 @@ impl TapMessage {
                     })?;
                 Ok(TapMessage::RequestPresentation(msg))
             }
-            "https://tap.rsvp/schema/1.0#revert" => {
+            "https://tap.rsvp/schema/1.0#Revert" => {
                 let msg: Revert = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                     Error::SerializationError(format!("Failed to parse Revert: {}", e))
                 })?;
                 Ok(TapMessage::Revert(msg))
             }
-            "https://tap.rsvp/schema/1.0#settle" => {
+            "https://tap.rsvp/schema/1.0#Settle" => {
                 let msg: Settle = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                     Error::SerializationError(format!("Failed to parse Settle: {}", e))
                 })?;
                 Ok(TapMessage::Settle(msg))
             }
-            "https://tap.rsvp/schema/1.0#transfer" => {
+            "https://tap.rsvp/schema/1.0#Transfer" => {
                 let msg: Transfer =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse Transfer: {}", e))
                     })?;
                 Ok(TapMessage::Transfer(msg))
             }
-            "https://tap.rsvp/schema/1.0#update-party" => {
+            "https://tap.rsvp/schema/1.0#UpdateParty" => {
                 let msg: UpdateParty =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse UpdateParty: {}", e))
                     })?;
                 Ok(TapMessage::UpdateParty(msg))
             }
-            "https://tap.rsvp/schema/1.0#update-policies" => {
+            "https://tap.rsvp/schema/1.0#UpdatePolicies" => {
                 let msg: UpdatePolicies =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
                         Error::SerializationError(format!("Failed to parse UpdatePolicies: {}", e))
@@ -241,32 +241,30 @@ impl TapMessage {
     /// Get the message type string for this TapMessage
     pub fn message_type(&self) -> &'static str {
         match self {
-            TapMessage::AddAgents(_) => "https://tap.rsvp/schema/1.0#add-agents",
-            TapMessage::Authorize(_) => "https://tap.rsvp/schema/1.0#authorize",
+            TapMessage::AddAgents(_) => "https://tap.rsvp/schema/1.0#AddAgents",
+            TapMessage::Authorize(_) => "https://tap.rsvp/schema/1.0#Authorize",
             TapMessage::AuthorizationRequired(_) => {
-                "https://tap.rsvp/schema/1.0#authorizationrequired"
+                "https://tap.rsvp/schema/1.0#AuthorizationRequired"
             }
-            TapMessage::Cancel(_) => "https://tap.rsvp/schema/1.0#cancel",
-            TapMessage::ConfirmRelationship(_) => "https://tap.rsvp/schema/1.0#confirmrelationship",
-            TapMessage::Connect(_) => "https://tap.rsvp/schema/1.0#connect",
+            TapMessage::Cancel(_) => "https://tap.rsvp/schema/1.0#Cancel",
+            TapMessage::ConfirmRelationship(_) => "https://tap.rsvp/schema/1.0#ConfirmRelationship",
+            TapMessage::Connect(_) => "https://tap.rsvp/schema/1.0#Connect",
             TapMessage::DIDCommPresentation(_) => {
                 "https://didcomm.org/present-proof/3.0/presentation"
             }
-            TapMessage::Error(_) => "https://tap.rsvp/schema/1.0#error",
-            TapMessage::OutOfBand(_) => "https://tap.rsvp/schema/1.0#outofband",
-            TapMessage::Payment(_) => "https://tap.rsvp/schema/1.0#payment",
-            TapMessage::Presentation(_) => "https://tap.rsvp/schema/1.0#presentation",
-            TapMessage::Reject(_) => "https://tap.rsvp/schema/1.0#reject",
-            TapMessage::RemoveAgent(_) => "https://tap.rsvp/schema/1.0#remove-agent",
-            TapMessage::ReplaceAgent(_) => "https://tap.rsvp/schema/1.0#replace-agent",
-            TapMessage::RequestPresentation(_) => {
-                "https://tap.rsvp/schema/1.0#request-presentation"
-            }
-            TapMessage::Revert(_) => "https://tap.rsvp/schema/1.0#revert",
-            TapMessage::Settle(_) => "https://tap.rsvp/schema/1.0#settle",
-            TapMessage::Transfer(_) => "https://tap.rsvp/schema/1.0#transfer",
-            TapMessage::UpdateParty(_) => "https://tap.rsvp/schema/1.0#update-party",
-            TapMessage::UpdatePolicies(_) => "https://tap.rsvp/schema/1.0#update-policies",
+            TapMessage::Error(_) => "https://tap.rsvp/schema/1.0#Error",
+            TapMessage::OutOfBand(_) => "https://tap.rsvp/schema/1.0#OutOfBand",
+            TapMessage::Payment(_) => "https://tap.rsvp/schema/1.0#Payment",
+            TapMessage::Presentation(_) => "https://tap.rsvp/schema/1.0#Presentation",
+            TapMessage::Reject(_) => "https://tap.rsvp/schema/1.0#Reject",
+            TapMessage::RemoveAgent(_) => "https://tap.rsvp/schema/1.0#RemoveAgent",
+            TapMessage::ReplaceAgent(_) => "https://tap.rsvp/schema/1.0#ReplaceAgent",
+            TapMessage::RequestPresentation(_) => "https://tap.rsvp/schema/1.0#RequestPresentation",
+            TapMessage::Revert(_) => "https://tap.rsvp/schema/1.0#Revert",
+            TapMessage::Settle(_) => "https://tap.rsvp/schema/1.0#Settle",
+            TapMessage::Transfer(_) => "https://tap.rsvp/schema/1.0#Transfer",
+            TapMessage::UpdateParty(_) => "https://tap.rsvp/schema/1.0#UpdateParty",
+            TapMessage::UpdatePolicies(_) => "https://tap.rsvp/schema/1.0#UpdatePolicies",
         }
     }
 }
@@ -279,7 +277,7 @@ mod tests {
     #[test]
     fn test_parse_transfer_body() {
         let body = json!({
-            "@type": "https://tap.rsvp/schema/1.0#transfer",
+            "@type": "https://tap.rsvp/schema/1.0#Transfer",
             "asset": {
                 "chain_id": {
                     "namespace": "eip155",
@@ -313,9 +311,9 @@ mod tests {
         let plain_msg = PlainMessage {
             id: "test-123".to_string(),
             typ: "application/didcomm-plain+json".to_string(),
-            type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+            type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
             body: json!({
-                "@type": "https://tap.rsvp/schema/1.0#transfer",
+                "@type": "https://tap.rsvp/schema/1.0#Transfer",
                 "asset": {
                     "chain_id": {
                         "namespace": "eip155",
@@ -377,7 +375,7 @@ mod tests {
         let tap_msg = TapMessage::Transfer(transfer);
         assert_eq!(
             tap_msg.message_type(),
-            "https://tap.rsvp/schema/1.0#transfer"
+            "https://tap.rsvp/schema/1.0#Transfer"
         );
     }
 }

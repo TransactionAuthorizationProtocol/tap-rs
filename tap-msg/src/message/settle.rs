@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Settle message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#settle")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Settle")]
 pub struct Settle {
     /// ID of the transaction being settled.
     #[tap(transaction_id)]

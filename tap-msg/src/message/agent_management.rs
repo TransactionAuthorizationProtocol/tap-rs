@@ -40,7 +40,7 @@ impl AddAgents {
 
 impl TapMessageBody for AddAgents {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#add-agents"
+        "https://tap.rsvp/schema/1.0#AddAgents"
     }
 
     fn validate(&self) -> Result<()> {
@@ -98,7 +98,7 @@ impl ReplaceAgent {
 
 impl TapMessageBody for ReplaceAgent {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#replace-agent"
+        "https://tap.rsvp/schema/1.0#ReplaceAgent"
     }
 
     fn validate(&self) -> Result<()> {
@@ -150,7 +150,7 @@ impl RemoveAgent {
 
 impl TapMessageBody for RemoveAgent {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#remove-agent"
+        "https://tap.rsvp/schema/1.0#RemoveAgent"
     }
 
     fn validate(&self) -> Result<()> {

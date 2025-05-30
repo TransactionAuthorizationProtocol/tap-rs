@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// This message type allows confirming a relationship between agents.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#confirmrelationship")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#ConfirmRelationship")]
 pub struct ConfirmRelationship {
     /// ID of the transaction related to this message.
     #[serde(rename = "transfer_id")]

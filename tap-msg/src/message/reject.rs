@@ -10,7 +10,7 @@ use crate::{TapMessage, TapMessageBody};
 
 /// Reject message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#reject")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Reject")]
 pub struct Reject {
     /// ID of the transaction being rejected.
     #[tap(transaction_id)]

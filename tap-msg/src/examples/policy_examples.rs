@@ -287,12 +287,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 
     // Step 3: Create an authorization message in response to the updated policies
     // Use the Authorizable trait's authorize method
-    let authorize_body = transfer.authorize(
-        beneficiary_did,
-        None,
-        None,
-        Some("Authorization with policy constraints"),
-    );
+    let authorize_body = transfer.authorize(beneficiary_did, None, None);
 
     // Create a reply to the update policies message
     let mut authorize_reply = authorize_body;
@@ -315,7 +310,6 @@ pub fn create_authorize_example() -> Result<()> {
         transaction_id: "transfer_12345".to_string(),
         settlement_address: None,
         expiry: None,
-        note: Some("Authorized with policy constraints".to_string()),
     };
 
     println!("Authorize message: {:#?}", authorize_message);

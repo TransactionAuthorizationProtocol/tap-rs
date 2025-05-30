@@ -54,7 +54,6 @@ fn test_create_reply() -> Result<()> {
         transaction_id: transfer_message.id.clone(), // Get ID from message
         settlement_address: None,
         expiry: None,
-        note: None,
     };
 
     // Create a reply using TapMessage trait (will need implementing on PlainMessage)
@@ -318,7 +317,7 @@ fn test_get_all_participants() -> Result<()> {
     let message = PlainMessage {
         id: Uuid::new_v4().to_string(),
         typ: "application/didcomm-plain+json".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: serde_json::json!({}),
         from: _alice_did.to_string(),
         to: vec![_bob_did.to_string(), charlie_did.to_string()],

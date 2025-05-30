@@ -45,7 +45,7 @@ async fn test_validation_processor_accepts_valid_messages() {
     // Create a valid message with all required fields
     let message = create_test_message(
         "test-123",
-        "https://tap.rsvp/schema/1.0#transfer",
+        "https://tap.rsvp/schema/1.0#Transfer",
         Some("did:example:sender"),
         Some(vec!["did:example:recipient"]),
     );
@@ -67,7 +67,7 @@ async fn test_validation_processor_rejects_empty_id() {
     // Create a message with an empty ID
     let message = create_test_message(
         "", // Empty ID should be rejected
-        "https://tap.rsvp/schema/1.0#transfer",
+        "https://tap.rsvp/schema/1.0#Transfer",
         Some("did:example:sender"),
         Some(vec!["did:example:recipient"]),
     );
@@ -111,7 +111,7 @@ async fn test_validation_processor_rejects_invalid_from_did() {
     // Create a message with an invalid from DID
     let message = create_test_message(
         "test-123",
-        "https://tap.rsvp/schema/1.0#transfer",
+        "https://tap.rsvp/schema/1.0#Transfer",
         Some("invalid-did-format"), // Invalid DID format
         Some(vec!["did:example:recipient"]),
     );
@@ -133,7 +133,7 @@ async fn test_validation_processor_rejects_invalid_to_did() {
     // Create a message with an invalid to DID
     let message = create_test_message(
         "test-123",
-        "https://tap.rsvp/schema/1.0#transfer",
+        "https://tap.rsvp/schema/1.0#Transfer",
         Some("did:example:sender"),
         Some(vec!["invalid-did-format"]), // Invalid DID format
     );
@@ -155,7 +155,7 @@ async fn test_validation_processor_accepts_valid_did_formats() {
     // Create a message with valid DID formats
     let message = create_test_message(
         "test-123",
-        "https://tap.rsvp/schema/1.0#transfer",
+        "https://tap.rsvp/schema/1.0#Transfer",
         Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"),
         Some(vec![
             "did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp",

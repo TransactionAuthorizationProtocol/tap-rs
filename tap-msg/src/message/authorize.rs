@@ -10,7 +10,7 @@ use crate::{TapMessage, TapMessageBody};
 
 /// Authorize message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#authorize")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Authorize")]
 pub struct Authorize {
     /// ID of the transaction being authorized.
     #[tap(transaction_id)]
@@ -27,10 +27,6 @@ pub struct Authorize {
     /// considered invalid and settlement should not proceed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
-
-    /// Optional note.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
 }
 
 impl Authorize {
@@ -40,17 +36,6 @@ impl Authorize {
             transaction_id: transaction_id.to_string(),
             settlement_address: None,
             expiry: None,
-            note: None,
-        }
-    }
-
-    /// Create a new Authorize message with a note
-    pub fn with_note(transaction_id: &str, note: &str) -> Self {
-        Self {
-            transaction_id: transaction_id.to_string(),
-            settlement_address: None,
-            expiry: None,
-            note: Some(note.to_string()),
         }
     }
 
@@ -60,7 +45,6 @@ impl Authorize {
             transaction_id: transaction_id.to_string(),
             settlement_address: Some(settlement_address.to_string()),
             expiry: None,
-            note: None,
         }
     }
 
@@ -69,13 +53,11 @@ impl Authorize {
         transaction_id: &str,
         settlement_address: Option<&str>,
         expiry: Option<&str>,
-        note: Option<&str>,
     ) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             settlement_address: settlement_address.map(|s| s.to_string()),
             expiry: expiry.map(|s| s.to_string()),
-            note: note.map(|s| s.to_string()),
         }
     }
 }

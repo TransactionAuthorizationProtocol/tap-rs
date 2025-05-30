@@ -26,9 +26,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let plain_message = PlainMessage {
         id: "example-transfer-123".to_string(),
         typ: "application/didcomm-plain+json".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: serde_json::json!({
-            "@type": "https://tap.rsvp/schema/1.0#transfer",
+            "@type": "https://tap.rsvp/schema/1.0#Transfer",
             "asset": {
                 "chain_id": {
                     "namespace": "eip155",
