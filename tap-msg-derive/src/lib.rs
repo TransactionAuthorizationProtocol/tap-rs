@@ -282,9 +282,29 @@ fn impl_tap_message_trait(
                 &self,
                 body: &T,
                 creator_did: &str,
-            ) -> #crate_path::error::Result<#crate_path::didcomm::PlainMessage> {
+            ) -> #crate_path::error::Result<#crate_path::didcomm::PlainMessage<T>> {
                 // Create the base message with creator as sender
                 let mut message = body.to_didcomm(creator_did)?;
+
+                // Since to_didcomm returns PlainMessage<Value>, we need to convert it
+                // Create a properly typed PlainMessage from the body
+                let typed_message = #crate_path::didcomm::PlainMessage {
+                    id: message.id,
+                    typ: message.typ,
+                    type_: message.type_,
+                    body: body.clone(),  // Use the actual typed body
+                    from: message.from,
+                    to: message.to,
+                    thid: message.thid,
+                    pthid: message.pthid,
+                    extra_headers: message.extra_headers,
+                    created_time: message.created_time,
+                    expires_time: message.expires_time,
+                    from_prior: message.from_prior,
+                    attachments: message.attachments,
+                };
+
+                let mut message = typed_message;
 
                 // Set the thread ID to maintain the conversation thread
                 if let Some(thread_id) = self.thread_id() {

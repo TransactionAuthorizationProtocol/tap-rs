@@ -6,7 +6,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::Authorizable;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Authorize, Participant, Reject, Settle, Transfer, UpdateParty};
+use tap_msg::message::{Participant, Reject, Settle, Transfer, UpdateParty};
 
 #[test]
 fn test_transfer_authorizable() {
@@ -17,20 +17,17 @@ fn test_transfer_authorizable() {
     let transfer_message = transfer
         .to_didcomm("did:example:sender")
         .expect("Failed to convert transfer to DIDComm");
-    let transfer_id = transfer_message.id.clone();
 
     // Test authorize method - now returns PlainMessage
     let note = Some("Authorization approved");
-    let auth_message = transfer
-        .authorize("did:example:sender", None, None, note)
-        .expect("Failed to create authorization");
+    let auth_message = transfer.authorize("did:example:sender", None, None, note);
 
-    // Extract the body to verify
-    let auth =
-        Authorize::from_didcomm(&auth_message).expect("Failed to convert DIDComm to Authorize");
-
-    assert_eq!(auth.transaction_id, transfer.transaction_id);
-    assert_eq!(auth.note, Some("Authorization approved".to_string()));
+    // The auth_message is already a PlainMessage<Authorize>, so we can access the body directly
+    assert_eq!(auth_message.body.transaction_id, transfer.transaction_id);
+    assert_eq!(
+        auth_message.body.note,
+        Some("Authorization approved".to_string())
+    );
 
     // Create Reject struct directly/manually since the trait is now at a different location
     let reject_code = "REJECT-001".to_string();
@@ -62,20 +59,17 @@ fn test_didcomm_message_authorizable() {
     let transfer_message = transfer
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let transfer_id = transfer_message.id.clone();
 
     // Test authorize method - now returns PlainMessage
     let note = Some("Authorization approved");
-    let auth_message = transfer
-        .authorize("did:example:sender", None, None, note)
-        .expect("Failed to create authorization");
+    let auth_message = transfer.authorize("did:example:sender", None, None, note);
 
-    // Extract the body to verify
-    let auth =
-        Authorize::from_didcomm(&auth_message).expect("Failed to convert DIDComm to Authorize");
-
-    assert_eq!(auth.note, Some("Authorization approved".to_string()));
-    assert_eq!(auth.transaction_id, transfer.transaction_id);
+    // The auth_message is already a PlainMessage<Authorize>, so we can access the body directly
+    assert_eq!(
+        auth_message.body.note,
+        Some("Authorization approved".to_string())
+    );
+    assert_eq!(auth_message.body.transaction_id, transfer.transaction_id);
 
     // Create Reject struct directly/manually
     let reject_code = "REJECT-001".to_string();
@@ -110,9 +104,7 @@ fn test_full_flow() {
 
     // Generate authorize response - now returns PlainMessage directly
     let note = Some("Transfer approved");
-    let auth_message = transfer
-        .authorize("did:example:sender", None, None, note)
-        .expect("Failed to create authorization");
+    let auth_message = transfer.authorize("did:example:sender", None, None, note);
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#authorize");
 
     // Create Settle struct directly

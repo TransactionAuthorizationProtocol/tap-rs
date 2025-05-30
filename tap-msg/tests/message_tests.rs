@@ -189,22 +189,17 @@ mod payment_tests {
         let transaction_id = payment.transaction_id.clone();
 
         // Test authorize - now returns PlainMessage
-        let authorize_message = payment
-            .authorize(
-                "did:example:creator",
-                None,
-                None,
-                Some("Authorized via manual struct creation"),
-            )
-            .expect("Failed to create authorization");
+        let authorize_message = payment.authorize(
+            "did:example:creator",
+            None,
+            None,
+            Some("Authorized via manual struct creation"),
+        );
 
-        // Extract the body to verify
-        let authorize = tap_msg::message::Authorize::from_didcomm(&authorize_message)
-            .expect("Failed to extract Authorize body");
-
+        // The authorize_message is already a PlainMessage<Authorize>, so we can access the body directly
         // Don't assert on transfer_id as it's generated from message_id()
         assert_eq!(
-            authorize.note,
+            authorize_message.body.note,
             Some("Authorized via manual struct creation".to_string())
         );
 

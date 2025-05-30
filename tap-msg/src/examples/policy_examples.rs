@@ -186,7 +186,7 @@ pub fn create_update_policies_using_authorizable_example(
     // 3. Call update_policies on the Transfer struct (Authorizable trait impl)
     // Extract or generate a transaction ID
     // Call update_policies on the Transfer struct (Authorizable trait impl)
-    let update_policies_message = transfer_body.update_policies(creator_did, policies)?;
+    let update_policies_message = transfer_body.update_policies(creator_did, policies);
 
     // The message is already a DIDComm message, so we can use it directly
     let mut update_policies_reply = update_policies_message;
@@ -197,7 +197,8 @@ pub fn create_update_policies_using_authorizable_example(
     // Set recipients
     update_policies_reply.to = participant_dids.iter().map(|s| s.to_string()).collect();
 
-    Ok(update_policies_reply)
+    // Convert typed PlainMessage to untyped PlainMessage
+    update_policies_reply.to_plain_message()
 }
 
 /// This example demonstrates a modified policy workflow using the Authorizable trait
@@ -291,7 +292,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
         None,
         None,
         Some("Authorization with policy constraints"),
-    )?;
+    );
 
     // Create a reply to the update policies message
     let mut authorize_reply = authorize_body;

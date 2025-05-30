@@ -119,11 +119,15 @@ impl Authorizable for Connect {
         settlement_address: Option<&str>,
         expiry: Option<&str>,
         note: Option<&str>,
-    ) -> Result<crate::didcomm::PlainMessage> {
+    ) -> crate::didcomm::PlainMessage<Authorize> {
         let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry, note);
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&authorize, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&authorize, creator_did)
+            .expect("Failed to create reply")
     }
 
     fn settle(
@@ -131,25 +135,33 @@ impl Authorizable for Connect {
         creator_did: &str,
         settlement_id: &str,
         amount: Option<&str>,
-    ) -> Result<crate::didcomm::PlainMessage> {
+    ) -> crate::didcomm::PlainMessage<Settle> {
         let settle = Settle {
             transaction_id: self.transaction_id.clone(),
             settlement_id: settlement_id.to_string(),
             amount: amount.map(|s| s.to_string()),
         };
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&settle, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&settle, creator_did)
+            .expect("Failed to create reply")
     }
 
-    fn reject(&self, creator_did: &str, reason: &str) -> Result<crate::didcomm::PlainMessage> {
+    fn reject(&self, creator_did: &str, reason: &str) -> crate::didcomm::PlainMessage<Reject> {
         let reject = Reject {
             transaction_id: self.transaction_id.clone(),
             reason: reason.to_string(),
         };
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&reject, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&reject, creator_did)
+            .expect("Failed to create reply")
     }
 
     fn cancel(
@@ -157,15 +169,19 @@ impl Authorizable for Connect {
         creator_did: &str,
         by: &str,
         reason: Option<&str>,
-    ) -> Result<crate::didcomm::PlainMessage> {
+    ) -> crate::didcomm::PlainMessage<Cancel> {
         let cancel = if let Some(reason) = reason {
             Cancel::with_reason(&self.transaction_id, by, reason)
         } else {
             Cancel::new(&self.transaction_id, by)
         };
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&cancel, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&cancel, creator_did)
+            .expect("Failed to create reply")
     }
 
     fn revert(
@@ -173,7 +189,7 @@ impl Authorizable for Connect {
         creator_did: &str,
         settlement_address: &str,
         reason: &str,
-    ) -> Result<crate::didcomm::PlainMessage> {
+    ) -> crate::didcomm::PlainMessage<Revert> {
         let revert = Revert {
             transaction_id: self.transaction_id.clone(),
             settlement_address: settlement_address.to_string(),
@@ -181,22 +197,30 @@ impl Authorizable for Connect {
             note: None,
         };
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&revert, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&revert, creator_did)
+            .expect("Failed to create reply")
     }
 
     fn update_policies(
         &self,
         creator_did: &str,
         policies: Vec<Policy>,
-    ) -> Result<crate::didcomm::PlainMessage> {
+    ) -> crate::didcomm::PlainMessage<UpdatePolicies> {
         let update_policies = UpdatePolicies {
             transaction_id: self.transaction_id.clone(),
             policies,
         };
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&update_policies, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&update_policies, creator_did)
+            .expect("Failed to create reply")
     }
 
     fn replace_agent(
@@ -204,25 +228,37 @@ impl Authorizable for Connect {
         creator_did: &str,
         original_agent: &str,
         replacement: Participant,
-    ) -> Result<crate::didcomm::PlainMessage> {
+    ) -> crate::didcomm::PlainMessage<ReplaceAgent> {
         let replace_agent = ReplaceAgent {
             transaction_id: self.transaction_id.clone(),
             original: original_agent.to_string(),
             replacement,
         };
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&replace_agent, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&replace_agent, creator_did)
+            .expect("Failed to create reply")
     }
 
-    fn remove_agent(&self, creator_did: &str, agent: &str) -> Result<crate::didcomm::PlainMessage> {
+    fn remove_agent(
+        &self,
+        creator_did: &str,
+        agent: &str,
+    ) -> crate::didcomm::PlainMessage<RemoveAgent> {
         let remove_agent = RemoveAgent {
             transaction_id: self.transaction_id.clone(),
             agent: agent.to_string(),
         };
         // Create a PlainMessage from self first, then create the reply
-        let original_message = self.to_didcomm(creator_did)?;
-        original_message.create_reply(&remove_agent, creator_did)
+        let original_message = self
+            .to_didcomm(creator_did)
+            .expect("Failed to create DIDComm message");
+        original_message
+            .create_reply(&remove_agent, creator_did)
+            .expect("Failed to create reply")
     }
 }
 

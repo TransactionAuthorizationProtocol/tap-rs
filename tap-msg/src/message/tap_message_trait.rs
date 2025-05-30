@@ -6,7 +6,7 @@
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
-use crate::message::Participant;
+use crate::message::{Participant, RemoveAgent, ReplaceAgent, UpdatePolicies};
 use chrono::Utc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;

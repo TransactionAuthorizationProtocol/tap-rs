@@ -235,8 +235,7 @@ pub fn create_replace_agent_example(
     };
 
     // Call replace_agent on the Transfer instance
-    let mut response =
-        original_transfer.replace_agent(creator_did, original_agent_id, replacement)?;
+    let mut response = original_transfer.replace_agent(creator_did, original_agent_id, replacement);
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -251,7 +250,8 @@ pub fn create_replace_agent_example(
 
     response.to = recipients;
 
-    Ok(response)
+    // Convert typed PlainMessage to untyped PlainMessage
+    response.to_plain_message()
 }
 
 /// This example demonstrates removing an agent using the Authorizable trait
@@ -266,7 +266,7 @@ pub fn create_remove_agent_example(
         .map_err(|e| Error::SerializationError(e.to_string()))?;
 
     // Call remove_agent on the Transfer instance
-    let mut response = original_transfer.remove_agent(creator_did, agent_to_remove)?;
+    let mut response = original_transfer.remove_agent(creator_did, agent_to_remove);
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -281,7 +281,8 @@ pub fn create_remove_agent_example(
 
     response.to = recipients;
 
-    Ok(response)
+    // Convert typed PlainMessage to untyped PlainMessage
+    response.to_plain_message()
 }
 
 /// This example demonstrates creating an UpdatePolicies message using the Authorizable trait
@@ -308,7 +309,7 @@ pub fn create_update_policies_example(
     let mut response = original_transfer.update_policies(
         creator_did,
         vec![Policy::RequireProofOfControl(proof_policy)],
-    )?;
+    );
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -323,7 +324,8 @@ pub fn create_update_policies_example(
 
     response.to = recipients;
 
-    Ok(response)
+    // Convert typed PlainMessage to untyped PlainMessage
+    response.to_plain_message()
 }
 
 /// This example demonstrates creating a Settle message

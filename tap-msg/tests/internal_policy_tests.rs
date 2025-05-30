@@ -185,19 +185,20 @@ fn test_authorizable_trait_methods() -> Result<()> {
         "test-transfer-123", // creator_did
         original_agent_did,
         replacement.clone(),
-    )
-    .expect("Failed to create replace agent message");
+    );
 
-    // Extract the body to validate
-    let replace_agent_body = tap_msg::message::ReplaceAgent::from_didcomm(&replace_agent_message)
-        .expect("Failed to extract ReplaceAgent body");
-
-    // Validate the created message body
-    assert_eq!(replace_agent_body.transaction_id, transfer.transaction_id); // Use transfer's transaction_id
-    assert_eq!(replace_agent_body.original, original_agent_did);
-    assert_eq!(replace_agent_body.replacement.id, replacement_agent_did);
+    // The replace_agent_message is already a PlainMessage<ReplaceAgent>, so we can access the body directly
     assert_eq!(
-        replace_agent_body.replacement.role,
+        replace_agent_message.body.transaction_id,
+        transfer.transaction_id
+    ); // Use transfer's transaction_id
+    assert_eq!(replace_agent_message.body.original, original_agent_did);
+    assert_eq!(
+        replace_agent_message.body.replacement.id,
+        replacement_agent_did
+    );
+    assert_eq!(
+        replace_agent_message.body.replacement.role,
         Some("replacement_agent".to_string())
     );
 
@@ -207,16 +208,14 @@ fn test_authorizable_trait_methods() -> Result<()> {
         &transfer,
         "test-transfer-123", // creator_did
         agent_to_remove,
-    )
-    .expect("Failed to create remove agent message");
+    );
 
-    // Extract the body to validate
-    let remove_agent_body = tap_msg::message::RemoveAgent::from_didcomm(&remove_agent_message)
-        .expect("Failed to extract RemoveAgent body");
-
-    // Validate the created message body
-    assert_eq!(remove_agent_body.transaction_id, transfer.transaction_id); // Use transfer's transaction_id
-    assert_eq!(remove_agent_body.agent, agent_to_remove);
+    // The remove_agent_message is already a PlainMessage<RemoveAgent>, so we can access the body directly
+    assert_eq!(
+        remove_agent_message.body.transaction_id,
+        transfer.transaction_id
+    ); // Use transfer's transaction_id
+    assert_eq!(remove_agent_message.body.agent, agent_to_remove);
 
     // It seems we don't need to convert these specific bodies to full messages for this test
     // We are just testing the body creation logic here.
