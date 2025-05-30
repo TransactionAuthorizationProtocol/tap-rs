@@ -57,6 +57,7 @@ fn create_test_transfer() -> Result<PlainMessage> {
             },
         ],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -373,6 +374,7 @@ fn create_test_transfer_struct() -> Result<Transfer> {
             },
         ],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: None,
     };

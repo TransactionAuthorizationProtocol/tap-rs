@@ -9,15 +9,9 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
-use crate::message::tap_message_trait::{
-    typed_plain_message, Authorizable, Connectable, TapMessage as TapMessageTrait, TapMessageBody,
-    Transaction,
-};
-use crate::message::{
-    AddAgents, Authorize, Cancel, ConfirmRelationship, Participant, Policy, Reject, RemoveAgent,
-    ReplaceAgent, Revert, Settle, UpdateParty, UpdatePolicies,
-};
-use crate::{PlainMessage, TapMessage};
+use crate::message::Participant;
+use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
+use crate::TapMessage;
 
 /// Payment message body (TAIP-14).
 ///
@@ -26,6 +20,7 @@ use crate::{PlainMessage, TapMessage};
 /// an asset or a currency to denominate the payment, along with the amount and
 /// recipient information.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Payment", initiator, authorizable, transactable)]
 pub struct Payment {
     /// Asset identifier (CAIP-19 format).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -71,6 +66,11 @@ pub struct Payment {
     #[serde(default)]
     #[tap(participant_list)]
     pub agents: Vec<Participant>,
+
+    /// Connection ID for linking to Connect messages
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(connection_id)]
+    pub connect_id: Option<String>,
 
     /// Additional metadata (optional).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -214,236 +214,13 @@ impl PaymentBuilder {
             expiry: self.expiry,
             invoice: self.invoice,
             agents: self.agents,
+            connect_id: None,
             metadata: self.metadata,
         }
     }
 }
 
-impl Connectable for Payment {
-    fn with_connection(&mut self, connect_id: &str) -> &mut Self {
-        // Store the connect_id in metadata
-        self.metadata.insert(
-            "connect_id".to_string(),
-            serde_json::Value::String(connect_id.to_string()),
-        );
-        self
-    }
 
-    fn has_connection(&self) -> bool {
-        self.metadata.contains_key("connect_id")
-    }
-
-    fn connection_id(&self) -> Option<&str> {
-        self.metadata.get("connect_id").and_then(|v| v.as_str())
-    }
-}
-
-impl Authorizable for Payment {
-    fn authorize(
-        &self,
-        creator_did: &str,
-        settlement_address: Option<&str>,
-        expiry: Option<&str>,
-    ) -> PlainMessage<Authorize> {
-        let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry);
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&authorize, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, authorize)
-    }
-
-    fn cancel(&self, creator_did: &str, by: &str, reason: Option<&str>) -> PlainMessage<Cancel> {
-        let cancel = if let Some(reason) = reason {
-            crate::message::Cancel::with_reason(&self.transaction_id, by, reason)
-        } else {
-            crate::message::Cancel::new(&self.transaction_id, by)
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&cancel, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, cancel)
-    }
-
-    fn reject(&self, creator_did: &str, reason: &str) -> PlainMessage<Reject> {
-        let reject = crate::message::Reject {
-            transaction_id: self.transaction_id.clone(),
-            reason: reason.to_string(),
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&reject, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, reject)
-    }
-}
-
-impl Transaction for Payment {
-    fn settle(
-        &self,
-        creator_did: &str,
-        settlement_id: &str,
-        amount: Option<&str>,
-    ) -> PlainMessage<Settle> {
-        let settle = crate::message::Settle {
-            transaction_id: self.transaction_id.clone(),
-            settlement_id: settlement_id.to_string(),
-            amount: amount.map(|s| s.to_string()),
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&settle, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, settle)
-    }
-
-    fn revert(
-        &self,
-        creator_did: &str,
-        settlement_address: &str,
-        reason: &str,
-    ) -> PlainMessage<Revert> {
-        let revert = crate::message::Revert {
-            transaction_id: self.transaction_id.clone(),
-            settlement_address: settlement_address.to_string(),
-            reason: reason.to_string(),
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&revert, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, revert)
-    }
-
-    fn add_agents(&self, creator_did: &str, agents: Vec<Participant>) -> PlainMessage<AddAgents> {
-        let add_agents = AddAgents {
-            transaction_id: self.transaction_id.clone(),
-            agents,
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&add_agents, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, add_agents)
-    }
-
-    fn replace_agent(
-        &self,
-        creator_did: &str,
-        original_agent: &str,
-        replacement: Participant,
-    ) -> PlainMessage<ReplaceAgent> {
-        let replace_agent = ReplaceAgent {
-            transaction_id: self.transaction_id.clone(),
-            original: original_agent.to_string(),
-            replacement,
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&replace_agent, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, replace_agent)
-    }
-
-    fn remove_agent(&self, creator_did: &str, agent: &str) -> PlainMessage<RemoveAgent> {
-        let remove_agent = RemoveAgent {
-            transaction_id: self.transaction_id.clone(),
-            agent: agent.to_string(),
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&remove_agent, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, remove_agent)
-    }
-
-    fn update_party(
-        &self,
-        creator_did: &str,
-        party_type: &str,
-        party: Participant,
-    ) -> PlainMessage<UpdateParty> {
-        let update_party = UpdateParty {
-            transaction_id: self.transaction_id.clone(),
-            party_type: party_type.to_string(),
-            party,
-            context: None,
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&update_party, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, update_party)
-    }
-
-    fn update_policies(
-        &self,
-        creator_did: &str,
-        policies: Vec<Policy>,
-    ) -> PlainMessage<UpdatePolicies> {
-        let update_policies = UpdatePolicies {
-            transaction_id: self.transaction_id.clone(),
-            policies,
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&update_policies, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, update_policies)
-    }
-
-    fn confirm_relationship(
-        &self,
-        creator_did: &str,
-        agent_did: &str,
-        relationship_type: &str,
-    ) -> PlainMessage<ConfirmRelationship> {
-        let confirm_relationship = ConfirmRelationship {
-            transaction_id: self.transaction_id.clone(),
-            agent_id: agent_did.to_string(),
-            relationship_type: relationship_type.to_string(),
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&confirm_relationship, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, confirm_relationship)
-    }
-}
 
 impl Payment {
     /// Creates a new Payment with an asset
@@ -465,6 +242,7 @@ impl Payment {
             expiry: None,
             invoice: None,
             agents,
+            connect_id: None,
             metadata: HashMap::new(),
         }
     }
@@ -488,6 +266,7 @@ impl Payment {
             expiry: None,
             invoice: None,
             agents,
+            connect_id: None,
             metadata: HashMap::new(),
         }
     }
@@ -512,17 +291,13 @@ impl Payment {
             expiry: None,
             invoice: None,
             agents,
+            connect_id: None,
             metadata: HashMap::new(),
         }
     }
-}
 
-impl TapMessageBody for Payment {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#Payment"
-    }
-
-    fn validate(&self) -> Result<()> {
+    /// Custom validation for Payment messages
+    pub fn validate(&self) -> Result<()> {
         // Validate either asset or currency_code is provided
         if self.asset.is_none() && self.currency_code.is_none() {
             return Err(Error::Validation(
@@ -591,78 +366,5 @@ impl TapMessageBody for Payment {
         }
 
         Ok(())
-    }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<crate::didcomm::PlainMessage> {
-        // Serialize the Payment to a JSON value
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Extract agent DIDs directly from the message
-        let mut agent_dids = Vec::new();
-
-        // Add merchant DID
-        agent_dids.push(self.merchant.id.clone());
-
-        // Add customer DID if present
-        if let Some(customer) = &self.customer {
-            agent_dids.push(customer.id.clone());
-        }
-
-        // Add DIDs from agents array
-        for agent in &self.agents {
-            agent_dids.push(agent.id.clone());
-        }
-
-        // Remove duplicates
-        agent_dids.sort();
-        agent_dids.dedup();
-
-        // Remove the sender from the recipients list to avoid sending to self
-        agent_dids.retain(|did| did != from_did);
-
-        let now = chrono::Utc::now().timestamp() as u64;
-
-        // Get the connection ID if this message is connected to a previous message
-        let pthid = self
-            .connection_id()
-            .map(|connect_id| connect_id.to_string());
-
-        // Set expires_time based on the expiry field if provided
-        let expires_time = self.expiry.as_ref().and_then(|expiry| {
-            // Try to parse ISO 8601 date to epoch seconds
-            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(expiry) {
-                Some(dt.timestamp() as u64)
-            } else {
-                None
-            }
-        });
-
-        // Create a new Message with required fields
-        let message = crate::didcomm::PlainMessage {
-            id: uuid::Uuid::new_v4().to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            body: body_json,
-            from: from_did.to_string(),
-            to: agent_dids,
-            thid: Some(self.transaction_id.clone()),
-            pthid,
-            created_time: Some(now),
-            expires_time,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            attachments: None,
-        };
-
-        Ok(message)
     }
 }

@@ -38,13 +38,13 @@ fn test_transfer_authorizable() {
 
     // Create Settle struct directly
     let settle = Settle {
-        transaction_id: transfer_message.id.clone(),
-        settlement_id: "tx-12345".to_string(),
-        amount: Some("100".to_string()),
+        transaction_id: "tx-123".to_string(),
+        settlement_id: "settle-123".to_string(),
+        amount: Some("50.00".to_string()),
     };
 
-    assert_eq!(settle.settlement_id, "tx-12345".to_string());
-    assert_eq!(settle.amount, Some("100".to_string()));
+    assert_eq!(settle.settlement_id, "settle-123".to_string());
+    assert_eq!(settle.amount, Some("50.00".to_string()));
 }
 
 #[test]
@@ -75,7 +75,7 @@ fn test_didcomm_message_authorizable() {
 
     // Create Settle struct directly
     let settle = Settle {
-        transaction_id: transfer_message.id.clone(),
+        transaction_id: transfer.transaction_id.clone(),
         settlement_id: "tx-12345".to_string(),
         amount: Some("100".to_string()),
     };
@@ -88,18 +88,14 @@ fn test_didcomm_message_authorizable() {
 fn test_full_flow() {
     // Create a Transfer message
     let transfer = create_test_transfer();
-    let original_message = transfer
-        .to_didcomm("did:example:sender")
-        .expect("Failed to convert to DIDComm message");
-
     // Generate authorize response - now returns PlainMessage directly
     let auth_message = transfer.authorize("did:example:sender", None, None);
     assert_eq!(auth_message.type_, "https://tap.rsvp/schema/1.0#Authorize");
 
     // Create Settle struct directly
     let settle = Settle {
-        transaction_id: original_message.id.clone(),
-        settlement_id: "txid-12345".to_string(),
+        transaction_id: transfer.transaction_id.clone(),
+        settlement_id: "tx-12345".to_string(),
         amount: Some("100".to_string()),
     };
 
@@ -209,6 +205,7 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: None,
     }

@@ -246,6 +246,7 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: None,
     }

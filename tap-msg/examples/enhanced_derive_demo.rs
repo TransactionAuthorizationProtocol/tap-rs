@@ -9,10 +9,9 @@ use std::collections::HashMap;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{MessageContext, Participant};
 use tap_msg::{error::Result, TapMessage};
-use tap_msg_derive::TapMessageBody;
 
 /// Example transfer message using the enhanced derive macro
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#example-enhanced-transfer")]
 pub struct EnhancedTransfer {
     /// Originator participant - automatically extracted for routing

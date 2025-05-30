@@ -6,14 +6,14 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 
 /// Request Presentation message body (TAIP-10).
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#RequestPresentation")]
 pub struct RequestPresentation {
     /// Transfer ID that this request is related to.
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// Presentation definition identifier or URI.
@@ -40,7 +40,7 @@ pub struct RequestPresentation {
 }
 
 /// Presentation message body (TAIP-8, TAIP-10).
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://didcomm.org/present-proof/3.0/presentation")]
 pub struct Presentation {
     /// Challenge from the request.

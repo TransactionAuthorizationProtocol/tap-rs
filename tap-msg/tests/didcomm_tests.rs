@@ -34,6 +34,7 @@ async fn test_pack_tap_body() -> Result<()> {
         amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -101,6 +102,7 @@ async fn test_extract_tap_body() -> Result<()> {
         amount: "1.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: None,
     };

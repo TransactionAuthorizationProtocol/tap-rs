@@ -159,6 +159,7 @@ fn main() -> Result<()> {
             ],
             settlement_id: None,
             memo: Some("Multi-agent transfer example with dynamic agent addition".to_string()),
+            connect_id: None,
             metadata: HashMap::new(),
         };
 
@@ -346,6 +347,7 @@ fn main() -> Result<()> {
             transfer_id,
             uuid::Uuid::new_v4()
         );
+        println!("  - {}", api_note);
 
         let api_authorize = Authorize {
             transaction_id: transfer_id.to_string(),

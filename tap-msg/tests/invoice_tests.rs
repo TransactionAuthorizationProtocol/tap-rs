@@ -200,7 +200,7 @@ fn test_payment_request_with_invoice() {
         .expect("Failed to convert Payment to DIDComm");
 
     // Verify DIDComm message type
-    assert_eq!(didcomm_message.type_, "https://tap.rsvp/schema/1.0#payment");
+    assert_eq!(didcomm_message.type_, "https://tap.rsvp/schema/1.0#Payment");
 
     // Verify that we can extract the message body
     let extracted =

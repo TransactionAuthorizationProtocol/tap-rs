@@ -4,15 +4,15 @@
 //! for canceling transactions in the TAP protocol.
 
 use crate::error::{Error, Result};
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 
 /// Cancel message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#Cancel")]
 pub struct Cancel {
     /// ID of the transfer being cancelled.
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// The party of the transaction wishing to cancel it.

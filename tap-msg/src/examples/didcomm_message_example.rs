@@ -39,6 +39,7 @@ pub fn create_transfer_message_example() -> Result<PlainMessage> {
         agents: vec![],
         settlement_id: None,
         transaction_id: uuid::Uuid::new_v4().to_string(),
+        connect_id: None,
         metadata: HashMap::new(),
     };
 

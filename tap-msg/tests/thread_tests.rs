@@ -40,6 +40,7 @@ fn test_create_reply() -> Result<()> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -59,11 +60,19 @@ fn test_create_reply() -> Result<()> {
     // Create a reply using TapMessage trait (will need implementing on PlainMessage)
     let reply_via_message = TapMessage::create_reply(&transfer_message, &authorize, _bob_did)?;
 
+    // Debug output
+    println!("Transfer message ID: {}", transfer_message.id);
+    println!("Transfer message thid: {:?}", transfer_message.thid);
+    println!("Reply message thid: {:?}", reply_via_message.thid);
+
     // Verify the reply created via the Message trait has the same properties
     assert_eq!(reply_via_message.from, _bob_did.to_string());
     assert!(reply_via_message.to.contains(&_alice_did.to_string()));
     assert!(!reply_via_message.to.contains(&_bob_did.to_string()));
-    assert_eq!(reply_via_message.thid, Some(transfer_message.id.clone()));
+    
+    // The reply's thid should be the transfer message's thid (which is the transaction_id)
+    // not the transfer message's id
+    assert_eq!(reply_via_message.thid, transfer_message.thid);
 
     Ok(())
 }
@@ -258,6 +267,7 @@ fn test_confirm_relationship() -> Result<()> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
         memo: Some("Test memo".to_string()),
     };

@@ -5,7 +5,7 @@
 
 use crate::error::{Error, Result};
 use crate::message::Participant;
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 
 /// UpdateParty message body (TAIP-6).
@@ -42,9 +42,10 @@ use serde::{Deserialize, Serialize};
 ///
 /// ```
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#UpdateParty")]
 pub struct UpdateParty {
     /// ID of the transaction this update relates to.
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// Type of party being updated (e.g., 'originator', 'beneficiary').
@@ -91,12 +92,10 @@ impl UpdateParty {
     }
 }
 
-impl TapMessageBody for UpdateParty {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#UpdateParty"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl UpdateParty {
+    /// Implementation of the validate method for the TapMessageBody trait
+    /// This delegates to the custom validation method
+    pub fn validate(&self) -> Result<()> {
         self.validate_update_party()
     }
 }

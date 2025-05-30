@@ -41,6 +41,7 @@ pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
         agents: vec![],
         settlement_id: None,
         memo: None,
+        connect_id: None,
         metadata: HashMap::new(),
     };
 
@@ -150,6 +151,7 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
             },
         ],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
     };
 
@@ -374,7 +376,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             leiCode: None,
             name: None,
         },
-        memo: None,
+        memo: Some("International transfer".to_string()),
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
@@ -382,9 +384,10 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             leiCode: None,
             name: None,
         }),
-        amount: "10.00".to_string(),
+        amount: "250.00".to_string(),
         agents: vec![],
         settlement_id: None,
+        connect_id: None,
         metadata: HashMap::new(),
     };
 

@@ -7,10 +7,10 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 
 /// Error message body.
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(generated_id)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#Error")]
 pub struct ErrorBody {

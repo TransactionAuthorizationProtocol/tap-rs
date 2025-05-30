@@ -47,7 +47,7 @@ use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 /// use serde::{Serialize, Deserialize};
 ///
 /// #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-/// #[tap(message_type = "https://tap.rsvp/schema/1.0#transfer")]
+/// #[tap(message_type = "https://tap.rsvp/schema/1.0#Transfer", initiator, authorizable, transactable)]
 /// pub struct Transfer {
 ///     #[tap(participant)]
 ///     pub originator: Participant,
@@ -68,20 +68,25 @@ use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 /// // - message_type() returning the specified string
 /// // - validate() with basic validation (can be overridden)
 /// // - to_didcomm() with automatic participant extraction and message construction
+/// // - Authorizable trait (if authorizable attribute is present)
+/// // - Transaction trait (if transactable attribute is present)
 /// ```
 ///
 /// # Supported Attributes
 ///
 /// ## Struct-level Attributes
 /// - `#[tap(message_type = "url")]` - TAP message type URL (enables TapMessageBody generation)
-/// - `#[tap(generated_id)]` - Indicates the message uses a generated ID
+/// - `#[tap(initiator)]` - Marks this as a conversation-initiating message
+/// - `#[tap(authorizable)]` - Auto-generates Authorizable trait implementation
+/// - `#[tap(transactable)]` - Auto-generates Transaction trait implementation
+/// - `#[tap(builder)]` - Auto-generates builder pattern
 ///
 /// ## Field-level Attributes
 /// - `#[tap(participant)]` - Single participant field (required or optional)
 /// - `#[tap(participant_list)]` - Vec<Participant> field
-/// - `#[tap(transaction_id)]` - Transaction ID field
-/// - `#[tap(optional_transaction_id)]` - Optional transaction ID field
-/// - `#[tap(thread_id)]` - Thread ID field (for thread-based messages)
+/// - `#[tap(transaction_id)]` - Transaction ID field (creates new transaction for initiators)
+/// - `#[tap(thread_id)]` - Thread ID field (references existing transaction for replies)
+/// - `#[tap(connection_id)]` - Connection ID field (for linking to Connect messages)
 #[proc_macro_derive(TapMessage, attributes(tap))]
 pub fn derive_tap_message(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -113,8 +118,18 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
     // Check if we're inside the tap-msg crate or external
     let is_internal = std::env::var("CARGO_CRATE_NAME").unwrap_or_default() == "tap_msg";
 
-    // TapMessageBody implementation is now handled by separate derive macro
-    let tap_message_body_impl: Option<TokenStream2> = None;
+    let tap_message_body_impl = if field_info.message_type.is_some() {
+        impl_tap_message_body_trait(
+            name,
+            &field_info,
+            &impl_generics,
+            &ty_generics,
+            where_clause,
+            is_internal,
+        )
+    } else {
+        quote! {}
+    };
 
     let tap_message_impl = impl_tap_message_trait(
         name,
@@ -134,10 +149,105 @@ fn impl_tap_message(input: &DeriveInput) -> TokenStream2 {
         is_internal,
     );
 
+    let authorizable_impl = if field_info.is_authorizable {
+        impl_authorizable_trait(
+            name,
+            &field_info,
+            &impl_generics,
+            &ty_generics,
+            where_clause,
+            is_internal,
+        )
+    } else {
+        quote! {}
+    };
+
+    let transaction_impl = if field_info.is_transactable {
+        impl_transaction_trait(
+            name,
+            &field_info,
+            &impl_generics,
+            &ty_generics,
+            where_clause,
+            is_internal,
+        )
+    } else {
+        quote! {}
+    };
+
+    let connectable_impl = if field_info.connection_id_field.is_some() || field_info.is_initiator {
+        impl_connectable_trait(
+            name,
+            &field_info,
+            &impl_generics,
+            &ty_generics,
+            where_clause,
+            is_internal,
+        )
+    } else {
+        quote! {}
+    };
+
     quote! {
-        #tap_message_body_impl
         #tap_message_impl
         #message_context_impl
+        #tap_message_body_impl
+        #authorizable_impl
+        #transaction_impl
+        #connectable_impl
+    }
+}
+
+fn impl_connectable_trait(
+    name: &syn::Ident,
+    field_info: &FieldInfo,
+    impl_generics: &syn::ImplGenerics,
+    ty_generics: &syn::TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
+    is_internal: bool,
+) -> TokenStream2 {
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
+
+    if let Some(ref conn_field) = field_info.connection_id_field {
+        // Has explicit connection_id field
+        quote! {
+            impl #impl_generics #crate_path::message::tap_message_trait::Connectable for #name #ty_generics #where_clause {
+                fn with_connection(&mut self, connect_id: &str) -> &mut Self {
+                    self.#conn_field = Some(connect_id.to_string());
+                    self
+                }
+
+                fn has_connection(&self) -> bool {
+                    self.#conn_field.is_some()
+                }
+
+                fn connection_id(&self) -> Option<&str> {
+                    self.#conn_field.as_deref()
+                }
+            }
+        }
+    } else {
+        // Initiator messages don't have connections
+        quote! {
+            impl #impl_generics #crate_path::message::tap_message_trait::Connectable for #name #ty_generics #where_clause {
+                fn with_connection(&mut self, _connect_id: &str) -> &mut Self {
+                    // Initiator messages don't have connection IDs
+                    self
+                }
+
+                fn has_connection(&self) -> bool {
+                    false
+                }
+
+                fn connection_id(&self) -> Option<&str> {
+                    None
+                }
+            }
+        }
     }
 }
 
@@ -149,8 +259,15 @@ struct FieldInfo {
     transaction_id_field: Option<syn::Ident>,
     optional_transaction_id_field: Option<syn::Ident>,
     thread_id_field: Option<syn::Ident>,
+    optional_thread_id_field: Option<syn::Ident>,
+    connection_id_field: Option<syn::Ident>,
     has_generated_id: bool,
     message_type: Option<String>,
+    is_initiator: bool,
+    is_authorizable: bool,
+    is_transactable: bool,
+    generate_builder: bool,
+    custom_validation: bool,
 }
 
 fn analyze_fields(
@@ -164,8 +281,15 @@ fn analyze_fields(
         transaction_id_field: None,
         optional_transaction_id_field: None,
         thread_id_field: None,
+        optional_thread_id_field: None,
+        connection_id_field: None,
         has_generated_id: false,
         message_type: None,
+        is_initiator: false,
+        is_authorizable: false,
+        is_transactable: false,
+        generate_builder: false,
+        custom_validation: false,
     };
 
     // First check struct-level attributes
@@ -180,6 +304,16 @@ fn analyze_fields(
                             field_info.message_type = Some(lit_str.value());
                         }
                     }
+                } else if meta.path.is_ident("initiator") {
+                    field_info.is_initiator = true;
+                } else if meta.path.is_ident("authorizable") {
+                    field_info.is_authorizable = true;
+                } else if meta.path.is_ident("transactable") {
+                    field_info.is_transactable = true;
+                } else if meta.path.is_ident("builder") {
+                    field_info.generate_builder = true;
+                } else if meta.path.is_ident("custom_validation") {
+                    field_info.custom_validation = true;
                 }
                 Ok(())
             });
@@ -208,7 +342,14 @@ fn analyze_fields(
                     } else if meta.path.is_ident("optional_transaction_id") {
                         field_info.optional_transaction_id_field = Some(field_name.clone());
                     } else if meta.path.is_ident("thread_id") {
-                        field_info.thread_id_field = Some(field_name.clone());
+                        // Check if the field type is Option<String>
+                        if is_optional_type(&field.ty) {
+                            field_info.optional_thread_id_field = Some(field_name.clone());
+                        } else {
+                            field_info.thread_id_field = Some(field_name.clone());
+                        }
+                    } else if meta.path.is_ident("connection_id") {
+                        field_info.connection_id_field = Some(field_name.clone());
                     } else if meta.path.is_ident("generated_id") {
                         field_info.has_generated_id = true;
                     }
@@ -419,11 +560,16 @@ fn generate_get_all_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
 }
 
 fn generate_thread_id_impl(field_info: &FieldInfo) -> TokenStream2 {
-    if let Some(thread_field) = &field_info.thread_id_field {
-        quote! { self.#thread_field.as_deref() }
-    } else if let Some(tx_field) = &field_info.transaction_id_field {
+    if let Some(ref thread_field) = field_info.thread_id_field {
+        quote! { Some(&self.#thread_field) }
+    } else if let Some(ref opt_thread_field) = field_info.optional_thread_id_field {
+        quote! { self.#opt_thread_field.as_deref() }
+    } else if field_info.is_initiator {
+        // Initiators don't have a thread_id - they start the thread
+        quote! { None }
+    } else if let Some(ref tx_field) = field_info.transaction_id_field {
         quote! { Some(&self.#tx_field) }
-    } else if let Some(opt_tx_field) = &field_info.optional_transaction_id_field {
+    } else if let Some(ref opt_tx_field) = field_info.optional_transaction_id_field {
         quote! { self.#opt_tx_field.as_deref() }
     } else {
         quote! { None }
@@ -433,31 +579,19 @@ fn generate_thread_id_impl(field_info: &FieldInfo) -> TokenStream2 {
 fn generate_message_id_impl(field_info: &FieldInfo) -> TokenStream2 {
     if let Some(tx_field) = &field_info.transaction_id_field {
         quote! { &self.#tx_field }
+    } else if let Some(thread_field) = &field_info.thread_id_field {
+        quote! { &self.#thread_field }
     } else if let Some(opt_tx_field) = &field_info.optional_transaction_id_field {
         quote! {
-            if let Some(ref id) = self.#opt_tx_field {
-                id
-            } else {
-                &self.id
-            }
+            self.#opt_tx_field.as_deref().unwrap_or("")
         }
-    } else if let Some(thread_field) = &field_info.thread_id_field {
-        quote! {
-            if let Some(ref thid) = self.#thread_field {
-                thid
-            } else {
-                &self.id
-            }
-        }
-    } else if field_info.has_generated_id {
+    } else {
         quote! {
             // For types without an ID field, we'll use a static string
             // This isn't ideal but it satisfies the API contract
             static FALLBACK_ID: &str = "00000000-0000-0000-0000-000000000000";
             FALLBACK_ID
         }
-    } else {
-        quote! { &self.transaction_id }
     }
 }
 
@@ -506,7 +640,24 @@ fn impl_tap_message_body_trait(
     let message_type = field_info
         .message_type
         .as_ref()
-        .expect("Message type should be present");
+        .expect("message_type attribute is required for TapMessageBody");
+
+    let validate_impl = if field_info.custom_validation {
+        // If custom_validation is specified, delegate to a validate_<struct_name_lowercase> method
+        let method_name = syn::Ident::new(
+            &format!("validate_{}", name.to_string().to_lowercase()),
+            name.span(),
+        );
+        quote! {
+            self.#method_name()
+        }
+    } else {
+        quote! {
+            // Basic validation - users can override this by implementing custom validation
+            Ok(())
+        }
+    };
+
     let to_didcomm_impl = generate_to_didcomm_impl(field_info, is_internal);
 
     quote! {
@@ -516,8 +667,7 @@ fn impl_tap_message_body_trait(
             }
 
             fn validate(&self) -> #crate_path::error::Result<()> {
-                // Basic validation - users can override this by implementing TapMessageBody manually
-                Ok(())
+                #validate_impl
             }
 
             fn to_didcomm(&self, from_did: &str) -> #crate_path::error::Result<#crate_path::didcomm::PlainMessage> {
@@ -582,7 +732,29 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
     };
 
     // Generate thread ID assignment
-    let thread_assignment = if let Some(tx_field) = &field_info.transaction_id_field {
+    let thread_assignment = if field_info.is_initiator {
+        // Initiators create a new thread - their transaction_id becomes the thid for replies
+        if let Some(tx_field) = &field_info.transaction_id_field {
+            quote! {
+                thid: Some(self.#tx_field.clone()),
+            }
+        } else {
+            quote! {
+                thid: None,
+            }
+        }
+    } else if let Some(thread_field) = &field_info.thread_id_field {
+        // Reply messages use thread_id to reference the existing transaction
+        quote! {
+            thid: Some(self.#thread_field.clone()),
+        }
+    } else if let Some(opt_thread_field) = &field_info.optional_thread_id_field {
+        // Optional thread_id field
+        quote! {
+            thid: self.#opt_thread_field.clone(),
+        }
+    } else if let Some(tx_field) = &field_info.transaction_id_field {
+        // Fallback for backwards compatibility
         quote! {
             thid: Some(self.#tx_field.clone()),
         }
@@ -590,13 +762,20 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
         quote! {
             thid: self.#opt_tx_field.clone(),
         }
-    } else if let Some(thread_field) = &field_info.thread_id_field {
-        quote! {
-            thid: self.#thread_field.clone(),
-        }
     } else {
         quote! {
             thid: None,
+        }
+    };
+
+    // Generate pthid assignment for connection linking
+    let pthid_assignment = if let Some(conn_field) = &field_info.connection_id_field {
+        quote! {
+            pthid: self.#conn_field.clone(),
+        }
+    } else {
+        quote! {
+            pthid: None,
         }
     };
 
@@ -627,7 +806,7 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
             from: from_did.to_string(),
             to: recipient_dids,
             #thread_assignment
-            pthid: None,
+            #pthid_assignment
             created_time: Some(now),
             expires_time: None,
             extra_headers: std::collections::HashMap::new(),
@@ -668,3 +847,252 @@ fn impl_tap_message_body_only(input: &DeriveInput) -> TokenStream2 {
         is_internal,
     )
 }
+
+fn impl_authorizable_trait(
+    name: &syn::Ident,
+    field_info: &FieldInfo,
+    impl_generics: &syn::ImplGenerics,
+    ty_generics: &syn::TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
+    is_internal: bool,
+) -> TokenStream2 {
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
+
+    // Get the transaction ID field access
+    let tx_id_access = if let Some(ref tx_field) = field_info.transaction_id_field {
+        quote! { &self.#tx_field }
+    } else if let Some(ref thread_field) = field_info.thread_id_field {
+        quote! { &self.#thread_field }
+    } else {
+        quote! { "" }
+    };
+
+    quote! {
+        impl #impl_generics #crate_path::message::tap_message_trait::Authorizable for #name #ty_generics #where_clause {
+            fn authorize(
+                &self,
+                creator_did: &str,
+                settlement_address: Option<&str>,
+                expiry: Option<&str>,
+            ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::Authorize> {
+                let authorize = #crate_path::message::Authorize::with_all(#tx_id_access, settlement_address, expiry);
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&authorize, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, authorize)
+            }
+
+            fn cancel(&self, creator_did: &str, by: &str, reason: Option<&str>) -> #crate_path::didcomm::PlainMessage<#crate_path::message::Cancel> {
+                let cancel = if let Some(reason) = reason {
+                    #crate_path::message::Cancel::with_reason(#tx_id_access, by, reason)
+                } else {
+                    #crate_path::message::Cancel::new(#tx_id_access, by)
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&cancel, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, cancel)
+            }
+
+            fn reject(&self, creator_did: &str, reason: &str) -> #crate_path::didcomm::PlainMessage<#crate_path::message::Reject> {
+                let reject = #crate_path::message::Reject {
+                    transaction_id: (#tx_id_access).to_string(),
+                    reason: reason.to_string(),
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&reject, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, reject)
+            }
+        }
+    }
+}
+
+fn impl_transaction_trait(
+    name: &syn::Ident,
+    field_info: &FieldInfo,
+    impl_generics: &syn::ImplGenerics,
+    ty_generics: &syn::TypeGenerics,
+    where_clause: Option<&syn::WhereClause>,
+    is_internal: bool,
+) -> TokenStream2 {
+    let crate_path = if is_internal {
+        quote! { crate }
+    } else {
+        quote! { ::tap_msg }
+    };
+
+    // Get the transaction ID field access
+    let tx_id_access = if let Some(ref tx_field) = field_info.transaction_id_field {
+        quote! { &self.#tx_field }
+    } else if let Some(ref thread_field) = field_info.thread_id_field {
+        quote! { &self.#thread_field }
+    } else {
+        quote! { "" }
+    };
+
+    quote! {
+        impl #impl_generics #crate_path::message::tap_message_trait::Transaction for #name #ty_generics #where_clause {
+            fn settle(
+                &self,
+                creator_did: &str,
+                settlement_id: &str,
+                amount: Option<&str>,
+            ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::Settle> {
+                let settle = #crate_path::message::Settle {
+                    transaction_id: (#tx_id_access).to_string(),
+                    settlement_id: settlement_id.to_string(),
+                    amount: amount.map(|s| s.to_string()),
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&settle, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, settle)
+            }
+
+            fn revert(
+                &self,
+                creator_did: &str,
+                settlement_address: &str,
+                reason: &str,
+            ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::Revert> {
+                let revert = #crate_path::message::Revert {
+                    transaction_id: (#tx_id_access).to_string(),
+                    settlement_address: settlement_address.to_string(),
+                    reason: reason.to_string(),
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&revert, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, revert)
+            }
+
+            fn add_agents(&self, creator_did: &str, agents: Vec<#crate_path::message::Participant>) -> #crate_path::didcomm::PlainMessage<#crate_path::message::AddAgents> {
+                let add_agents = #crate_path::message::AddAgents {
+                    transaction_id: (#tx_id_access).to_string(),
+                    agents,
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&add_agents, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, add_agents)
+            }
+
+            fn replace_agent(
+                &self,
+                creator_did: &str,
+                original_agent: &str,
+                replacement: #crate_path::message::Participant,
+            ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::ReplaceAgent> {
+                let replace_agent = #crate_path::message::ReplaceAgent {
+                    transaction_id: (#tx_id_access).to_string(),
+                    original: original_agent.to_string(),
+                    replacement,
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&replace_agent, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, replace_agent)
+            }
+
+            fn remove_agent(&self, creator_did: &str, agent: &str) -> #crate_path::didcomm::PlainMessage<#crate_path::message::RemoveAgent> {
+                let remove_agent = #crate_path::message::RemoveAgent {
+                    transaction_id: (#tx_id_access).to_string(),
+                    agent: agent.to_string(),
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&remove_agent, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, remove_agent)
+            }
+
+            fn update_party(
+                &self,
+                creator_did: &str,
+                party_type: &str,
+                party: #crate_path::message::Participant,
+            ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::UpdateParty> {
+                let update_party = #crate_path::message::UpdateParty {
+                    transaction_id: (#tx_id_access).to_string(),
+                    party_type: party_type.to_string(),
+                    party,
+                    context: None,
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&update_party, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, update_party)
+            }
+
+            fn update_policies(
+                &self,
+                creator_did: &str,
+                policies: Vec<#crate_path::message::Policy>,
+            ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::UpdatePolicies> {
+                let update_policies = #crate_path::message::UpdatePolicies {
+                    transaction_id: (#tx_id_access).to_string(),
+                    policies,
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&update_policies, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, update_policies)
+            }
+
+            fn confirm_relationship(
+                &self,
+                creator_did: &str,
+                agent_did: &str,
+                relationship_type: &str,
+            ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::ConfirmRelationship> {
+                let confirm_relationship = #crate_path::message::ConfirmRelationship {
+                    transaction_id: (#tx_id_access).to_string(),
+                    agent_id: agent_did.to_string(),
+                    relationship_type: relationship_type.to_string(),
+                };
+                let original_message = self
+                    .to_didcomm(creator_did)
+                    .expect("Failed to create DIDComm message");
+                let reply = original_message
+                    .create_reply(&confirm_relationship, creator_did)
+                    .expect("Failed to create reply");
+                #crate_path::message::tap_message_trait::typed_plain_message(reply, confirm_relationship)
+            }
+        }
+    }
+}
+

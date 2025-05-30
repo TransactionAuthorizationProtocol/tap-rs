@@ -5,16 +5,16 @@
 
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 
 /// UpdatePolicies message body (TAIP-7).
 ///
 /// This message type allows agents to update their policies for a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#UpdatePolicies", custom_validation)]
 pub struct UpdatePolicies {
-    #[serde(rename = "transactionId")]
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     pub policies: Vec<Policy>,
@@ -30,7 +30,7 @@ impl UpdatePolicies {
     }
 
     /// Custom validation for UpdatePolicies messages
-    pub fn validate_update_policies(&self) -> Result<()> {
+    pub fn validate_updatepolicies(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "UpdatePolicies must have a transaction_id".to_string(),
@@ -51,12 +51,4 @@ impl UpdatePolicies {
     }
 }
 
-impl TapMessageBody for UpdatePolicies {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#UpdatePolicies"
-    }
 
-    fn validate(&self) -> Result<()> {
-        self.validate_update_policies()
-    }
-}

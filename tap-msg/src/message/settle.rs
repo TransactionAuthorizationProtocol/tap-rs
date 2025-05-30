@@ -4,15 +4,15 @@
 //! for settling transactions in the TAP protocol.
 
 use crate::error::{Error, Result};
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 
 /// Settle message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#Settle")]
 pub struct Settle {
     /// ID of the transaction being settled.
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// Settlement ID (CAIP-220 identifier of the underlying settlement transaction).

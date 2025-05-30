@@ -1040,6 +1040,7 @@ mod tests {
             type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
             body: serde_json::json!({
                 "@type": "https://tap.rsvp/schema/1.0#Transfer",
+                "transaction_id": "test-tx-123",
                 "asset": {
                     "chain_id": {
                         "namespace": "eip155",
@@ -1054,6 +1055,10 @@ mod tests {
                 },
                 "amount": "100",
                 "agents": [],
+                "memo": null,
+                "beneficiary": null,
+                "settlement_id": null,
+                "connect_id": null,
                 "metadata": {}
             }),
             from: key.did.clone(),

@@ -7,14 +7,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::message::Participant;
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 
 /// Add agents message body (TAIP-5).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#AddAgents", custom_validation)]
 pub struct AddAgents {
     /// ID of the transaction to add agents to.
-    #[serde(rename = "transfer_id")]
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// Agents to add.
@@ -38,12 +38,9 @@ impl AddAgents {
     }
 }
 
-impl TapMessageBody for AddAgents {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#AddAgents"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl AddAgents {
+    /// Custom validation for AddAgents messages
+    pub fn validate_addagents(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in AddAgents".to_string(),
@@ -71,10 +68,10 @@ impl TapMessageBody for AddAgents {
 ///
 /// This message type allows replacing an agent with another agent in a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#ReplaceAgent", custom_validation)]
 pub struct ReplaceAgent {
     /// ID of the transaction to replace agent in.
-    #[serde(rename = "transfer_id")]
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// DID of the original agent to replace.
@@ -96,12 +93,9 @@ impl ReplaceAgent {
     }
 }
 
-impl TapMessageBody for ReplaceAgent {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#ReplaceAgent"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl ReplaceAgent {
+    /// Custom validation for ReplaceAgent messages
+    pub fn validate_replaceagent(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in ReplaceAgent".to_string(),
@@ -128,10 +122,10 @@ impl TapMessageBody for ReplaceAgent {
 ///
 /// This message type allows removing an agent from a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#RemoveAgent", custom_validation)]
 pub struct RemoveAgent {
     /// ID of the transaction to remove agent from.
-    #[serde(rename = "transfer_id")]
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// DID of the agent to remove.
@@ -148,12 +142,9 @@ impl RemoveAgent {
     }
 }
 
-impl TapMessageBody for RemoveAgent {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#RemoveAgent"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl RemoveAgent {
+    /// Custom validation for RemoveAgent messages
+    pub fn validate_removeagent(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in RemoveAgent".to_string(),

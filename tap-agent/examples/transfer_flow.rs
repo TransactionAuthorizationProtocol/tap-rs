@@ -168,6 +168,7 @@ fn create_transfer_message(
         agents: vec![settlement_agent],
         settlement_id: None,
         memo: Some("Example transfer".to_string()),
+        connect_id: None,
         metadata: HashMap::new(),
     }
 }

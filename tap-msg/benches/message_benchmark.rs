@@ -58,6 +58,7 @@ fn create_transfer_body() -> Transfer {
         metadata: HashMap::new(),
         memo: None,
         transaction_id: "test-transfer-id".to_string(),
+        connect_id: None,
     }
 }
 

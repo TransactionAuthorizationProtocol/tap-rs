@@ -67,6 +67,7 @@ mod storage_tests {
             agents: vec![],
             memo: Some("Test transfer".to_string()),
             settlement_id: None,
+            connect_id: None,
             metadata: Default::default(),
         };
 
@@ -108,6 +109,7 @@ mod storage_tests {
             metadata: Default::default(),
             agents: vec![],
             expiry: None,
+            connect_id: None,
         };
 
         create_test_message(

@@ -32,12 +32,10 @@ fn test_transfer_connectable() {
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
-    // The connection should be stored in the metadata
-    let metadata = transfer
-        .metadata
-        .get("connect_id")
-        .expect("connect_id not found in metadata");
-    assert_eq!(metadata.as_str().unwrap(), connect_id);
+    // The connection should be stored in the connect_id field
+    assert!(transfer.has_connection());
+    assert_eq!(transfer.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(transfer.connect_id, Some(connect_id.clone()));
 }
 
 #[test]
@@ -68,12 +66,10 @@ fn test_payment_request_connectable() {
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
-    // The connection should be stored in the metadata
-    let metadata = payment
-        .metadata
-        .get("connect_id")
-        .expect("connect_id not found in metadata");
-    assert_eq!(metadata.as_str().unwrap(), connect_id);
+    // The connection should be stored in the connect_id field
+    assert!(payment.has_connection());
+    assert_eq!(payment.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(payment.connect_id, Some(connect_id.clone()));
 }
 
 #[test]
@@ -212,8 +208,9 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
-        metadata: HashMap::new(),
         memo: None,
+        connect_id: None,
+        metadata: HashMap::new(),
     }
 }
 
@@ -246,6 +243,7 @@ fn create_test_payment_request() -> Payment {
         memo: None,
         expiry: None,
         invoice: None,
+        connect_id: None,
         metadata: HashMap::new(),
         merchant,
         customer: Some(customer),

@@ -293,6 +293,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         agents: vec![sender_agent, recipient_agent, settlement_agent], // Include both DIDs plus settlement agent
         settlement_id: None,
         memo: Some("Payment simulator transfer".to_string()),
+        connect_id: None,
         metadata: HashMap::new(),
     };
 

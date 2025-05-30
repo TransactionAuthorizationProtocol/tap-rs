@@ -7,10 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
-use crate::message::tap_message_trait::{
-    typed_plain_message, Authorizable, Connectable, TapMessage as TapMessageTrait, TapMessageBody,
-};
-use crate::message::{Authorize, Cancel, Reject};
+use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
 use crate::TapMessage;
 
 /// Transaction limits for connection constraints.
@@ -35,6 +32,7 @@ pub struct ConnectionConstraints {
 
 /// Connect message body (TAIP-2).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Connect", initiator, authorizable)]
 pub struct Connect {
     /// Transaction ID.
     #[tap(transaction_id)]
@@ -75,27 +73,9 @@ impl Connect {
     }
 }
 
-impl Connectable for Connect {
-    fn with_connection(&mut self, _connect_id: &str) -> &mut Self {
-        // Connect messages don't have a connection ID
-        self
-    }
-
-    fn has_connection(&self) -> bool {
-        false
-    }
-
-    fn connection_id(&self) -> Option<&str> {
-        None
-    }
-}
-
-impl TapMessageBody for Connect {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#Connect"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl Connect {
+    /// Custom validation for Connect messages
+    pub fn validate_connect(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation("transaction_id is required".to_string()));
         }
@@ -107,66 +87,20 @@ impl TapMessageBody for Connect {
         }
         Ok(())
     }
-}
-
-impl Authorizable for Connect {
-    fn authorize(
-        &self,
-        creator_did: &str,
-        settlement_address: Option<&str>,
-        expiry: Option<&str>,
-    ) -> crate::didcomm::PlainMessage<Authorize> {
-        let authorize = Authorize::with_all(&self.transaction_id, settlement_address, expiry);
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&authorize, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, authorize)
-    }
-
-    fn cancel(
-        &self,
-        creator_did: &str,
-        by: &str,
-        reason: Option<&str>,
-    ) -> crate::didcomm::PlainMessage<Cancel> {
-        let cancel = if let Some(reason) = reason {
-            Cancel::with_reason(&self.transaction_id, by, reason)
-        } else {
-            Cancel::new(&self.transaction_id, by)
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&cancel, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, cancel)
-    }
-
-    fn reject(&self, creator_did: &str, reason: &str) -> crate::didcomm::PlainMessage<Reject> {
-        let reject = Reject {
-            transaction_id: self.transaction_id.clone(),
-            reason: reason.to_string(),
-        };
-        // Create a PlainMessage from self first, then create the reply
-        let original_message = self
-            .to_didcomm(creator_did)
-            .expect("Failed to create DIDComm message");
-        let reply = original_message
-            .create_reply(&reject, creator_did)
-            .expect("Failed to create reply");
-        typed_plain_message(reply, reject)
+    
+    /// Validation method that will be called by TapMessageBody trait
+    pub fn validate(&self) -> Result<()> {
+        self.validate_connect()
     }
 }
+
+
+
+
 
 /// Out of Band invitation for TAP connections.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(generated_id)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#OutOfBand")]
 pub struct OutOfBand {
     /// The goal code for this invitation.
     pub goal_code: String,
@@ -204,9 +138,11 @@ impl OutOfBand {
     }
 }
 
+
+
 /// Authorization Required message body.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(generated_id)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#AuthorizationRequired")]
 pub struct AuthorizationRequired {
     /// Authorization URL.
     pub url: String,
@@ -232,12 +168,9 @@ impl AuthorizationRequired {
     }
 }
 
-impl TapMessageBody for OutOfBand {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#OutOfBand"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl OutOfBand {
+    /// Custom validation for OutOfBand messages
+    pub fn validate_out_of_band(&self) -> Result<()> {
         if self.goal_code.is_empty() {
             return Err(Error::Validation("Goal code is required".to_string()));
         }
@@ -248,14 +181,16 @@ impl TapMessageBody for OutOfBand {
 
         Ok(())
     }
+    
+    /// Validation method that will be called by TapMessageBody trait
+    pub fn validate(&self) -> Result<()> {
+        self.validate_out_of_band()
+    }
 }
 
-impl TapMessageBody for AuthorizationRequired {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#AuthorizationRequired"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl AuthorizationRequired {
+    /// Custom validation for AuthorizationRequired messages
+    pub fn validate_authorization_required(&self) -> Result<()> {
         if self.url.is_empty() {
             return Err(Error::Validation(
                 "Authorization URL is required".to_string(),
@@ -275,5 +210,10 @@ impl TapMessageBody for AuthorizationRequired {
         }
 
         Ok(())
+    }
+    
+    /// Validation method that will be called by TapMessageBody trait
+    pub fn validate(&self) -> Result<()> {
+        self.validate_authorization_required()
     }
 }

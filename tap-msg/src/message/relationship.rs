@@ -4,18 +4,18 @@
 //! relationships between agents in the TAP protocol.
 
 use crate::error::{Error, Result};
-use crate::{TapMessage, TapMessageBody};
+use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 
 /// ConfirmRelationship message body (TAIP-9).
 ///
 /// This message type allows confirming a relationship between agents.
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage, TapMessageBody)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#ConfirmRelationship")]
 pub struct ConfirmRelationship {
     /// ID of the transaction related to this message.
     #[serde(rename = "transfer_id")]
-    #[tap(transaction_id)]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// DID of the agent whose relationship is being confirmed.

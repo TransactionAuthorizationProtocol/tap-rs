@@ -278,6 +278,7 @@ mod tests {
     fn test_parse_transfer_body() {
         let body = json!({
             "@type": "https://tap.rsvp/schema/1.0#Transfer",
+            "transaction_id": "test-tx-123",
             "asset": {
                 "chain_id": {
                     "namespace": "eip155",
@@ -314,6 +315,7 @@ mod tests {
             type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
             body: json!({
                 "@type": "https://tap.rsvp/schema/1.0#Transfer",
+                "transaction_id": "test-tx-456",
                 "asset": {
                     "chain_id": {
                         "namespace": "eip155",
@@ -368,6 +370,7 @@ mod tests {
             agents: vec![],
             memo: None,
             settlement_id: None,
+            connect_id: None,
             transaction_id: "tx-123".to_string(),
             metadata: Default::default(),
         };
