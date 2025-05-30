@@ -363,6 +363,8 @@ impl TapNode {
     /// * `Ok(())` if the message was successfully processed
     /// * `Err(Error)` if there was an error during processing
     pub async fn receive_message(&self, message: serde_json::Value) -> Result<()> {
+        // Store the raw message for logging
+        let raw_message = serde_json::to_string(&message).ok();
         use tap_agent::{verify_jws, Jwe, Jws};
 
         // Determine message type
@@ -380,7 +382,8 @@ impl TapNode {
                 .map_err(|e| Error::Verification(format!("JWS verification failed: {}", e)))?;
 
             // Process the verified plain message
-            self.process_plain_message(plain_message).await
+            self.process_plain_message(plain_message, raw_message.as_deref())
+                .await
         } else if is_encrypted {
             // Route encrypted message to each matching agent
             let jwe: Jwe = serde_json::from_value(message.clone())
@@ -424,19 +427,24 @@ impl TapNode {
                 Error::Serialization(format!("Failed to parse PlainMessage: {}", e))
             })?;
 
-            self.process_plain_message(plain_message).await
+            self.process_plain_message(plain_message, raw_message.as_deref())
+                .await
         }
     }
 
     /// Process a plain message through the pipeline
-    async fn process_plain_message(&self, message: PlainMessage) -> Result<()> {
+    async fn process_plain_message(
+        &self,
+        message: PlainMessage,
+        raw_message: Option<&str>,
+    ) -> Result<()> {
         // Log all incoming messages for audit trail
         #[cfg(feature = "storage")]
         {
             if let Some(ref storage) = self.storage {
                 // Log the message to the audit trail
                 match storage
-                    .log_message(&message, storage::MessageDirection::Incoming)
+                    .log_message(&message, storage::MessageDirection::Incoming, raw_message)
                     .await
                 {
                     Ok(_) => log::debug!("Logged incoming message: {}", message.id),
@@ -517,7 +525,7 @@ impl TapNode {
             if let Some(ref storage) = self.storage {
                 // Log the message to the audit trail
                 match storage
-                    .log_message(&message, storage::MessageDirection::Outgoing)
+                    .log_message(&message, storage::MessageDirection::Outgoing, None)
                     .await
                 {
                     Ok(_) => log::debug!("Logged outgoing message: {}", message.id),

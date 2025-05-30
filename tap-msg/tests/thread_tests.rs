@@ -69,7 +69,7 @@ fn test_create_reply() -> Result<()> {
     assert_eq!(reply_via_message.from, _bob_did.to_string());
     assert!(reply_via_message.to.contains(&_alice_did.to_string()));
     assert!(!reply_via_message.to.contains(&_bob_did.to_string()));
-    
+
     // The reply's thid should be the transfer message's thid (which is the transaction_id)
     // not the transfer message's id
     assert_eq!(reply_via_message.thid, transfer_message.thid);

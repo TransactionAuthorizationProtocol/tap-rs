@@ -9,8 +9,8 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
-use crate::message::Participant;
 use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
+use crate::message::Participant;
 use crate::TapMessage;
 
 /// Payment message body (TAIP-14).
@@ -20,7 +20,12 @@ use crate::TapMessage;
 /// an asset or a currency to denominate the payment, along with the amount and
 /// recipient information.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#Payment", initiator, authorizable, transactable)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#Payment",
+    initiator,
+    authorizable,
+    transactable
+)]
 pub struct Payment {
     /// Asset identifier (CAIP-19 format).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -219,8 +224,6 @@ impl PaymentBuilder {
         }
     }
 }
-
-
 
 impl Payment {
     /// Creates a new Payment with an asset

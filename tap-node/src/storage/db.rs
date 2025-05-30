@@ -162,6 +162,73 @@ impl Storage {
         root_dir.join("logs")
     }
 
+    /// Update the status of a message in the messages table
+    ///
+    /// # Arguments
+    ///
+    /// * `message_id` - The ID of the message to update
+    /// * `status` - The new status (accepted, rejected, pending)
+    ///
+    /// # Errors
+    ///
+    /// Returns `StorageError` if the database update fails
+    pub async fn update_message_status(
+        &self,
+        message_id: &str,
+        status: &str,
+    ) -> Result<(), StorageError> {
+        debug!("Updating message {} status to {}", message_id, status);
+
+        sqlx::query(
+            r#"
+            UPDATE messages 
+            SET status = ?1 
+            WHERE message_id = ?2
+            "#,
+        )
+        .bind(status)
+        .bind(message_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update the status of a transaction in the transactions table
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The reference ID of the transaction to update
+    /// * `status` - The new status (pending, confirmed, failed, cancelled, reverted)
+    ///
+    /// # Errors
+    ///
+    /// Returns `StorageError` if the database update fails
+    pub async fn update_transaction_status(
+        &self,
+        transaction_id: &str,
+        status: &str,
+    ) -> Result<(), StorageError> {
+        debug!(
+            "Updating transaction {} status to {}",
+            transaction_id, status
+        );
+
+        sqlx::query(
+            r#"
+            UPDATE transactions 
+            SET status = ?1 
+            WHERE reference_id = ?2
+            "#,
+        )
+        .bind(status)
+        .bind(transaction_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
     /// Insert a new transaction from a TAP message
     ///
     /// This method extracts transaction details from a Transfer or Payment message
@@ -386,6 +453,7 @@ impl Storage {
     ///
     /// * `message` - The DIDComm PlainMessage to log
     /// * `direction` - Whether the message is incoming or outgoing
+    /// * `raw_message` - Optional raw JWE/JWS message string
     ///
     /// # Errors
     ///
@@ -396,6 +464,7 @@ impl Storage {
         &self,
         message: &PlainMessage,
         direction: MessageDirection,
+        raw_message: Option<&str>,
     ) -> Result<(), StorageError> {
         let message_json = serde_json::to_value(message)?;
         let message_id = message.id.clone();
@@ -412,8 +481,8 @@ impl Storage {
 
         let result = sqlx::query(
             r#"
-            INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, raw_message)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
             "#,
         )
         .bind(&message_id)
@@ -424,6 +493,7 @@ impl Storage {
         .bind(parent_thread_id)
         .bind(direction.to_string())
         .bind(sqlx::types::Json(message_json))
+        .bind(raw_message)
         .execute(&self.pool)
         .await;
 
@@ -774,11 +844,11 @@ mod tests {
 
         // Log messages
         storage
-            .log_message(&connect_message, MessageDirection::Incoming)
+            .log_message(&connect_message, MessageDirection::Incoming, None)
             .await
             .unwrap();
         storage
-            .log_message(&authorize_message, MessageDirection::Outgoing)
+            .log_message(&authorize_message, MessageDirection::Outgoing, None)
             .await
             .unwrap();
 
@@ -803,7 +873,7 @@ mod tests {
 
         // Test duplicate message handling (should not error)
         storage
-            .log_message(&connect_message, MessageDirection::Incoming)
+            .log_message(&connect_message, MessageDirection::Incoming, None)
             .await
             .unwrap();
         let all_messages_after = storage.list_messages(10, 0, None).await.unwrap();

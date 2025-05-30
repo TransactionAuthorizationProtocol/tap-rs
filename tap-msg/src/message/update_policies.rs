@@ -12,7 +12,10 @@ use serde::{Deserialize, Serialize};
 ///
 /// This message type allows agents to update their policies for a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#UpdatePolicies", custom_validation)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#UpdatePolicies",
+    custom_validation
+)]
 pub struct UpdatePolicies {
     #[tap(thread_id)]
     pub transaction_id: String,
@@ -50,5 +53,3 @@ impl UpdatePolicies {
         Ok(())
     }
 }
-
-

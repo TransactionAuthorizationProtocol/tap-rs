@@ -32,7 +32,11 @@ pub struct ConnectionConstraints {
 
 /// Connect message body (TAIP-2).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#Connect", initiator, authorizable)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#Connect",
+    initiator,
+    authorizable
+)]
 pub struct Connect {
     /// Transaction ID.
     #[tap(transaction_id)]
@@ -87,16 +91,12 @@ impl Connect {
         }
         Ok(())
     }
-    
+
     /// Validation method that will be called by TapMessageBody trait
     pub fn validate(&self) -> Result<()> {
         self.validate_connect()
     }
 }
-
-
-
-
 
 /// Out of Band invitation for TAP connections.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
@@ -137,8 +137,6 @@ impl OutOfBand {
         }
     }
 }
-
-
 
 /// Authorization Required message body.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
@@ -181,7 +179,7 @@ impl OutOfBand {
 
         Ok(())
     }
-    
+
     /// Validation method that will be called by TapMessageBody trait
     pub fn validate(&self) -> Result<()> {
         self.validate_out_of_band()
@@ -211,7 +209,7 @@ impl AuthorizationRequired {
 
         Ok(())
     }
-    
+
     /// Validation method that will be called by TapMessageBody trait
     pub fn validate(&self) -> Result<()> {
         self.validate_authorization_required()

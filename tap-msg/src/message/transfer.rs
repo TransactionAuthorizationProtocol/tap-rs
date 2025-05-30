@@ -8,13 +8,18 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
-use crate::message::Participant;
 use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
+use crate::message::Participant;
 use crate::TapMessage;
 
 /// Transfer message body (TAIP-3).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#Transfer", initiator, authorizable, transactable)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#Transfer",
+    initiator,
+    authorizable,
+    transactable
+)]
 pub struct Transfer {
     /// Network asset identifier (CAIP-19 format).
     pub asset: AssetId,
@@ -96,8 +101,6 @@ impl Transfer {
     pub fn message_id(&self) -> String {
         uuid::Uuid::new_v4().to_string()
     }
-
-
 }
 
 /// Builder for creating Transfer objects in a more idiomatic way
@@ -237,8 +240,6 @@ impl TransferBuilder {
     }
 }
 
-
-
 impl Transfer {
     /// Custom validation for Transfer messages
     pub fn validate(&self) -> Result<()> {
@@ -272,6 +273,4 @@ impl Transfer {
 
         Ok(())
     }
-
-
 }

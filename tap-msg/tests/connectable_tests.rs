@@ -96,7 +96,10 @@ fn test_message_connectable() {
 
     // Test connected state
     assert!(transfer_message.has_connection());
-    assert_eq!(transfer_message.connection_id(), Some(connection_id.as_str()));
+    assert_eq!(
+        transfer_message.connection_id(),
+        Some(connection_id.as_str())
+    );
 
     // The connection should be stored in the pthid field
     assert_eq!(transfer_message.pthid, Some(connection_id));

@@ -11,7 +11,10 @@ use crate::TapMessage;
 
 /// Add agents message body (TAIP-5).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#AddAgents", custom_validation)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#AddAgents",
+    custom_validation
+)]
 pub struct AddAgents {
     /// ID of the transaction to add agents to.
     #[tap(thread_id)]
@@ -68,7 +71,10 @@ impl AddAgents {
 ///
 /// This message type allows replacing an agent with another agent in a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#ReplaceAgent", custom_validation)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#ReplaceAgent",
+    custom_validation
+)]
 pub struct ReplaceAgent {
     /// ID of the transaction to replace agent in.
     #[tap(thread_id)]
@@ -122,7 +128,10 @@ impl ReplaceAgent {
 ///
 /// This message type allows removing an agent from a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#RemoveAgent", custom_validation)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#RemoveAgent",
+    custom_validation
+)]
 pub struct RemoveAgent {
     /// ID of the transaction to remove agent from.
     #[tap(thread_id)]

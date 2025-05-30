@@ -1095,4 +1095,3 @@ fn impl_transaction_trait(
         }
     }
 }
-
