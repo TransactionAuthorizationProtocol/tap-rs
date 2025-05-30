@@ -48,7 +48,7 @@ async fn create_test_message(
         settlement_id: None,
         memo: Some(format!("Test message {}", index)),
         metadata: HashMap::new(),
-        connect_id: None,
+        connection_id: None,
     };
 
     // Convert to DIDComm message

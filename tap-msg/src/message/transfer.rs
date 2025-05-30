@@ -52,7 +52,7 @@ pub struct Transfer {
     /// Connection ID for linking to Connect messages
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tap(connection_id)]
-    pub connect_id: Option<String>,
+    pub connection_id: Option<String>,
 
     /// Additional metadata for the transfer.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -198,7 +198,7 @@ impl TransferBuilder {
                 .transaction_id
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             agents: self.agents,
-            connect_id: None,
+            connection_id: None,
             metadata: self.metadata,
         }
     }
@@ -226,7 +226,7 @@ impl TransferBuilder {
             settlement_id: self.settlement_id,
             memo: self.memo,
             agents: self.agents,
-            connect_id: None,
+            connection_id: None,
             metadata: self.metadata,
         };
 

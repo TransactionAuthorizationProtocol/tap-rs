@@ -249,7 +249,7 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
             },
         ],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 

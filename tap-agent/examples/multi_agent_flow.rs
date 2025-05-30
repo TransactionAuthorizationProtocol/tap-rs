@@ -159,7 +159,7 @@ fn main() -> Result<()> {
             ],
             settlement_id: None,
             memo: Some("Multi-agent transfer example with dynamic agent addition".to_string()),
-            connect_id: None,
+            connection_id: None,
             metadata: HashMap::new(),
         };
 

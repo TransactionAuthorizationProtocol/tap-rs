@@ -33,7 +33,7 @@ fn test_valid_transfer_body() {
         amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -76,7 +76,7 @@ fn test_transfer_with_empty_asset() {
         amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -114,7 +114,7 @@ fn test_transfer_with_empty_amount() {
         amount: "".to_string(), // Empty amount
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };

@@ -1058,7 +1058,7 @@ mod tests {
                 "memo": null,
                 "beneficiary": null,
                 "settlement_id": null,
-                "connect_id": null,
+                "connection_id": null,
                 "metadata": {}
             }),
             from: key.did.clone(),

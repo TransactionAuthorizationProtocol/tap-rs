@@ -40,7 +40,7 @@ fn test_create_reply() -> Result<()> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -267,7 +267,7 @@ fn test_confirm_relationship() -> Result<()> {
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: Some("Test memo".to_string()),
     };

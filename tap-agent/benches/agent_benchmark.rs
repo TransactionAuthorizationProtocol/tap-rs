@@ -54,7 +54,7 @@ fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
         memo: Some("Benchmark test transfer".to_string()),
         metadata: HashMap::new(),
         transaction_id: "benchmark-transfer-id".to_string(),
-        connect_id: None,
+        connection_id: None,
     }
 }
 

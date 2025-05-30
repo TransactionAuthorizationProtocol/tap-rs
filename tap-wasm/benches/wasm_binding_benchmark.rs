@@ -43,7 +43,7 @@ fn create_transfer_body() -> Transfer {
         memo: Some("Payment for services".to_string()),
         metadata: HashMap::new(),
         transaction_id: "test-transfer-id".to_string(),
-        connect_id: None,
+        connection_id: None,
     }
 }
 

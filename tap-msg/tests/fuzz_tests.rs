@@ -135,12 +135,12 @@ fn test_fuzz_connectable_with_invalid_id() {
     // Create a Transfer message
     let mut transfer = create_test_transfer();
 
-    // Test with empty connect_id
+    // Test with empty connection_id
     transfer.with_connection("");
     assert!(transfer.has_connection());
     assert_eq!(transfer.connection_id(), Some(""));
 
-    // Test with very long connect_id
+    // Test with very long connection_id
     let long_id = "a".repeat(10000);
     transfer.with_connection(&long_id);
     assert!(transfer.has_connection());
@@ -268,7 +268,7 @@ fn create_test_transfer() -> Transfer {
         agents,
         settlement_id: None,
         memo: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     }
 }

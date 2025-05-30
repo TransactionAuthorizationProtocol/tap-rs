@@ -46,7 +46,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -112,7 +112,7 @@ fn test_to_didcomm_filters_sender_when_specified() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -174,7 +174,7 @@ fn test_to_didcomm_with_route() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone(), agent3.clone()],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -229,7 +229,7 @@ fn test_create_tap_message() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone()],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -286,7 +286,7 @@ fn test_get_all_participants() {
         amount: "100.00".to_string(),
         agents: vec![agent1.clone(), agent2.clone()],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };

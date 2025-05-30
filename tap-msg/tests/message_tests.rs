@@ -49,7 +49,7 @@ fn test_create_message() {
         amount: "100000000".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };

@@ -216,8 +216,8 @@ fn impl_connectable_trait(
         // Has explicit connection_id field
         quote! {
             impl #impl_generics #crate_path::message::tap_message_trait::Connectable for #name #ty_generics #where_clause {
-                fn with_connection(&mut self, connect_id: &str) -> &mut Self {
-                    self.#conn_field = Some(connect_id.to_string());
+                fn with_connection(&mut self, connection_id: &str) -> &mut Self {
+                    self.#conn_field = Some(connection_id.to_string());
                     self
                 }
 
@@ -234,7 +234,7 @@ fn impl_connectable_trait(
         // Initiator messages don't have connections
         quote! {
             impl #impl_generics #crate_path::message::tap_message_trait::Connectable for #name #ty_generics #where_clause {
-                fn with_connection(&mut self, _connect_id: &str) -> &mut Self {
+                fn with_connection(&mut self, _connection_id: &str) -> &mut Self {
                     // Initiator messages don't have connection IDs
                     self
                 }

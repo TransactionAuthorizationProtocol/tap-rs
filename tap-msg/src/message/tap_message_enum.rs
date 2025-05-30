@@ -370,7 +370,7 @@ mod tests {
             agents: vec![],
             memo: None,
             settlement_id: None,
-            connect_id: None,
+            connection_id: None,
             transaction_id: "tx-123".to_string(),
             metadata: Default::default(),
         };

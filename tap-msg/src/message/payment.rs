@@ -70,7 +70,7 @@ pub struct Payment {
     /// Connection ID for linking to Connect messages
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tap(connection_id)]
-    pub connect_id: Option<String>,
+    pub connection_id: Option<String>,
 
     /// Additional metadata (optional).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -214,7 +214,7 @@ impl PaymentBuilder {
             expiry: self.expiry,
             invoice: self.invoice,
             agents: self.agents,
-            connect_id: None,
+            connection_id: None,
             metadata: self.metadata,
         }
     }
@@ -242,7 +242,7 @@ impl Payment {
             expiry: None,
             invoice: None,
             agents,
-            connect_id: None,
+            connection_id: None,
             metadata: HashMap::new(),
         }
     }
@@ -266,7 +266,7 @@ impl Payment {
             expiry: None,
             invoice: None,
             agents,
-            connect_id: None,
+            connection_id: None,
             metadata: HashMap::new(),
         }
     }
@@ -291,7 +291,7 @@ impl Payment {
             expiry: None,
             invoice: None,
             agents,
-            connect_id: None,
+            connection_id: None,
             metadata: HashMap::new(),
         }
     }

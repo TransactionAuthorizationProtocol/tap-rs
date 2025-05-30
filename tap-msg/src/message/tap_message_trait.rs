@@ -194,12 +194,12 @@ pub trait Connectable {
     ///
     /// # Arguments
     ///
-    /// * `connect_id` - The ID of the Connect message to link to
+    /// * `connection_id` - The ID of the Connect message to link to
     ///
     /// # Returns
     ///
     /// Self reference for fluent interface chaining
-    fn with_connection(&mut self, connect_id: &str) -> &mut Self;
+    fn with_connection(&mut self, connection_id: &str) -> &mut Self;
 
     /// Check if this message is connected to a prior Connect message.
     ///
@@ -416,8 +416,8 @@ impl TapMessage for PlainMessage {
 
 // Implement Connectable trait for PlainMessage
 impl Connectable for PlainMessage {
-    fn with_connection(&mut self, connect_id: &str) -> &mut Self {
-        self.pthid = Some(connect_id.to_string());
+    fn with_connection(&mut self, connection_id: &str) -> &mut Self {
+        self.pthid = Some(connection_id.to_string());
         self
     }
 

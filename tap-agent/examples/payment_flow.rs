@@ -231,7 +231,7 @@ fn create_payment_message(
         merchant,
         customer: Some(customer),
         agents: vec![settlement_agent],
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         transaction_id: transaction_id.to_string(),
         memo: Some("Payment for goods or services".to_string()),

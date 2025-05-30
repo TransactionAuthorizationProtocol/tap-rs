@@ -27,7 +27,7 @@ fn test_full_tap_flow() -> Result<()> {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Step 2: Create a Transfer message connected to the Connect message
     let mut transfer = create_test_transfer();
@@ -35,7 +35,7 @@ fn test_full_tap_flow() -> Result<()> {
         "DEBUG: Before with_connection, transfer.connection_id() = {:?}",
         transfer.connection_id()
     );
-    transfer.with_connection(&connect_id);
+    transfer.with_connection(&connection_id);
     println!(
         "DEBUG: After with_connection, transfer.connection_id() = {:?}",
         transfer.connection_id()
@@ -43,7 +43,7 @@ fn test_full_tap_flow() -> Result<()> {
 
     // Verify connection
     assert!(transfer.connection_id().is_some()); // Check using connection_id()
-    assert_eq!(transfer.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message
     let transfer_message = transfer
@@ -60,12 +60,12 @@ fn test_full_tap_flow() -> Result<()> {
         "DEBUG: transfer_message.pthid = {:?}",
         transfer_message.pthid
     );
-    println!("DEBUG: connect_id = {:?}", connect_id);
+    println!("DEBUG: connection_id = {:?}", connection_id);
     println!(
         "DEBUG: transfer.connection_id() = {:?}",
         transfer.connection_id()
     );
-    assert_eq!(transfer_message.pthid, Some(connect_id.clone()));
+    assert_eq!(transfer_message.pthid, Some(connection_id.clone()));
 
     // Step 3: Authorize the Transfer
     let transfer_body_json = transfer_message.body.clone();
@@ -135,7 +135,7 @@ fn test_payment_flow() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Step 2: Create a Payment message connected to the Connect message
     let mut payment = create_test_payment_request();
@@ -143,7 +143,7 @@ fn test_payment_flow() {
         "DEBUG: Before with_connection, payment.connection_id() = {:?}",
         payment.connection_id()
     );
-    payment.with_connection(&connect_id);
+    payment.with_connection(&connection_id);
     println!(
         "DEBUG: After with_connection, payment.connection_id() = {:?}",
         payment.connection_id()
@@ -151,7 +151,7 @@ fn test_payment_flow() {
 
     // Verify connection
     assert!(payment.connection_id().is_some()); // Check using connection_id()
-    assert_eq!(payment.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(payment.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message
     let payment_message = payment
@@ -164,7 +164,7 @@ fn test_payment_flow() {
         .expect("Failed to convert Payment to DIDComm");
 
     // Check that the payment message has the correct pthid (parent thread ID)
-    assert_eq!(payment_message.pthid, Some(connect_id.clone()));
+    assert_eq!(payment_message.pthid, Some(connection_id.clone()));
 
     // Step 3: Authorize the Payment
     let authorize_body = Authorize {
@@ -195,7 +195,7 @@ fn test_payment_flow() {
         "DEBUG: Before with_connection, payment2.connection_id() = {:?}",
         payment2.connection_id()
     );
-    payment2.with_connection(&connect_id);
+    payment2.with_connection(&connection_id);
     println!(
         "DEBUG: After with_connection, payment2.connection_id() = {:?}",
         payment2.connection_id()
@@ -243,7 +243,7 @@ fn test_complex_message_flow() -> Result<()> {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Step 2: Create multiple Transfer messages connected to the Connect message
     let mut transfers = Vec::new();
@@ -257,7 +257,7 @@ fn test_complex_message_flow() -> Result<()> {
             "DEBUG: Before with_connection, transfer.connection_id() = {:?}",
             transfer.connection_id()
         );
-        transfer.with_connection(&connect_id);
+        transfer.with_connection(&connection_id);
         println!(
             "DEBUG: After with_connection, transfer.connection_id() = {:?}",
             transfer.connection_id()
@@ -403,9 +403,9 @@ fn test_complex_message_flow() -> Result<()> {
         Some(transfer_messages[2].id.clone())
     );
 
-    // All transfer messages should have the connect_id as their parent thread ID
+    // All transfer messages should have the connection_id as their parent thread ID
     for transfer_message in &transfer_messages {
-        assert_eq!(transfer_message.pthid, Some(connect_id.clone()));
+        assert_eq!(transfer_message.pthid, Some(connection_id.clone()));
     }
 
     Ok(())
@@ -471,7 +471,7 @@ fn create_test_transfer() -> Transfer {
         agents,
         settlement_id: None,
         memo: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     }
 }

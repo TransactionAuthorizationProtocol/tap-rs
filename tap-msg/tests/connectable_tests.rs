@@ -11,7 +11,7 @@ fn test_transfer_connectable() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Transfer message
     let mut transfer = create_test_transfer();
@@ -21,21 +21,21 @@ fn test_transfer_connectable() {
     assert_eq!(transfer.connection_id(), None);
 
     // Connect the transfer to the connect message
-    transfer.with_connection(&connect_id);
+    transfer.with_connection(&connection_id);
 
     // Test connected state
     assert!(transfer.has_connection());
-    assert_eq!(transfer.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message and verify the connection is preserved
     let _transfer_message = transfer
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
-    // The connection should be stored in the connect_id field
+    // The connection should be stored in the connection_id field
     assert!(transfer.has_connection());
-    assert_eq!(transfer.connection_id(), Some(connect_id.as_str()));
-    assert_eq!(transfer.connect_id, Some(connect_id.clone()));
+    assert_eq!(transfer.connection_id(), Some(connection_id.as_str()));
+    assert_eq!(transfer.connection_id, Some(connection_id.clone()));
 }
 
 #[test]
@@ -45,7 +45,7 @@ fn test_payment_request_connectable() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Payment message
     let mut payment = create_test_payment_request();
@@ -55,21 +55,21 @@ fn test_payment_request_connectable() {
     assert_eq!(payment.connection_id(), None);
 
     // Connect the payment to the connect message
-    payment.with_connection(&connect_id);
+    payment.with_connection(&connection_id);
 
     // Test connected state
     assert!(payment.has_connection());
-    assert_eq!(payment.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(payment.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message and verify the connection is preserved
     let _payment_message = payment
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
-    // The connection should be stored in the connect_id field
+    // The connection should be stored in the connection_id field
     assert!(payment.has_connection());
-    assert_eq!(payment.connection_id(), Some(connect_id.as_str()));
-    assert_eq!(payment.connect_id, Some(connect_id.clone()));
+    assert_eq!(payment.connection_id(), Some(connection_id.as_str()));
+    assert_eq!(payment.connection_id, Some(connection_id.clone()));
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn test_message_connectable() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Transfer message and convert to DIDComm message
     let transfer = create_test_transfer();
@@ -92,14 +92,14 @@ fn test_message_connectable() {
     assert_eq!(transfer_message.connection_id(), None);
 
     // Connect the message to the connect message
-    transfer_message.with_connection(&connect_id);
+    transfer_message.with_connection(&connection_id);
 
     // Test connected state
     assert!(transfer_message.has_connection());
-    assert_eq!(transfer_message.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(transfer_message.connection_id(), Some(connection_id.as_str()));
 
     // The connection should be stored in the pthid field
-    assert_eq!(transfer_message.pthid, Some(connect_id));
+    assert_eq!(transfer_message.pthid, Some(connection_id));
 }
 
 #[test]
@@ -109,11 +109,11 @@ fn test_connection_round_trip() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Transfer message, connect it, and convert to DIDComm message
     let mut transfer = create_test_transfer();
-    transfer.with_connection(&connect_id);
+    transfer.with_connection(&connection_id);
     let transfer_message = transfer
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
@@ -125,7 +125,7 @@ fn test_connection_round_trip() {
     assert!(round_trip_transfer.has_connection());
     assert_eq!(
         round_trip_transfer.connection_id(),
-        Some(connect_id.as_str())
+        Some(connection_id.as_str())
     );
 }
 
@@ -136,28 +136,28 @@ fn test_multiple_connections() {
     let connect_message1 = connect1
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id1 = connect_message1.id.clone();
+    let connection_id1 = connect_message1.id.clone();
 
     let connect2 = create_test_connect();
     let connect_message2 = connect2
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id2 = connect_message2.id.clone();
+    let connection_id2 = connect_message2.id.clone();
 
     // Create a Transfer message and connect it to the first connect message
     let mut transfer = create_test_transfer();
-    transfer.with_connection(&connect_id1);
+    transfer.with_connection(&connection_id1);
 
     // Verify it's connected to the first connect message
     assert!(transfer.has_connection());
-    assert_eq!(transfer.connection_id(), Some(connect_id1.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id1.as_str()));
 
     // Connect it to the second connect message
-    transfer.with_connection(&connect_id2);
+    transfer.with_connection(&connection_id2);
 
     // Verify it's now connected to the second connect message
     assert!(transfer.has_connection());
-    assert_eq!(transfer.connection_id(), Some(connect_id2.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id2.as_str()));
 }
 
 // Helper functions to create test messages
@@ -209,7 +209,7 @@ fn create_test_transfer() -> Transfer {
         agents,
         settlement_id: None,
         memo: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     }
 }
@@ -243,7 +243,7 @@ fn create_test_payment_request() -> Payment {
         memo: None,
         expiry: None,
         invoice: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         merchant,
         customer: Some(customer),

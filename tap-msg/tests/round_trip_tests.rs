@@ -43,7 +43,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         amount: "100.00".to_string(),
         agents: vec![originator, beneficiary],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };

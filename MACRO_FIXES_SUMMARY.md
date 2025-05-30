@@ -1,7 +1,7 @@
 # TAP Message Macro Fixes Summary
 
 ## Overview
-This document summarizes the fixes applied to the TAP message macro system to resolve compilation errors and test failures.
+This document summarizes the fixes applied to the TAP message macro system to resolve compilation errors and test failures, and the renaming of fields for consistency.
 
 ## Issues Fixed
 
@@ -15,6 +15,8 @@ This document summarizes the fixes applied to the TAP message macro system to re
 - `tap-rs/tap-msg/benches/message_benchmark.rs`
 
 **Fix**: Added `connect_id: None` to all Transfer struct initializations.
+
+**Update**: Later renamed `connect_id` to `connection_id` throughout the codebase for consistency.
 
 ### 2. Unused Variable Warning
 **Issue**: The `api_note` variable in `multi_agent_flow.rs` was declared but never used.
@@ -77,8 +79,25 @@ impl TapMessageBody for MyMessage {
 - `ReplaceAgent` - Validates that transaction_id, original, and replacement IDs are not empty
 - `RemoveAgent` - Validates that transaction_id and agent ID are not empty
 
+### 5. Field Rename: connect_id to connection_id
+**Issue**: The field name `connect_id` was inconsistent with the naming convention used elsewhere in the codebase.
+
+**Files Updated**:
+- `tap-rs/tap-msg/src/message/transfer.rs` - Updated Transfer struct field
+- `tap-rs/tap-msg/src/message/payment.rs` - Updated Payment struct field
+- `tap-rs/tap-msg/src/message/tap_message_trait.rs` - Updated Connectable trait parameter
+- `tap-rs/tap-msg-derive/src/lib.rs` - Updated derive macro parameter names
+- All test files and examples using these structs
+
+**Changes Made**:
+- Renamed the field from `connect_id` to `connection_id` in Transfer and Payment structs
+- Updated all struct initializations to use `connection_id: None`
+- Updated the Connectable trait method parameter from `connect_id` to `connection_id`
+- Updated all variable names and comments referring to `connect_id`
+
 ## Test Results
 After all fixes were applied, all tests pass successfully:
 - No compilation errors
 - No test failures
 - No warnings (except for intentionally ignored tests)
+- Field naming is now consistent throughout the codebase

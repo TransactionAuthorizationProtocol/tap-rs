@@ -41,7 +41,7 @@ pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
         agents: vec![],
         settlement_id: None,
         memo: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 
@@ -151,7 +151,7 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
             },
         ],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 
@@ -387,7 +387,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
         amount: "250.00".to_string(),
         agents: vec![],
         settlement_id: None,
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 

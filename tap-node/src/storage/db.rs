@@ -697,7 +697,7 @@ mod tests {
             agents: vec![],
             memo: None,
             settlement_id: None,
-            connect_id: None,
+            connection_id: None,
             metadata: Default::default(),
         };
 

@@ -383,7 +383,7 @@ fn create_transfer_message(
         agents: vec![settlement_agent],
         settlement_id: None,
         memo: Some("Secure example transfer".to_string()),
-        connect_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 
