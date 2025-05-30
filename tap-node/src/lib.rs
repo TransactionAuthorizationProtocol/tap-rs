@@ -88,6 +88,8 @@ pub mod agent;
 pub mod error;
 pub mod event;
 pub mod message;
+#[cfg(feature = "storage")]
+pub mod state_machine;
 pub mod storage;
 #[cfg(feature = "storage")]
 pub mod validation;
@@ -233,6 +235,9 @@ pub struct TapNode {
     /// Storage for transactions
     #[cfg(feature = "storage")]
     storage: Option<Arc<storage::Storage>>,
+    /// Transaction state processor
+    #[cfg(feature = "storage")]
+    state_processor: Option<Arc<state_machine::StandardTransactionProcessor>>,
 }
 
 impl TapNode {
@@ -273,6 +278,8 @@ impl TapNode {
         // Storage will be initialized on first use
         #[cfg(feature = "storage")]
         let storage = None;
+        #[cfg(feature = "storage")]
+        let state_processor = None;
 
         let node = Self {
             agents,
@@ -285,6 +292,8 @@ impl TapNode {
             config,
             #[cfg(feature = "storage")]
             storage,
+            #[cfg(feature = "storage")]
+            state_processor,
         };
 
         // Set up the event logger if configured
@@ -352,7 +361,15 @@ impl TapNode {
         let transaction_audit_handler = Arc::new(event::handlers::TransactionAuditHandler::new());
         self.event_bus.subscribe(transaction_audit_handler).await;
 
+        // Create state processor
+        let state_processor = Arc::new(state_machine::StandardTransactionProcessor::new(
+            storage_arc.clone(),
+            self.event_bus.clone(),
+            self.agents.clone(),
+        ));
+
         self.storage = Some(storage_arc);
+        self.state_processor = Some(state_processor);
         Ok(())
     }
 
@@ -495,6 +512,18 @@ impl TapNode {
                         // Return error to stop processing
                         return Err(Error::Validation(reason));
                     }
+                }
+            }
+        }
+
+        // Process message through state machine if available
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref state_processor) = self.state_processor {
+                use crate::state_machine::TransactionStateProcessor;
+                if let Err(e) = state_processor.process_message(&message).await {
+                    log::warn!("State processor error: {}", e);
+                    // Don't fail the entire message processing, just log the error
                 }
             }
         }

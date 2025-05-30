@@ -229,6 +229,77 @@ impl Storage {
         Ok(())
     }
 
+    /// Get a transaction by its reference ID
+    ///
+    /// # Arguments
+    ///
+    /// * `reference_id` - The reference ID of the transaction
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(Transaction))` if found
+    /// * `Ok(None)` if not found
+    /// * `Err(StorageError)` on database error
+    pub async fn get_transaction_by_id(
+        &self,
+        reference_id: &str,
+    ) -> Result<Option<Transaction>, StorageError> {
+        let result = sqlx::query_as::<_, (
+            i64,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+            String,
+            String,
+            serde_json::Value,
+            String,
+            String,
+        )>(
+            r#"
+            SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
+            FROM transactions WHERE reference_id = ?1
+            "#,
+        )
+        .bind(reference_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some((
+            id,
+            tx_type,
+            reference_id,
+            from_did,
+            to_did,
+            thread_id,
+            message_type,
+            status,
+            message_json,
+            created_at,
+            updated_at,
+        )) = result
+        {
+            Ok(Some(Transaction {
+                id,
+                transaction_type: TransactionType::try_from(tx_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                reference_id,
+                from_did,
+                to_did,
+                thread_id,
+                message_type,
+                status: TransactionStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                message_json,
+                created_at,
+                updated_at,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
     /// Get a transaction by thread ID
     ///
     /// # Arguments
@@ -350,6 +421,221 @@ impl Storage {
         Ok(count > 0)
     }
 
+    /// Insert a transaction agent
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The reference ID of the transaction
+    /// * `agent_did` - The DID of the agent
+    /// * `agent_role` - The role of the agent (sender, receiver, compliance, other)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` on success
+    /// * `Err(StorageError)` on database error
+    pub async fn insert_transaction_agent(
+        &self,
+        transaction_id: &str,
+        agent_did: &str,
+        agent_role: &str,
+    ) -> Result<(), StorageError> {
+        // First get the transaction's internal ID
+        let tx_result = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT id FROM transactions WHERE reference_id = ?1
+            "#,
+        )
+        .bind(transaction_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let tx_internal_id = match tx_result {
+            Some(id) => id,
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "Transaction {} not found",
+                    transaction_id
+                )))
+            }
+        };
+
+        // Insert the agent
+        sqlx::query(
+            r#"
+            INSERT INTO transaction_agents (transaction_id, agent_did, agent_role, status)
+            VALUES (?1, ?2, ?3, 'pending')
+            ON CONFLICT(transaction_id, agent_did) DO UPDATE SET
+                agent_role = excluded.agent_role,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+            "#,
+        )
+        .bind(tx_internal_id)
+        .bind(agent_did)
+        .bind(agent_role)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Update transaction agent status
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The reference ID of the transaction
+    /// * `agent_did` - The DID of the agent
+    /// * `status` - The new status (pending, authorized, rejected, cancelled)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` on success
+    /// * `Err(StorageError)` on database error
+    pub async fn update_transaction_agent_status(
+        &self,
+        transaction_id: &str,
+        agent_did: &str,
+        status: &str,
+    ) -> Result<(), StorageError> {
+        // First get the transaction's internal ID
+        let tx_result = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT id FROM transactions WHERE reference_id = ?1
+            "#,
+        )
+        .bind(transaction_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let tx_internal_id = match tx_result {
+            Some(id) => id,
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "Transaction {} not found",
+                    transaction_id
+                )))
+            }
+        };
+
+        // Update the agent status
+        let result = sqlx::query(
+            r#"
+            UPDATE transaction_agents 
+            SET status = ?1 
+            WHERE transaction_id = ?2 AND agent_did = ?3
+            "#,
+        )
+        .bind(status)
+        .bind(tx_internal_id)
+        .bind(agent_did)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(StorageError::NotFound(format!(
+                "Agent {} not found for transaction {}",
+                agent_did, transaction_id
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Get all agents for a transaction
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The reference ID of the transaction
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<(agent_did, agent_role, status)>)` on success
+    /// * `Err(StorageError)` on database error
+    pub async fn get_transaction_agents(
+        &self,
+        transaction_id: &str,
+    ) -> Result<Vec<(String, String, String)>, StorageError> {
+        // First get the transaction's internal ID
+        let tx_result = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT id FROM transactions WHERE reference_id = ?1
+            "#,
+        )
+        .bind(transaction_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let tx_internal_id = match tx_result {
+            Some(id) => id,
+            None => {
+                return Err(StorageError::NotFound(format!(
+                    "Transaction {} not found",
+                    transaction_id
+                )))
+            }
+        };
+
+        // Get all agents
+        let agents = sqlx::query_as::<_, (String, String, String)>(
+            r#"
+            SELECT agent_did, agent_role, status
+            FROM transaction_agents
+            WHERE transaction_id = ?1
+            ORDER BY created_at
+            "#,
+        )
+        .bind(tx_internal_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(agents)
+    }
+
+    /// Check if all agents have authorized the transaction
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The reference ID of the transaction
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(true)` if all agents have authorized
+    /// * `Ok(false)` if any agent hasn't authorized or has rejected/cancelled
+    /// * `Err(StorageError)` on database error
+    pub async fn are_all_agents_authorized(
+        &self,
+        transaction_id: &str,
+    ) -> Result<bool, StorageError> {
+        // First get the transaction's internal ID
+        let tx_result = sqlx::query_scalar::<_, i64>(
+            r#"
+            SELECT id FROM transactions WHERE reference_id = ?1
+            "#,
+        )
+        .bind(transaction_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        let tx_internal_id = match tx_result {
+            Some(id) => id,
+            None => return Ok(false), // Transaction doesn't exist
+        };
+
+        // Check if there are any agents not in 'authorized' status
+        let non_authorized_count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*) FROM transaction_agents 
+            WHERE transaction_id = ?1 AND status != 'authorized'
+            "#,
+        )
+        .bind(tx_internal_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        // If there are no agents, transaction is ready to settle
+        // If there are agents, all must be authorized
+        Ok(non_authorized_count == 0)
+    }
+
     /// Insert a new transaction from a TAP message
     ///
     /// This method extracts transaction details from a Transfer or Payment message
@@ -417,75 +703,6 @@ impl Storage {
                 }
             }
             Err(e) => Err(StorageError::Database(e)),
-        }
-    }
-
-    /// Retrieve a transaction by its reference ID
-    ///
-    /// # Arguments
-    ///
-    /// * `reference_id` - The unique message ID of the transaction
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(Some(Transaction))` if found
-    /// * `Ok(None)` if not found
-    /// * `Err(StorageError)` on database error
-    pub async fn get_transaction_by_id(
-        &self,
-        reference_id: &str,
-    ) -> Result<Option<Transaction>, StorageError> {
-        let result = sqlx::query_as::<_, (
-            i64,
-            String,
-            String,
-            Option<String>,
-            Option<String>,
-            Option<String>,
-            String,
-            String,
-            serde_json::Value,
-            String,
-            String,
-        )>(
-            r#"
-            SELECT id, type, reference_id, from_did, to_did, thread_id, message_type, status, message_json, created_at, updated_at
-            FROM transactions WHERE reference_id = ?1
-            "#,
-        )
-        .bind(reference_id)
-        .fetch_optional(&self.pool)
-        .await?;
-
-        match result {
-            Some((
-                id,
-                tx_type,
-                reference_id,
-                from_did,
-                to_did,
-                thread_id,
-                message_type,
-                status,
-                message_json,
-                created_at,
-                updated_at,
-            )) => Ok(Some(Transaction {
-                id,
-                transaction_type: TransactionType::try_from(tx_type.as_str())
-                    .map_err(StorageError::InvalidTransactionType)?,
-                reference_id,
-                from_did,
-                to_did,
-                thread_id,
-                message_type,
-                status: TransactionStatus::try_from(status.as_str())
-                    .map_err(StorageError::InvalidTransactionType)?,
-                message_json,
-                created_at,
-                updated_at,
-            })),
-            None => Ok(None),
         }
     }
 

@@ -35,7 +35,7 @@ impl TimestampValidator {
                 .unwrap()
                 .with_timezone(&Utc)
         } else {
-            DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(|| Utc::now())
+            DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(Utc::now)
         }
     }
 }

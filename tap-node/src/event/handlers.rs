@@ -78,16 +78,14 @@ impl TransactionStateHandler {
 #[async_trait]
 impl EventSubscriber for TransactionStateHandler {
     async fn handle_event(&self, event: NodeEvent) {
-        match event {
-            NodeEvent::TransactionStateChanged {
-                transaction_id,
-                new_state,
-                ..
-            } => {
-                self.update_transaction_status(&transaction_id, &new_state)
-                    .await;
-            }
-            _ => {} // Ignore other events
+        if let NodeEvent::TransactionStateChanged {
+            transaction_id,
+            new_state,
+            ..
+        } = event
+        {
+            self.update_transaction_status(&transaction_id, &new_state)
+                .await;
         }
     }
 }
