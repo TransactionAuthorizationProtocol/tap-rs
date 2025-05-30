@@ -656,9 +656,10 @@ impl Storage {
         let message_json = serde_json::to_value(message)?;
 
         // Extract transaction type and use message ID as reference
-        let tx_type = if message.type_.contains("transfer") {
+        let message_type_lower = message.type_.to_lowercase();
+        let tx_type = if message_type_lower.contains("transfer") {
             TransactionType::Transfer
-        } else if message.type_.contains("payment") {
+        } else if message_type_lower.contains("payment") {
             TransactionType::Payment
         } else {
             return Err(StorageError::InvalidTransactionType(

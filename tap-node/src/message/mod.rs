@@ -10,10 +10,10 @@ pub mod sender;
 // Re-export processors, routers, and senders
 pub use processor::{
     DefaultPlainMessageProcessor, LoggingPlainMessageProcessor, PlainMessageProcessor,
-    ValidationPlainMessageProcessor,
+    StateMachineIntegrationProcessor, ValidationPlainMessageProcessor,
 };
 pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
-pub use router::DefaultPlainMessageRouter;
+pub use router::{DefaultPlainMessageRouter, IntraNodePlainMessageRouter};
 pub use sender::{HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender};
 
 // Import the PlainMessage type from tap-msg
@@ -47,6 +47,7 @@ pub enum PlainMessageProcessorType {
     Default(DefaultPlainMessageProcessor),
     Logging(LoggingPlainMessageProcessor),
     Validation(ValidationPlainMessageProcessor),
+    StateMachine(StateMachineIntegrationProcessor),
     Composite(CompositePlainMessageProcessor),
 }
 
@@ -54,6 +55,7 @@ pub enum PlainMessageProcessorType {
 #[derive(Clone, Debug)]
 pub enum PlainMessageRouterType {
     Default(DefaultPlainMessageRouter),
+    IntraNode(IntraNodePlainMessageRouter),
 }
 
 /// A message processor that applies multiple processors in sequence
@@ -90,6 +92,9 @@ impl PlainMessageProcessor for CompositePlainMessageProcessor {
                 PlainMessageProcessorType::Validation(p) => {
                     p.process_incoming(current_message).await?
                 }
+                PlainMessageProcessorType::StateMachine(p) => {
+                    p.process_incoming(current_message).await?
+                }
                 PlainMessageProcessorType::Composite(p) => {
                     p.process_incoming(current_message).await?
                 }
@@ -118,6 +123,9 @@ impl PlainMessageProcessor for CompositePlainMessageProcessor {
                     p.process_outgoing(current_message).await?
                 }
                 PlainMessageProcessorType::Validation(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::StateMachine(p) => {
                     p.process_outgoing(current_message).await?
                 }
                 PlainMessageProcessorType::Composite(p) => {
@@ -161,6 +169,7 @@ impl PlainMessageRouter for CompositePlainMessageRouter {
         for router in &self.routers {
             let result = match router {
                 PlainMessageRouterType::Default(r) => r.route_message_impl(message),
+                PlainMessageRouterType::IntraNode(r) => r.route_message_impl(message),
             };
 
             match result {

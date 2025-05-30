@@ -294,8 +294,13 @@ impl TransactionStateProcessor for StandardTransactionProcessor {
 
         match tap_message {
             TapMessage::Transfer(_) | TapMessage::Payment(_) => {
-                // Extract and store agents for new transaction
+                // First, store the transaction itself
                 let transaction_id = &message.id;
+                if let Err(e) = self.storage.insert_transaction(message).await {
+                    log::warn!("Failed to insert transaction {}: {}", transaction_id, e);
+                }
+
+                // Extract and store agents for new transaction
                 let agents = self.extract_agents_from_message(message).await?;
 
                 for (agent_did, role) in agents {
