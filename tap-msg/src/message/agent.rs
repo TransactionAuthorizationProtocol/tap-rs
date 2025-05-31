@@ -9,6 +9,12 @@ use std::collections::HashMap;
 
 use crate::message::policy::Policy;
 
+/// Common trait for TAP participants (agents and parties)
+pub trait TapParticipant {
+    /// Get the identifier of this participant
+    fn id(&self) -> &str;
+}
+
 /// Helper for serializing/deserializing the `for` field that can be either a string or an array
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForParties(pub Vec<String>);
@@ -98,6 +104,12 @@ pub struct Agent {
     /// This allows for extensible metadata beyond the core fields.
     #[serde(flatten)]
     pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl TapParticipant for Agent {
+    fn id(&self) -> &str {
+        &self.id
+    }
 }
 
 impl Agent {

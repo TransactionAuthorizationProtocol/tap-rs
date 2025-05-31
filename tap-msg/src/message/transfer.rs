@@ -69,17 +69,16 @@ impl Transfer {
     ///
     /// # Example
     /// ```
-    /// use tap_msg::message::Transfer;
+    /// use tap_msg::message::{Transfer, Participant, Party};
     /// use tap_caip::{AssetId, ChainId};
-    /// use tap_msg::message::Participant;
     /// use std::collections::HashMap;
     ///
     /// // Create chain ID and asset ID
     /// let chain_id = ChainId::new("eip155", "1").unwrap();
     /// let asset = AssetId::new(chain_id, "erc20", "0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
     ///
-    /// // Create originator participant (will be deprecated in favor of Party)
-    /// let originator = Participant::new("did:example:alice");
+    /// // Create originator participant
+    /// let originator = Participant::from_party(Party::new("did:example:alice"));
     ///
     /// // Create a transfer with required fields
     /// let transfer = Transfer::builder()
@@ -244,7 +243,7 @@ impl Transfer {
         }
 
         // Validate originator
-        if self.originator.id.is_empty() {
+        if self.originator.id().is_empty() {
             return Err(Error::Validation("Originator ID is required".to_string()));
         }
 

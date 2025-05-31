@@ -60,7 +60,8 @@ pub use invoice::{
 // Re-export agent types
 pub use agent::Agent;
 
-// Re-export participant types (deprecated - use Agent/Party instead)
+
+// Re-export participant types (compatibility layer)
 pub use participant::Participant;
 
 // Re-export party types

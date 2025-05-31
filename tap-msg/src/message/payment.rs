@@ -13,6 +13,8 @@ use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessag
 use crate::message::Participant;
 use crate::TapMessage;
 
+use super::{Agent, Party};
+
 /// Payment message body (TAIP-14).
 ///
 /// A Payment is a DIDComm message initiated by the merchant's agent and sent
@@ -45,11 +47,11 @@ pub struct Payment {
     /// Customer (payer) details.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tap(participant)]
-    pub customer: Option<Participant>,
+    pub customer: Option<Party>,
 
     /// Merchant (payee) details.
     #[tap(participant)]
-    pub merchant: Participant,
+    pub merchant: Party,
 
     /// Transaction identifier.
     #[tap(transaction_id)]
@@ -70,7 +72,7 @@ pub struct Payment {
     /// Other agents involved in the payment.
     #[serde(default)]
     #[tap(participant_list)]
-    pub agents: Vec<Participant>,
+    pub agents: Vec<Agent>,
 
     /// Connection ID for linking to Connect messages
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,13 +91,13 @@ pub struct PaymentBuilder {
     amount: Option<String>,
     currency_code: Option<String>,
     supported_assets: Option<Vec<AssetId>>,
-    customer: Option<Participant>,
-    merchant: Option<Participant>,
+    customer: Option<Party>,
+    merchant: Option<Party>,
     transaction_id: Option<String>,
     memo: Option<String>,
     expiry: Option<String>,
     invoice: Option<crate::message::Invoice>,
-    agents: Vec<Participant>,
+    agents: Vec<Agent>,
     metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -135,13 +137,13 @@ impl PaymentBuilder {
     }
 
     /// Set the customer for this payment
-    pub fn customer(mut self, customer: Participant) -> Self {
+    pub fn customer(mut self, customer: Party) -> Self {
         self.customer = Some(customer);
         self
     }
 
     /// Set the merchant for this payment
-    pub fn merchant(mut self, merchant: Participant) -> Self {
+    pub fn merchant(mut self, merchant: Party) -> Self {
         self.merchant = Some(merchant);
         self
     }
@@ -171,13 +173,13 @@ impl PaymentBuilder {
     }
 
     /// Add an agent to this payment
-    pub fn add_agent(mut self, agent: Participant) -> Self {
+    pub fn add_agent(mut self, agent: Agent) -> Self {
         self.agents.push(agent);
         self
     }
 
     /// Set all agents for this payment
-    pub fn agents(mut self, agents: Vec<Participant>) -> Self {
+    pub fn agents(mut self, agents: Vec<Agent>) -> Self {
         self.agents = agents;
         self
     }
@@ -227,12 +229,7 @@ impl PaymentBuilder {
 
 impl Payment {
     /// Creates a new Payment with an asset
-    pub fn with_asset(
-        asset: AssetId,
-        amount: String,
-        merchant: Participant,
-        agents: Vec<Participant>,
-    ) -> Self {
+    pub fn with_asset(asset: AssetId, amount: String, merchant: Party, agents: Vec<Agent>) -> Self {
         Self {
             asset: Some(asset),
             amount,
@@ -254,8 +251,8 @@ impl Payment {
     pub fn with_currency(
         currency_code: String,
         amount: String,
-        merchant: Participant,
-        agents: Vec<Participant>,
+        merchant: Party,
+        agents: Vec<Agent>,
     ) -> Self {
         Self {
             asset: None,
@@ -279,8 +276,8 @@ impl Payment {
         currency_code: String,
         amount: String,
         supported_assets: Vec<AssetId>,
-        merchant: Participant,
-        agents: Vec<Participant>,
+        merchant: Party,
+        agents: Vec<Agent>,
     ) -> Self {
         Self {
             asset: None,

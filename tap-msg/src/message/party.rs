@@ -6,6 +6,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::message::agent::TapParticipant;
+
 /// Party in a transaction (TAIP-6).
 /// 
 /// Parties are identified using an IRI as the @id attribute in a JSON-LD object.
@@ -21,6 +23,12 @@ pub struct Party {
     /// Example: {"https://schema.org/addressCountry": "de", "lei": "..."}
     #[serde(flatten)]
     pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl TapParticipant for Party {
+    fn id(&self) -> &str {
+        &self.id
+    }
 }
 
 impl Party {
