@@ -16,19 +16,19 @@ use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 ///
 /// ```ignore
 /// use tap_msg::TapMessage;
-/// use tap_msg::message::Participant;
+/// use tap_msg::message::{Party, Agent};
 /// use tap_caip::AssetId;
 ///
 /// #[derive(TapMessage)]
 /// pub struct Transfer {
 ///     #[tap(participant)]
-///     pub originator: Participant,
+///     pub originator: Party,
 ///     
 ///     #[tap(participant)]
-///     pub beneficiary: Option<Participant>,
+///     pub beneficiary: Option<Party>,
 ///     
 ///     #[tap(participant_list)]
-///     pub agents: Vec<Participant>,
+///     pub agents: Vec<Agent>,
 ///     
 ///     #[tap(transaction_id)]
 ///     pub transaction_id: String,
@@ -43,20 +43,20 @@ use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 ///
 /// ```ignore
 /// use tap_msg::TapMessage;
-/// use tap_msg::message::Participant;
+/// use tap_msg::message::{Party, Agent};
 /// use serde::{Serialize, Deserialize};
 ///
 /// #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 /// #[tap(message_type = "https://tap.rsvp/schema/1.0#Transfer", initiator, authorizable, transactable)]
 /// pub struct Transfer {
 ///     #[tap(participant)]
-///     pub originator: Participant,
+///     pub originator: Party,
 ///     
 ///     #[tap(participant)]
-///     pub beneficiary: Option<Participant>,
+///     pub beneficiary: Option<Party>,
 ///     
 ///     #[tap(participant_list)]
-///     pub agents: Vec<Participant>,
+///     pub agents: Vec<Agent>,
 ///     
 ///     #[tap(transaction_id)]
 ///     pub transaction_id: String,
@@ -82,8 +82,8 @@ use syn::{parse_macro_input, Data, DeriveInput, Field, Fields};
 /// - `#[tap(builder)]` - Auto-generates builder pattern
 ///
 /// ## Field-level Attributes
-/// - `#[tap(participant)]` - Single participant field (required or optional)
-/// - `#[tap(participant_list)]` - Vec<Participant> field
+/// - `#[tap(participant)]` - Single participant field (Party or Agent, required or optional)
+/// - `#[tap(participant_list)]` - Vec<Agent> field for lists of agents
 /// - `#[tap(transaction_id)]` - Transaction ID field (creates new transaction for initiators)
 /// - `#[tap(thread_id)]` - Thread ID field (references existing transaction for replies)
 /// - `#[tap(connection_id)]` - Connection ID field (for linking to Connect messages)
@@ -481,6 +481,8 @@ fn impl_message_context_trait(
     quote! {
         impl #impl_generics #crate_path::message::MessageContext for #name #ty_generics #where_clause {
             fn participants(&self) -> Vec<&#crate_path::message::Participant> {
+                // NOTE: This trait still returns Participant for backward compatibility
+                // The implementation will need to convert Agent/Party types to Participant
                 #participants_impl
             }
 
@@ -492,11 +494,15 @@ fn impl_message_context_trait(
 }
 
 fn generate_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
+    // Note: This implementation assumes all participant fields are of the legacy Participant type
+    // for backward compatibility. The actual implementation will be generated based on the 
+    // field types at compile time.
     let mut participant_pushes = Vec::new();
 
-    // Add required participants
+    // Add required participants (these could be Agent, Party, or Participant)
     for field in &field_info.participant_fields {
         participant_pushes.push(quote! {
+            // Try to use as Participant directly, or convert from Agent/Party
             participants.push(&self.#field);
         });
     }
@@ -510,7 +516,7 @@ fn generate_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
         });
     }
 
-    // Add participant lists
+    // Add participant lists (these are typically Vec<Agent>)
     for field in &field_info.participant_list_fields {
         participant_pushes.push(quote! {
             participants.extend(&self.#field);

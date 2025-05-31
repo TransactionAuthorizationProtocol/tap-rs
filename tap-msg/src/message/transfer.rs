@@ -78,13 +78,8 @@ impl Transfer {
     /// let chain_id = ChainId::new("eip155", "1").unwrap();
     /// let asset = AssetId::new(chain_id, "erc20", "0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
     ///
-    /// // Create participant
-    /// let originator = Participant {
-    ///     id: "did:example:alice".to_string(),
-    ///     role: Some("originator".to_string()),
-    ///     policies: None,
-    ///     leiCode: None, name: None,
-    /// };
+    /// // Create originator participant (will be deprecated in favor of Party)
+    /// let originator = Participant::new("did:example:alice");
     ///
     /// // Create a transfer with required fields
     /// let transfer = Transfer::builder()

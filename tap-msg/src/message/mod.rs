@@ -4,6 +4,7 @@
 //! Transaction Authorization Protocol (TAP).
 
 // Import all message modules
+pub mod agent;
 pub mod agent_management;
 pub mod authorize;
 pub mod cancel;
@@ -13,6 +14,7 @@ pub mod did_presentation;
 pub mod error;
 pub mod invoice;
 pub mod participant;
+pub mod party;
 pub mod payment;
 pub mod policy;
 pub mod presentation;
@@ -55,8 +57,14 @@ pub use invoice::{
     DocumentReference, Invoice, LineItem, OrderReference, TaxCategory, TaxSubtotal, TaxTotal,
 };
 
-// Re-export participant types
+// Re-export agent types
+pub use agent::Agent;
+
+// Re-export participant types (deprecated - use Agent/Party instead)
 pub use participant::Participant;
+
+// Re-export party types
+pub use party::Party;
 
 // Re-export payment types
 pub use payment::{Payment, PaymentBuilder};
