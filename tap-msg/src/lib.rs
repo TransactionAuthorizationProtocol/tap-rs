@@ -11,7 +11,7 @@
 // Internal modules
 pub mod didcomm;
 pub mod error;
-pub mod examples;
+// pub mod examples; // Temporarily disabled during refactor
 pub mod message;
 pub mod utils;
 
@@ -25,8 +25,8 @@ pub use didcomm::{
 };
 pub use error::{Error, Result};
 pub use message::{
-    create_tap_message, AddAgents, Authorize, DocumentReference, ErrorBody, Invoice, LineItem,
-    MessageContext, OrderReference, Participant, Payment, Presentation, Reject, Settle,
+    create_tap_message, AddAgents, Agent, Authorize, DocumentReference, ErrorBody, Invoice,
+    LineItem, MessageContext, OrderReference, Party, Payment, Presentation, Reject, Settle,
     TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, TransactionContext, Transfer,
 };
 

@@ -288,8 +288,7 @@ mod tests {
                 "reference": "60"
             },
             "originator": {
-                "id": "did:example:alice",
-                "name": "Test Originator"
+                "@id": "did:example:alice"
             },
             "amount": "100",
             "agents": [],
@@ -325,8 +324,7 @@ mod tests {
                     "reference": "60"
                 },
                 "originator": {
-                    "id": "did:example:alice",
-                    "name": "Alice"
+                    "@id": "did:example:alice"
                 },
                 "amount": "100",
                 "agents": [],
@@ -358,13 +356,7 @@ mod tests {
     fn test_message_type() {
         let transfer = Transfer {
             asset: "eip155:1/slip44:60".parse().unwrap(),
-            originator: crate::message::Participant {
-                id: "did:example:alice".to_string(),
-                name: Some("Alice".to_string()),
-                role: None,
-                policies: None,
-                leiCode: None,
-            },
+            originator: crate::message::Party::new("did:example:alice"),
             beneficiary: None,
             amount: "100".to_string(),
             agents: vec![],

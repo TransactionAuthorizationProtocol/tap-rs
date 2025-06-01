@@ -11,8 +11,9 @@ use std::str::FromStr;
 
 use tap_caip::AssetId;
 use tap_msg::didcomm::PlainMessage;
-use tap_msg::message::Participant;
+use tap_msg::message::agent::TapParticipant;
 use tap_msg::message::Transfer;
+use tap_msg::message::{Agent, Party};
 
 #[derive(Debug, PartialEq)]
 enum TestResult {
@@ -82,8 +83,8 @@ struct TestVectorMessage {
 struct TestVectorTransfer {
     asset: String,
     #[serde(default)]
-    originator: Option<TestVectorParticipant>,
-    beneficiary: Option<TestVectorParticipant>,
+    originator: Option<TestVectorParty>,
+    beneficiary: Option<TestVectorParty>,
     amount: String,
     #[serde(default)]
     agents: Vec<TestVectorAgent>,
@@ -95,9 +96,9 @@ struct TestVectorTransfer {
     memo: Option<String>,
 }
 
-/// Struct to hold a Participant from a test vector
+/// Struct to hold a Participant from a test vector (legacy compatibility)
 #[derive(Debug, Deserialize)]
-struct TestVectorParticipant {
+struct TestVectorParty {
     #[serde(rename = "@id")]
     id: String,
     #[serde(default)]
@@ -655,23 +656,11 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                     // Create originator participant from either originator field or first agent
                     let originator = if let Some(o) = &transfer_body.originator {
                         // Use explicit originator field
-                        Participant {
-                            id: o.id.clone(),
-                            role: o.role.clone(),
-                            policies: None, // Ignoring policies for now due to type mismatch
-                            leiCode: o.lei_code.clone(),
-                            name: None,
-                        }
+                        Party::new(&o.id)
                     } else if !transfer_body.agents.is_empty() {
                         // Use first agent as originator
                         let first_agent = &transfer_body.agents[0];
-                        Participant {
-                            id: first_agent.id.clone(),
-                            role: first_agent.role.clone(),
-                            policies: None,
-                            leiCode: None,
-                            name: None,
-                        }
+                        Party::new(&first_agent.id)
                     } else {
                         // No originator found - this is an error case
                         return if test_vector.should_pass {
@@ -687,13 +676,10 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                     };
 
                     // Create beneficiary participant if present
-                    let beneficiary = transfer_body.beneficiary.as_ref().map(|b| Participant {
-                        id: b.id.clone(),
-                        role: b.role.clone(),
-                        policies: None, // Ignoring policies for now due to type mismatch
-                        leiCode: b.lei_code.clone(),
-                        name: None,
-                    });
+                    let beneficiary = transfer_body
+                        .beneficiary
+                        .as_ref()
+                        .map(|b| Party::new(&b.id));
 
                     // Convert agents - exclude first agent if we used it as originator
                     let agents = transfer_body
@@ -708,12 +694,12 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                                 0
                             },
                         )
-                        .map(|a| Participant {
-                            id: a.id.clone(),
-                            role: a.role.clone(),
-                            policies: None,
-                            leiCode: None,
-                            name: None,
+                        .map(|a| {
+                            Agent::new(
+                                &a.id,
+                                &a.role.as_deref().unwrap_or("agent"),
+                                &originator.id(),
+                            )
                         })
                         .collect();
 

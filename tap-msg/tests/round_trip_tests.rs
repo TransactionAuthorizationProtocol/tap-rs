@@ -3,7 +3,7 @@ use std::result::Result;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::didcomm::PlainMessage;
-use tap_msg::message::{Participant, TapMessageBody, Transfer};
+use tap_msg::message::{Agent, Party, TapMessageBody, Transfer};
 
 /// Test the round-trip conversion between TAP messages and DIDComm messages.
 ///
@@ -19,21 +19,9 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     let from_did = "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK";
     let to_did = "did:key:z6MkwYyuTCaaDKnMGHpMkteuFpj1KrsFgGXwW3nXdT7k3RQP";
 
-    let originator = Participant {
-        id: from_did.to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new(from_did);
 
-    let beneficiary = Participant {
-        id: to_did.to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new(to_did);
 
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -41,7 +29,10 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
-        agents: vec![originator, beneficiary],
+        agents: vec![
+            Agent::new(from_did, "originator", from_did),
+            Agent::new(to_did, "beneficiary", to_did),
+        ],
         settlement_id: None,
         connection_id: None,
         metadata: HashMap::new(),

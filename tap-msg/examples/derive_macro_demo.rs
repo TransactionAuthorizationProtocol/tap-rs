@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessage as TapMessageTrait;
-use tap_msg::message::{MessageContext, Participant, TapMessageBody};
+use tap_msg::message::{Agent, MessageContext, TapMessageBody};
 use tap_msg::{didcomm::PlainMessage, error::Result, TapMessage};
 
 /// Example message using the new derive macro
@@ -15,17 +15,17 @@ use tap_msg::{didcomm::PlainMessage, error::Result, TapMessage};
 pub struct ExampleTransfer {
     /// Originator participant - automatically extracted
     #[tap(participant)]
-    pub originator: Participant,
+    pub originator: Agent,
 
     /// Optional beneficiary participant - automatically extracted
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tap(participant)]
-    pub beneficiary: Option<Participant>,
+    pub beneficiary: Option<Agent>,
 
     /// List of agent participants - automatically extracted
     #[serde(default)]
     #[tap(participant_list)]
-    pub agents: Vec<Participant>,
+    pub agents: Vec<Agent>,
 
     /// Transaction ID for tracking - used for message threading
     #[tap(transaction_id)]
@@ -93,29 +93,11 @@ impl TapMessageBody for ExampleTransfer {
 
 fn main() -> Result<()> {
     // Create participants
-    let originator = Participant {
-        id: "did:example:alice".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: Some("Alice".to_string()),
-    };
+    let originator = Agent::new("did:example:alice", "originator", "did:example:alice");
 
-    let beneficiary = Participant {
-        id: "did:example:bob".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: Some("Bob".to_string()),
-    };
+    let beneficiary = Agent::new("did:example:bob", "beneficiary", "did:example:bob");
 
-    let agent = Participant {
-        id: "did:example:agent".to_string(),
-        role: Some("agent".to_string()),
-        policies: None,
-        leiCode: None,
-        name: Some("TAP Agent".to_string()),
-    };
+    let agent = Agent::new("did:example:agent", "agent", "did:example:agent");
 
     // Create asset ID
     let chain_id = tap_caip::ChainId::new("eip155", "1").unwrap();
@@ -141,15 +123,10 @@ fn main() -> Result<()> {
 
     // Demonstrate automatic participant extraction via MessageContext
     println!("1. Automatic Participant Extraction:");
-    let participants = transfer.participants();
+    let participants = transfer.participant_dids();
     println!("   Number of participants: {}", participants.len());
-    for (i, participant) in participants.iter().enumerate() {
-        println!(
-            "   Participant {}: {} ({})",
-            i + 1,
-            participant.id,
-            participant.role.as_deref().unwrap_or("unknown")
-        );
+    for (i, participant_did) in participants.iter().enumerate() {
+        println!("   Participant {}: {}", i + 1, participant_did);
     }
 
     // Demonstrate participant DID extraction

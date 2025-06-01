@@ -13,7 +13,7 @@ use std::str::FromStr;
 use tap_agent::agent::{Agent, TapAgent};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle, Transfer};
-use tap_msg::Participant;
+use tap_msg::Party;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -131,31 +131,13 @@ fn create_transfer_message(
     beneficiary_did: &str,
     settlement_address: &str,
 ) -> Transfer {
-    // Create originator and beneficiary participants
-    let originator = Participant {
-        id: originator_did.to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let beneficiary = Participant {
-        id: beneficiary_did.to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new(originator_did);
+    let beneficiary = Party::new(beneficiary_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", originator_did);
 
     // Create a transfer message
     Transfer {

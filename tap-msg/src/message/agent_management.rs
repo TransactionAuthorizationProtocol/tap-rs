@@ -6,7 +6,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
-use crate::message::Participant;
+use crate::message::agent::TapParticipant;
+use crate::message::Agent;
 use crate::TapMessage;
 
 /// Add agents message body (TAIP-5).
@@ -22,12 +23,12 @@ pub struct AddAgents {
 
     /// Agents to add.
     #[tap(participant_list)]
-    pub agents: Vec<Participant>,
+    pub agents: Vec<Agent>,
 }
 
 impl AddAgents {
     /// Create a new AddAgents message
-    pub fn new(transaction_id: &str, agents: Vec<Participant>) -> Self {
+    pub fn new(transaction_id: &str, agents: Vec<Agent>) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             agents,
@@ -35,7 +36,7 @@ impl AddAgents {
     }
 
     /// Add a single agent to this message
-    pub fn add_agent(mut self, agent: Participant) -> Self {
+    pub fn add_agent(mut self, agent: Agent) -> Self {
         self.agents.push(agent);
         self
     }
@@ -58,7 +59,7 @@ impl AddAgents {
 
         // Validate each agent
         for agent in &self.agents {
-            if agent.id.is_empty() {
+            if agent.id().is_empty() {
                 return Err(Error::Validation("Agent ID cannot be empty".to_string()));
             }
         }
@@ -85,12 +86,12 @@ pub struct ReplaceAgent {
 
     /// Replacement agent.
     #[tap(participant)]
-    pub replacement: Participant,
+    pub replacement: Agent,
 }
 
 impl ReplaceAgent {
     /// Create a new ReplaceAgent message
-    pub fn new(transaction_id: &str, original: &str, replacement: Participant) -> Self {
+    pub fn new(transaction_id: &str, original: &str, replacement: Agent) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             original: original.to_string(),
@@ -114,7 +115,7 @@ impl ReplaceAgent {
             ));
         }
 
-        if self.replacement.id.is_empty() {
+        if self.replacement.id().is_empty() {
             return Err(Error::Validation(
                 "Replacement agent ID is required in ReplaceAgent".to_string(),
             ));

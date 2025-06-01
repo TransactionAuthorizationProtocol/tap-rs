@@ -1,7 +1,7 @@
 //! Agent types for TAP messages (TAIP-5).
 //!
 //! This module defines the structure of agent information used in TAP messages.
-//! Agents are services involved in executing transactions such as exchanges, 
+//! Agents are services involved in executing transactions such as exchanges,
 //! custodial wallet services, wallets, blockchain addresses, DeFi protocols, and bridges.
 
 use serde::{Deserialize, Serialize};
@@ -75,7 +75,7 @@ impl<'de> Deserialize<'de> for ForParties {
 }
 
 /// Agent in a transaction (TAIP-5).
-/// 
+///
 /// Agents are identified using Decentralized Identifiers (DIDs) and can be:
 /// - Centralized services (exchanges, custodial wallets)
 /// - End-user software (self-hosted wallets)  
@@ -137,10 +137,10 @@ impl Agent {
 
     /// Create a new agent with metadata.
     pub fn with_metadata(
-        id: &str, 
-        role: &str, 
-        for_party: &str, 
-        metadata: HashMap<String, serde_json::Value>
+        id: &str,
+        role: &str,
+        for_party: &str,
+        metadata: HashMap<String, serde_json::Value>,
     ) -> Self {
         Self {
             id: id.to_string(),
@@ -219,22 +219,22 @@ impl Agent {
 pub mod roles {
     /// Settlement address role for blockchain transactions.
     pub const SETTLEMENT_ADDRESS: &str = "SettlementAddress";
-    
+
     /// Source address role for originating transactions.
     pub const SOURCE_ADDRESS: &str = "SourceAddress";
-    
+
     /// Custodial service role.
     pub const CUSTODIAL_SERVICE: &str = "CustodialService";
-    
+
     /// Wallet service role.
     pub const WALLET_SERVICE: &str = "WalletService";
-    
+
     /// Exchange service role.
     pub const EXCHANGE: &str = "Exchange";
-    
+
     /// Bridge service role for cross-chain transactions.
     pub const BRIDGE: &str = "Bridge";
-    
+
     /// DeFi protocol role.
     pub const DEFI_PROTOCOL: &str = "DeFiProtocol";
 }
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn test_agent_creation() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice");
-        
+
         assert_eq!(agent.id, "did:web:example.com");
         assert_eq!(agent.role, "Exchange");
         assert_eq!(agent.for_parties.0, vec!["did:example:alice"]);
@@ -258,22 +258,28 @@ mod tests {
     #[test]
     fn test_agent_with_metadata() {
         let mut metadata = HashMap::new();
-        metadata.insert("name".to_string(), serde_json::Value::String("Example Exchange".to_string()));
-        
-        let agent = Agent::with_metadata(
-            "did:web:example.com", 
-            "Exchange", 
-            "did:example:alice",
-            metadata
+        metadata.insert(
+            "name".to_string(),
+            serde_json::Value::String("Example Exchange".to_string()),
         );
-        
-        assert_eq!(agent.get_metadata("name").unwrap().as_str().unwrap(), "Example Exchange");
+
+        let agent = Agent::with_metadata(
+            "did:web:example.com",
+            "Exchange",
+            "did:example:alice",
+            metadata,
+        );
+
+        assert_eq!(
+            agent.get_metadata("name").unwrap().as_str().unwrap(),
+            "Example Exchange"
+        );
     }
 
     #[test]
     fn test_agent_with_policies() {
         use crate::message::policy::{Policy, RequireAuthorization};
-        
+
         let auth_req = RequireAuthorization {
             from: Some(vec!["did:example:kyc".to_string()]),
             from_role: None,
@@ -281,22 +287,29 @@ mod tests {
             purpose: Some("KYC verification".to_string()),
         };
         let policy = Policy::RequireAuthorization(auth_req);
-        
+
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_policies(vec![policy]);
-        
+
         assert!(agent.policies.is_some());
         assert_eq!(agent.policies.as_ref().unwrap().len(), 1);
     }
 
     #[test]
     fn test_agent_serialization() {
-        let agent = Agent::new("did:web:example.com", "SettlementAddress", "did:example:alice")
-            .with_metadata_field("name".to_string(), serde_json::Value::String("Test Agent".to_string()));
+        let agent = Agent::new(
+            "did:web:example.com",
+            "SettlementAddress",
+            "did:example:alice",
+        )
+        .with_metadata_field(
+            "name".to_string(),
+            serde_json::Value::String("Test Agent".to_string()),
+        );
 
         let json = serde_json::to_string(&agent).unwrap();
         let deserialized: Agent = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(agent, deserialized);
         assert_eq!(deserialized.role, "SettlementAddress");
         assert_eq!(deserialized.for_parties.0, vec!["did:example:alice"]);
@@ -306,7 +319,7 @@ mod tests {
     fn test_agent_json_ld_format() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice");
         let json = serde_json::to_value(&agent).unwrap();
-        
+
         assert_eq!(json["@id"], "did:web:example.com");
         assert_eq!(json["role"], "Exchange");
         assert_eq!(json["for"], "did:example:alice"); // Should serialize as string for single party
@@ -315,7 +328,7 @@ mod tests {
     #[test]
     fn test_agent_helper_methods() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice");
-        
+
         assert!(agent.has_role("Exchange"));
         assert!(!agent.has_role("Wallet"));
         assert!(agent.acts_for("did:example:alice"));
@@ -331,9 +344,12 @@ mod tests {
 
     #[test]
     fn test_agent_multiple_parties() {
-        let parties = vec!["did:example:alice".to_string(), "did:example:bob".to_string()];
+        let parties = vec![
+            "did:example:alice".to_string(),
+            "did:example:bob".to_string(),
+        ];
         let agent = Agent::new_for_parties("did:web:example.com", "Exchange", parties.clone());
-        
+
         assert_eq!(agent.for_parties.0, parties);
         assert!(agent.acts_for("did:example:alice"));
         assert!(agent.acts_for("did:example:bob"));
@@ -344,10 +360,10 @@ mod tests {
     fn test_agent_for_parties_serialization_single() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice");
         let json = serde_json::to_value(&agent).unwrap();
-        
+
         // Single party should serialize as string
         assert_eq!(json["for"], "did:example:alice");
-        
+
         // Test deserialization
         let deserialized: Agent = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.for_parties.0, vec!["did:example:alice"]);
@@ -355,16 +371,22 @@ mod tests {
 
     #[test]
     fn test_agent_for_parties_serialization_multiple() {
-        let parties = vec!["did:example:alice".to_string(), "did:example:bob".to_string()];
+        let parties = vec![
+            "did:example:alice".to_string(),
+            "did:example:bob".to_string(),
+        ];
         let agent = Agent::new_for_parties("did:web:example.com", "Exchange", parties.clone());
         let json = serde_json::to_value(&agent).unwrap();
-        
+
         // Multiple parties should serialize as array
-        assert_eq!(json["for"], serde_json::Value::Array(vec![
-            serde_json::Value::String("did:example:alice".to_string()),
-            serde_json::Value::String("did:example:bob".to_string())
-        ]));
-        
+        assert_eq!(
+            json["for"],
+            serde_json::Value::Array(vec![
+                serde_json::Value::String("did:example:alice".to_string()),
+                serde_json::Value::String("did:example:bob".to_string())
+            ])
+        );
+
         // Test deserialization
         let deserialized: Agent = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.for_parties.0, parties);
@@ -377,7 +399,7 @@ mod tests {
             "role": "Exchange",
             "for": "did:example:alice"
         });
-        
+
         let agent: Agent = serde_json::from_value(json).unwrap();
         assert_eq!(agent.for_parties.0, vec!["did:example:alice"]);
     }
@@ -389,21 +411,27 @@ mod tests {
             "role": "Exchange",
             "for": ["did:example:alice", "did:example:bob"]
         });
-        
+
         let agent: Agent = serde_json::from_value(json).unwrap();
-        assert_eq!(agent.for_parties.0, vec!["did:example:alice", "did:example:bob"]);
+        assert_eq!(
+            agent.for_parties.0,
+            vec!["did:example:alice", "did:example:bob"]
+        );
     }
 
     #[test]
     fn test_agent_for_parties_methods() {
         let mut agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice");
-        
+
         assert_eq!(agent.for_parties(), &["did:example:alice"]);
         assert_eq!(agent.primary_party(), Some("did:example:alice"));
-        
+
         agent.add_for_party("did:example:bob");
-        assert_eq!(agent.for_parties(), &["did:example:alice", "did:example:bob"]);
-        
+        assert_eq!(
+            agent.for_parties(),
+            &["did:example:alice", "did:example:bob"]
+        );
+
         agent.set_for_parties(vec!["did:example:charlie".to_string()]);
         assert_eq!(agent.for_parties(), &["did:example:charlie"]);
         assert_eq!(agent.primary_party(), Some("did:example:charlie"));

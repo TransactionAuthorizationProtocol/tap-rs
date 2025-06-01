@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use crate::message::agent::TapParticipant;
 
 /// Party in a transaction (TAIP-6).
-/// 
+///
 /// Parties are identified using an IRI as the @id attribute in a JSON-LD object.
 /// They represent real-world entities (legal or natural persons) that are parties to a transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -122,11 +122,17 @@ mod tests {
     #[test]
     fn test_party_with_metadata() {
         let mut metadata = HashMap::new();
-        metadata.insert("name".to_string(), serde_json::Value::String("Alice".to_string()));
-        
+        metadata.insert(
+            "name".to_string(),
+            serde_json::Value::String("Alice".to_string()),
+        );
+
         let party = Party::with_metadata("did:example:alice", metadata);
         assert_eq!(party.id, "did:example:alice");
-        assert_eq!(party.get_metadata("name").unwrap().as_str().unwrap(), "Alice");
+        assert_eq!(
+            party.get_metadata("name").unwrap().as_str().unwrap(),
+            "Alice"
+        );
     }
 
     #[test]
@@ -155,7 +161,7 @@ mod tests {
 
         let json = serde_json::to_string(&party).unwrap();
         let deserialized: Party = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(party, deserialized);
         assert_eq!(deserialized.country().unwrap(), "de");
         assert_eq!(deserialized.lei_code().unwrap(), "LEI123");
@@ -165,7 +171,7 @@ mod tests {
     fn test_party_json_ld_format() {
         let party = Party::new("did:example:alice").with_country("de");
         let json = serde_json::to_value(&party).unwrap();
-        
+
         assert_eq!(json["@id"], "did:example:alice");
         assert_eq!(json["https://schema.org/addressCountry"], "de");
     }

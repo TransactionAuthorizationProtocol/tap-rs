@@ -38,12 +38,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 "reference": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             },
             "originator": {
-                "id": sender_key.did.clone(),
-                "name": "Alice"
+                "@id": sender_key.did.clone()
             },
             "beneficiary": {
-                "id": "did:example:bob",
-                "name": "Bob"
+                "@id": "did:example:bob"
             },
             "amount": "1000",
             "agents": [],
@@ -88,17 +86,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Message Type: Transfer");
                 println!("Asset: {}", transfer.asset);
                 println!("Amount: {}", transfer.amount);
-                println!(
-                    "Originator: {} ({})",
-                    transfer.originator.id,
-                    transfer.originator.name.as_deref().unwrap_or("Unknown")
-                );
+                println!("Originator: {}", transfer.originator.id);
                 if let Some(beneficiary) = &transfer.beneficiary {
-                    println!(
-                        "Beneficiary: {} ({})",
-                        beneficiary.id,
-                        beneficiary.name.as_deref().unwrap_or("Unknown")
-                    );
+                    println!("Beneficiary: {}", beneficiary.id);
                 }
                 if let Some(memo) = &transfer.memo {
                     println!("Memo: {}", memo);

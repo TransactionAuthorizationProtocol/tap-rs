@@ -8,7 +8,7 @@ use tap_caip::AssetId;
 use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
 use tap_msg::message::{
-    Authorize, Connect, ConnectionConstraints, Participant, Payment, PaymentBuilder, Reject,
+    Agent, Authorize, Connect, ConnectionConstraints, Party, Payment, PaymentBuilder, Reject,
     Settle, TransactionLimits, Transfer, UpdateParty,
 };
 use tap_msg::Result;
@@ -364,9 +364,7 @@ fn test_complex_message_flow() -> Result<()> {
         .expect("Failed to convert Settle to DIDComm");
 
     // Step 6: UpdateParty the third transfer
-    let mut updated_originator =
-        Participant::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-    updated_originator.leiCode = Some("NEWLEICODE123".to_string());
+    let updated_originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
     let update_party = UpdateParty {
         transaction_id: transfer_messages[2].id.clone(),
@@ -438,29 +436,15 @@ fn create_test_transfer() -> Transfer {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-        name: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+    )];
 
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -479,29 +463,15 @@ fn create_test_transfer() -> Transfer {
 fn create_test_payment_request() -> Payment {
     let transaction_id = uuid::Uuid::new_v4().to_string();
 
-    let merchant = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let merchant = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let customer = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let customer = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: Some("agent".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+    )];
 
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();

@@ -1025,7 +1025,7 @@ impl Storage {
 mod tests {
     use super::*;
     use tap_msg::message::transfer::Transfer;
-    use tap_msg::message::Participant;
+    use tap_msg::message::Party;
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -1085,20 +1085,8 @@ mod tests {
         // Create a test transfer message
         let transfer_body = Transfer {
             transaction_id: "test_transfer_123".to_string(),
-            originator: Participant {
-                id: "did:example:originator".to_string(),
-                name: None,
-                role: None,
-                policies: None,
-                leiCode: None,
-            },
-            beneficiary: Some(Participant {
-                id: "did:example:beneficiary".to_string(),
-                name: None,
-                role: None,
-                policies: None,
-                leiCode: None,
-            }),
+            originator: Party::new("did:example:originator"),
+            beneficiary: Some(Party::new("did:example:beneficiary")),
             asset: "eip155:1/erc20:0x0000000000000000000000000000000000000000"
                 .parse()
                 .unwrap(),

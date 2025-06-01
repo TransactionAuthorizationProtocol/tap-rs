@@ -3,14 +3,14 @@
 //! This module provides a declarative way to handle message context,
 //! including participant extraction, routing hints, and transaction context.
 
-use crate::message::Participant;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Message context providing participants, routing hints, and transaction context
 pub trait MessageContext {
-    /// Extract all participants from the message
-    fn participants(&self) -> Vec<&Participant>;
+    /// Extract all participant DIDs from the message
+    /// This replaces the old participants() method and works with Agent/Party types directly
+    fn participant_dids(&self) -> Vec<String>;
 
     /// Get routing hints for message delivery
     fn routing_hints(&self) -> RoutingHints {
@@ -20,14 +20,6 @@ pub trait MessageContext {
     /// Get transaction context if applicable
     fn transaction_context(&self) -> Option<TransactionContext> {
         None
-    }
-
-    /// Extract all participant DIDs for routing
-    fn participant_dids(&self) -> Vec<String> {
-        self.participants()
-            .into_iter()
-            .map(|p| p.id.clone())
-            .collect()
     }
 
     /// Get transaction ID if available
@@ -101,22 +93,23 @@ impl TransactionContext {
     }
 }
 
-/// A helper trait for extracting participants using attributes
+/// A helper trait for extracting participant DIDs using attributes
 pub trait ParticipantExtractor {
-    /// Extract participants marked with #[tap(participant)]
-    fn extract_single_participants(&self) -> Vec<&Participant>;
+    /// Extract participant DIDs marked with #[tap(participant)]
+    fn extract_single_participant_dids(&self) -> Vec<String>;
 
-    /// Extract participants from lists marked with #[tap(participant_list)]
-    fn extract_list_participants(&self) -> Vec<&Participant>;
+    /// Extract participant DIDs from lists marked with #[tap(participant_list)]
+    fn extract_list_participant_dids(&self) -> Vec<String>;
 
-    /// Extract optional participants marked with #[tap(participant)]
-    fn extract_optional_participants(&self) -> Vec<&Participant>;
+    /// Extract optional participant DIDs marked with #[tap(participant)]
+    fn extract_optional_participant_dids(&self) -> Vec<String>;
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message::Participant;
+    use crate::message::agent::TapParticipant;
+    use crate::message::{Agent, Party};
 
     #[test]
     fn test_routing_hints_default() {
@@ -145,22 +138,24 @@ mod tests {
         );
     }
 
-    // Mock implementation for testing
+    // Mock implementation for testing with Agent and Party types
     struct TestMessage {
-        originator: Participant,
-        beneficiary: Option<Participant>,
-        agents: Vec<Participant>,
+        originator: Party,
+        beneficiary: Option<Party>,
+        agents: Vec<Agent>,
         transaction_id: String,
     }
 
     impl MessageContext for TestMessage {
-        fn participants(&self) -> Vec<&Participant> {
-            let mut participants = vec![&self.originator];
+        fn participant_dids(&self) -> Vec<String> {
+            let mut dids = vec![self.originator.id().to_string()];
             if let Some(ref beneficiary) = self.beneficiary {
-                participants.push(beneficiary);
+                dids.push(beneficiary.id().to_string());
             }
-            participants.extend(&self.agents);
-            participants
+            for agent in &self.agents {
+                dids.push(agent.id().to_string());
+            }
+            dids
         }
 
         fn transaction_context(&self) -> Option<TransactionContext> {
@@ -174,32 +169,15 @@ mod tests {
     #[test]
     fn test_message_context() {
         let msg = TestMessage {
-            originator: Participant {
-                id: "did:example:alice".to_string(),
-                role: Some("originator".to_string()),
-                policies: None,
-                leiCode: None,
-                name: None,
-            },
-            beneficiary: Some(Participant {
-                id: "did:example:bob".to_string(),
-                role: Some("beneficiary".to_string()),
-                policies: None,
-                leiCode: None,
-                name: None,
-            }),
-            agents: vec![Participant {
-                id: "did:example:agent".to_string(),
-                role: Some("agent".to_string()),
-                policies: None,
-                leiCode: None,
-                name: None,
-            }],
+            originator: Party::new("did:example:alice"),
+            beneficiary: Some(Party::new("did:example:bob")),
+            agents: vec![Agent::new(
+                "did:example:agent",
+                "Exchange",
+                "did:example:alice",
+            )],
             transaction_id: "tx-123".to_string(),
         };
-
-        let participants = msg.participants();
-        assert_eq!(participants.len(), 3);
 
         let dids = msg.participant_dids();
         assert_eq!(dids.len(), 3);

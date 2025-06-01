@@ -416,6 +416,8 @@ fn impl_tap_message_trait(
             }
 
             fn get_all_participants(&self) -> Vec<String> {
+                // Import TapParticipant trait for .id() method access
+                use #crate_path::message::agent::TapParticipant;
                 #get_all_participants_impl
             }
 
@@ -469,7 +471,7 @@ fn impl_message_context_trait(
     where_clause: Option<&syn::WhereClause>,
     is_internal: bool,
 ) -> TokenStream2 {
-    let participants_impl = generate_participants_impl(field_info);
+    let participant_dids_impl = generate_participant_dids_impl(field_info);
     let transaction_context_impl = generate_transaction_context_impl(field_info, is_internal);
 
     let crate_path = if is_internal {
@@ -480,10 +482,10 @@ fn impl_message_context_trait(
 
     quote! {
         impl #impl_generics #crate_path::message::MessageContext for #name #ty_generics #where_clause {
-            fn participants(&self) -> Vec<&#crate_path::message::Participant> {
-                // NOTE: This trait still returns Participant for backward compatibility
-                // The implementation will need to convert Agent/Party types to Participant
-                #participants_impl
+            fn participant_dids(&self) -> Vec<String> {
+                // Import TapParticipant trait for .id() method access
+                use #crate_path::message::agent::TapParticipant;
+                #participant_dids_impl
             }
 
             fn transaction_context(&self) -> Option<#crate_path::message::TransactionContext> {
@@ -493,40 +495,39 @@ fn impl_message_context_trait(
     }
 }
 
-fn generate_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
-    // Note: This implementation assumes all participant fields are of the legacy Participant type
-    // for backward compatibility. The actual implementation will be generated based on the 
-    // field types at compile time.
-    let mut participant_pushes = Vec::new();
+fn generate_participant_dids_impl(field_info: &FieldInfo) -> TokenStream2 {
+    let mut did_extracts = Vec::new();
 
-    // Add required participants (these could be Agent, Party, or Participant)
+    // Add required participants (Agent, Party, or Participant types)
     for field in &field_info.participant_fields {
-        participant_pushes.push(quote! {
-            // Try to use as Participant directly, or convert from Agent/Party
-            participants.push(&self.#field);
+        did_extracts.push(quote! {
+            // Use the TapParticipant trait to get ID - works with Agent, Party, or Participant
+            dids.push(self.#field.id().to_string());
         });
     }
 
     // Add optional participants
     for field in &field_info.optional_participant_fields {
-        participant_pushes.push(quote! {
+        did_extracts.push(quote! {
             if let Some(ref participant) = self.#field {
-                participants.push(participant);
+                dids.push(participant.id().to_string());
             }
         });
     }
 
-    // Add participant lists (these are typically Vec<Agent>)
+    // Add participant lists (typically Vec<Agent> or Vec<Participant>)
     for field in &field_info.participant_list_fields {
-        participant_pushes.push(quote! {
-            participants.extend(&self.#field);
+        did_extracts.push(quote! {
+            for participant in &self.#field {
+                dids.push(participant.id().to_string());
+            }
         });
     }
 
     quote! {
-        let mut participants = Vec::new();
-        #(#participant_pushes)*
-        participants
+        let mut dids = Vec::new();
+        #(#did_extracts)*
+        dids
     }
 }
 
@@ -536,7 +537,7 @@ fn generate_get_all_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
     // Add required participants
     for field in &field_info.participant_fields {
         participant_extracts.push(quote! {
-            participants.push(self.#field.id.clone());
+            participants.push(self.#field.id().to_string());
         });
     }
 
@@ -544,7 +545,7 @@ fn generate_get_all_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
     for field in &field_info.optional_participant_fields {
         participant_extracts.push(quote! {
             if let Some(ref participant) = self.#field {
-                participants.push(participant.id.clone());
+                participants.push(participant.id().to_string());
             }
         });
     }
@@ -553,7 +554,7 @@ fn generate_get_all_participants_impl(field_info: &FieldInfo) -> TokenStream2 {
     for field in &field_info.participant_list_fields {
         participant_extracts.push(quote! {
             for participant in &self.#field {
-                participants.push(participant.id.clone());
+                participants.push(participant.id().to_string());
             }
         });
     }
@@ -700,7 +701,7 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
         // Required participants
         for field in &field_info.participant_fields {
             extracts.push(quote! {
-                recipient_dids.push(self.#field.id.clone());
+                recipient_dids.push(self.#field.id().to_string());
             });
         }
 
@@ -708,7 +709,7 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
         for field in &field_info.optional_participant_fields {
             extracts.push(quote! {
                 if let Some(ref participant) = self.#field {
-                    recipient_dids.push(participant.id.clone());
+                    recipient_dids.push(participant.id().to_string());
                 }
             });
         }
@@ -717,7 +718,7 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
         for field in &field_info.participant_list_fields {
             extracts.push(quote! {
                 for participant in &self.#field {
-                    recipient_dids.push(participant.id.clone());
+                    recipient_dids.push(participant.id().to_string());
                 }
             });
         }
@@ -786,6 +787,9 @@ fn generate_to_didcomm_impl(field_info: &FieldInfo, is_internal: bool) -> TokenS
     };
 
     quote! {
+        // Import TapParticipant trait for .id() method access
+        use #crate_path::message::agent::TapParticipant;
+
         // Serialize the message body to JSON
         let mut body_json = serde_json::to_value(self)
             .map_err(|e| #crate_path::error::Error::SerializationError(e.to_string()))?;
@@ -992,7 +996,7 @@ fn impl_transaction_trait(
                 #crate_path::message::tap_message_trait::typed_plain_message(reply, revert)
             }
 
-            fn add_agents(&self, creator_did: &str, agents: Vec<#crate_path::message::Participant>) -> #crate_path::didcomm::PlainMessage<#crate_path::message::AddAgents> {
+            fn add_agents(&self, creator_did: &str, agents: Vec<#crate_path::message::Agent>) -> #crate_path::didcomm::PlainMessage<#crate_path::message::AddAgents> {
                 let add_agents = #crate_path::message::AddAgents {
                     transaction_id: (#tx_id_access).to_string(),
                     agents,
@@ -1010,7 +1014,7 @@ fn impl_transaction_trait(
                 &self,
                 creator_did: &str,
                 original_agent: &str,
-                replacement: #crate_path::message::Participant,
+                replacement: #crate_path::message::Agent,
             ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::ReplaceAgent> {
                 let replace_agent = #crate_path::message::ReplaceAgent {
                     transaction_id: (#tx_id_access).to_string(),
@@ -1044,7 +1048,7 @@ fn impl_transaction_trait(
                 &self,
                 creator_did: &str,
                 party_type: &str,
-                party: #crate_path::message::Participant,
+                party: #crate_path::message::Party,
             ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::UpdateParty> {
                 let update_party = #crate_path::message::UpdateParty {
                     transaction_id: (#tx_id_access).to_string(),

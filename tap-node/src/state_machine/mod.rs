@@ -57,25 +57,21 @@ impl StandardTransactionProcessor {
             TapMessage::Transfer(transfer) => {
                 // Only add agents from the agents field, not the primary parties
                 for agent in &transfer.agents {
-                    if let Some(role) = &agent.role {
-                        let role_str = match role.as_str() {
-                            "compliance" => "compliance",
-                            _ => "other",
-                        };
-                        agents.push((agent.id.clone(), role_str.to_string()));
-                    }
+                    let role_str = match agent.role.as_str() {
+                        "compliance" => "compliance",
+                        _ => "other",
+                    };
+                    agents.push((agent.id.clone(), role_str.to_string()));
                 }
             }
             TapMessage::Payment(payment) => {
                 // Only add agents from the agents field, not the primary parties
                 for agent in &payment.agents {
-                    if let Some(role) = &agent.role {
-                        let role_str = match role.as_str() {
-                            "compliance" => "compliance",
-                            _ => "other",
-                        };
-                        agents.push((agent.id.clone(), role_str.to_string()));
-                    }
+                    let role_str = match agent.role.as_str() {
+                        "compliance" => "compliance",
+                        _ => "other",
+                    };
+                    agents.push((agent.id.clone(), role_str.to_string()));
                 }
             }
             _ => {
@@ -503,14 +499,10 @@ impl TransactionStateProcessor for StandardTransactionProcessor {
                 let transaction_id = &add.transaction_id;
 
                 for agent in &add.agents {
-                    let role_str = agent
-                        .role
-                        .as_ref()
-                        .map(|r| match r.as_str() {
-                            "compliance" => "compliance",
-                            _ => "other",
-                        })
-                        .unwrap_or("other");
+                    let role_str = match agent.role.as_str() {
+                        "compliance" => "compliance",
+                        _ => "other",
+                    };
 
                     if let Err(e) = self
                         .storage

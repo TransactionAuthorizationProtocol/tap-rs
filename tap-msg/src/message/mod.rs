@@ -13,7 +13,6 @@ pub mod context;
 pub mod did_presentation;
 pub mod error;
 pub mod invoice;
-pub mod participant;
 pub mod party;
 pub mod payment;
 pub mod policy;
@@ -59,10 +58,6 @@ pub use invoice::{
 
 // Re-export agent types
 pub use agent::Agent;
-
-
-// Re-export participant types (compatibility layer)
-pub use participant::Participant;
 
 // Re-export party types
 pub use party::Party;

@@ -5,7 +5,7 @@ use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::{Error, Result};
 use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
 use tap_msg::message::{
-    AddAgents, Authorize, ConfirmRelationship, Participant, RemoveAgent, ReplaceAgent, Transfer,
+    AddAgents, Agent, Authorize, ConfirmRelationship, Party, RemoveAgent, ReplaceAgent, Transfer,
 };
 // Removed unused import: Authorizable
 use uuid::Uuid;
@@ -23,20 +23,8 @@ fn test_create_reply() -> Result<()> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Participant {
-            id: _alice_did.to_string(),
-            role: Some("originator".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        },
-        beneficiary: Some(Participant {
-            id: _bob_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        }),
+        originator: Party::new(_alice_did),
+        beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
@@ -87,13 +75,7 @@ fn test_add_agents() -> Result<()> {
     // Create an AddAgents message to add Charlie
     let add_agents = AddAgents {
         transaction_id: transfer_id.to_string(),
-        agents: vec![Participant {
-            id: charlie_did.to_string(),
-            role: Some("observer".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        }],
+        agents: vec![Agent::new(charlie_did, "observer", charlie_did)],
     };
 
     // Validate the message
@@ -137,13 +119,7 @@ fn test_replace_agent() -> Result<()> {
     let replace_agent = ReplaceAgent {
         transaction_id: transfer_id.to_string(),
         original: _bob_did.to_string(),
-        replacement: Participant {
-            id: charlie_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        },
+        replacement: Agent::new(charlie_did, "beneficiary", charlie_did),
     };
 
     // Validate the message
@@ -262,8 +238,8 @@ fn test_confirm_relationship() -> Result<()> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Participant::new(_alice_did),
-        beneficiary: Some(Participant::new(_bob_did)),
+        originator: Party::new(_alice_did),
+        beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
@@ -357,13 +333,11 @@ fn test_get_all_participants() -> Result<()> {
 fn test_add_agents_missing_transfer_id() {
     // Test adding agents to a transfer that doesn't exist
     let _tx_id = "".to_string();
-    let agents = vec![Participant {
-        id: "did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL".to_string(),
-        role: Some("sender_agent".to_string()),
-        leiCode: None,
-        name: None,
-        policies: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL",
+        "sender_agent",
+        "did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL",
+    )];
 
     // Create an AddAgents message to add the agents
     let add_agents = AddAgents {

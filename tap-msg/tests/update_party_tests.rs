@@ -4,17 +4,16 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Participant, Transfer, UpdateParty};
+use tap_msg::message::{Agent, Party, Transfer, UpdateParty};
 
 #[test]
 fn test_update_party_creation() {
     // Create a transfer ID (simulating an existing transfer)
     let transaction_id = "12345-67890-abcdef";
 
-    // Create a participant that will be updated
-    let mut updated_participant =
-        Participant::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
-    updated_participant.role = Some("new_role".to_string());
+    // Create a party that will be updated
+    let updated_participant =
+        Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     // Create an UpdateParty message
     let update_party = UpdateParty {
@@ -28,7 +27,6 @@ fn test_update_party_creation() {
     assert_eq!(update_party.transaction_id, transaction_id);
     assert_eq!(update_party.party_type, "beneficiary");
     assert_eq!(update_party.party.id, updated_participant.id);
-    assert_eq!(update_party.party.role, updated_participant.role);
     assert_eq!(update_party.context, None);
 
     // Convert to DIDComm
@@ -48,12 +46,7 @@ fn test_update_party_validation() {
     let valid_update = UpdateParty {
         transaction_id: "transfer-123".to_string(),
         party_type: "beneficiary".to_string(),
-        party: {
-            let mut p =
-                Participant::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
-            p.role = Some("beneficiary".to_string());
-            p
-        },
+        party: Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
         context: None,
     };
 
@@ -77,7 +70,7 @@ fn test_update_party_validation() {
 
     // Test with empty party.id
     let invalid_party = UpdateParty {
-        party: Participant::new(""),
+        party: Party::new(""),
         ..valid_update.clone()
     };
 
@@ -90,12 +83,7 @@ fn test_update_party_didcomm_conversion() {
     let update_party = UpdateParty {
         transaction_id: "transfer-456".to_string(),
         party_type: "originator".to_string(),
-        party: {
-            let mut p =
-                Participant::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
-            p.role = Some("updated_role".to_string());
-            p
-        },
+        party: Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6"),
         context: None,
     };
 
@@ -118,7 +106,6 @@ fn test_update_party_didcomm_conversion() {
     assert_eq!(round_trip.transaction_id, update_party.transaction_id);
     assert_eq!(round_trip.party_type, update_party.party_type);
     assert_eq!(round_trip.party.id, update_party.party.id);
-    assert_eq!(round_trip.party.role, update_party.party.role);
     assert_eq!(round_trip.context, update_party.context);
 }
 
@@ -126,8 +113,8 @@ fn test_update_party_didcomm_conversion() {
 fn test_update_party_beneficiary() {
     let transaction_id = "transfer-456".to_string();
     let mut updated_participant =
-        Participant::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
-    updated_participant.leiCode = Some("UPDATEDLEICODE456".to_string());
+        Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
+    updated_participant = updated_participant.with_lei("UPDATEDLEICODE456");
 
     let update_party = UpdateParty {
         transaction_id: transaction_id.clone(),
@@ -141,7 +128,7 @@ fn test_update_party_beneficiary() {
     assert_eq!(update_party.party_type, "beneficiary");
     assert_eq!(update_party.party.id, updated_participant.id);
     assert_eq!(
-        update_party.party.leiCode,
+        update_party.party.lei_code(),
         Some("UPDATEDLEICODE456".to_string())
     );
     assert_eq!(update_party.context, None);
@@ -151,8 +138,8 @@ fn test_update_party_beneficiary() {
 fn test_update_party_intermediary() {
     let transaction_id = "transfer-789".to_string();
     let mut updated_participant =
-        Participant::new("did:key:z6Mkff4Y1wG9Bf7qY9LqfXQ3n8Yk5tW6RzX2n5k3f8j7sJg");
-    updated_participant.leiCode = Some("UPDATEDLEICODE789".to_string());
+        Party::new("did:key:z6Mkff4Y1wG9Bf7qY9LqfXQ3n8Yk5tW6RzX2n5k3f8j7sJg");
+    updated_participant = updated_participant.with_lei("UPDATEDLEICODE789");
 
     let update_party = UpdateParty {
         transaction_id: transaction_id.clone(),
@@ -166,7 +153,7 @@ fn test_update_party_intermediary() {
     assert_eq!(update_party.party_type, "intermediary");
     assert_eq!(update_party.party.id, updated_participant.id);
     assert_eq!(
-        update_party.party.leiCode,
+        update_party.party.lei_code(),
         Some("UPDATEDLEICODE789".to_string())
     );
     assert_eq!(update_party.context, None);
@@ -184,8 +171,8 @@ fn test_authorizable_with_update_party() {
 
     // Create a participant to update (e.g., the beneficiary)
     let mut updated_participant_1 =
-        Participant::new("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
-    updated_participant_1.leiCode = Some("5493008UI88NI01JAE46".to_string());
+        Party::new("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
+    updated_participant_1 = updated_participant_1.with_lei("5493008UI88NI01JAE46");
 
     // Create the first UpdateParty message manually, referencing the transfer message ID
     let update_party = UpdateParty {
@@ -201,8 +188,8 @@ fn test_authorizable_with_update_party() {
     // We can reuse the same transfer_message ID if it's for the same transfer
 
     let mut updated_participant_2 =
-        Participant::new("did:key:z6MkrPhff2T6RCEc3m4Q4v1nhfFbFf8aGKvFhXGf3g1jX8nN");
-    updated_participant_2.leiCode = Some("UPDATEDLEICODE123".to_string());
+        Party::new("did:key:z6MkrPhff2T6RCEc3m4Q4v1nhfFbFf8aGKvFhXGf3g1jX8nN");
+    updated_participant_2 = updated_participant_2.with_lei("UPDATEDLEICODE123");
 
     // Create the second UpdateParty message
     let update_party_from_message = UpdateParty {
@@ -216,8 +203,8 @@ fn test_authorizable_with_update_party() {
     assert_eq!(update_party_from_message.party_type, "originator");
     assert_eq!(update_party_from_message.party.id, updated_participant_2.id);
     assert_eq!(
-        update_party_from_message.party.leiCode,
-        updated_participant_2.leiCode
+        update_party_from_message.party.lei_code(),
+        updated_participant_2.lei_code()
     );
 }
 
@@ -226,15 +213,13 @@ fn create_test_transfer() -> Transfer {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let mut originator =
-        Participant::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-    originator.role = Some("originator".to_string());
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let mut beneficiary =
-        Participant::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
-    beneficiary.role = Some("beneficiary".to_string());
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant::new(
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
         "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
     )];
 

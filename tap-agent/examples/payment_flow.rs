@@ -18,7 +18,7 @@ use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle};
-use tap_msg::{Participant, Payment};
+use tap_msg::{Party, Payment};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -192,31 +192,13 @@ fn create_payment_message(
     settlement_address: &str,
     transaction_id: &str,
 ) -> Payment {
-    // Create merchant and customer participants
-    let merchant = Participant {
-        id: merchant_did.to_string(),
-        role: Some("merchant".to_string()),
-        name: None,
-        policies: None,
-        leiCode: None,
-    };
-
-    let customer = Participant {
-        id: customer_did.to_string(),
-        role: Some("customer".to_string()),
-        name: None,
-        policies: None,
-        leiCode: None,
-    };
+    // Create merchant and customer parties
+    let merchant = Party::new(merchant_did);
+    let customer = Party::new(customer_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        name: None,
-        policies: None,
-        leiCode: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", merchant_did);
 
     // Create a payment message
     Payment {

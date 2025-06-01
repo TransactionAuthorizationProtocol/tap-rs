@@ -2,7 +2,7 @@
 mod storage_tests {
     use serde_json::json;
     use tap_msg::didcomm::PlainMessage;
-    use tap_msg::message::{payment::Payment, transfer::Transfer, Participant};
+    use tap_msg::message::{payment::Payment, transfer::Transfer, Party};
     use tap_node::storage::{
         MessageDirection, Storage, StorageError, TransactionStatus, TransactionType,
     };
@@ -44,22 +44,22 @@ mod storage_tests {
 
     /// Helper to create a Transfer message
     fn create_transfer_message(id: &str) -> PlainMessage {
+        let mut originator = Party::new("did:example:originator");
+        originator.add_metadata(
+            "name".to_string(),
+            serde_json::Value::String("Alice".to_string()),
+        );
+
+        let mut beneficiary = Party::new("did:example:beneficiary");
+        beneficiary.add_metadata(
+            "name".to_string(),
+            serde_json::Value::String("Bob".to_string()),
+        );
+
         let transfer_body = Transfer {
             transaction_id: id.to_string(),
-            originator: Participant {
-                id: "did:example:originator".to_string(),
-                name: Some("Alice".to_string()),
-                role: Some("originator".to_string()),
-                policies: None,
-                leiCode: None,
-            },
-            beneficiary: Some(Participant {
-                id: "did:example:beneficiary".to_string(),
-                name: Some("Bob".to_string()),
-                role: Some("beneficiary".to_string()),
-                policies: None,
-                leiCode: None,
-            }),
+            originator,
+            beneficiary: Some(beneficiary),
             asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
                 .parse()
                 .unwrap(),
@@ -90,19 +90,21 @@ mod storage_tests {
             amount: "50.00".to_string(),
             currency_code: None,
             supported_assets: None,
-            customer: Some(Participant {
-                id: "did:example:customer".to_string(),
-                name: Some("Charlie".to_string()),
-                role: Some("customer".to_string()),
-                policies: None,
-                leiCode: None,
-            }),
-            merchant: Participant {
-                id: "did:example:merchant".to_string(),
-                name: Some("Dave's Shop".to_string()),
-                role: Some("merchant".to_string()),
-                policies: None,
-                leiCode: None,
+            customer: {
+                let mut customer = Party::new("did:example:customer");
+                customer.add_metadata(
+                    "name".to_string(),
+                    serde_json::Value::String("Charlie".to_string()),
+                );
+                Some(customer)
+            },
+            merchant: {
+                let mut merchant = Party::new("did:example:merchant");
+                merchant.add_metadata(
+                    "name".to_string(),
+                    serde_json::Value::String("Dave's Shop".to_string()),
+                );
+                merchant
             },
             memo: Some("Payment for goods".to_string()),
             invoice: None,

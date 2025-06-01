@@ -4,7 +4,8 @@
 //! party information in an existing transaction.
 
 use crate::error::{Error, Result};
-use crate::message::Participant;
+use crate::message::agent::TapParticipant;
+use crate::message::Party;
 use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 
@@ -22,22 +23,18 @@ use serde::{Deserialize, Serialize};
 /// # Example
 /// ```
 /// use tap_msg::message::update_party::UpdateParty;
-/// use tap_msg::message::Participant;
+/// use tap_msg::message::Party;
 /// use std::collections::HashMap;
 ///
-/// // Create a participant with updated information
-/// let updated_participant = Participant {
-///     id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-///     role: Some("new_role".to_string()),
-///     policies: None,
-///     leiCode: None, name: None,
-/// };
+/// // Create a party with updated information
+/// let updated_party = Party::new("did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx")
+///     .with_country("de");
 ///
 /// // Create an UpdateParty message
 /// let update_party = UpdateParty::new(
 ///     "transfer-123",
-///     "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
-///     updated_participant
+///     "originator",
+///     updated_party
 /// );
 ///
 /// ```
@@ -54,7 +51,7 @@ pub struct UpdateParty {
 
     /// Updated party information.
     #[tap(participant)]
-    pub party: Participant,
+    pub party: Party,
 
     /// Optional context for the update.
     #[serde(rename = "@context", skip_serializing_if = "Option::is_none")]
@@ -63,7 +60,7 @@ pub struct UpdateParty {
 
 impl UpdateParty {
     /// Creates a new UpdateParty message body.
-    pub fn new(transaction_id: &str, party_type: &str, party: Participant) -> Self {
+    pub fn new(transaction_id: &str, party_type: &str, party: Party) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             party_type: party_type.to_string(),
@@ -84,7 +81,7 @@ impl UpdateParty {
             return Err(Error::Validation("partyType cannot be empty".to_string()));
         }
 
-        if self.party.id.is_empty() {
+        if self.party.id().is_empty() {
             return Err(Error::Validation("party.id cannot be empty".to_string()));
         }
 

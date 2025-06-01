@@ -19,7 +19,7 @@ use tap_agent::error::{Error, Result};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Reject, Settle, Transfer};
-use tap_msg::Participant;
+use tap_msg::Party;
 
 fn main() -> Result<()> {
     tokio_test::block_on(async {
@@ -340,31 +340,13 @@ fn create_transfer_message(
         return Err(Error::Validation("Invalid DIDs provided".to_string()));
     }
 
-    // Create originator and beneficiary participants
-    let originator = Participant {
-        id: originator_did.to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let beneficiary = Participant {
-        id: beneficiary_did.to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new(originator_did);
+    let beneficiary = Party::new(beneficiary_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", originator_did);
 
     // Validate asset ID
     let asset = match AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f")

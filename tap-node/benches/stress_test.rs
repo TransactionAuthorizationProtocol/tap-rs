@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tap_agent::TapAgent;
 use tap_msg::message::TapMessageBody;
-use tap_msg::message::Transfer;
+use tap_msg::message::{Party, Transfer};
 use tap_msg::PlainMessage;
 use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
@@ -29,20 +29,8 @@ async fn create_test_message(
             "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
         )
         .unwrap(),
-        originator: tap_msg::Participant {
-            id: from_did.to_string(),
-            role: Some("originator".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        },
-        beneficiary: Some(tap_msg::Participant {
-            id: to_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        }),
+        originator: Party::new(from_did),
+        beneficiary: Some(Party::new(to_did)),
         amount: format!("{}.00", index),
         agents: vec![],
         settlement_id: None,

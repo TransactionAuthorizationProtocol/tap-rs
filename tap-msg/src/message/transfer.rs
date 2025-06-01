@@ -8,8 +8,9 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
+use crate::message::agent::TapParticipant;
 use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
-use crate::message::Participant;
+use crate::message::{Agent, Party};
 use crate::TapMessage;
 
 /// Transfer message body (TAIP-3).
@@ -27,12 +28,12 @@ pub struct Transfer {
     /// Originator information.
     #[serde(rename = "originator")]
     #[tap(participant)]
-    pub originator: Participant,
+    pub originator: Party,
 
     /// Beneficiary information (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tap(participant)]
-    pub beneficiary: Option<Participant>,
+    pub beneficiary: Option<Party>,
 
     /// Transfer amount.
     pub amount: String,
@@ -40,7 +41,7 @@ pub struct Transfer {
     /// Agents involved in the transfer.
     #[serde(default)]
     #[tap(participant_list)]
-    pub agents: Vec<Participant>,
+    pub agents: Vec<Agent>,
 
     /// Memo for the transfer (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -69,7 +70,7 @@ impl Transfer {
     ///
     /// # Example
     /// ```
-    /// use tap_msg::message::{Transfer, Participant, Party};
+    /// use tap_msg::message::{Transfer, Party};
     /// use tap_caip::{AssetId, ChainId};
     /// use std::collections::HashMap;
     ///
@@ -77,8 +78,8 @@ impl Transfer {
     /// let chain_id = ChainId::new("eip155", "1").unwrap();
     /// let asset = AssetId::new(chain_id, "erc20", "0x6b175474e89094c44da98b954eedeac495271d0f").unwrap();
     ///
-    /// // Create originator participant
-    /// let originator = Participant::from_party(Party::new("did:example:alice"));
+    /// // Create originator party
+    /// let originator = Party::new("did:example:alice");
     ///
     /// // Create a transfer with required fields
     /// let transfer = Transfer::builder()
@@ -101,13 +102,13 @@ impl Transfer {
 #[derive(Default)]
 pub struct TransferBuilder {
     asset: Option<AssetId>,
-    originator: Option<Participant>,
+    originator: Option<Party>,
     amount: Option<String>,
-    beneficiary: Option<Participant>,
+    beneficiary: Option<Party>,
     settlement_id: Option<String>,
     memo: Option<String>,
     transaction_id: Option<String>,
-    agents: Vec<Participant>,
+    agents: Vec<Agent>,
     metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -119,7 +120,7 @@ impl TransferBuilder {
     }
 
     /// Set the originator for this transfer
-    pub fn originator(mut self, originator: Participant) -> Self {
+    pub fn originator(mut self, originator: Party) -> Self {
         self.originator = Some(originator);
         self
     }
@@ -131,7 +132,7 @@ impl TransferBuilder {
     }
 
     /// Set the beneficiary for this transfer
-    pub fn beneficiary(mut self, beneficiary: Participant) -> Self {
+    pub fn beneficiary(mut self, beneficiary: Party) -> Self {
         self.beneficiary = Some(beneficiary);
         self
     }
@@ -155,13 +156,13 @@ impl TransferBuilder {
     }
 
     /// Add an agent to this transfer
-    pub fn add_agent(mut self, agent: Participant) -> Self {
+    pub fn add_agent(mut self, agent: Agent) -> Self {
         self.agents.push(agent);
         self
     }
 
     /// Set all agents for this transfer
-    pub fn agents(mut self, agents: Vec<Participant>) -> Self {
+    pub fn agents(mut self, agents: Vec<Agent>) -> Self {
         self.agents = agents;
         self
     }

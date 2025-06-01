@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::process;
 use tap_agent::{Agent, TapAgent};
-use tap_msg::message::{Participant, Transfer};
+use tap_msg::message::{Agent as TapMessageAgent, Party, Transfer};
 // No longer needed: use tap_node::DefaultAgentExt;
 use tracing::{debug, info};
 
@@ -185,55 +185,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create payment request message using the proper type
     info!("Creating payment request message");
 
-    // Create merchant and customer participants
-    let _merchant = Participant {
-        id: args.recipient_did.clone(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create merchant and customer parties
+    let _merchant = Party::new(&args.recipient_did);
+    let _customer = Party::new(&agent_did);
 
-    let _customer = Participant {
-        id: agent_did.clone(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create agents
+    let sender_agent = TapMessageAgent::new(&agent_did, "sender", &agent_did);
+    let recipient_agent =
+        TapMessageAgent::new(&args.recipient_did, "recipient", &args.recipient_did);
 
-    // Create agent participants
-    let sender_agent = Participant {
-        id: agent_did.clone(),
-        role: Some("sender".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let recipient_agent = Participant {
-        id: args.recipient_did.clone(),
-        role: Some("recipient".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    // Create a settlement agent participant (required by validation)
-    let settlement_agent = Participant {
-        id: format!(
-            "did:pkh:eip155:1:0x{}",
-            uuid::Uuid::new_v4()
-                .to_string()
-                .replace("-", "")
-                .get(0..40)
-                .unwrap_or("1234567890abcdef1234567890abcdef12345678")
-        ),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create a settlement agent (required by validation)
+    let settlement_agent_did = format!(
+        "did:pkh:eip155:1:0x{}",
+        uuid::Uuid::new_v4()
+            .to_string()
+            .replace("-", "")
+            .get(0..40)
+            .unwrap_or("1234567890abcdef1234567890abcdef12345678")
+    );
+    let settlement_agent =
+        TapMessageAgent::new(&settlement_agent_did, "settlementAddress", &agent_did);
 
     // Create a payment request using the proper struct and builder pattern
     let payment_request = tap_msg::message::payment::PaymentBuilder::default()
@@ -245,8 +216,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .amount(amount.to_string())
         .transaction_id(transaction_id.clone())
         .memo("Payment simulator payment request".to_string())
-        .merchant(sender_agent.clone())
-        .customer(recipient_agent.clone())
+        .merchant(_merchant.clone())
+        .customer(_customer.clone())
         .build();
 
     // Add currency code
@@ -264,22 +235,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Create transfer message using the proper type
     info!("Creating transfer message");
 
-    // Create originator and beneficiary participants
-    let originator = Participant {
-        id: agent_did.clone(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let beneficiary = Participant {
-        id: args.recipient_did.clone(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new(&agent_did);
+    let beneficiary = Party::new(&args.recipient_did);
 
     // Create a transfer using the proper struct
     let transfer = Transfer {
@@ -290,7 +248,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         originator,
         beneficiary: Some(beneficiary),
         amount: amount.to_string(),
-        agents: vec![sender_agent, recipient_agent, settlement_agent], // Include both DIDs plus settlement agent
+        agents: vec![sender_agent, recipient_agent, settlement_agent], // Include both agents plus settlement agent
         settlement_id: None,
         memo: Some("Payment simulator transfer".to_string()),
         connection_id: None,

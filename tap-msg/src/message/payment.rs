@@ -9,11 +9,10 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 
 use crate::error::{Error, Result};
+use crate::message::agent::TapParticipant;
 use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
-use crate::message::Participant;
+use crate::message::{Agent, Party};
 use crate::TapMessage;
-
-use super::{Agent, Party};
 
 /// Payment message body (TAIP-14).
 ///
@@ -331,7 +330,7 @@ impl Payment {
         }
 
         // Validate merchant
-        if self.merchant.id.is_empty() {
+        if self.merchant.id().is_empty() {
             return Err(Error::Validation("Merchant ID is required".to_string()));
         }
 

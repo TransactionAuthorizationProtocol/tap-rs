@@ -6,7 +6,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::Authorizable;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Participant, Reject, Settle, Transfer, UpdateParty};
+use tap_msg::message::{Agent, Party, Reject, Settle, Transfer, UpdateParty};
 
 #[test]
 fn test_transfer_authorizable() {
@@ -117,14 +117,9 @@ fn test_update_party_message() {
         .expect("Failed to convert transfer to DIDComm");
     let transfer_id = transfer_message.id.clone();
 
-    // Create a participant that will be updated
-    let updated_participant = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("new_role".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create a party that will be updated
+    let updated_participant =
+        Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     // Create an UpdateParty message
     let update_party = UpdateParty {
@@ -156,7 +151,6 @@ fn test_update_party_message() {
     assert_eq!(round_trip.transaction_id, transfer_id);
     assert_eq!(round_trip.party_type, "beneficiary");
     assert_eq!(round_trip.party.id, updated_participant.id);
-    assert_eq!(round_trip.party.role, updated_participant.role);
 
     // Test using update_party from manual creation
     let update_party_from_manual = UpdateParty {
@@ -173,29 +167,15 @@ fn create_test_transfer() -> Transfer {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-        name: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+    )];
 
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),

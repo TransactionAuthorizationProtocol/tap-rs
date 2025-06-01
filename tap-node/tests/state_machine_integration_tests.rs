@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tap_caip::{AssetId, ChainId};
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Participant, Payment, Transfer};
+use tap_msg::message::{Agent, Party, Payment, Transfer};
 use tap_node::agent::AgentRegistry;
 use tap_node::event::EventBus;
 use tap_node::message::{PlainMessageProcessor, StateMachineIntegrationProcessor};
@@ -23,15 +23,14 @@ fn test_agent_did(name: &str) -> String {
     format!("did:test:{}", name)
 }
 
-/// Helper to create a test participant
-fn test_participant(name: &str, role: Option<&str>) -> Participant {
-    Participant {
-        id: test_agent_did(name),
-        role: role.map(|r| r.to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    }
+/// Helper to create a test party
+fn test_party(name: &str) -> Party {
+    Party::new(&test_agent_did(name))
+}
+
+/// Helper to create a test agent
+fn test_agent(name: &str, role: &str, for_party: &str) -> Agent {
+    Agent::new(&test_agent_did(name), role, &test_agent_did(for_party))
 }
 
 /// Helper to create a test asset
@@ -64,10 +63,10 @@ async fn test_complete_state_machine_integration() {
     let integration_processor =
         StateMachineIntegrationProcessor::new().with_state_processor(state_processor.clone());
 
-    // Create a Transfer message with agents
-    let originator = test_participant("alice", Some("originator"));
-    let beneficiary = test_participant("bob", Some("beneficiary"));
-    let compliance_agent = test_participant("compliance1", Some("compliance"));
+    // Create a Transfer message with parties and agents
+    let originator = test_party("alice");
+    let beneficiary = test_party("bob");
+    let compliance_agent = test_agent("compliance1", "compliance", "alice");
 
     let transfer = Transfer {
         asset: test_asset(),
@@ -130,9 +129,9 @@ async fn test_automatic_authorization() {
     ));
 
     // Create a Payment message
-    let customer = test_participant("customer1", Some("customer"));
-    let merchant = test_participant("merchant1", Some("merchant"));
-    let compliance_agent = test_participant("compliance1", Some("compliance"));
+    let customer = test_party("customer1");
+    let merchant = test_party("merchant1");
+    let compliance_agent = test_agent("compliance1", "compliance", "customer1");
 
     let payment = Payment {
         asset: Some(test_asset()),
@@ -211,10 +210,10 @@ async fn test_processing_pipeline_order() {
     // Create a valid Transfer message
     let transfer = Transfer {
         asset: test_asset(),
-        originator: test_participant("alice", Some("originator")),
-        beneficiary: Some(test_participant("bob", Some("beneficiary"))),
+        originator: test_party("alice"),
+        beneficiary: Some(test_party("bob")),
         amount: "100.0".to_string(),
-        agents: vec![test_participant("compliance1", Some("compliance"))],
+        agents: vec![test_agent("compliance1", "compliance", "alice")],
         memo: None,
         settlement_id: None,
         transaction_id: "test-pipeline-001".to_string(),

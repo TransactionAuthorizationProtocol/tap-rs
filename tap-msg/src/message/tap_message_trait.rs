@@ -7,7 +7,7 @@ use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
 use crate::message::{
-    AddAgents, Authorize, Cancel, ConfirmRelationship, Participant, Reject, RemoveAgent,
+    AddAgents, Agent, Authorize, Cancel, ConfirmRelationship, Party, Reject, RemoveAgent,
     ReplaceAgent, Revert, Settle, UpdateParty, UpdatePolicies,
 };
 use chrono::Utc;
@@ -560,19 +560,19 @@ pub trait Transaction: TapMessage {
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this addition
     /// * `agents` - List of agents to add
-    fn add_agents(&self, creator_did: &str, agents: Vec<Participant>) -> PlainMessage<AddAgents>;
+    fn add_agents(&self, creator_did: &str, agents: Vec<Agent>) -> PlainMessage<AddAgents>;
 
     /// Create a ReplaceAgent message for this object (TAIP-5).
     ///
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this replacement
     /// * `original_agent` - The agent DID to replace
-    /// * `replacement` - The replacement agent participant
+    /// * `replacement` - The replacement agent
     fn replace_agent(
         &self,
         creator_did: &str,
         original_agent: &str,
-        replacement: Participant,
+        replacement: Agent,
     ) -> PlainMessage<ReplaceAgent>;
 
     /// Create a RemoveAgent message for this object (TAIP-5).
@@ -592,7 +592,7 @@ pub trait Transaction: TapMessage {
         &self,
         creator_did: &str,
         party_type: &str,
-        party: Participant,
+        party: Party,
     ) -> PlainMessage<UpdateParty>;
 
     /// Create an UpdatePolicies message for this object (TAIP-7).

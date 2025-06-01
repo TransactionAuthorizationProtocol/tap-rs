@@ -804,6 +804,7 @@ mod tests {
     use crate::key_manager::KeyManager;
     use std::sync::Arc;
     use tap_msg::didcomm::PlainMessage;
+    use tap_msg::message::agent::TapParticipant;
 
     #[tokio::test]
     async fn test_plain_message_pack_unpack() {
@@ -1050,8 +1051,7 @@ mod tests {
                     "reference": "60"
                 },
                 "originator": {
-                    "id": key.did.clone(),
-                    "name": "Test Originator"
+                    "@id": key.did.clone()
                 },
                 "amount": "100",
                 "agents": [],
@@ -1091,7 +1091,7 @@ mod tests {
         match unpacked.tap_message.unwrap() {
             TapMessage::Transfer(transfer) => {
                 assert_eq!(transfer.amount, "100");
-                assert_eq!(transfer.originator.id, key.did);
+                assert_eq!(transfer.originator.id(), key.did);
             }
             _ => panic!("Expected Transfer message"),
         }

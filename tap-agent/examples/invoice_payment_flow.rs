@@ -18,7 +18,7 @@ use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle};
-use tap_msg::{Invoice, LineItem, Participant, Payment, TaxCategory, TaxSubtotal, TaxTotal};
+use tap_msg::{Invoice, LineItem, Party, Payment, TaxCategory, TaxSubtotal, TaxTotal};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -246,31 +246,13 @@ fn create_payment_message_with_invoice(
     invoice_id: &str,
     transaction_id: &str,
 ) -> Payment {
-    // Create merchant and customer participants
-    let merchant = Participant {
-        id: merchant_did.to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let customer = Participant {
-        id: customer_did.to_string(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create merchant and customer parties
+    let merchant = Party::new(merchant_did);
+    let customer = Party::new(customer_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", merchant_did);
 
     // Create line items for the invoice
     let line_items = vec![

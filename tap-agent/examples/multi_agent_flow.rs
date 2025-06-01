@@ -20,7 +20,7 @@ use tap_agent::error::Result;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{AddAgents, Authorize, Reject, Settle, Transfer};
-use tap_msg::Participant;
+use tap_msg::{Agent as TapAgent_, Party};
 
 fn main() -> Result<()> {
     tokio_test::block_on(async {
@@ -110,52 +110,20 @@ fn main() -> Result<()> {
         let transfer = Transfer {
             transaction_id: uuid::Uuid::new_v4().to_string(),
             asset,
-            originator: Participant {
-                id: originator_party.to_string(),
-                role: Some("originator".to_string()),
-                policies: None,
-                leiCode: None,
-                name: None,
-            },
-            beneficiary: Some(Participant {
-                id: beneficiary_party.to_string(),
-                role: Some("beneficiary".to_string()),
-                policies: None,
-                leiCode: None,
-                name: None,
-            }),
+            originator: Party::new(originator_party),
+            beneficiary: Some(Party::new(beneficiary_party)),
             amount: "100.0".to_string(),
             agents: vec![
                 // Originator agents
-                Participant {
-                    id: originator_vasp_did.clone(),
-                    role: Some("originatorVASP".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
-                Participant {
-                    id: originator_wallet_did.clone(),
-                    role: Some("originatorWallet".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
-                Participant {
-                    id: originator_wallet_api_did.clone(),
-                    role: Some("originatorWalletAPI".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
+                TapAgent_::new(&originator_vasp_did, "originatorVASP", originator_party),
+                TapAgent_::new(&originator_wallet_did, "originatorWallet", originator_party),
+                TapAgent_::new(
+                    &originator_wallet_api_did,
+                    "originatorWalletAPI",
+                    originator_party,
+                ),
                 // Beneficiary agent
-                Participant {
-                    id: beneficiary_vasp_did.clone(),
-                    role: Some("beneficiaryVASP".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
+                TapAgent_::new(&beneficiary_vasp_did, "beneficiaryVASP", beneficiary_party),
             ],
             settlement_id: None,
             memo: Some("Multi-agent transfer example with dynamic agent addition".to_string()),
@@ -214,20 +182,16 @@ fn main() -> Result<()> {
         let add_agents = AddAgents {
             transaction_id: transfer_id.to_string(),
             agents: vec![
-                Participant {
-                    id: beneficiary_wallet_did.clone(),
-                    role: Some("beneficiaryWallet".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
-                Participant {
-                    id: beneficiary_wallet_api_did.clone(),
-                    role: Some("beneficiaryWalletAPI".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
+                TapAgent_::new(
+                    &beneficiary_wallet_did,
+                    "beneficiaryWallet",
+                    beneficiary_party,
+                ),
+                TapAgent_::new(
+                    &beneficiary_wallet_api_did,
+                    "beneficiaryWalletAPI",
+                    beneficiary_party,
+                ),
             ],
         };
 
@@ -257,15 +221,9 @@ fn main() -> Result<()> {
         println!(
             "  Added agents: {} ({}), {} ({})\n",
             received_add_agents.agents[0].id,
-            received_add_agents.agents[0]
-                .role
-                .as_ref()
-                .unwrap_or(&"unknown".to_string()),
+            received_add_agents.agents[0].role,
             received_add_agents.agents[1].id,
-            received_add_agents.agents[1]
-                .role
-                .as_ref()
-                .unwrap_or(&"unknown".to_string())
+            received_add_agents.agents[1].role
         );
 
         // Step 7: Initial rejection by beneficiary VASP for compliance
