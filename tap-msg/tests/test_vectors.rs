@@ -102,6 +102,7 @@ struct TestVectorParty {
     #[serde(rename = "@id")]
     id: String,
     #[serde(default)]
+    #[allow(dead_code)] // Part of test vector definition
     role: Option<String>,
     #[serde(rename = "leiCode", default)]
     #[allow(dead_code)] // Part of test vector definition
