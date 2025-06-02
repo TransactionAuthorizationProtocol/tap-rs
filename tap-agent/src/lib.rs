@@ -110,18 +110,6 @@ pub mod test_utils;
 /// Message verification utilities
 pub mod verification;
 
-/// A trait for types that can be serialized to JSON in an type-erased way
-pub trait ErasedSerialize {
-    /// Serialize to JSON string
-    fn to_json(&self) -> std::result::Result<String, serde_json::Error>;
-}
-
-impl<T: serde::Serialize> ErasedSerialize for T {
-    fn to_json(&self) -> std::result::Result<String, serde_json::Error> {
-        serde_json::to_string(self)
-    }
-}
-
 // Re-export key types for convenience
 pub use agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
 pub use config::AgentConfig;
