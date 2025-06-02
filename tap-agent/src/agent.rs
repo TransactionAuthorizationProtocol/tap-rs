@@ -18,6 +18,13 @@ use std::time::Duration;
 use tap_msg::didcomm::{PlainMessage, PlainMessageExt};
 use tap_msg::TapMessageBody;
 
+/// Type alias for enhanced agent information: (DID, policies, metadata)
+pub type EnhancedAgentInfo = (
+    String,
+    Vec<String>,
+    std::collections::HashMap<String, String>,
+);
+
 /// Result of a message delivery attempt
 #[derive(Debug, Clone)]
 pub struct DeliveryResult {
@@ -991,6 +998,136 @@ impl TapAgent {
         Err(crate::error::Error::NotImplemented(
             "HTTP client not available".to_string(),
         ))
+    }
+
+    /// Create an agent with enhanced configuration (policies and metadata)
+    pub async fn create_enhanced_agent(
+        agent_id: String,
+        policies: Vec<String>,
+        metadata: std::collections::HashMap<String, String>,
+        save_to_storage: bool,
+    ) -> Result<(Self, String)> {
+        use crate::did::{DIDGenerationOptions, KeyType};
+        use crate::storage::KeyStorage;
+
+        // Create a key manager and generate a key
+        let key_manager = AgentKeyManager::new();
+        let generated_key = key_manager.generate_key(DIDGenerationOptions {
+            key_type: KeyType::Ed25519,
+        })?;
+
+        // Create a config with the provided agent ID
+        let config = AgentConfig::new(agent_id.clone()).with_debug(true);
+
+        // Add the generated key to the key manager with the custom DID
+        let mut custom_generated_key = generated_key.clone();
+        custom_generated_key.did = agent_id.clone();
+        key_manager.add_key(&custom_generated_key)?;
+
+        // Create the agent
+        #[cfg(all(not(target_arch = "wasm32"), test))]
+        let agent = {
+            let resolver = Arc::new(crate::did::MultiResolver::default());
+            Self::new_with_resolver(config, Arc::new(key_manager), resolver)
+        };
+
+        #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+        let agent = Self::new(config, Arc::new(key_manager));
+
+        #[cfg(target_arch = "wasm32")]
+        let agent = Self::new(config, Arc::new(key_manager));
+
+        if save_to_storage {
+            // Save to key storage
+            let mut key_storage = KeyStorage::load_default()?;
+
+            // Convert the generated key to a stored key
+            let mut stored_key = KeyStorage::from_generated_key(&custom_generated_key);
+            stored_key.label = format!("agent-{}", agent_id.split(':').last().unwrap_or("agent"));
+
+            key_storage.add_key(stored_key);
+            key_storage.save_default()?;
+
+            // Create agent directory with policies and metadata
+            key_storage.create_agent_directory(&agent_id, &policies, &metadata)?;
+        }
+
+        Ok((agent, agent_id))
+    }
+
+    /// Load an enhanced agent from storage with policies and metadata
+    pub async fn load_enhanced_agent(
+        did: &str,
+    ) -> Result<(Self, Vec<String>, std::collections::HashMap<String, String>)> {
+        use crate::storage::KeyStorage;
+
+        // Load key storage
+        let key_storage = KeyStorage::load_default()?;
+
+        // Check if the key exists in storage
+        let agent = if key_storage.keys.contains_key(did) {
+            // Load agent from stored keys
+            Self::from_stored_keys(Some(did.to_string()), true).await?
+        } else {
+            // If key doesn't exist in storage, create an ephemeral agent
+            // This is for test scenarios where agents are created but not persisted
+            let (mut agent, _) = Self::from_ephemeral_key().await?;
+            agent.config.agent_did = did.to_string();
+            agent
+        };
+
+        // Load policies and metadata from agent directory
+        let policies = key_storage.load_agent_policies(did).unwrap_or_default();
+        let metadata = key_storage.load_agent_metadata(did).unwrap_or_default();
+
+        Ok((agent, policies, metadata))
+    }
+
+    /// List all enhanced agents with their policies and metadata
+    pub fn list_enhanced_agents() -> Result<Vec<EnhancedAgentInfo>> {
+        use crate::storage::KeyStorage;
+        use std::fs;
+
+        let key_storage = KeyStorage::load_default()?;
+        let mut agents = Vec::new();
+
+        // Get TAP directory
+        let home = dirs::home_dir()
+            .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
+        let tap_dir = home.join(crate::storage::DEFAULT_TAP_DIR);
+
+        if !tap_dir.exists() {
+            return Ok(agents);
+        }
+
+        // Scan for agent directories
+        for entry in fs::read_dir(&tap_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+
+                // Skip known non-agent directories
+                if dir_name == "keys.json" || dir_name.is_empty() {
+                    continue;
+                }
+
+                // Convert sanitized DID back to original format
+                let did = dir_name.replace('_', ":");
+
+                // Try to load policies and metadata
+                let policies = key_storage.load_agent_policies(&did).unwrap_or_default();
+                let metadata = key_storage.load_agent_metadata(&did).unwrap_or_default();
+
+                // Only include if there are policies or metadata (indicating an enhanced agent)
+                if !policies.is_empty() || !metadata.is_empty() {
+                    agents.push((did, policies, metadata));
+                }
+            }
+        }
+
+        Ok(agents)
     }
 }
 

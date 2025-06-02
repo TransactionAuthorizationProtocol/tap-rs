@@ -147,7 +147,7 @@ pub use did::MultiResolver;
 
 // Native-only re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub use agent::{Agent, DeliveryResult, TapAgent};
+pub use agent::{Agent, DeliveryResult, EnhancedAgentInfo, TapAgent};
 #[cfg(not(target_arch = "wasm32"))]
 pub use did::{DIDMethodResolver, SyncDIDResolver};
 #[cfg(not(target_arch = "wasm32"))]

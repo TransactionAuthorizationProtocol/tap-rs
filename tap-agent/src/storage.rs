@@ -307,6 +307,87 @@ impl KeyStorage {
             },
         }
     }
+    /// Create agent directory and save policies/metadata files
+    pub fn create_agent_directory(
+        &self,
+        did: &str,
+        policies: &[String],
+        metadata: &HashMap<String, String>,
+    ) -> Result<()> {
+        let sanitized_did = sanitize_did(did);
+        let agent_dir = self.get_agent_directory(&sanitized_did)?;
+
+        // Create the agent directory
+        fs::create_dir_all(&agent_dir).map_err(|e| {
+            Error::Storage(format!(
+                "Failed to create agent directory {}: {}",
+                agent_dir.display(),
+                e
+            ))
+        })?;
+
+        // Save policies.json
+        let policies_file = agent_dir.join("policies.json");
+        let policies_json = serde_json::to_string_pretty(policies)
+            .map_err(|e| Error::Storage(format!("Failed to serialize policies: {}", e)))?;
+        fs::write(&policies_file, policies_json)
+            .map_err(|e| Error::Storage(format!("Failed to write policies file: {}", e)))?;
+
+        // Save metadata.json
+        let metadata_file = agent_dir.join("metadata.json");
+        let metadata_json = serde_json::to_string_pretty(metadata)
+            .map_err(|e| Error::Storage(format!("Failed to serialize metadata: {}", e)))?;
+        fs::write(&metadata_file, metadata_json)
+            .map_err(|e| Error::Storage(format!("Failed to write metadata file: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Load policies from agent directory
+    pub fn load_agent_policies(&self, did: &str) -> Result<Vec<String>> {
+        let sanitized_did = sanitize_did(did);
+        let agent_dir = self.get_agent_directory(&sanitized_did)?;
+        let policies_file = agent_dir.join("policies.json");
+
+        if !policies_file.exists() {
+            return Ok(vec![]);
+        }
+
+        let content = fs::read_to_string(&policies_file)
+            .map_err(|e| Error::Storage(format!("Failed to read policies file: {}", e)))?;
+
+        serde_json::from_str(&content)
+            .map_err(|e| Error::Storage(format!("Failed to parse policies file: {}", e)))
+    }
+
+    /// Load metadata from agent directory
+    pub fn load_agent_metadata(&self, did: &str) -> Result<HashMap<String, String>> {
+        let sanitized_did = sanitize_did(did);
+        let agent_dir = self.get_agent_directory(&sanitized_did)?;
+        let metadata_file = agent_dir.join("metadata.json");
+
+        if !metadata_file.exists() {
+            return Ok(HashMap::new());
+        }
+
+        let content = fs::read_to_string(&metadata_file)
+            .map_err(|e| Error::Storage(format!("Failed to read metadata file: {}", e)))?;
+
+        serde_json::from_str(&content)
+            .map_err(|e| Error::Storage(format!("Failed to parse metadata file: {}", e)))
+    }
+
+    /// Get the agent directory path for a given DID
+    fn get_agent_directory(&self, sanitized_did: &str) -> Result<PathBuf> {
+        let home = home_dir()
+            .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
+        Ok(home.join(DEFAULT_TAP_DIR).join(sanitized_did))
+    }
+}
+
+/// Sanitize a DID for use as a directory name (same as TAP Node)
+fn sanitize_did(did: &str) -> String {
+    did.replace(':', "_")
 }
 
 /// Generate a JWK for a stored key

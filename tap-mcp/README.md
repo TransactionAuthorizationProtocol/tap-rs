@@ -358,21 +358,138 @@ echo '{
 
 ### Claude Desktop
 
-Add to your Claude Desktop configuration:
+To configure Claude Desktop to use TAP-MCP, you need to add the server configuration to your Claude Desktop settings. The configuration file location depends on your operating system:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
+**Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+#### Option 1: Using the built binary (recommended for production)
+
+First, build and install TAP-MCP:
+
+```bash
+cd /path/to/tap-rs/tap-mcp
+cargo build --release
+sudo cp target/release/tap-mcp /usr/local/bin/
+```
+
+Then add this configuration to your Claude Desktop config file:
+
+```json
+{
+  "mcpServers": {
+    "tap": {
+      "command": "tap-mcp",
+      "args": ["--agent-did", "did:web:your-domain.com"],
+      "env": {
+        "TAP_ROOT": "/your/tap/directory",
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
+```
+
+#### Option 2: Using cargo run (for development)
+
+Add this configuration to your Claude Desktop config file:
 
 ```json
 {
   "mcpServers": {
     "tap": {
       "command": "cargo",
-      "args": ["run", "--manifest-path", "/path/to/tap-rs/tap-mcp/Cargo.toml", "--"],
+      "args": [
+        "run", 
+        "--manifest-path", 
+        "/path/to/tap-rs/tap-mcp/Cargo.toml", 
+        "--",
+        "--agent-did",
+        "did:web:your-domain.com"
+      ],
       "env": {
-        "TAP_ROOT": "/your/tap/directory"
+        "TAP_ROOT": "/your/tap/directory",
+        "RUST_LOG": "info"
       }
     }
   }
 }
 ```
+
+#### Configuration Options
+
+- `--agent-did`: (Optional) Specify an agent DID for organized storage. Creates database at `~/.tap/{sanitized-did}/`
+- `--tap-root`: (Optional) Custom TAP root directory (default: `~/.tap`)
+- `--debug`: Enable debug logging
+- `TAP_ROOT`: Environment variable alternative to `--tap-root`
+- `RUST_LOG`: Control log level (debug, info, warn, error)
+
+#### Complete Example Configuration
+
+```json
+{
+  "mcpServers": {
+    "tap-production": {
+      "command": "tap-mcp",
+      "args": [
+        "--agent-did", "did:web:mycompany.com:agents:settlement",
+        "--tap-root", "/home/user/.tap-production"
+      ],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    },
+    "tap-development": {
+      "command": "cargo",
+      "args": [
+        "run",
+        "--manifest-path", "/home/user/code/tap-rs/tap-mcp/Cargo.toml",
+        "--",
+        "--debug",
+        "--agent-did", "did:web:localhost:8080:dev-agent"
+      ],
+      "env": {
+        "TAP_ROOT": "/tmp/tap-dev",
+        "RUST_LOG": "debug"
+      }
+    }
+  }
+}
+```
+
+#### Verifying the Configuration
+
+After updating your Claude Desktop configuration:
+
+1. **Restart Claude Desktop** for the changes to take effect
+2. **Check the Claude Desktop logs** (usually in the app's menu under "View" → "Developer" → "Developer Tools")
+3. **Test the connection** by asking Claude: "List the available TAP tools"
+
+You should see tools like `tap.create_agent`, `tap.create_transfer`, `tap.authorize`, etc.
+
+#### Troubleshooting Claude Desktop Integration
+
+If TAP-MCP doesn't appear in Claude Desktop:
+
+1. **Check the config file syntax** - ensure valid JSON formatting
+2. **Verify file paths** - make sure the `command` and `manifest-path` are correct
+3. **Check permissions** - ensure Claude Desktop can execute the command
+4. **Review logs** - check Claude Desktop's developer console for error messages
+5. **Test manually** - try running the exact command from terminal first:
+
+```bash
+# Test the command manually
+cargo run --manifest-path /path/to/tap-rs/tap-mcp/Cargo.toml -- --help
+
+# Or if using the binary
+tap-mcp --help
+```
+
+Once configured, you can interact with TAP through Claude Desktop by asking questions like:
+- "Create a new TAP agent for settlement services"
+- "Show me recent TAP transactions"
+- "Help me authorize a transfer transaction"
 
 ### Python MCP Client
 
