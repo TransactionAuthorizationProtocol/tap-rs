@@ -5,12 +5,23 @@ use crate::error::Result;
 use crate::message::{
     policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl},
     tap_message_trait::{Authorizable, TapMessageBody, Transaction},
-    Authorize, Participant, Transfer, UpdatePolicies,
+    Agent, Authorize, Party, Transfer, UpdatePolicies,
 };
 
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+
+/// Demo participant struct for examples
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Participant {
+    pub id: String,
+    pub role: Option<String>,
+    pub policies: Option<Vec<Policy>>,
+    #[serde(rename = "leiCode")]
+    pub leiCode: Option<String>,
+    pub name: Option<String>,
+}
 
 /// This example demonstrates how to create a participant with policies
 pub fn create_participant_with_policies_example() -> Result<Participant> {
@@ -212,46 +223,21 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
     let receiver_vasp_did = "did:example:receiver_vasp";
 
     // Step 1: Create a transfer message to initiate the workflow
-    let transfer = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
-        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
-            .unwrap(),
-        originator: Participant {
-            id: originator_did.to_string(),
-            role: Some("originator".to_string()),
-            leiCode: None,
-            name: None,
-            policies: None,
-        },
-        beneficiary: Some(Participant {
-            id: beneficiary_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            leiCode: None,
-            name: None,
-            policies: None,
-        }),
-        amount: "100.00".to_string(),
-        memo: None,
-        agents: vec![
-            Participant {
-                id: sender_vasp_did.to_string(),
-                role: Some("sender_vasp".to_string()),
-                leiCode: None,
-                name: None,
-                policies: None,
-            },
-            Participant {
-                id: receiver_vasp_did.to_string(),
-                role: Some("receiver_vasp".to_string()),
-                leiCode: None,
-                name: None,
-                policies: None,
-            },
-        ],
-        settlement_id: None,
-        connection_id: None,
-        metadata: HashMap::new(),
-    };
+    let originator = Party::new(originator_did);
+    let beneficiary = Party::new(beneficiary_did);
+    
+    let sender_agent = Agent::new(sender_vasp_did, "sender_vasp", originator_did);
+    let receiver_agent = Agent::new(receiver_vasp_did, "receiver_vasp", beneficiary_did);
+    
+    let transfer = Transfer::builder()
+        .asset(AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap())
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .amount("100.00".to_string())
+        .add_agent(sender_agent)
+        .add_agent(receiver_agent)
+        .transaction_id(uuid::Uuid::new_v4().to_string())
+        .build();
 
     // Convert the transfer to a DIDComm message
     let transfer_message = transfer.to_didcomm_with_route(

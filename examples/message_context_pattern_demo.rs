@@ -8,9 +8,20 @@ use tap_msg::{
     didcomm::PlainMessage,
     error::Result,
     impl_message_context, impl_tap_message,
-    message::{MessageContext, Participant, TapMessageBody, TransactionContext},
+    message::{MessageContext, TapMessageBody, TransactionContext},
 };
 use serde::{Deserialize, Serialize};
+
+/// Demo participant struct for examples
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Participant {
+    pub id: String,
+    pub role: Option<String>,
+    pub policies: Option<Vec<String>>,
+    #[serde(rename = "leiCode")]
+    pub leiCode: Option<String>,
+    pub name: Option<String>,
+}
 
 /// Example Transfer message using the new MessageContext pattern
 #[derive(Debug, Clone, Serialize, Deserialize)]

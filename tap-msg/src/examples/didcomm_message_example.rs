@@ -3,7 +3,7 @@
 use crate::didcomm::{Attachment, AttachmentData, JsonAttachmentData, PlainMessage};
 use crate::error::Result;
 use crate::message::{
-    Authorize, DIDCommPresentation, Participant, Reject, Settle, TapMessageBody, Transfer,
+    Authorize, DIDCommPresentation, Party, Reject, Settle, TapMessageBody, Transfer,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -12,36 +12,19 @@ use tap_caip::AssetId;
 
 /// Example function to create a Transfer message using the new approach.
 pub fn create_transfer_message_example() -> Result<PlainMessage> {
-    // Create originator and beneficiary participants
-    let originator = Participant {
-        id: "did:example:alice".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new("did:example:alice");
 
-    let beneficiary = Participant {
-        id: "did:example:bob".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:example:bob");
 
-    // Create a transfer body
-    let transfer_body = Transfer {
-        asset: AssetId::from_str("eip155:1/erc20:0x123456789abcdef").unwrap(),
-        originator,
-        beneficiary: Some(beneficiary),
-        amount: "10.00".to_string(),
-        memo: None,
-        agents: vec![],
-        settlement_id: None,
-        transaction_id: uuid::Uuid::new_v4().to_string(),
-        connection_id: None,
-        metadata: HashMap::new(),
-    };
+    // Create a transfer body using the builder pattern
+    let transfer_body = Transfer::builder()
+        .asset(AssetId::from_str("eip155:1/erc20:0x123456789abcdef").unwrap())
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .amount("10.00".to_string())
+        .transaction_id(uuid::Uuid::new_v4().to_string())
+        .build();
 
     // Convert the Transfer body to a DIDComm message
     let message =

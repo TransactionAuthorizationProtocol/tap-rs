@@ -5,10 +5,21 @@
 
 use crate::didcomm::PlainMessage;
 use crate::error::Result;
-use crate::message::{MessageContext, Participant, TapMessageBody, TransactionContext};
+use crate::message::{MessageContext, TapMessageBody, TransactionContext};
 use crate::TapMessage;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+/// Demo participant struct for examples
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Participant {
+    pub id: String,
+    pub role: Option<String>,
+    pub policies: Option<Vec<String>>,
+    #[serde(rename = "leiCode")]
+    pub leiCode: Option<String>,
+    pub name: Option<String>,
+}
 
 /// Example transfer message using the new MessageContext pattern
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]

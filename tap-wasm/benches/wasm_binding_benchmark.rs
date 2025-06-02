@@ -6,45 +6,29 @@
 //! Run with: cargo bench --bench wasm_binding_benchmark
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::{Authorize, Participant, Reject, TapMessageBody, Transfer};
+use tap_msg::message::{Authorize, Party, Reject, TapMessageBody, Transfer};
 use tap_msg::PlainMessage;
 
 /// Create a test transfer message body
 fn create_transfer_body() -> Transfer {
-    // Create originator and beneficiary agents
-    let originator = Participant {
-        id: "did:example:alice".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new("did:example:alice");
 
-    let beneficiary = Participant {
-        id: "did:example:bob".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:example:bob");
 
-    // Create a transfer body
-    Transfer {
-        asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f")
-            .unwrap(),
-        originator,
-        beneficiary: Some(beneficiary),
-        amount: "10.00".to_string(),
-        agents: vec![],
-        settlement_id: None,
-        memo: Some("Payment for services".to_string()),
-        metadata: HashMap::new(),
-        transaction_id: "test-transfer-id".to_string(),
-        connection_id: None,
-    }
+    // Create a transfer body using the builder pattern
+    Transfer::builder()
+        .asset(
+            AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+        )
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .amount("100.0".to_string())
+        .memo("Benchmark test transfer".to_string())
+        .transaction_id("benchmark-transfer-id".to_string())
+        .build()
 }
 
 /// Create a message for testing

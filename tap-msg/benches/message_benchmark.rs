@@ -6,10 +6,10 @@
 //! Run with: cargo bench --bench message_benchmark
 
 use criterion::{criterion_group, criterion_main, Criterion};
-use std::collections::HashMap;
+
 use tap_caip::AssetId;
 use tap_msg::didcomm::PlainMessage;
-use tap_msg::message::{Authorize, Participant, Reject, Settle, TapMessageBody, Transfer};
+use tap_msg::message::{Authorize, Party, Reject, Settle, TapMessageBody, Transfer};
 
 // Configure bench
 criterion_group!(
@@ -22,22 +22,10 @@ criterion_main!(benches);
 
 /// Create a test Transfer message body
 fn create_transfer_body() -> Transfer {
-    // Create participant information
-    let originator = Participant {
-        id: "did:example:alice".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create party information
+    let originator = Party::new("did:example:alice");
 
-    let beneficiary = Participant {
-        id: "did:example:bob".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:example:bob");
 
     // Create asset ID properly - using a valid Ethereum address format
     let asset = AssetId::new(
@@ -47,19 +35,14 @@ fn create_transfer_body() -> Transfer {
     )
     .unwrap();
 
-    // Return the transfer body
-    Transfer {
-        asset,
-        originator,
-        beneficiary: Some(beneficiary),
-        amount: "10.00".to_string(),
-        agents: vec![],
-        settlement_id: None,
-        metadata: HashMap::new(),
-        memo: None,
-        transaction_id: "test-transfer-id".to_string(),
-        connection_id: None,
-    }
+    // Return the transfer body using the builder pattern
+    Transfer::builder()
+        .asset(asset)
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .amount("10.00".to_string())
+        .transaction_id("test-transfer-id".to_string())
+        .build()
 }
 
 /// Create a test Authorize message body
