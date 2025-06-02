@@ -205,8 +205,6 @@ pub struct ListToolsResult {
 
 /// JSON-RPC error codes
 pub mod error_codes {
-    #[allow(dead_code)]
-    pub const PARSE_ERROR: i32 = -32700;
     pub const INVALID_REQUEST: i32 = -32600;
     pub const METHOD_NOT_FOUND: i32 = -32601;
     pub const INVALID_PARAMS: i32 = -32602;
@@ -234,15 +232,6 @@ impl JsonRpcResponse {
 }
 
 impl JsonRpcError {
-    #[allow(dead_code)]
-    pub fn parse_error(message: impl Into<String>) -> Self {
-        Self {
-            code: error_codes::PARSE_ERROR,
-            message: message.into(),
-            data: None,
-        }
-    }
-
     pub fn invalid_request(message: impl Into<String>) -> Self {
         Self {
             code: error_codes::INVALID_REQUEST,

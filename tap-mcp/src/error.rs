@@ -24,10 +24,6 @@ pub enum Error {
     #[error("JSON serialization error: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("MCP protocol error: {0}")]
-    #[allow(dead_code)]
-    McpProtocol(String),
-
     #[error("Invalid tool parameter: {0}")]
     InvalidParameter(String),
 
@@ -39,18 +35,9 @@ pub enum Error {
 
     #[error("Configuration error: {0}")]
     Configuration(String),
-
-    #[error("Unknown error: {0}")]
-    #[allow(dead_code)]
-    Unknown(String),
 }
 
 impl Error {
-    #[allow(dead_code)]
-    pub fn mcp_protocol(msg: impl Into<String>) -> Self {
-        Self::McpProtocol(msg.into())
-    }
-
     pub fn invalid_parameter(msg: impl Into<String>) -> Self {
         Self::InvalidParameter(msg.into())
     }

@@ -81,17 +81,6 @@ impl StdioTransport {
         debug!("Sent response for id={:?}", response.id);
         Ok(())
     }
-
-    /// Write a JSON-RPC error response
-    #[allow(dead_code)]
-    pub async fn write_error(
-        &mut self,
-        id: Option<serde_json::Value>,
-        error: crate::mcp::protocol::JsonRpcError,
-    ) -> Result<()> {
-        let response = JsonRpcResponse::error(id, error);
-        self.write_response(response).await
-    }
 }
 
 impl Default for StdioTransport {

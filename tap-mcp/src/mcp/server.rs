@@ -13,8 +13,6 @@ use tracing::{debug, error, info, warn};
 /// MCP server for TAP functionality
 pub struct McpServer {
     transport: StdioTransport,
-    #[allow(dead_code)]
-    tap_integration: Arc<TapIntegration>,
     tool_registry: ToolRegistry,
     resource_registry: ResourceRegistry,
     initialized: bool,
@@ -29,7 +27,6 @@ impl McpServer {
 
         Ok(Self {
             transport: StdioTransport::new(),
-            tap_integration,
             tool_registry,
             resource_registry,
             initialized: false,

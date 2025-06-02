@@ -2,16 +2,12 @@
 
 use crate::error::{Error, Result};
 use std::path::PathBuf;
-use std::sync::Arc;
-use tap_node::event::EventBus;
 use tap_node::storage::Storage;
 use tracing::{debug, info, warn};
 
 /// TAP ecosystem integration
 pub struct TapIntegration {
     storage: Storage,
-    #[allow(dead_code)]
-    event_bus: Arc<EventBus>,
     agent_storage_path: PathBuf,
 }
 
@@ -41,9 +37,6 @@ impl TapIntegration {
             Storage::new_with_did("tap-mcp", Some(tap_root.clone())).await?
         };
 
-        // Initialize event bus
-        let event_bus = Arc::new(EventBus::new());
-
         // Agent storage path
         let agent_storage_path = tap_root.join("agents");
         if !agent_storage_path.exists() {
@@ -55,7 +48,6 @@ impl TapIntegration {
 
         Ok(Self {
             storage,
-            event_bus,
             agent_storage_path,
         })
     }
@@ -63,18 +55,6 @@ impl TapIntegration {
     /// Get storage reference
     pub fn storage(&self) -> &Storage {
         &self.storage
-    }
-
-    /// Get event bus reference
-    #[allow(dead_code)]
-    pub fn event_bus(&self) -> Arc<EventBus> {
-        Arc::clone(&self.event_bus)
-    }
-
-    /// Get agent storage path
-    #[allow(dead_code)]
-    pub fn agent_storage_path(&self) -> &PathBuf {
-        &self.agent_storage_path
     }
 
     /// List all agents in the agent storage directory
@@ -125,7 +105,8 @@ impl TapIntegration {
                 .to_string(),
             policies: agent_data
                 .get("policies")
-                .and_then(|v| v.as_array()).cloned()
+                .and_then(|v| v.as_array())
+                .cloned()
                 .unwrap_or_default(),
             metadata: agent_data
                 .get("metadata")
