@@ -4,13 +4,13 @@ A Model Context Protocol (MCP) server that provides AI applications with standar
 
 ## Overview
 
-TAP-MCP bridges the gap between AI applications and the TAP ecosystem by exposing TAP Node functionality through the MCP standard. It provides:
+TAP-MCP is a thin wrapper around TAP Node that exposes transaction authorization functionality through the Model Context Protocol standard. This enables AI applications to:
 
 - **Agent Management**: Create and list TAP agents with policies
 - **Transaction Creation**: Initiate transfers, payments, and other TAP operations  
 - **Message Monitoring**: Access transaction history and message details
 - **Schema Access**: Get JSON schemas for TAP message types
-- **Real-time Integration**: Direct connection to TAP Node's SQLite database
+- **DID-based Storage**: Uses TAP Node's DID-organized database structure (~/.tap/{did}/)
 
 ## Installation
 
@@ -46,14 +46,16 @@ cargo run
 
 The server will:
 - Use `~/.tap` as the TAP root directory
-- Connect to `~/.tap/tap-node.db` SQLite database
+- Create DID-based storage (if --agent-did is provided)
 - Listen for MCP requests on stdin/stdout
 
 ### 2. Custom Configuration
 
 ```bash
-# Use custom TAP directory and database
-cargo run -- --tap-root /custom/tap/path --db-path /custom/db/path.db
+# Use specific agent DID for organized storage
+cargo run -- --agent-did "did:web:example.com"
+
+# This creates database at ~/.tap/did_web_example.com/transactions.db
 
 # Enable debug logging
 cargo run -- --debug

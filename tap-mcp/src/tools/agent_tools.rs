@@ -73,18 +73,28 @@ impl ToolHandler for CreateAgentTool {
             params.id, params.role, params.for_party
         );
 
+        // Create AgentInfo from parameters
+        let agent_info = crate::tap_integration::AgentInfo {
+            id: params.id.clone(),
+            role: params.role.clone(),
+            for_party: params.for_party.clone(),
+            policies: params.policies.unwrap_or_default().into_iter()
+                .map(|v| v.to_string()).collect(),
+            metadata: params.metadata.map(|m| {
+                if let serde_json::Value::Object(obj) = m {
+                    obj.into_iter().map(|(k, v)| (k, v.to_string())).collect()
+                } else {
+                    std::collections::HashMap::new()
+                }
+            }).unwrap_or_default(),
+        };
+
         match self
             .tap_integration()
-            .create_agent(
-                params.id.clone(),
-                params.role.clone(),
-                params.for_party.clone(),
-                params.policies,
-                params.metadata,
-            )
+            .create_agent(&agent_info)
             .await
         {
-            Ok(agent_info) => {
+            Ok(()) => {
                 let response = CreateAgentResponse {
                     agent: AgentResponse {
                         id: agent_info.id,
@@ -220,8 +230,12 @@ impl ToolHandler for ListAgentsTool {
                         id: agent.id,
                         role: agent.role,
                         for_party: agent.for_party,
-                        policies: agent.policies,
-                        metadata: agent.metadata,
+                        policies: agent.policies.into_iter().map(|p| serde_json::Value::String(p)).collect(),
+                        metadata: if agent.metadata.is_empty() {
+                            serde_json::Value::Null
+                        } else {
+                            serde_json::to_value(agent.metadata).unwrap_or(serde_json::Value::Null)
+                        },
                     })
                     .collect();
 

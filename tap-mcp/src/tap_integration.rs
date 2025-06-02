@@ -2,178 +2,121 @@
 
 use crate::error::{Error, Result};
 use std::path::PathBuf;
-use tap_node::storage::Storage;
-use tracing::{debug, info, warn};
+use std::sync::Arc;
+use tap_agent::TapAgent;
+use tap_node::{TapNode, NodeConfig};
+use tracing::{debug, info};
 
-/// TAP ecosystem integration
+/// TAP ecosystem integration - thin wrapper around TapNode
 pub struct TapIntegration {
-    storage: Storage,
-    agent_storage_path: PathBuf,
+    node: Arc<TapNode>,
 }
 
 impl TapIntegration {
-    /// Create new TAP integration
-    pub async fn new(tap_root: Option<&str>, db_path: Option<&str>) -> Result<Self> {
-        // Determine TAP root directory
-        let tap_root = if let Some(root) = tap_root {
-            PathBuf::from(root)
-        } else {
-            // Default to ~/.tap
-            dirs::home_dir()
-                .ok_or_else(|| Error::configuration("Could not find home directory"))?
-                .join(".tap")
-        };
-
-        // Ensure TAP directory exists
-        if !tap_root.exists() {
-            info!("Creating TAP directory at: {:?}", tap_root);
-            std::fs::create_dir_all(&tap_root)?;
+    /// Create new TAP integration using TapNode
+    pub async fn new(agent_did: Option<&str>) -> Result<Self> {
+        // Create node configuration
+        let mut config = NodeConfig::default();
+        
+        // Set agent DID for proper storage organization
+        if let Some(did) = agent_did {
+            config.agent_did = Some(did.to_string());
         }
-
-        // Initialize storage
-        let storage = if let Some(db_path) = db_path {
-            Storage::new(Some(PathBuf::from(db_path))).await?
-        } else {
-            Storage::new_with_did("tap-mcp", Some(tap_root.clone())).await?
-        };
-
-        // Agent storage path
-        let agent_storage_path = tap_root.join("agents");
-        if !agent_storage_path.exists() {
-            info!("Creating agents directory at: {:?}", agent_storage_path);
-            std::fs::create_dir_all(&agent_storage_path)?;
-        }
-
-        info!("TAP integration initialized with root: {:?}", tap_root);
-
+        
+        // Enable storage features
+        config.enable_message_logging = true;
+        config.log_message_content = true;
+        
+        // Create the node
+        let mut node = TapNode::new(config);
+        
+        // Initialize storage with DID-based structure
+        node.init_storage().await
+            .map_err(|e| Error::configuration(format!("Failed to initialize TAP node storage: {}", e)))?;
+        
+        info!("Initialized TAP integration with DID-based storage");
+        
         Ok(Self {
-            storage,
-            agent_storage_path,
+            node: Arc::new(node),
         })
     }
-
-    /// Get storage reference
-    pub fn storage(&self) -> &Storage {
-        &self.storage
+    
+    /// Create new TAP integration for testing with custom paths
+    pub async fn new_for_testing(tap_root: Option<&str>, agent_did: &str) -> Result<Self> {
+        let mut config = NodeConfig::default();
+        
+        // Set custom TAP root for testing
+        if let Some(root) = tap_root {
+            config.tap_root = Some(PathBuf::from(root));
+        }
+        
+        // Set agent DID
+        config.agent_did = Some(agent_did.to_string());
+        config.enable_message_logging = true;
+        config.log_message_content = true;
+        
+        let mut node = TapNode::new(config);
+        node.init_storage().await
+            .map_err(|e| Error::configuration(format!("Failed to initialize TAP node storage: {}", e)))?;
+        
+        debug!("Created TAP integration for testing with DID: {}", agent_did);
+        
+        Ok(Self {
+            node: Arc::new(node),
+        })
     }
-
-    /// List all agents in the agent storage directory
+    
+    /// Get reference to underlying TapNode
+    pub fn node(&self) -> &Arc<TapNode> {
+        &self.node
+    }
+    
+    /// Get storage reference (if available)
+    pub fn storage(&self) -> Option<&Arc<tap_node::storage::Storage>> {
+        self.node.storage()
+    }
+    
+    /// List all registered agents
     pub async fn list_agents(&self) -> Result<Vec<AgentInfo>> {
+        let agent_dids = self.node.list_agents();
         let mut agents = Vec::new();
-
-        if !self.agent_storage_path.exists() {
-            return Ok(agents);
+        
+        for did in agent_dids {
+            // For MCP, we'll return basic agent info
+            // In a real implementation, we might want to store more metadata
+            agents.push(AgentInfo {
+                id: did.clone(),
+                role: "Agent".to_string(), // Default role
+                for_party: did, // Agent represents itself by default
+                policies: vec![],
+                metadata: std::collections::HashMap::new(),
+            });
         }
-
-        let mut dir = tokio::fs::read_dir(&self.agent_storage_path).await?;
-        while let Some(entry) = dir.next_entry().await? {
-            let path = entry.path();
-            if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
-                match self.load_agent_from_file(&path).await {
-                    Ok(agent_info) => agents.push(agent_info),
-                    Err(e) => {
-                        warn!("Failed to load agent from {:?}: {}", path, e);
-                    }
-                }
-            }
-        }
-
-        debug!("Loaded {} agents from storage", agents.len());
+        
         Ok(agents)
     }
-
-    /// Load agent information from file
-    async fn load_agent_from_file(&self, path: &PathBuf) -> Result<AgentInfo> {
-        let content = tokio::fs::read_to_string(path).await?;
-        let agent_data: serde_json::Value = serde_json::from_str(&content)?;
-
-        Ok(AgentInfo {
-            id: agent_data
-                .get("@id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string(),
-            role: agent_data
-                .get("role")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string(),
-            for_party: agent_data
-                .get("for")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string(),
-            policies: agent_data
-                .get("policies")
-                .and_then(|v| v.as_array())
-                .cloned()
-                .unwrap_or_default(),
-            metadata: agent_data
-                .get("metadata")
-                .cloned()
-                .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
-        })
-    }
-
-    /// Save agent to storage
-    pub async fn save_agent(&self, agent_info: &AgentInfo) -> Result<()> {
-        let agent_data = serde_json::json!({
-            "@id": agent_info.id,
-            "role": agent_info.role,
-            "for": agent_info.for_party,
-            "policies": agent_info.policies,
-            "metadata": agent_info.metadata
-        });
-
-        // Use agent ID as filename (sanitized)
-        let filename = format!("{}.json", sanitize_filename(&agent_info.id));
-        let file_path = self.agent_storage_path.join(filename);
-
-        let content = serde_json::to_string_pretty(&agent_data)?;
-        tokio::fs::write(&file_path, content).await?;
-
-        info!("Saved agent {} to {:?}", agent_info.id, file_path);
+    
+    /// Create a new agent (register with the node)
+    pub async fn create_agent(&self, agent_info: &AgentInfo) -> Result<()> {
+        // Create a new TAP agent
+        let (agent, _did) = TapAgent::from_ephemeral_key().await
+            .map_err(|e| Error::configuration(format!("Failed to create agent: {}", e)))?;
+        
+        // Register with the node
+        self.node.register_agent(Arc::new(agent)).await
+            .map_err(|e| Error::configuration(format!("Failed to register agent: {}", e)))?;
+        
+        info!("Created and registered agent: {}", agent_info.id);
         Ok(())
-    }
-
-    /// Create a TAP agent and save to storage
-    pub async fn create_agent(
-        &self,
-        id: String,
-        role: String,
-        for_party: String,
-        policies: Option<Vec<serde_json::Value>>,
-        metadata: Option<serde_json::Value>,
-    ) -> Result<AgentInfo> {
-        let agent_info = AgentInfo {
-            id,
-            role,
-            for_party,
-            policies: policies.unwrap_or_default(),
-            metadata: metadata.unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
-        };
-
-        self.save_agent(&agent_info).await?;
-        Ok(agent_info)
     }
 }
 
-/// Agent information structure
+/// Agent information for MCP interface
 #[derive(Debug, Clone)]
 pub struct AgentInfo {
     pub id: String,
     pub role: String,
     pub for_party: String,
-    pub policies: Vec<serde_json::Value>,
-    pub metadata: serde_json::Value,
-}
-
-/// Sanitize filename by replacing invalid characters
-fn sanitize_filename(name: &str) -> String {
-    name.chars()
-        .map(|c| match c {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' => '_',
-            c => c,
-        })
-        .collect()
+    pub policies: Vec<String>,
+    pub metadata: std::collections::HashMap<String, String>,
 }

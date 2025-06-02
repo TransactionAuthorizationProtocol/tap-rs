@@ -147,17 +147,13 @@ impl ToolHandler for CreateTransferTool {
         };
 
         // Store the transaction in tap-node's database
-        match self
-            .tap_integration()
-            .storage()
-            .insert_transaction(&didcomm_message)
-            .await
-        {
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+        
+        match storage.insert_transaction(&didcomm_message).await {
             Ok(_) => {
                 // Log the message in the audit trail
-                if let Err(e) = self
-                    .tap_integration()
-                    .storage()
+                if let Err(e) = storage
                     .log_message(
                         &didcomm_message,
                         tap_node::storage::MessageDirection::Outgoing,
@@ -279,9 +275,10 @@ impl ToolHandler for AuthorizeTool {
         };
 
         // Log the message in the audit trail
-        match self
-            .tap_integration()
-            .storage()
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            
+        match storage
             .log_message(
                 &didcomm_message,
                 tap_node::storage::MessageDirection::Outgoing,
@@ -400,9 +397,10 @@ impl ToolHandler for RejectTool {
         };
 
         // Log the message in the audit trail
-        match self
-            .tap_integration()
-            .storage()
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            
+        match storage
             .log_message(
                 &didcomm_message,
                 tap_node::storage::MessageDirection::Outgoing,
@@ -525,9 +523,10 @@ impl ToolHandler for CancelTool {
         };
 
         // Log the message in the audit trail
-        match self
-            .tap_integration()
-            .storage()
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            
+        match storage
             .log_message(
                 &didcomm_message,
                 tap_node::storage::MessageDirection::Outgoing,
@@ -651,9 +650,10 @@ impl ToolHandler for SettleTool {
         };
 
         // Log the message in the audit trail
-        match self
-            .tap_integration()
-            .storage()
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            
+        match storage
             .log_message(
                 &didcomm_message,
                 tap_node::storage::MessageDirection::Outgoing,
@@ -781,10 +781,10 @@ impl ToolHandler for ListTransactionsTool {
         );
 
         // Get messages from storage (transactions are stored as messages)
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
         let direction_filter = None; // No direction filter for now
-        let messages = self
-            .tap_integration()
-            .storage()
+        let messages = storage
             .list_messages(params.limit, params.offset, direction_filter)
             .await?;
 

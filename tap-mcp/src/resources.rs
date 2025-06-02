@@ -176,10 +176,10 @@ impl ResourceRegistry {
         }
 
         // Get messages from storage
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::resource_not_found("Storage not initialized"))?;
         let direction_filter = None; // No direction filter for now
-        let messages = self
-            .tap_integration()
-            .storage()
+        let messages = storage
             .list_messages(limit, offset, direction_filter)
             .await?;
 
@@ -238,9 +238,9 @@ impl ResourceRegistry {
 
     /// Read a specific message by ID
     async fn read_specific_message(&self, message_id: &str) -> Result<Vec<ResourceContent>> {
-        match self
-            .tap_integration()
-            .storage()
+        let storage = self.tap_integration().storage()
+            .ok_or_else(|| Error::resource_not_found("Storage not initialized"))?;
+        match storage
             .get_message_by_id(message_id)
             .await?
         {

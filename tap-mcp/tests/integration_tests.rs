@@ -18,28 +18,25 @@ use tap_mcp::tap_integration::TapIntegration;
 struct TestEnvironment {
     _temp_dir: TempDir,
     tap_root: PathBuf,
-    db_path: PathBuf,
 }
 
 impl TestEnvironment {
     fn new() -> Result<Self> {
         let temp_dir = tempfile::tempdir()?;
         let tap_root = temp_dir.path().join("tap");
-        let db_path = tap_root.join("test.db");
 
         std::fs::create_dir_all(&tap_root)?;
 
         Ok(Self {
             _temp_dir: temp_dir,
             tap_root,
-            db_path,
         })
     }
 
     async fn create_integration(&self) -> Result<TapIntegration> {
-        TapIntegration::new(
+        TapIntegration::new_for_testing(
             Some(self.tap_root.to_str().unwrap()),
-            Some(self.db_path.to_str().unwrap()),
+            "did:example:test-agent",
         )
         .await
     }

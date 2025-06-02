@@ -21,13 +21,9 @@ struct Args {
     #[arg(long, short)]
     debug: bool,
 
-    /// Path to TAP root directory (defaults to ~/.tap)
+    /// Agent DID for database organization (e.g., did:web:example.com)
     #[arg(long)]
-    tap_root: Option<String>,
-
-    /// Database path for tap-node (defaults to ~/.tap/tap-node.db)
-    #[arg(long)]
-    db_path: Option<String>,
+    agent_did: Option<String>,
 }
 
 #[tokio::main]
@@ -46,12 +42,10 @@ async fn main() -> Result<()> {
 
     info!("Starting TAP-MCP server v{}", env!("CARGO_PKG_VERSION"));
 
-    // Initialize TAP integration
-    let tap_integration =
-        tap_integration::TapIntegration::new(args.tap_root.as_deref(), args.db_path.as_deref())
-            .await?;
+    // Initialize TAP integration with TapNode
+    let tap_integration = tap_integration::TapIntegration::new(args.agent_did.as_deref()).await?;
 
-    info!("TAP integration initialized");
+    info!("TAP integration initialized using TapNode with DID-based storage");
 
     // Create and run MCP server
     let mcp_server = mcp::McpServer::new(tap_integration).await?;
