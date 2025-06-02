@@ -194,6 +194,7 @@ impl AgentKeyManager {
                 // Create a StoredKey and add to key storage
                 let stored_key = StoredKey {
                     did: did.clone(),
+                    label: String::new(), // Will be auto-generated when added
                     key_type,
                     private_key: private_key_b64,
                     public_key: public_key_b64,

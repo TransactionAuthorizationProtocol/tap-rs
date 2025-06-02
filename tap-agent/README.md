@@ -172,7 +172,7 @@ let agent = AgentBuilder::new(key.did)
 
 #### 2. Using Stored Keys
 
-Load keys from the default storage location (~/.tap/keys.json):
+Load keys from the default storage location (~/.tap/keys.json). Keys can be referenced by their DID or label:
 
 ```rust
 use tap_agent::Agent;
@@ -180,6 +180,12 @@ use tap_agent::Agent;
 // Use a stored key with a specific DID
 let agent = Agent::from_stored_keys(
     Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
+    true
+).await?;
+
+// Or use a stored key by its label
+let agent = Agent::from_stored_keys(
+    Some("production-key".to_string()),
     true
 ).await?;
 
@@ -596,6 +602,10 @@ tap-agent-cli generate --output did.json --key-output key.json
 
 # Save key to default storage (~/.tap/keys.json) and set as default
 tap-agent-cli generate --save --default
+
+# Generate with a custom label (instead of default agent-1, agent-2, etc.)
+tap-agent-cli generate --save --label "my-signing-key"
+tap-agent-cli generate --save --label "production-key" --default
 ```
 
 #### Lookup Command
@@ -623,20 +633,28 @@ The resolver supports the following DID methods by default:
 The `keys` command manages stored keys:
 
 ```bash
-# List all stored keys
+# List all stored keys (shows labels, DIDs, and key types)
 tap-agent-cli keys list
 
-# View details for a specific key
+# View details for a specific key (by DID or label)
 tap-agent-cli keys view did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli keys view "my-signing-key"
+tap-agent-cli keys view "agent-1"
 
-# Set a key as the default
+# Set a key as the default (by DID or label)
 tap-agent-cli keys set-default did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli keys set-default "production-key"
 
-# Delete a key (with confirmation)
+# Delete a key (by DID or label, with confirmation)
 tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli keys delete "test-key"
 
 # Delete a key (without confirmation)
-tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --force
+tap-agent-cli keys delete "old-key" --force
+
+# Relabel an existing key
+tap-agent-cli keys relabel "agent-1" "development-key"
+tap-agent-cli keys relabel did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK "new-label"
 ```
 
 Keys are stored in `~/.tap/keys.json` by default. This storage location is shared with other TAP tools like `tap-http` for consistent key management.

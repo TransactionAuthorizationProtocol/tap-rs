@@ -24,6 +24,9 @@ pub const DEFAULT_KEYS_FILE: &str = "keys.json";
 pub struct StoredKey {
     /// The DID for this key
     pub did: String,
+    /// Human-friendly label for this key
+    #[serde(default)]
+    pub label: String,
     /// The key type (e.g., Ed25519, P256)
     #[serde(with = "key_type_serde")]
     pub key_type: KeyType,
@@ -72,6 +75,9 @@ mod key_type_serde {
 pub struct KeyStorage {
     /// A map of DIDs to their stored keys
     pub keys: HashMap<String, StoredKey>,
+    /// A map of labels to DIDs for quick lookup
+    #[serde(default)]
+    pub labels: HashMap<String, String>,
     /// The default DID to use when not specified
     pub default_did: Option<String>,
     /// Creation timestamp
@@ -89,14 +95,90 @@ impl KeyStorage {
     }
 
     /// Add a key to the storage
-    pub fn add_key(&mut self, key: StoredKey) {
+    pub fn add_key(&mut self, mut key: StoredKey) {
+        // Generate default label if not provided
+        if key.label.is_empty() {
+            key.label = self.generate_default_label();
+        }
+
+        // Ensure label is unique
+        let final_label = self.ensure_unique_label(&key.label, Some(&key.did));
+        key.label = final_label.clone();
+
         // If this is the first key, make it the default
         if self.keys.is_empty() {
             self.default_did = Some(key.did.clone());
         }
 
+        // Update label mapping
+        self.labels.insert(final_label, key.did.clone());
+
         self.keys.insert(key.did.clone(), key);
         self.updated_at = chrono::Utc::now();
+    }
+
+    /// Generate a default label in the format agent-{n}
+    fn generate_default_label(&self) -> String {
+        let mut counter = 1;
+        loop {
+            let label = format!("agent-{}", counter);
+            if !self.labels.contains_key(&label) {
+                return label;
+            }
+            counter += 1;
+        }
+    }
+
+    /// Ensure a label is unique, modifying it if necessary
+    fn ensure_unique_label(&self, desired_label: &str, exclude_did: Option<&str>) -> String {
+        // If the label doesn't exist or belongs to the same DID, it's fine
+        if let Some(existing_did) = self.labels.get(desired_label) {
+            if exclude_did.is_some() && existing_did == exclude_did.unwrap() {
+                return desired_label.to_string();
+            }
+        } else {
+            return desired_label.to_string();
+        }
+
+        // Generate a unique label by appending a number
+        let mut counter = 2;
+        loop {
+            let new_label = format!("{}-{}", desired_label, counter);
+            if !self.labels.contains_key(&new_label) {
+                return new_label;
+            }
+            counter += 1;
+        }
+    }
+
+    /// Find a key by label
+    pub fn find_by_label(&self, label: &str) -> Option<&StoredKey> {
+        self.labels.get(label).and_then(|did| self.keys.get(did))
+    }
+
+    /// Update a key's label
+    pub fn update_label(&mut self, did: &str, new_label: &str) -> Result<()> {
+        // First ensure the key exists
+        if !self.keys.contains_key(did) {
+            return Err(Error::Storage(format!("Key with DID '{}' not found", did)));
+        }
+
+        // Remove old label mapping
+        self.labels.retain(|_, v| v != did);
+
+        // Ensure new label is unique
+        let final_label = self.ensure_unique_label(new_label, Some(did));
+
+        // Update the key's label
+        if let Some(key) = self.keys.get_mut(did) {
+            key.label = final_label.clone();
+        }
+
+        // Add new label mapping
+        self.labels.insert(final_label, did.to_string());
+
+        self.updated_at = chrono::Utc::now();
+        Ok(())
     }
 
     /// Get the default key path
@@ -121,10 +203,47 @@ impl KeyStorage {
         let contents = fs::read_to_string(path)
             .map_err(|e| Error::Storage(format!("Failed to read key storage file: {}", e)))?;
 
-        let storage: KeyStorage = serde_json::from_str(&contents)
+        let mut storage: KeyStorage = serde_json::from_str(&contents)
             .map_err(|e| Error::Storage(format!("Failed to parse key storage file: {}", e)))?;
 
+        // Rebuild labels map if not present (for backward compatibility)
+        if storage.labels.is_empty() {
+            storage.rebuild_labels();
+        }
+
+        // Ensure all keys have labels (for backward compatibility)
+        storage.ensure_all_keys_have_labels();
+
         Ok(storage)
+    }
+
+    /// Rebuild the labels map from existing keys
+    fn rebuild_labels(&mut self) {
+        self.labels.clear();
+        for (did, key) in &self.keys {
+            if !key.label.is_empty() {
+                self.labels.insert(key.label.clone(), did.clone());
+            }
+        }
+    }
+
+    /// Ensure all keys have labels (for backward compatibility)
+    fn ensure_all_keys_have_labels(&mut self) {
+        let mut keys_to_update = Vec::new();
+
+        for (did, key) in &self.keys {
+            if key.label.is_empty() {
+                keys_to_update.push(did.clone());
+            }
+        }
+
+        for did in keys_to_update {
+            let new_label = self.generate_default_label();
+            if let Some(key) = self.keys.get_mut(&did) {
+                key.label = new_label.clone();
+                self.labels.insert(new_label, did);
+            }
+        }
     }
 
     /// Save keys to the default location
@@ -158,6 +277,19 @@ impl KeyStorage {
     pub fn from_generated_key(key: &GeneratedKey) -> StoredKey {
         StoredKey {
             did: key.did.clone(),
+            label: String::new(), // Will be set when added to storage
+            key_type: key.key_type,
+            private_key: base64::engine::general_purpose::STANDARD.encode(&key.private_key),
+            public_key: base64::engine::general_purpose::STANDARD.encode(&key.public_key),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Convert a GeneratedKey to a StoredKey with a specific label
+    pub fn from_generated_key_with_label(key: &GeneratedKey, label: &str) -> StoredKey {
+        StoredKey {
+            did: key.did.clone(),
+            label: label.to_string(),
             key_type: key.key_type,
             private_key: base64::engine::general_purpose::STANDARD.encode(&key.private_key),
             public_key: base64::engine::general_purpose::STANDARD.encode(&key.public_key),

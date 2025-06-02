@@ -63,6 +63,10 @@ pub enum Commands {
         /// Set as default key
         #[arg(long)]
         default: bool,
+
+        /// Label for the key (defaults to agent-{n})
+        #[arg(short = 'l', long)]
+        label: Option<String>,
     },
 
     /// Lookup and resolve a DID to its DID Document
@@ -94,6 +98,10 @@ pub enum Commands {
         /// Set as default key
         #[arg(long)]
         default: bool,
+
+        /// Label for the imported key (defaults to agent-{n})
+        #[arg(short = 'l', long)]
+        label: Option<String>,
     },
 
     /// Pack a plaintext DIDComm message
@@ -150,29 +158,41 @@ pub enum KeysCommands {
     /// View details of a specific key
     #[command(name = "view")]
     View {
-        /// The DID of the key to view
+        /// The DID or label of the key to view
         #[arg(required = true)]
-        did: String,
+        did_or_label: String,
     },
 
     /// Set a key as the default
     #[command(name = "set-default")]
     SetDefault {
-        /// The DID of the key to set as default
+        /// The DID or label of the key to set as default
         #[arg(required = true)]
-        did: String,
+        did_or_label: String,
     },
 
     /// Delete a key from storage
     #[command(name = "delete")]
     Delete {
-        /// The DID of the key to delete
+        /// The DID or label of the key to delete
         #[arg(required = true)]
-        did: String,
+        did_or_label: String,
 
         /// Force deletion without confirmation
         #[arg(short, long)]
         force: bool,
+    },
+
+    /// Update the label of a key
+    #[command(name = "relabel")]
+    Relabel {
+        /// The DID or label of the key to relabel
+        #[arg(required = true)]
+        did_or_label: String,
+
+        /// The new label for the key
+        #[arg(required = true)]
+        new_label: String,
     },
 }
 
@@ -188,16 +208,18 @@ pub fn run() -> Result<()> {
             key_output,
             save,
             default,
+            label,
         } => {
-            generate_did(
-                &method,
-                &key_type,
-                domain.as_deref(),
+            generate_did(GenerateDIDOptions {
+                method: &method,
+                key_type: &key_type,
+                domain: domain.as_deref(),
                 output,
                 key_output,
                 save,
-                default,
-            )?;
+                set_default: default,
+                label: label.as_deref(),
+            })?;
         }
         Commands::Lookup { did, output } => {
             lookup_did(&did, output)?;
@@ -205,8 +227,12 @@ pub fn run() -> Result<()> {
         Commands::Keys { subcommand } => {
             manage_keys(subcommand)?;
         }
-        Commands::Import { key_file, default } => {
-            import_key(&key_file, default)?;
+        Commands::Import {
+            key_file,
+            default,
+            label,
+        } => {
+            import_key(&key_file, default, label.as_deref())?;
         }
         Commands::Pack {
             input,
@@ -229,69 +255,73 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-/// Generate a DID of the specified method and key type
-fn generate_did(
-    method: &str,
-    key_type: &str,
-    domain: Option<&str>,
+/// Options for DID generation
+struct GenerateDIDOptions<'a> {
+    method: &'a str,
+    key_type: &'a str,
+    domain: Option<&'a str>,
     output: Option<PathBuf>,
     key_output: Option<PathBuf>,
     save: bool,
     set_default: bool,
-) -> Result<()> {
+    label: Option<&'a str>,
+}
+
+/// Generate a DID of the specified method and key type
+fn generate_did(options: GenerateDIDOptions) -> Result<()> {
     // Parse key type
-    let key_type = match key_type.to_lowercase().as_str() {
+    let key_type = match options.key_type.to_lowercase().as_str() {
         "ed25519" => KeyType::Ed25519,
         "p256" => KeyType::P256,
         "secp256k1" => KeyType::Secp256k1,
         _ => {
             eprintln!(
                 "Unsupported key type: {}. Using Ed25519 as default.",
-                key_type
+                options.key_type
             );
             KeyType::Ed25519
         }
     };
 
-    // Create options
-    let options = DIDGenerationOptions { key_type };
+    // Create DID generation options
+    let did_options = DIDGenerationOptions { key_type };
 
     // Generate DID using the specified method
     let generator = DIDKeyGenerator::new();
-    let generated_key = match method.to_lowercase().as_str() {
-        "key" => generator.generate_did(options)?,
+    let generated_key = match options.method.to_lowercase().as_str() {
+        "key" => generator.generate_did(did_options)?,
         "web" => {
             // For did:web, domain is required
-            let domain = domain.ok_or_else(|| {
+            let domain = options.domain.ok_or_else(|| {
                 crate::error::Error::MissingConfig("Domain is required for did:web".to_string())
             })?;
-            generator.generate_web_did(domain, options)?
+            generator.generate_web_did(domain, did_options)?
         }
         _ => {
             eprintln!(
                 "Unsupported DID method: {}. Using did:key as default.",
-                method
+                options.method
             );
-            generator.generate_did(options)?
+            generator.generate_did(did_options)?
         }
     };
 
     // Display DID information
-    display_generated_did(&generated_key, method, domain);
+    display_generated_did(&generated_key, options.method, options.domain);
 
     // Save DID document if output path is specified
-    if let Some(output_path) = output {
+    if let Some(output_path) = options.output {
         save_did_document(&generated_key, &output_path)?;
     }
 
     // Save private key if key output path is specified
-    if let Some(key_path) = key_output {
+    if let Some(key_path) = options.key_output {
         save_private_key(&generated_key, &key_path)?;
     }
 
     // Save key to default storage if requested
-    if save {
-        save_key_to_storage(&generated_key, set_default)?;
+    if options.save {
+        save_key_to_storage(&generated_key, options.set_default, options.label)?;
     }
 
     Ok(())
@@ -354,14 +384,16 @@ fn save_private_key(generated_key: &GeneratedKey, key_path: &PathBuf) -> Result<
 }
 
 /// Save a key to the default storage location
-fn save_key_to_storage(generated_key: &GeneratedKey, set_as_default: bool) -> Result<()> {
+fn save_key_to_storage(
+    generated_key: &GeneratedKey,
+    set_as_default: bool,
+    label: Option<&str>,
+) -> Result<()> {
     // Convert GeneratedKey to StoredKey
-    let stored_key = StoredKey {
-        did: generated_key.did.clone(),
-        key_type: generated_key.key_type,
-        private_key: base64::engine::general_purpose::STANDARD.encode(&generated_key.private_key),
-        public_key: base64::engine::general_purpose::STANDARD.encode(&generated_key.public_key),
-        metadata: std::collections::HashMap::new(),
+    let stored_key = if let Some(label) = label {
+        KeyStorage::from_generated_key_with_label(generated_key, label)
+    } else {
+        KeyStorage::from_generated_key(generated_key)
     };
 
     // Load existing storage or create a new one
@@ -390,7 +422,7 @@ fn save_key_to_storage(generated_key: &GeneratedKey, set_as_default: bool) -> Re
 }
 
 /// Import a key from a file into the key storage
-fn import_key(key_file: &PathBuf, set_as_default: bool) -> Result<()> {
+fn import_key(key_file: &PathBuf, set_as_default: bool, label: Option<&str>) -> Result<()> {
     // Read and parse the key file
     let key_json = fs::read_to_string(key_file)
         .map_err(|e| Error::Storage(format!("Failed to read key file: {}", e)))?;
@@ -431,6 +463,7 @@ fn import_key(key_file: &PathBuf, set_as_default: bool) -> Result<()> {
     // Create a StoredKey
     let stored_key = StoredKey {
         did: did.to_string(),
+        label: label.unwrap_or("").to_string(),
         key_type,
         private_key: private_key.to_string(),
         public_key: public_key.to_string(),
@@ -478,20 +511,54 @@ fn manage_keys(subcommand: Option<KeysCommands>) -> Result<()> {
         Some(KeysCommands::List) => {
             list_keys(&storage)?;
         }
-        Some(KeysCommands::View { did }) => {
-            view_key(&storage, &did)?;
+        Some(KeysCommands::View { did_or_label }) => {
+            view_key(&storage, &did_or_label)?;
         }
-        Some(KeysCommands::SetDefault { did }) => {
-            set_default_key(&mut storage, &did)?;
+        Some(KeysCommands::SetDefault { did_or_label }) => {
+            set_default_key(&mut storage, &did_or_label)?;
         }
-        Some(KeysCommands::Delete { did, force }) => {
-            delete_key(&mut storage, &did, force)?;
+        Some(KeysCommands::Delete {
+            did_or_label,
+            force,
+        }) => {
+            delete_key(&mut storage, &did_or_label, force)?;
+        }
+        Some(KeysCommands::Relabel {
+            did_or_label,
+            new_label,
+        }) => {
+            relabel_key(&mut storage, &did_or_label, &new_label)?;
         }
         None => {
             // Default to list if no subcommand is provided
             list_keys(&storage)?;
         }
     }
+
+    Ok(())
+}
+
+/// Relabel a key in storage
+fn relabel_key(storage: &mut KeyStorage, did_or_label: &str, new_label: &str) -> Result<()> {
+    // Try to find by label first, then by DID
+    let did = if let Some(key) = storage.find_by_label(did_or_label) {
+        key.did.clone()
+    } else if storage.keys.contains_key(did_or_label) {
+        did_or_label.to_string()
+    } else {
+        return Err(Error::Storage(format!(
+            "Key '{}' not found in storage",
+            did_or_label
+        )));
+    };
+
+    // Update the label
+    storage.update_label(&did, new_label)?;
+
+    // Save the updated storage
+    storage.save_default()?;
+
+    println!("Key relabeled successfully to '{}'", new_label);
 
     Ok(())
 }
@@ -512,8 +579,8 @@ fn list_keys(storage: &KeyStorage) -> Result<()> {
     let default_did = storage.default_did.as_deref();
 
     // Print header
-    println!("{:<40} {:<10} Default", "DID", "Key Type");
-    println!("{:-<60}", "");
+    println!("{:<15} {:<40} {:<10} Default", "Label", "DID", "Key Type");
+    println!("{:-<75}", "");
 
     // Print each key
     for (did, key) in &storage.keys {
@@ -523,7 +590,8 @@ fn list_keys(storage: &KeyStorage) -> Result<()> {
             ""
         };
         println!(
-            "{:<40} {:<10} {}",
+            "{:<15} {:<40} {:<10} {}",
+            key.label,
             did,
             format!("{:?}", key.key_type),
             is_default
@@ -536,21 +604,22 @@ fn list_keys(storage: &KeyStorage) -> Result<()> {
 }
 
 /// View details for a specific key
-fn view_key(storage: &KeyStorage, did: &str) -> Result<()> {
-    // Get the key
+fn view_key(storage: &KeyStorage, did_or_label: &str) -> Result<()> {
+    // Try to find by label first, then by DID
     let key = storage
-        .keys
-        .get(did)
-        .ok_or_else(|| Error::Storage(format!("Key '{}' not found in storage", did)))?;
+        .find_by_label(did_or_label)
+        .or_else(|| storage.keys.get(did_or_label))
+        .ok_or_else(|| Error::Storage(format!("Key '{}' not found in storage", did_or_label)))?;
 
     // Display key information
     println!("\n=== Key Details ===");
+    println!("Label: {}", key.label);
     println!("DID: {}", key.did);
     println!("Key Type: {:?}", key.key_type);
     println!("Public Key (Base64): {}", key.public_key);
 
     // Check if this is the default key
-    if storage.default_did.as_deref() == Some(did) {
+    if storage.default_did.as_deref() == Some(&key.did) {
         println!("Default: Yes");
     } else {
         println!("Default: No");
@@ -568,17 +637,21 @@ fn view_key(storage: &KeyStorage, did: &str) -> Result<()> {
 }
 
 /// Set a key as the default
-fn set_default_key(storage: &mut KeyStorage, did: &str) -> Result<()> {
-    // Check if the key exists
-    if !storage.keys.contains_key(did) {
+fn set_default_key(storage: &mut KeyStorage, did_or_label: &str) -> Result<()> {
+    // Try to find by label first, then by DID
+    let did = if let Some(key) = storage.find_by_label(did_or_label) {
+        key.did.clone()
+    } else if storage.keys.contains_key(did_or_label) {
+        did_or_label.to_string()
+    } else {
         return Err(Error::Storage(format!(
             "Key '{}' not found in storage",
-            did
+            did_or_label
         )));
-    }
+    };
 
-    // Update the default DID
-    storage.default_did = Some(did.to_string());
+    // Set as default
+    storage.default_did = Some(did.clone());
 
     // Save the updated storage
     storage.save_default()?;
@@ -589,14 +662,18 @@ fn set_default_key(storage: &mut KeyStorage, did: &str) -> Result<()> {
 }
 
 /// Delete a key from storage
-fn delete_key(storage: &mut KeyStorage, did: &str, force: bool) -> Result<()> {
-    // Check if the key exists
-    if !storage.keys.contains_key(did) {
+fn delete_key(storage: &mut KeyStorage, did_or_label: &str, force: bool) -> Result<()> {
+    // Try to find by label first, then by DID
+    let did = if let Some(key) = storage.find_by_label(did_or_label) {
+        key.did.clone()
+    } else if storage.keys.contains_key(did_or_label) {
+        did_or_label.to_string()
+    } else {
         return Err(Error::Storage(format!(
             "Key '{}' not found in storage",
-            did
+            did_or_label
         )));
-    }
+    };
 
     // Confirm deletion if not forced
     if !force {
@@ -611,10 +688,13 @@ fn delete_key(storage: &mut KeyStorage, did: &str, force: bool) -> Result<()> {
     }
 
     // Remove the key
-    storage.keys.remove(did);
+    storage.keys.remove(&did);
 
-    // If this was the default key, update the default DID
-    if storage.default_did.as_deref() == Some(did) {
+    // Remove from labels map
+    storage.labels.retain(|_, v| v != &did);
+
+    // If this was the default key, clear the default
+    if storage.default_did.as_deref() == Some(&did) {
         storage.default_did = storage.keys.keys().next().cloned();
     }
 
@@ -767,27 +847,33 @@ async fn pack_message_async(
     let storage = KeyStorage::load_default()?;
 
     // Get the sender DID
-    let sender = if let Some(did) = sender_did {
-        // Verify that the DID exists
-        if !storage.keys.contains_key(&did) {
+    let sender = if let Some(did_or_label) = sender_did {
+        // Try to find by label first, then by DID
+        let did = if let Some(key) = storage.find_by_label(&did_or_label) {
+            key.did.clone()
+        } else if storage.keys.contains_key(&did_or_label) {
+            did_or_label
+        } else {
             return Err(Error::Storage(format!(
-                "Key with DID '{}' not found in storage",
-                did
+                "Sender '{}' not found in storage",
+                did_or_label
             )));
-        }
-        did
+        };
+        Some(did)
     } else if let Some(default_did) = storage.default_did.clone() {
         // Use default DID if available
-        default_did
+        Some(default_did)
     } else if let Some(first_key) = storage.keys.keys().next() {
-        // Otherwise use first available DID
-        first_key.clone()
+        // Fallback to first key
+        Some(first_key.clone())
     } else {
-        // No keys found
+        // No keys available
         return Err(Error::Storage("No keys found in storage".to_string()));
     };
 
-    println!("Using sender DID: {}", sender);
+    if let Some(ref sender_did) = sender {
+        println!("Using sender DID: {}", sender_did);
+    }
 
     // Create key manager with the loaded keys
     let key_manager_builder =
@@ -811,7 +897,7 @@ async fn pack_message_async(
     // Create pack options
     let pack_options = PackOptions {
         security_mode,
-        sender_kid: Some(format!("{}#keys-1", sender)),
+        sender_kid: sender.as_ref().map(|s| format!("{}#keys-1", s)),
         recipient_kid: recipient_did.map(|did| format!("{}#keys-1", did)),
     };
 
@@ -870,15 +956,18 @@ async fn unpack_message_async(
     let storage = KeyStorage::load_default()?;
 
     // Get the recipient DID
-    let recipient = if let Some(did) = recipient_did {
-        // Verify that the DID exists
-        if !storage.keys.contains_key(&did) {
+    let recipient = if let Some(did_or_label) = recipient_did {
+        // Try to find by label first, then by DID
+        if let Some(key) = storage.find_by_label(&did_or_label) {
+            key.did.clone()
+        } else if storage.keys.contains_key(&did_or_label) {
+            did_or_label
+        } else {
             return Err(Error::Storage(format!(
-                "Key with DID '{}' not found in storage",
-                did
+                "Recipient '{}' not found in storage",
+                did_or_label
             )));
         }
-        did
     } else if let Some(default_did) = storage.default_did.clone() {
         // Use default DID if available
         default_did
