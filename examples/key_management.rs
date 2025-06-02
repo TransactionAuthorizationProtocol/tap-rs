@@ -2,37 +2,51 @@
 //!
 //! This example demonstrates how to:
 //! - Generate cryptographic keys
-//! - Save keys to ~/.tap/keys.json
+//! - Save keys to a temporary directory (for demonstration)
 //! - Load existing keys
 //! - Manage multiple keys
+//!
+//! Note: This example uses temporary storage to avoid affecting your production ~/.tap directory
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use tap_agent::{
     did::{DIDKeyGenerator, DIDGenerationOptions, KeyType},
     storage::{KeyStorage, StoredKey},
     error::Result,
 };
+use tempfile::TempDir;
 
 fn main() -> Result<()> {
     println!("TAP Key Management Example\n");
 
+    // Create a temporary directory for this example to avoid affecting production ~/.tap
+    let temp_dir = TempDir::new().map_err(|e| tap_agent::error::Error::Storage(e.to_string()))?;
+    let storage_path = temp_dir.path().join("keys.json");
+    
+    println!("Using temporary storage at: {:?}\n", storage_path);
+    println!("(This avoids affecting your production ~/.tap directory)\n");
+
     // Example 1: Generate a new Ed25519 key
-    generate_new_key()?;
+    generate_new_key(&storage_path)?;
     
     // Example 2: Load existing keys
-    load_and_display_keys()?;
+    load_and_display_keys(&storage_path)?;
     
     // Example 3: Generate multiple key types
-    generate_multiple_key_types()?;
+    generate_multiple_key_types(&storage_path)?;
     
     // Example 4: Key rotation example
-    demonstrate_key_rotation()?;
+    demonstrate_key_rotation(&storage_path)?;
+    
+    println!("Example completed! All keys were stored in temporary directory.");
+    println!("Your production ~/.tap directory was not affected.");
 
     Ok(())
 }
 
 /// Generate a new Ed25519 key and save it
-fn generate_new_key() -> Result<()> {
+fn generate_new_key(storage_path: &PathBuf) -> Result<()> {
     println!("=== Generating New Ed25519 Key ===");
     
     // Create key generator
@@ -62,7 +76,7 @@ fn generate_new_key() -> Result<()> {
     };
     
     // Load existing storage or create new
-    let mut storage = KeyStorage::load_default()
+    let mut storage = KeyStorage::load_from_path(storage_path)
         .unwrap_or_else(|_| {
             println!("No existing key storage found, creating new one");
             KeyStorage::new()
@@ -71,18 +85,18 @@ fn generate_new_key() -> Result<()> {
     // Add key to storage
     storage.add_key(stored_key);
     
-    // Save to default location (~/.tap/keys.json)
-    storage.save_default()?;
-    println!("Key saved to ~/.tap/keys.json\n");
+    // Save to temporary location
+    storage.save_to_path(storage_path)?;
+    println!("Key saved to {:?}\n", storage_path);
     
     Ok(())
 }
 
 /// Load and display existing keys
-fn load_and_display_keys() -> Result<()> {
+fn load_and_display_keys(storage_path: &PathBuf) -> Result<()> {
     println!("=== Loading Existing Keys ===");
     
-    match KeyStorage::load_default() {
+    match KeyStorage::load_from_path(storage_path) {
         Ok(storage) => {
             println!("Found {} key(s) in storage", storage.keys.len());
             
@@ -116,11 +130,11 @@ fn load_and_display_keys() -> Result<()> {
 }
 
 /// Generate keys of different types
-fn generate_multiple_key_types() -> Result<()> {
+fn generate_multiple_key_types(storage_path: &PathBuf) -> Result<()> {
     println!("=== Generating Multiple Key Types ===");
     
     let generator = DIDKeyGenerator::new();
-    let mut storage = KeyStorage::load_default()
+    let mut storage = KeyStorage::load_from_path(storage_path)
         .unwrap_or_else(|_| KeyStorage::new());
     
     // Generate one key of each type
@@ -152,17 +166,17 @@ fn generate_multiple_key_types() -> Result<()> {
         println!("  Generated: {}", &generated_key.did[..50.min(generated_key.did.len())] );
     }
     
-    storage.save_default()?;
-    println!("\nAll keys saved to ~/.tap/keys.json\n");
+    storage.save_to_path(storage_path)?;
+    println!("\nAll keys saved to {:?}\n", storage_path);
     
     Ok(())
 }
 
 /// Demonstrate key rotation
-fn demonstrate_key_rotation() -> Result<()> {
+fn demonstrate_key_rotation(storage_path: &PathBuf) -> Result<()> {
     println!("=== Key Rotation Example ===");
     
-    let mut storage = KeyStorage::load_default()
+    let mut storage = KeyStorage::load_from_path(storage_path)
         .unwrap_or_else(|_| KeyStorage::new());
     
     if storage.keys.is_empty() {
@@ -199,7 +213,7 @@ fn demonstrate_key_rotation() -> Result<()> {
     storage.default_did = Some(new_key.did.clone());
     
     // Save updated storage
-    storage.save_default()?;
+    storage.save_to_path(storage_path)?;
     
     println!("Key rotation complete!");
     println!("New default DID: {}", new_key.did);

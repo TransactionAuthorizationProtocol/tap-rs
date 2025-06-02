@@ -10,6 +10,8 @@ use tracing::{debug, info};
 /// TAP ecosystem integration - thin wrapper around TapNode
 pub struct TapIntegration {
     node: Arc<TapNode>,
+    /// Custom storage path for testing (if set, overrides default ~/.tap)
+    storage_path: Option<PathBuf>,
 }
 
 impl TapIntegration {
@@ -39,6 +41,7 @@ impl TapIntegration {
 
         Ok(Self {
             node: Arc::new(node),
+            storage_path: None,
         })
     }
 
@@ -67,8 +70,16 @@ impl TapIntegration {
             agent_did
         );
 
+        // For testing, use the keys.json file in the TAP root
+        let storage_path = if let Some(root) = tap_root {
+            Some(PathBuf::from(root).join("keys.json"))
+        } else {
+            None
+        };
+
         Ok(Self {
             node: Arc::new(node),
+            storage_path,
         })
     }
 
@@ -88,8 +99,12 @@ impl TapIntegration {
         let mut agents = Vec::new();
 
         // Get agents from tap-agent storage with policies and metadata
-        let enhanced_agents = TapAgent::list_enhanced_agents()
-            .map_err(|e| Error::configuration(format!("Failed to list enhanced agents: {}", e)))?;
+        let enhanced_agents = if let Some(ref storage_path) = self.storage_path {
+            TapAgent::list_enhanced_agents_with_path(Some(storage_path.clone()))
+        } else {
+            TapAgent::list_enhanced_agents()
+        }
+        .map_err(|e| Error::configuration(format!("Failed to list enhanced agents: {}", e)))?;
 
         for (did, policies, metadata) in enhanced_agents {
             // Role and for_party are not stored in metadata anymore
@@ -125,13 +140,24 @@ impl TapIntegration {
     pub async fn create_agent(&self, agent_info: &AgentInfo) -> Result<()> {
         // Create enhanced agent with policies and metadata using tap-agent
         // Note: role and for_party are not stored, they are determined per transaction
-        let (agent, _did) = TapAgent::create_enhanced_agent(
-            agent_info.id.clone(),
-            agent_info.policies.clone(),
-            agent_info.metadata.clone(),
-            true, // Save to storage
-        )
-        .await
+        let (agent, _did) = if let Some(ref storage_path) = self.storage_path {
+            TapAgent::create_enhanced_agent_with_path(
+                agent_info.id.clone(),
+                agent_info.policies.clone(),
+                agent_info.metadata.clone(),
+                true, // Save to storage
+                Some(storage_path.clone()),
+            )
+            .await
+        } else {
+            TapAgent::create_enhanced_agent(
+                agent_info.id.clone(),
+                agent_info.policies.clone(),
+                agent_info.metadata.clone(),
+                true, // Save to storage
+            )
+            .await
+        }
         .map_err(|e| Error::configuration(format!("Failed to create enhanced agent: {}", e)))?;
 
         // Register with the TAP Node for message processing

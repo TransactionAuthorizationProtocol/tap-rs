@@ -75,9 +75,6 @@ mod key_type_serde {
 pub struct KeyStorage {
     /// A map of DIDs to their stored keys
     pub keys: HashMap<String, StoredKey>,
-    /// A map of labels to DIDs for quick lookup
-    #[serde(default)]
-    pub labels: HashMap<String, String>,
     /// The default DID to use when not specified
     pub default_did: Option<String>,
     /// Creation timestamp
@@ -86,6 +83,9 @@ pub struct KeyStorage {
     /// Last update timestamp
     #[serde(default = "chrono::Utc::now")]
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Base directory for agent subdirectories (not serialized, runtime only)
+    #[serde(skip)]
+    base_directory: Option<PathBuf>,
 }
 
 impl KeyStorage {
@@ -110,9 +110,6 @@ impl KeyStorage {
             self.default_did = Some(key.did.clone());
         }
 
-        // Update label mapping
-        self.labels.insert(final_label, key.did.clone());
-
         self.keys.insert(key.did.clone(), key);
         self.updated_at = chrono::Utc::now();
     }
@@ -122,7 +119,7 @@ impl KeyStorage {
         let mut counter = 1;
         loop {
             let label = format!("agent-{}", counter);
-            if !self.labels.contains_key(&label) {
+            if !self.keys.values().any(|key| key.label == label) {
                 return label;
             }
             counter += 1;
@@ -131,12 +128,14 @@ impl KeyStorage {
 
     /// Ensure a label is unique, modifying it if necessary
     fn ensure_unique_label(&self, desired_label: &str, exclude_did: Option<&str>) -> String {
-        // If the label doesn't exist or belongs to the same DID, it's fine
-        if let Some(existing_did) = self.labels.get(desired_label) {
-            if exclude_did.is_some() && existing_did == exclude_did.unwrap() {
+        // Check if the label exists in any key
+        if let Some(existing_key) = self.keys.values().find(|key| key.label == desired_label) {
+            // If it belongs to the same DID we're updating, it's fine
+            if exclude_did.is_some() && existing_key.did == exclude_did.unwrap() {
                 return desired_label.to_string();
             }
         } else {
+            // Label doesn't exist, so it's available
             return desired_label.to_string();
         }
 
@@ -144,7 +143,7 @@ impl KeyStorage {
         let mut counter = 2;
         loop {
             let new_label = format!("{}-{}", desired_label, counter);
-            if !self.labels.contains_key(&new_label) {
+            if !self.keys.values().any(|key| key.label == new_label) {
                 return new_label;
             }
             counter += 1;
@@ -153,7 +152,7 @@ impl KeyStorage {
 
     /// Find a key by label
     pub fn find_by_label(&self, label: &str) -> Option<&StoredKey> {
-        self.labels.get(label).and_then(|did| self.keys.get(did))
+        self.keys.values().find(|key| key.label == label)
     }
 
     /// Update a key's label
@@ -163,19 +162,13 @@ impl KeyStorage {
             return Err(Error::Storage(format!("Key with DID '{}' not found", did)));
         }
 
-        // Remove old label mapping
-        self.labels.retain(|_, v| v != did);
-
         // Ensure new label is unique
         let final_label = self.ensure_unique_label(new_label, Some(did));
 
         // Update the key's label
         if let Some(key) = self.keys.get_mut(did) {
-            key.label = final_label.clone();
+            key.label = final_label;
         }
-
-        // Add new label mapping
-        self.labels.insert(final_label, did.to_string());
 
         self.updated_at = chrono::Utc::now();
         Ok(())
@@ -196,35 +189,27 @@ impl KeyStorage {
 
     /// Load keys from a specific path
     pub fn load_from_path(path: &Path) -> Result<Self> {
-        if !path.exists() {
-            return Ok(Self::new());
+        let mut storage = if !path.exists() {
+            Self::new()
+        } else {
+            let contents = fs::read_to_string(path)
+                .map_err(|e| Error::Storage(format!("Failed to read key storage file: {}", e)))?;
+
+            let mut storage: KeyStorage = serde_json::from_str(&contents)
+                .map_err(|e| Error::Storage(format!("Failed to parse key storage file: {}", e)))?;
+
+            // Ensure all keys have labels (for backward compatibility)
+            storage.ensure_all_keys_have_labels();
+
+            storage
+        };
+
+        // Set base directory from the path for agent subdirectories
+        if let Some(parent) = path.parent() {
+            storage.base_directory = Some(parent.to_path_buf());
         }
-
-        let contents = fs::read_to_string(path)
-            .map_err(|e| Error::Storage(format!("Failed to read key storage file: {}", e)))?;
-
-        let mut storage: KeyStorage = serde_json::from_str(&contents)
-            .map_err(|e| Error::Storage(format!("Failed to parse key storage file: {}", e)))?;
-
-        // Rebuild labels map if not present (for backward compatibility)
-        if storage.labels.is_empty() {
-            storage.rebuild_labels();
-        }
-
-        // Ensure all keys have labels (for backward compatibility)
-        storage.ensure_all_keys_have_labels();
 
         Ok(storage)
-    }
-
-    /// Rebuild the labels map from existing keys
-    fn rebuild_labels(&mut self) {
-        self.labels.clear();
-        for (did, key) in &self.keys {
-            if !key.label.is_empty() {
-                self.labels.insert(key.label.clone(), did.clone());
-            }
-        }
     }
 
     /// Ensure all keys have labels (for backward compatibility)
@@ -240,8 +225,7 @@ impl KeyStorage {
         for did in keys_to_update {
             let new_label = self.generate_default_label();
             if let Some(key) = self.keys.get_mut(&did) {
-                key.label = new_label.clone();
-                self.labels.insert(new_label, did);
+                key.label = new_label;
             }
         }
     }
@@ -379,9 +363,14 @@ impl KeyStorage {
 
     /// Get the agent directory path for a given DID
     fn get_agent_directory(&self, sanitized_did: &str) -> Result<PathBuf> {
-        let home = home_dir()
-            .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
-        Ok(home.join(DEFAULT_TAP_DIR).join(sanitized_did))
+        let base_dir = if let Some(ref base) = self.base_directory {
+            base.clone()
+        } else {
+            let home = home_dir()
+                .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
+            home.join(DEFAULT_TAP_DIR)
+        };
+        Ok(base_dir.join(sanitized_did))
     }
 }
 

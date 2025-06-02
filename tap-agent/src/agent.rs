@@ -14,6 +14,7 @@ use reqwest::Client;
 #[cfg(target_arch = "wasm32")]
 use serde::de::DeserializeOwned;
 use serde_json::Value;
+use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(feature = "native")]
 use std::time::Duration;
@@ -1009,12 +1010,24 @@ impl TapAgent {
         metadata: std::collections::HashMap<String, String>,
         save_to_storage: bool,
     ) -> Result<(Self, String)> {
+        Self::create_enhanced_agent_with_path(agent_id, policies, metadata, save_to_storage, None)
+            .await
+    }
+
+    /// Create an agent with enhanced configuration (policies and metadata) with custom storage path
+    pub async fn create_enhanced_agent_with_path(
+        agent_id: String,
+        policies: Vec<String>,
+        metadata: std::collections::HashMap<String, String>,
+        save_to_storage: bool,
+        storage_path: Option<PathBuf>,
+    ) -> Result<(Self, String)> {
         use crate::did::{DIDGenerationOptions, KeyType};
         use crate::storage::KeyStorage;
 
-        // Create a key manager and generate a key
+        // Create a key manager and generate a key without saving to storage
         let key_manager = AgentKeyManager::new();
-        let generated_key = key_manager.generate_key(DIDGenerationOptions {
+        let generated_key = key_manager.generate_key_without_save(DIDGenerationOptions {
             key_type: KeyType::Ed25519,
         })?;
 
@@ -1022,9 +1035,10 @@ impl TapAgent {
         let config = AgentConfig::new(agent_id.clone()).with_debug(true);
 
         // Add the generated key to the key manager with the custom DID
+        // Use add_key_without_save to prevent automatic storage write
         let mut custom_generated_key = generated_key.clone();
         custom_generated_key.did = agent_id.clone();
-        key_manager.add_key(&custom_generated_key)?;
+        key_manager.add_key_without_save(&custom_generated_key)?;
 
         // Create the agent
         #[cfg(all(not(target_arch = "wasm32"), test))]
@@ -1041,14 +1055,23 @@ impl TapAgent {
 
         if save_to_storage {
             // Save to key storage
-            let mut key_storage = KeyStorage::load_default()?;
+            let mut key_storage = if let Some(path) = &storage_path {
+                KeyStorage::load_from_path(path)?
+            } else {
+                KeyStorage::load_default()?
+            };
 
             // Convert the generated key to a stored key
             let mut stored_key = KeyStorage::from_generated_key(&custom_generated_key);
             stored_key.label = format!("agent-{}", agent_id.split(':').last().unwrap_or("agent"));
 
             key_storage.add_key(stored_key);
-            key_storage.save_default()?;
+
+            if let Some(path) = &storage_path {
+                key_storage.save_to_path(path)?;
+            } else {
+                key_storage.save_default()?;
+            }
 
             // Create agent directory with policies and metadata
             key_storage.create_agent_directory(&agent_id, &policies, &metadata)?;
@@ -1087,16 +1110,34 @@ impl TapAgent {
 
     /// List all enhanced agents with their policies and metadata
     pub fn list_enhanced_agents() -> Result<Vec<EnhancedAgentInfo>> {
+        Self::list_enhanced_agents_with_path(None)
+    }
+
+    /// List all enhanced agents with their policies and metadata with custom storage path
+    pub fn list_enhanced_agents_with_path(
+        storage_path: Option<PathBuf>,
+    ) -> Result<Vec<EnhancedAgentInfo>> {
         use crate::storage::KeyStorage;
         use std::fs;
 
-        let key_storage = KeyStorage::load_default()?;
+        let key_storage = if let Some(path) = &storage_path {
+            KeyStorage::load_from_path(path)?
+        } else {
+            KeyStorage::load_default()?
+        };
         let mut agents = Vec::new();
 
         // Get TAP directory
-        let home = dirs::home_dir()
-            .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
-        let tap_dir = home.join(crate::storage::DEFAULT_TAP_DIR);
+        let tap_dir = if let Some(path) = &storage_path {
+            // For custom paths, the tap directory is the parent of the keys.json file
+            path.parent()
+                .ok_or_else(|| Error::Storage("Invalid storage path".to_string()))?
+                .to_path_buf()
+        } else {
+            let home = dirs::home_dir()
+                .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
+            home.join(crate::storage::DEFAULT_TAP_DIR)
+        };
 
         if !tap_dir.exists() {
             return Ok(agents);

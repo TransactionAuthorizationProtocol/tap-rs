@@ -690,9 +690,6 @@ fn delete_key(storage: &mut KeyStorage, did_or_label: &str, force: bool) -> Resu
     // Remove the key
     storage.keys.remove(&did);
 
-    // Remove from labels map
-    storage.labels.retain(|_, v| v != &did);
-
     // If this was the default key, clear the default
     if storage.default_did.as_deref() == Some(&did) {
         storage.default_did = storage.keys.keys().next().cloned();

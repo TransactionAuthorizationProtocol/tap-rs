@@ -103,6 +103,10 @@ pub mod message_packing;
 /// Key storage utilities
 pub mod storage;
 
+/// Test utilities for temporary storage
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+
 /// Message verification utilities
 pub mod verification;
 

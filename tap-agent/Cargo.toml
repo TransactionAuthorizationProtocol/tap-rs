@@ -34,6 +34,7 @@ bs58 = "0.5"
 clap = { version = "4.4", features = ["derive"] }
 once_cell = "1.18.0"
 dirs = "5.0"
+tempfile = { version = "3.8", optional = true }
 
 # WASM support
 wasm-bindgen = { workspace = true, optional = true }
@@ -48,6 +49,7 @@ tokio-test = { workspace = true }
 assert_matches = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 criterion = "0.5"
+tempfile = "3.8"
 
 [[bench]]
 name = "agent_benchmark"
@@ -56,6 +58,7 @@ harness = false
 [features]
 default = ["native"]
 native = ["reqwest"]
+test-utils = ["tempfile"]
 wasm = [
     "tap-msg/wasm",
     "wasm-bindgen",

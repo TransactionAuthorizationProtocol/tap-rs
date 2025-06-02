@@ -6,6 +6,10 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::process;
 use std::sync::Arc;
+use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
+use tap_agent::config::AgentConfig;
+use tap_agent::did::{DIDGenerationOptions, KeyType};
+use tap_agent::key_manager::KeyManager;
 use tap_agent::storage::KeyStorage;
 use tap_agent::Agent;
 use tap_agent::TapAgent;
@@ -139,8 +143,8 @@ fn print_help() {
     println!();
     println!("NOTES:");
     println!("    - If no agent DID and key are provided, the server will:");
-    println!("      1. Try to load keys from ~/.tap/keys.json (created by 'tap-agent-cli generate --save')");
-    println!("      2. Fall back to an ephemeral agent if no stored keys exist");
+    println!("      1. Try to load keys from ~/.tap/keys.json");
+    println!("      2. Automatically create and save new keys if none exist");
 }
 
 #[tokio::main]
@@ -172,8 +176,52 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Create the actual agent
-    let agent = TapAgent::from_stored_keys(None, true).await.unwrap();
+    // Create the actual agent - try to load from storage first, create if none exist
+    let agent = match TapAgent::from_stored_keys(None, true).await {
+        Ok(agent) => {
+            info!("Loaded agent from stored keys");
+            agent
+        }
+        Err(e) => {
+            info!("No stored keys found ({}), creating new agent...", e);
+
+            // Create a key manager with storage enabled and generate a new key
+            let default_key_path = KeyStorage::default_key_path().ok_or_else(|| {
+                std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "Could not determine default key path",
+                )
+            })?;
+            let key_manager_builder =
+                AgentKeyManagerBuilder::new().load_from_path(default_key_path);
+            let key_manager = key_manager_builder.build()?;
+
+            // Generate a new key
+            let generated_key = key_manager.generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })?;
+
+            info!("Generated new agent with DID: {}", generated_key.did);
+
+            // Create agent config and build agent
+            let config = AgentConfig::new(generated_key.did.clone()).with_debug(true);
+
+            #[cfg(all(not(target_arch = "wasm32"), test))]
+            let agent = {
+                let resolver = Arc::new(tap_agent::did::MultiResolver::default());
+                TapAgent::new_with_resolver(config, Arc::new(key_manager), resolver)
+            };
+
+            #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+            let agent = TapAgent::new(config, Arc::new(key_manager));
+
+            #[cfg(target_arch = "wasm32")]
+            let agent = TapAgent::new(config, Arc::new(key_manager));
+
+            info!("New key saved to storage successfully");
+            agent
+        }
+    };
     let agent_did = agent.get_agent_did().to_string(); // Clone to a String to avoid borrowing issues
 
     let agent_arc = Arc::new(agent);
@@ -182,15 +230,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Print the DID to stdout for easy copying
     println!("TAP HTTP Server started with agent DID: {}", agent_did);
 
-    // If using ephemeral agent, print a note that it's not persistent
-    if args.agent_did.is_none() && args.agent_key.is_none() {
+    // Check if we're using command-line provided keys vs. stored keys
+    if args.agent_did.is_some() && args.agent_key.is_some() {
+        println!("Note: Using command-line provided DID and key.");
+    } else {
         match KeyStorage::default_key_path() {
-            Some(path) if !path.exists() => {
-                println!("Note: Using an ephemeral agent that won't persist across restarts.");
-                println!("To create a persistent agent, run: `tap-agent-cli generate --save`");
-                println!("Or provide --agent-did and --agent-key arguments");
+            Some(path) if path.exists() => {
+                println!("Note: Using persistent agent keys from storage.");
             }
-            _ => {}
+            _ => {
+                println!("Note: Created new persistent agent keys in storage for future use.");
+            }
         }
     }
 
@@ -268,10 +318,54 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Err(e.into());
     }
 
-    // Register the agent with the node
+    // Register the primary agent with the node
     if let Err(e) = node.register_agent(agent_arc.clone()).await {
         error!("Failed to register agent: {}", e);
         return Err(e.into());
+    }
+
+    // Register all additional agents from storage
+    match KeyStorage::load_default() {
+        Ok(storage) => {
+            let stored_dids: Vec<String> = storage.keys.keys().cloned().collect();
+            info!("Found {} total keys in storage", stored_dids.len());
+
+            for stored_did in &stored_dids {
+                // Skip the primary agent as it's already registered
+                if stored_did == &agent_did {
+                    continue;
+                }
+
+                info!("Registering additional agent: {}", stored_did);
+                match TapAgent::from_stored_keys(Some(stored_did.clone()), true).await {
+                    Ok(additional_agent) => {
+                        let additional_agent_arc = Arc::new(additional_agent);
+                        if let Err(e) = node.register_agent(additional_agent_arc).await {
+                            error!("Failed to register additional agent {}: {}", stored_did, e);
+                        } else {
+                            info!("Successfully registered additional agent: {}", stored_did);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to load additional agent {}: {}", stored_did, e);
+                    }
+                }
+            }
+
+            if stored_dids.len() > 1 {
+                info!(
+                    "Registered {} agents total (1 primary + {} additional)",
+                    stored_dids.len(),
+                    stored_dids.len() - 1
+                );
+            } else {
+                info!("Registered 1 agent (primary only)");
+            }
+        }
+        Err(e) => {
+            info!("Could not load additional keys from storage: {}", e);
+            info!("Only the primary agent is registered");
+        }
     }
 
     // Create and start HTTP server

@@ -29,11 +29,11 @@ fn test_default_label_generation() -> Result<()> {
         assert_eq!(added_key.label, format!("agent-{}", i));
     }
 
-    // Verify label mappings
-    assert_eq!(storage.labels.len(), 5);
+    // Verify labels are assigned correctly
+    assert_eq!(storage.keys.len(), 5);
     for i in 1..=5 {
         let label = format!("agent-{}", i);
-        assert!(storage.labels.contains_key(&label));
+        assert!(storage.keys.values().any(|key| key.label == label));
     }
 
     Ok(())
@@ -53,8 +53,8 @@ fn test_custom_label() -> Result<()> {
     let added_key = storage.keys.get(&key.did).unwrap();
     assert_eq!(added_key.label, "production-key");
 
-    // Verify label mapping
-    assert_eq!(storage.labels.get("production-key"), Some(&key.did));
+    // Verify label is set correctly
+    assert_eq!(storage.keys.get(&key.did).unwrap().label, "production-key");
 
     Ok(())
 }
@@ -133,9 +133,9 @@ fn test_update_label() -> Result<()> {
     let updated_key = storage.keys.get(&key.did).unwrap();
     assert_eq!(updated_key.label, "new-label");
 
-    // Verify label mappings updated
-    assert!(!storage.labels.contains_key("old-label"));
-    assert_eq!(storage.labels.get("new-label"), Some(&key.did));
+    // Verify label was updated
+    assert!(!storage.keys.values().any(|k| k.label == "old-label"));
+    assert_eq!(storage.keys.get(&key.did).unwrap().label, "new-label");
 
     // Verify can still find by new label
     let found = storage.find_by_label("new-label");
@@ -174,7 +174,6 @@ fn test_storage_persistence_with_labels() -> Result<()> {
         let loaded_storage = KeyStorage::load_from_path(&path)?;
 
         assert_eq!(loaded_storage.keys.len(), 2);
-        assert_eq!(loaded_storage.labels.len(), 2);
 
         let key1 = loaded_storage.find_by_label("test-key-1");
         assert!(key1.is_some());
@@ -225,7 +224,6 @@ fn test_backward_compatibility() -> Result<()> {
 
     // Verify labels were auto-generated
     assert_eq!(loaded_storage.keys.len(), 2);
-    assert_eq!(loaded_storage.labels.len(), 2);
 
     // Check that all keys have labels
     for (_, key) in &loaded_storage.keys {

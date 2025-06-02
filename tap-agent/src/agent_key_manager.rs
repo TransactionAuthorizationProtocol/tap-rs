@@ -258,23 +258,49 @@ impl AgentKeyManager {
 
         Ok(self.clone())
     }
-}
 
-impl Default for AgentKeyManager {
-    fn default() -> Self {
-        Self::new()
+    /// Add a key to the key manager with option to save to storage
+    fn add_key_internal(&self, key: &GeneratedKey, save_to_storage: bool) -> Result<()> {
+        // Create a LocalAgentKey
+        let agent_key = self.agent_key_from_generated(key)?;
+        let key_id = AgentKey::key_id(&agent_key).to_string();
+
+        // Store the legacy secret
+        if let Ok(mut secrets) = self.secrets.write() {
+            secrets.insert(key.did.clone(), agent_key.clone().secret);
+        } else {
+            return Err(Error::FailedToAcquireResolverWriteLock);
+        }
+
+        // Store in all collections
+        self.store_agent_key(&agent_key, &key_id)?;
+
+        // Save to storage if configured and requested
+        if save_to_storage {
+            self.save_to_storage()?;
+        }
+
+        Ok(())
     }
-}
 
-#[async_trait]
-impl KeyManager for AgentKeyManager {
-    /// Get access to the secrets storage
-    fn secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>> {
-        Arc::clone(&self.secrets)
+    /// Add a key to the key manager without saving to storage
+    /// This is useful when you plan to save to storage manually later
+    pub fn add_key_without_save(&self, key: &GeneratedKey) -> Result<()> {
+        self.add_key_internal(key, false)
     }
 
-    /// Generate a new key with the specified options
-    fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
+    /// Generate a new key with the specified options without saving to storage
+    /// This is useful when you plan to save to storage manually later
+    pub fn generate_key_without_save(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
+        self.generate_key_internal(options, false)
+    }
+
+    /// Internal method to generate a key with optional storage save
+    fn generate_key_internal(
+        &self,
+        options: DIDGenerationOptions,
+        save_to_storage: bool,
+    ) -> Result<GeneratedKey> {
         // Generate the key
         let key = self.generator.generate_did(options)?;
 
@@ -299,17 +325,30 @@ impl KeyManager for AgentKeyManager {
         // Store in all collections
         self.store_agent_key(&agent_key, &key_id)?;
 
-        // Save to storage if configured
-        self.save_to_storage()?;
+        // Save to storage if configured and requested
+        if save_to_storage {
+            self.save_to_storage()?;
+        }
 
         Ok(key)
     }
 
-    /// Generate a new web DID with the specified domain and options
-    fn generate_web_did(
+    /// Generate a new web DID with the specified domain and options without saving to storage
+    /// This is useful when you plan to save to storage manually later
+    pub fn generate_web_did_without_save(
         &self,
         domain: &str,
         options: DIDGenerationOptions,
+    ) -> Result<GeneratedKey> {
+        self.generate_web_did_internal(domain, options, false)
+    }
+
+    /// Internal method to generate a web DID with optional storage save
+    fn generate_web_did_internal(
+        &self,
+        domain: &str,
+        options: DIDGenerationOptions,
+        save_to_storage: bool,
     ) -> Result<GeneratedKey> {
         // Generate the key
         let key = self.generator.generate_web_did(domain, options)?;
@@ -335,32 +374,45 @@ impl KeyManager for AgentKeyManager {
         // Store in all collections
         self.store_agent_key(&agent_key, &key_id)?;
 
-        // Save to storage if configured
-        self.save_to_storage()?;
+        // Save to storage if configured and requested
+        if save_to_storage {
+            self.save_to_storage()?;
+        }
 
         Ok(key)
+    }
+}
+
+impl Default for AgentKeyManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl KeyManager for AgentKeyManager {
+    /// Get access to the secrets storage
+    fn secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>> {
+        Arc::clone(&self.secrets)
+    }
+
+    /// Generate a new key with the specified options
+    fn generate_key(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
+        self.generate_key_internal(options, true)
+    }
+
+    /// Generate a new web DID with the specified domain and options
+    fn generate_web_did(
+        &self,
+        domain: &str,
+        options: DIDGenerationOptions,
+    ) -> Result<GeneratedKey> {
+        self.generate_web_did_internal(domain, options, true)
     }
 
     /// Add an existing key to the key manager
     fn add_key(&self, key: &GeneratedKey) -> Result<()> {
-        // Create a LocalAgentKey
-        let agent_key = self.agent_key_from_generated(key)?;
-        let key_id = AgentKey::key_id(&agent_key).to_string();
-
-        // Store the legacy secret
-        if let Ok(mut secrets) = self.secrets.write() {
-            secrets.insert(key.did.clone(), agent_key.clone().secret);
-        } else {
-            return Err(Error::FailedToAcquireResolverWriteLock);
-        }
-
-        // Store in all collections
-        self.store_agent_key(&agent_key, &key_id)?;
-
-        // Save to storage if configured
-        self.save_to_storage()?;
-
-        Ok(())
+        self.add_key_internal(key, true)
     }
 
     /// Remove a key from the key manager
