@@ -1,10 +1,11 @@
 [package]
 name = "tap-mcp"
-version = "0.1.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
 description = "Model Context Protocol server for TAP Node functionality"
-license = "MIT"
-repository = "https://github.com/notabene-id/tap-rs"
+repository.workspace = true
+license.workspace = true
 keywords = ["mcp", "tap", "blockchain", "transactions", "ai"]
 categories = ["api-bindings", "development-tools"]
 
