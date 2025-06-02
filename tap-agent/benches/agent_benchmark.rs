@@ -3,7 +3,6 @@
 //! Run with: cargo bench --bench agent_benchmark
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tap_agent::{Agent, TapAgent};
