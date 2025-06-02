@@ -150,7 +150,7 @@ pub enum ToolContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ResourceContent {
     pub uri: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "mimeType", skip_serializing_if = "Option::is_none")]
     pub mime_type: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,

@@ -277,4 +277,47 @@ impl McpServer {
             }
         }
     }
+
+    /// Handle a request directly (for testing)
+    #[allow(dead_code)]
+    pub async fn handle_request_direct(
+        &mut self,
+        request: JsonRpcRequest,
+    ) -> Result<JsonRpcResponse> {
+        debug!("Handling direct request: {}", request.method);
+
+        let response = match request.method.as_str() {
+            "initialize" => {
+                let response = self.handle_initialize(request.id, request.params).await;
+                // For testing, automatically mark as initialized after successful initialize
+                if matches!(
+                    response,
+                    JsonRpcResponse {
+                        result: Some(_),
+                        error: None,
+                        ..
+                    }
+                ) {
+                    self.initialized = true;
+                }
+                response
+            }
+            "initialized" => {
+                // Client confirms initialization
+                self.initialized = true;
+                info!("Client initialization confirmed");
+                return Ok(JsonRpcResponse::success(request.id, serde_json::json!({})));
+            }
+            "tools/list" => self.handle_list_tools(request.id, request.params).await,
+            "tools/call" => self.handle_call_tool(request.id, request.params).await,
+            "resources/list" => self.handle_list_resources(request.id, request.params).await,
+            "resources/read" => self.handle_read_resource(request.id, request.params).await,
+            _ => {
+                warn!("Unknown method: {}", request.method);
+                JsonRpcResponse::error(request.id, JsonRpcError::method_not_found(request.method))
+            }
+        };
+
+        Ok(response)
+    }
 }
