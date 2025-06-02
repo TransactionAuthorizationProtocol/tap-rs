@@ -9,23 +9,25 @@
 //! cryptocurrency asset transfers.
 
 // Internal modules
-pub mod derive;
 pub mod didcomm;
 pub mod error;
-pub mod examples;
+// pub mod examples; // Temporarily disabled during refactor
 pub mod message;
 pub mod utils;
+
+// Re-export the derive macros from tap-msg-derive
+pub use tap_msg_derive::{TapMessage, TapMessageBody};
 
 // Re-export public types for easier access
 pub use didcomm::{
     Attachment, AttachmentData, Base64AttachmentData, JsonAttachmentData, LinksAttachmentData,
-    OutOfBand, PlainMessage,
+    OutOfBand, PlainMessage, PlainMessageExt, UntypedPlainMessage,
 };
 pub use error::{Error, Result};
 pub use message::{
-    create_tap_message, AddAgents, Authorize, DocumentReference, ErrorBody, Invoice, LineItem,
-    OrderReference, Participant, Payment, Presentation, Reject, Settle, TapMessageBody,
-    TaxCategory, TaxSubtotal, TaxTotal, Transfer,
+    create_tap_message, AddAgents, Agent, Authorize, DocumentReference, ErrorBody, Invoice,
+    LineItem, MessageContext, OrderReference, Party, Payment, Presentation, Reject, Settle,
+    TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, TransactionContext, Transfer,
 };
 
 // Conditional compilation for WASM targets

@@ -18,7 +18,7 @@ use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle};
-use tap_msg::{Invoice, LineItem, Participant, Payment, TaxCategory, TaxSubtotal, TaxTotal};
+use tap_msg::{Invoice, LineItem, Party, Payment, TaxCategory, TaxSubtotal, TaxTotal};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -106,7 +106,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 2: Customer receives and processes the payment request
         println!("Step 2: Customer receives and processes the payment request");
 
-        let received_payment: Payment = customer_agent.receive_message(&packed_payment).await?;
+        let plain_message = customer_agent.receive_message(&packed_payment).await?;
+        let received_payment: Payment = serde_json::from_value(plain_message.body)?;
         println!("Customer received payment request:");
         println!("  Asset: {}", received_payment.asset.as_ref().unwrap());
         println!("  Amount: {}", received_payment.amount);
@@ -144,7 +145,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let authorize = Authorize {
             transaction_id: transaction_id.clone(),
-            note: Some(format!("Authorizing payment to merchant: {}", merchant_did)),
+            settlement_address: None,
+            expiry: None,
         };
 
         let (packed_authorize, _delivery_results) = customer_agent
@@ -155,13 +157,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 4: Merchant receives the authorization
         println!("Step 4: Merchant receives the authorization");
 
-        let received_authorize: Authorize =
-            merchant_agent.receive_message(&packed_authorize).await?;
+        let plain_message = merchant_agent.receive_message(&packed_authorize).await?;
+        let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Merchant received authorization:");
         println!("  Payment ID: {}", received_authorize.transaction_id);
-        if let Some(note) = received_authorize.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 5: Customer settles the payment
         println!("Step 5: Customer settles the payment");
@@ -186,7 +185,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 6: Merchant receives the settlement confirmation
         println!("Step 6: Merchant receives the settlement confirmation");
 
-        let received_settle: Settle = merchant_agent.receive_message(&packed_settle).await?;
+        let plain_message = merchant_agent.receive_message(&packed_settle).await?;
+        let received_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Merchant received settlement confirmation:");
         println!("  Payment ID: {}", received_settle.transaction_id);
         println!("  Settlement ID: {}", received_settle.settlement_id);
@@ -246,31 +246,13 @@ fn create_payment_message_with_invoice(
     invoice_id: &str,
     transaction_id: &str,
 ) -> Payment {
-    // Create merchant and customer participants
-    let merchant = Participant {
-        id: merchant_did.to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let customer = Participant {
-        id: customer_did.to_string(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create merchant and customer parties
+    let merchant = Party::new(merchant_did);
+    let customer = Party::new(customer_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", merchant_did);
 
     // Create line items for the invoice
     let line_items = vec![
@@ -360,6 +342,7 @@ fn create_payment_message_with_invoice(
         merchant,
         customer: Some(customer),
         agents: vec![settlement_agent],
+        connection_id: None,
         metadata: HashMap::new(),
         transaction_id: transaction_id.to_string(),
         memo: Some("Payment with invoice".to_string()),

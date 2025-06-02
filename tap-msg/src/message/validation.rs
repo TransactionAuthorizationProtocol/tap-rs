@@ -30,12 +30,12 @@ pub fn validate_message(message: &PlainMessage) -> Result<()> {
 /// Used for validation without constructing a full Message object
 pub fn validate_message_body(message_type: &str, body: &Value) -> Result<()> {
     match message_type {
-        "https://tap.rsvp/schema/1.0#transfer" => {
+        "https://tap.rsvp/schema/1.0#Transfer" => {
             let transfer: Transfer = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             transfer.validate()
         }
-        "https://tap.rsvp/schema/1.0#presentation" => {
+        "https://tap.rsvp/schema/1.0#Presentation" => {
             let presentation: Presentation = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             presentation.validate()
@@ -46,27 +46,27 @@ pub fn validate_message_body(message_type: &str, body: &Value) -> Result<()> {
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             didcomm_presentation.validate()
         }
-        "https://tap.rsvp/schema/1.0#authorize" => {
+        "https://tap.rsvp/schema/1.0#Authorize" => {
             let authorize: Authorize = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             authorize.validate()
         }
-        "https://tap.rsvp/schema/1.0#reject" => {
+        "https://tap.rsvp/schema/1.0#Reject" => {
             let reject: Reject = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             reject.validate()
         }
-        "https://tap.rsvp/schema/1.0#settle" => {
+        "https://tap.rsvp/schema/1.0#Settle" => {
             let settle: Settle = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             settle.validate()
         }
-        "https://tap.rsvp/schema/1.0#addagents" => {
+        "https://tap.rsvp/schema/1.0#AddAgents" => {
             let add_agents: AddAgents = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             add_agents.validate()
         }
-        "https://tap.rsvp/schema/1.0#error" => {
+        "https://tap.rsvp/schema/1.0#Error" => {
             let error: ErrorBody = serde_json::from_value(body.clone())
                 .map_err(|e| Error::SerializationError(e.to_string()))?;
             error.validate()

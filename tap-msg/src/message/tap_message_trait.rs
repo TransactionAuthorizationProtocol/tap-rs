@@ -6,7 +6,10 @@
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::policy::Policy;
-use crate::message::{Authorize, Participant, RemoveAgent, ReplaceAgent, UpdatePolicies};
+use crate::message::{
+    AddAgents, Agent, Authorize, Cancel, ConfirmRelationship, Party, Reject, RemoveAgent,
+    ReplaceAgent, Revert, Settle, UpdateParty, UpdatePolicies,
+};
 use chrono::Utc;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -191,12 +194,12 @@ pub trait Connectable {
     ///
     /// # Arguments
     ///
-    /// * `connect_id` - The ID of the Connect message to link to
+    /// * `connection_id` - The ID of the Connect message to link to
     ///
     /// # Returns
     ///
     /// Self reference for fluent interface chaining
-    fn with_connection(&mut self, connect_id: &str) -> &mut Self;
+    fn with_connection(&mut self, connection_id: &str) -> &mut Self;
 
     /// Check if this message is connected to a prior Connect message.
     ///
@@ -306,9 +309,6 @@ pub trait TapMessage {
         Ok(message)
     }
 
-    /// Get the message type for this message
-    fn message_type(&self) -> &'static str;
-
     /// Get the thread ID for this message
     fn thread_id(&self) -> Option<&str>;
 
@@ -401,29 +401,6 @@ impl TapMessage for PlainMessage {
         participants
     }
 
-    fn message_type(&self) -> &'static str {
-        match self.type_.as_str() {
-            "https://tap.rsvp/schema/1.0#transfer" => "https://tap.rsvp/schema/1.0#transfer",
-            "https://tap.rsvp/schema/1.0#payment-request" => {
-                "https://tap.rsvp/schema/1.0#payment-request"
-            }
-            "https://tap.rsvp/schema/1.0#connect" => "https://tap.rsvp/schema/1.0#connect",
-            "https://tap.rsvp/schema/1.0#authorize" => "https://tap.rsvp/schema/1.0#authorize",
-            "https://tap.rsvp/schema/1.0#reject" => "https://tap.rsvp/schema/1.0#reject",
-            "https://tap.rsvp/schema/1.0#settle" => "https://tap.rsvp/schema/1.0#settle",
-            "https://tap.rsvp/schema/1.0#update-party" => {
-                "https://tap.rsvp/schema/1.0#update-party"
-            }
-            "https://tap.rsvp/schema/1.0#update-policies" => {
-                "https://tap.rsvp/schema/1.0#update-policies"
-            }
-            "https://didcomm.org/present-proof/3.0/presentation" => {
-                "https://didcomm.org/present-proof/3.0/presentation"
-            }
-            _ => "unknown",
-        }
-    }
-
     fn thread_id(&self) -> Option<&str> {
         self.thid.as_deref()
     }
@@ -439,8 +416,8 @@ impl TapMessage for PlainMessage {
 
 // Implement Connectable trait for PlainMessage
 impl Connectable for PlainMessage {
-    fn with_connection(&mut self, connect_id: &str) -> &mut Self {
-        self.pthid = Some(connect_id.to_string());
+    fn with_connection(&mut self, connection_id: &str) -> &mut Self {
+        self.pthid = Some(connection_id.to_string());
         self
     }
 
@@ -450,6 +427,27 @@ impl Connectable for PlainMessage {
 
     fn connection_id(&self) -> Option<&str> {
         self.pthid.as_deref()
+    }
+}
+
+/// Helper function to convert an untyped PlainMessage to a typed PlainMessage.
+///
+/// This is used internally to convert the result of create_reply to a typed message.
+pub fn typed_plain_message<T: TapMessageBody>(reply: PlainMessage, body: T) -> PlainMessage<T> {
+    PlainMessage {
+        id: reply.id,
+        typ: reply.typ,
+        type_: reply.type_,
+        body,
+        from: reply.from,
+        to: reply.to,
+        thid: reply.thid,
+        pthid: reply.pthid,
+        extra_headers: reply.extra_headers,
+        created_time: reply.created_time,
+        expires_time: reply.expires_time,
+        from_prior: reply.from_prior,
+        attachments: reply.attachments,
     }
 }
 
@@ -490,25 +488,134 @@ pub fn create_tap_message<T: TapMessageBody>(
     Ok(message)
 }
 
-/// Authorizable trait implementation for various TAP message types.
-/// This module defines the Authorizable trait, which allows message types
-/// to be authorized, and implementations for relevant TAP message types.
-/// Authorizable trait for types that can be authorized or can generate authorization-related messages.
-pub trait Authorizable {
-    /// Create an Authorize message for this object.
-    fn authorize(&self, note: Option<String>) -> Authorize;
+/// Authorizable trait for TAIP-4 authorization messages.
+///
+/// This trait provides methods for creating authorization-related messages
+/// as defined in TAIP-4, excluding the Settle message which is handled
+/// separately in the Transaction trait.
+pub trait Authorizable: TapMessage {
+    /// Create an Authorize message for this object (TAIP-4).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this authorization
+    /// * `settlement_address` - Optional settlement address in CAIP-10 format
+    /// * `expiry` - Optional expiry timestamp in ISO 8601 format
+    fn authorize(
+        &self,
+        creator_did: &str,
+        settlement_address: Option<&str>,
+        expiry: Option<&str>,
+    ) -> PlainMessage<Authorize>;
 
-    /// Create an UpdatePolicies message for this object.
-    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies;
+    /// Create a Cancel message for this object (TAIP-4).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this cancellation
+    /// * `by` - The party wishing to cancel (e.g., "originator" or "beneficiary")
+    /// * `reason` - Optional reason for cancellation
+    fn cancel(&self, creator_did: &str, by: &str, reason: Option<&str>) -> PlainMessage<Cancel>;
 
-    /// Create a ReplaceAgent message for this object.
+    /// Create a Reject message for this object (TAIP-4).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this rejection
+    /// * `reason` - Reason for rejection
+    fn reject(&self, creator_did: &str, reason: &str) -> PlainMessage<Reject>;
+}
+
+/// Transaction trait for managing transaction lifecycle operations.
+///
+/// This trait provides methods for transaction processing operations
+/// as defined in TAIPs 5-9, including agent management, party updates,
+/// policy management, and settlement.
+pub trait Transaction: TapMessage {
+    /// Create a Settle message for this object (TAIP-4).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this settlement
+    /// * `settlement_id` - CAIP-220 identifier of the underlying settlement transaction
+    /// * `amount` - Optional amount settled (must be <= original amount)
+    fn settle(
+        &self,
+        creator_did: &str,
+        settlement_id: &str,
+        amount: Option<&str>,
+    ) -> PlainMessage<Settle>;
+
+    /// Create a Revert message for this object (TAIP-4).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this reversal request
+    /// * `settlement_address` - CAIP-10 format address to return funds to
+    /// * `reason` - Reason for reversal request
+    fn revert(
+        &self,
+        creator_did: &str,
+        settlement_address: &str,
+        reason: &str,
+    ) -> PlainMessage<Revert>;
+
+    /// Create an AddAgents message for this object (TAIP-5).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this addition
+    /// * `agents` - List of agents to add
+    fn add_agents(&self, creator_did: &str, agents: Vec<Agent>) -> PlainMessage<AddAgents>;
+
+    /// Create a ReplaceAgent message for this object (TAIP-5).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this replacement
+    /// * `original_agent` - The agent DID to replace
+    /// * `replacement` - The replacement agent
     fn replace_agent(
         &self,
-        transaction_id: String,
-        original_agent: String,
-        replacement: Participant,
-    ) -> ReplaceAgent;
+        creator_did: &str,
+        original_agent: &str,
+        replacement: Agent,
+    ) -> PlainMessage<ReplaceAgent>;
 
-    /// Create a RemoveAgent message for this object.
-    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent;
+    /// Create a RemoveAgent message for this object (TAIP-5).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this removal
+    /// * `agent` - The agent DID to remove
+    fn remove_agent(&self, creator_did: &str, agent: &str) -> PlainMessage<RemoveAgent>;
+
+    /// Create an UpdateParty message for this object (TAIP-6).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this update
+    /// * `party_type` - The type of party ("originator", "beneficiary", etc.)
+    /// * `party` - The party information to update
+    fn update_party(
+        &self,
+        creator_did: &str,
+        party_type: &str,
+        party: Party,
+    ) -> PlainMessage<UpdateParty>;
+
+    /// Create an UpdatePolicies message for this object (TAIP-7).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this update
+    /// * `policies` - New policies to apply
+    fn update_policies(
+        &self,
+        creator_did: &str,
+        policies: Vec<Policy>,
+    ) -> PlainMessage<UpdatePolicies>;
+
+    /// Create a ConfirmRelationship message for this object (TAIP-9).
+    ///
+    /// # Arguments
+    /// * `creator_did` - The DID of the agent creating this confirmation
+    /// * `agent_did` - The agent DID confirming their relationship
+    /// * `relationship_type` - The type of relationship being confirmed
+    fn confirm_relationship(
+        &self,
+        creator_did: &str,
+        agent_did: &str,
+        relationship_type: &str,
+    ) -> PlainMessage<ConfirmRelationship>;
 }

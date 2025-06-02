@@ -5,7 +5,8 @@ use std::collections::HashMap;
 /// Wrapper for plain message. Provides helpers for message building and packing/unpacking.
 /// Adapted from https://github.com/sicpa-dlab/didcomm-rust/blob/main/src/message/message.rs
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
-pub struct PlainMessage {
+#[serde(bound = "T: Serialize + serde::de::DeserializeOwned")]
+pub struct PlainMessage<T = Value> {
     /// Message id. Must be unique to the sender.
     pub id: String,
 
@@ -20,8 +21,8 @@ pub struct PlainMessage {
     #[serde(rename = "type")]
     pub type_: String,
 
-    /// Message body.
-    pub body: Value,
+    /// Message body - strongly typed when T is specified.
+    pub body: T,
 
     /// Sender identifier. The from attribute MUST be a string that is a valid DID
     /// or DID URL (without the fragment component) which identifies the sender of the message.
@@ -69,10 +70,297 @@ pub struct PlainMessage {
     pub attachments: Option<Vec<Attachment>>,
 }
 
+/// Type alias for backward compatibility - PlainMessage with Value body
+pub type UntypedPlainMessage = PlainMessage<Value>;
+
 const PLAINTEXT_TYP: &str = "application/didcomm-plain+json";
 
 fn default_typ() -> String {
     PLAINTEXT_TYP.to_string()
+}
+
+// Implementation for generic PlainMessage<T>
+impl<T> PlainMessage<T>
+where
+    T: serde::Serialize + serde::de::DeserializeOwned,
+{
+    /// Create a new PlainMessage with the given body
+    pub fn new(id: String, type_: String, body: T, from: String) -> Self {
+        Self {
+            id,
+            typ: default_typ(),
+            type_,
+            body,
+            from,
+            to: vec![],
+            thid: None,
+            pthid: None,
+            created_time: Some(chrono::Utc::now().timestamp() as u64),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: HashMap::new(),
+        }
+    }
+
+    /// Builder method to set recipients
+    pub fn with_recipients(mut self, to: Vec<String>) -> Self {
+        self.to = to;
+        self
+    }
+
+    /// Builder method to add a single recipient
+    pub fn with_recipient(mut self, recipient: &str) -> Self {
+        self.to.push(recipient.to_string());
+        self
+    }
+
+    /// Builder method to set thread ID
+    pub fn with_thread_id(mut self, thid: Option<String>) -> Self {
+        self.thid = thid;
+        self
+    }
+
+    /// Builder method to set parent thread ID
+    pub fn with_parent_thread_id(mut self, pthid: Option<String>) -> Self {
+        self.pthid = pthid;
+        self
+    }
+
+    /// Builder method to set expiration time
+    pub fn with_expires_at(mut self, expires_time: u64) -> Self {
+        self.expires_time = Some(expires_time);
+        self
+    }
+
+    /// Builder method to add attachments
+    pub fn with_attachments(mut self, attachments: Vec<Attachment>) -> Self {
+        self.attachments = Some(attachments);
+        self
+    }
+
+    /// Builder method to add a custom header
+    pub fn with_header(mut self, key: String, value: Value) -> Self {
+        self.extra_headers.insert(key, value);
+        self
+    }
+}
+
+// Implementation specific to typed PlainMessage where T implements TapMessageBody
+impl<T> PlainMessage<T>
+where
+    T: crate::message::TapMessageBody + serde::Serialize + serde::de::DeserializeOwned,
+{
+    /// Create a new typed message
+    pub fn new_typed(body: T, from: &str) -> Self {
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: default_typ(),
+            type_: T::message_type().to_string(),
+            body,
+            from: from.to_string(),
+            to: vec![],
+            thid: None,
+            pthid: None,
+            created_time: Some(chrono::Utc::now().timestamp() as u64),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: HashMap::new(),
+        }
+    }
+
+    /// Convert to untyped PlainMessage for serialization/transport
+    pub fn to_plain_message(self) -> crate::error::Result<PlainMessage<Value>> {
+        // First serialize the body with the @type field
+        let mut body_value = serde_json::to_value(&self.body)?;
+
+        // Ensure @type is set in the body
+        if let Some(body_obj) = body_value.as_object_mut() {
+            body_obj.insert(
+                "@type".to_string(),
+                Value::String(T::message_type().to_string()),
+            );
+        }
+
+        Ok(PlainMessage {
+            id: self.id,
+            typ: self.typ,
+            type_: self.type_,
+            body: body_value,
+            from: self.from,
+            to: self.to,
+            thid: self.thid,
+            pthid: self.pthid,
+            created_time: self.created_time,
+            expires_time: self.expires_time,
+            from_prior: self.from_prior,
+            attachments: self.attachments,
+            extra_headers: self.extra_headers,
+        })
+    }
+
+    /// Extract recipients based on the message body participants
+    pub fn extract_participants(&self) -> Vec<String> {
+        let mut participants = vec![];
+
+        // Try to extract from MessageContext first if implemented
+        if let Some(ctx_participants) = self.try_extract_from_context() {
+            participants = ctx_participants;
+        } else {
+            // Fallback to TapMessageBody::to_didcomm
+            if let Ok(plain_msg) = self.body.to_didcomm(&self.from) {
+                participants = plain_msg.to;
+            }
+        }
+
+        // Add any explicitly set recipients
+        for recipient in &self.to {
+            if !participants.contains(recipient) {
+                participants.push(recipient.clone());
+            }
+        }
+
+        participants
+    }
+
+    /// Try to extract participants using MessageContext if available
+    fn try_extract_from_context(&self) -> Option<Vec<String>> {
+        // This is a compile-time check - if T implements MessageContext,
+        // we can use it. Otherwise, this will return None.
+        //
+        // In practice, this would need to be implemented using trait objects
+        // or type erasure, but for now we'll use the TapMessageBody approach
+        // and let individual message types override this behavior.
+        None
+    }
+}
+
+// Implementation for PlainMessage<T> where T implements both TapMessageBody and MessageContext
+impl<T> PlainMessage<T>
+where
+    T: crate::message::TapMessageBody
+        + crate::message::MessageContext
+        + serde::Serialize
+        + serde::de::DeserializeOwned,
+{
+    /// Extract participants using MessageContext
+    pub fn extract_participants_with_context(&self) -> Vec<String> {
+        self.body.participant_dids()
+    }
+
+    /// Create a typed message with automatic recipient detection
+    pub fn new_typed_with_context(body: T, from: &str) -> Self {
+        let participants = body.participant_dids();
+
+        Self {
+            id: uuid::Uuid::new_v4().to_string(),
+            typ: default_typ(),
+            type_: T::message_type().to_string(),
+            body,
+            from: from.to_string(),
+            to: participants.into_iter().filter(|did| did != from).collect(),
+            thid: None,
+            pthid: None,
+            created_time: Some(chrono::Utc::now().timestamp() as u64),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: HashMap::new(),
+        }
+    }
+
+    /// Get routing hints from the message body
+    pub fn routing_hints(&self) -> crate::message::RoutingHints {
+        self.body.routing_hints()
+    }
+
+    /// Get transaction context from the message body
+    pub fn transaction_context(&self) -> Option<crate::message::TransactionContext> {
+        self.body.transaction_context()
+    }
+}
+
+// Implementation for PlainMessage<Value> (untyped)
+impl PlainMessage<Value> {
+    /// Create a typed message from an untyped PlainMessage
+    pub fn from_untyped(plain_msg: PlainMessage<Value>) -> Self {
+        plain_msg
+    }
+
+    /// Try to parse the body into a specific TAP message type
+    pub fn parse_body<T: crate::message::TapMessageBody>(
+        self,
+    ) -> crate::error::Result<PlainMessage<T>> {
+        // Check type matches
+        if self.type_ != T::message_type() {
+            return Err(crate::error::Error::Validation(format!(
+                "Type mismatch: expected {}, got {}",
+                T::message_type(),
+                self.type_
+            )));
+        }
+
+        // Parse the body
+        let typed_body: T = serde_json::from_value(self.body)?;
+
+        Ok(PlainMessage {
+            id: self.id,
+            typ: self.typ,
+            type_: self.type_,
+            body: typed_body,
+            from: self.from,
+            to: self.to,
+            thid: self.thid,
+            pthid: self.pthid,
+            created_time: self.created_time,
+            expires_time: self.expires_time,
+            from_prior: self.from_prior,
+            attachments: self.attachments,
+            extra_headers: self.extra_headers,
+        })
+    }
+
+    /// Parse into the TapMessage enum for runtime dispatch
+    pub fn parse_tap_message(
+        &self,
+    ) -> crate::error::Result<crate::message::tap_message_enum::TapMessage> {
+        crate::message::tap_message_enum::TapMessage::from_plain_message(self)
+    }
+}
+
+/// Extension trait for PlainMessage to work with typed messages
+pub trait PlainMessageExt<T> {
+    /// Convert to a typed message
+    fn into_typed(self) -> PlainMessage<T>;
+
+    /// Try to parse as a specific message type
+    fn parse_as<U: crate::message::TapMessageBody>(self) -> crate::error::Result<PlainMessage<U>>;
+}
+
+impl PlainMessageExt<Value> for PlainMessage<Value> {
+    fn into_typed(self) -> PlainMessage<Value> {
+        self
+    }
+
+    fn parse_as<U: crate::message::TapMessageBody>(self) -> crate::error::Result<PlainMessage<U>> {
+        self.parse_body()
+    }
+}
+
+/// Helper to convert between typed messages and TapMessage enum
+impl<T: crate::message::TapMessageBody> TryFrom<PlainMessage<T>>
+    for crate::message::tap_message_enum::TapMessage
+where
+    crate::message::tap_message_enum::TapMessage: From<T>,
+{
+    type Error = crate::error::Error;
+
+    fn try_from(typed: PlainMessage<T>) -> crate::error::Result<Self> {
+        // This would require implementing From<T> for TapMessage for each message type
+        // For now, we'll use the parse approach
+        typed.to_plain_message()?.parse_tap_message()
+    }
 }
 
 /// Message for out-of-band invitations (TAIP-2).

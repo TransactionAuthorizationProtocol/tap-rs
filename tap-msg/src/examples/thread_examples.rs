@@ -2,7 +2,7 @@
 
 use crate::error::{Error, Result};
 use crate::message::policy::{Policy, RequireProofOfControl};
-use crate::message::tap_message_trait::{Authorizable, TapMessageBody};
+use crate::message::tap_message_trait::{TapMessageBody, Transaction};
 use crate::message::{
     AddAgents, Authorize, Participant, RemoveAgent, ReplaceAgent, Settle, Transfer,
 };
@@ -41,6 +41,7 @@ pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
         agents: vec![],
         settlement_id: None,
         memo: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 
@@ -50,7 +51,8 @@ pub fn create_reply_to_transfer_example() -> Result<PlainMessage> {
     // Create an Authorize message
     let authorize = Authorize {
         transaction_id: transfer_message.id.clone(),
-        note: Some("I authorize this transfer".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     // Create a reply to the transfer message
@@ -79,7 +81,8 @@ pub fn create_reply_using_message_trait_example(
     // Create an Authorize response
     let authorize = Authorize {
         transaction_id: original_message.id.clone(),
-        note: Some("Transfer authorized".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     // Create a reply using the Message trait extension
@@ -148,6 +151,7 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
             },
         ],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 
@@ -158,7 +162,8 @@ pub fn create_add_agents_example() -> Result<PlainMessage> {
     // Create an Authorize message first
     let authorize = Authorize {
         transaction_id: transfer_message.id.clone(),
-        note: Some("I authorize this transfer".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     // Create a reply from the originator to the beneficiary
@@ -229,14 +234,7 @@ pub fn create_replace_agent_example(
     };
 
     // Call replace_agent on the Transfer instance
-    let replace_agent_body = original_transfer.replace_agent(
-        original_message.id.clone(),
-        original_agent_id.to_string(),
-        replacement,
-    );
-
-    // Create a reply using the TapMessage trait
-    let mut response = replace_agent_body.to_didcomm(creator_did)?;
+    let mut response = original_transfer.replace_agent(creator_did, original_agent_id, replacement);
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -251,7 +249,8 @@ pub fn create_replace_agent_example(
 
     response.to = recipients;
 
-    Ok(response)
+    // Convert typed PlainMessage to untyped PlainMessage
+    response.to_plain_message()
 }
 
 /// This example demonstrates removing an agent using the Authorizable trait
@@ -266,11 +265,7 @@ pub fn create_remove_agent_example(
         .map_err(|e| Error::SerializationError(e.to_string()))?;
 
     // Call remove_agent on the Transfer instance
-    let remove_agent_body =
-        original_transfer.remove_agent(original_message.id.clone(), agent_to_remove.to_string());
-
-    // Create a reply using the TapMessage trait
-    let mut response = remove_agent_body.to_didcomm(creator_did)?;
+    let mut response = original_transfer.remove_agent(creator_did, agent_to_remove);
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -285,7 +280,8 @@ pub fn create_remove_agent_example(
 
     response.to = recipients;
 
-    Ok(response)
+    // Convert typed PlainMessage to untyped PlainMessage
+    response.to_plain_message()
 }
 
 /// This example demonstrates creating an UpdatePolicies message using the Authorizable trait
@@ -309,13 +305,10 @@ pub fn create_update_policies_example(
     };
 
     // Call update_policies on the Transfer instance
-    let update_policies_body = original_transfer.update_policies(
-        original_message.id.clone(),
+    let mut response = original_transfer.update_policies(
+        creator_did,
         vec![Policy::RequireProofOfControl(proof_policy)],
     );
-
-    // Create a reply using the TapMessage trait, which maintains thread correlation
-    let mut response = update_policies_body.to_didcomm(creator_did)?;
 
     // Set thread ID to maintain conversation
     response.thid = original_message.thid.clone();
@@ -330,7 +323,8 @@ pub fn create_update_policies_example(
 
     response.to = recipients;
 
-    Ok(response)
+    // Convert typed PlainMessage to untyped PlainMessage
+    response.to_plain_message()
 }
 
 /// This example demonstrates creating a Settle message
@@ -382,7 +376,7 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             leiCode: None,
             name: None,
         },
-        memo: None,
+        memo: Some("International transfer".to_string()),
         beneficiary: Some(Participant {
             id: bob_did.to_string(),
             role: Some("beneficiary".to_string()),
@@ -390,9 +384,10 @@ pub fn thread_participant_workflow_example() -> Result<()> {
             leiCode: None,
             name: None,
         }),
-        amount: "10.00".to_string(),
+        amount: "250.00".to_string(),
         agents: vec![],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
     };
 
@@ -407,7 +402,8 @@ pub fn thread_participant_workflow_example() -> Result<()> {
     // 2. Now Bob wants to reply to the transfer
     let authorize = Authorize {
         transaction_id: transfer_message.id.clone(),
-        note: Some("Transfer approved".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     // Create a reply from Bob to Alice

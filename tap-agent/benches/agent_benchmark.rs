@@ -3,12 +3,12 @@
 //! Run with: cargo bench --bench agent_benchmark
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use tap_agent::{Agent, TapAgent};
 use tap_caip::AssetId;
-use tap_msg::{message::Transfer, Participant};
+use tap_msg::message::{Party, Transfer};
+use uuid::Uuid;
 
 /// Create a test agent with ephemeral key for benchmarking
 fn create_test_agent() -> (Arc<TapAgent>, String) {
@@ -25,36 +25,21 @@ fn create_test_agent() -> (Arc<TapAgent>, String) {
 
 /// Create a test transfer message
 fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {
-    // Create originator and beneficiary participants
-    let originator = Participant {
-        id: from_did.to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new(from_did);
 
-    let beneficiary = Participant {
-        id: to_did.to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new(to_did);
 
-    // Create a transfer body
-    Transfer {
-        asset: AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f")
-            .unwrap(),
-        originator,
-        beneficiary: Some(beneficiary),
-        amount: "100.0".to_string(),
-        agents: vec![],
-        settlement_id: None,
-        memo: Some("Benchmark test transfer".to_string()),
-        metadata: HashMap::new(),
-        transaction_id: "benchmark-transfer-id".to_string(),
-    }
+    // Create a transfer body using the builder pattern
+    Transfer::builder()
+        .asset(
+            AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f").unwrap(),
+        )
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .amount("100.00".to_string())
+        .transaction_id(format!("test-{}", Uuid::new_v4()))
+        .build()
 }
 
 /// Benchmark message sending

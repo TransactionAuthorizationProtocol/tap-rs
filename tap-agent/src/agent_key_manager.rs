@@ -34,6 +34,8 @@ pub struct AgentKeyManager {
     decryption_keys: Arc<RwLock<HashMap<String, Arc<dyn DecryptionKey + Send + Sync>>>>,
     /// Verification keys
     verification_keys: Arc<RwLock<HashMap<String, Arc<dyn VerificationKey + Send + Sync>>>>,
+    /// Generated keys with DID documents (for key ID resolution)
+    generated_keys: Arc<RwLock<HashMap<String, GeneratedKey>>>,
     /// Storage path
     storage_path: Option<PathBuf>,
 }
@@ -48,8 +50,25 @@ impl AgentKeyManager {
             encryption_keys: Arc::new(RwLock::new(HashMap::new())),
             decryption_keys: Arc::new(RwLock::new(HashMap::new())),
             verification_keys: Arc::new(RwLock::new(HashMap::new())),
+            generated_keys: Arc::new(RwLock::new(HashMap::new())),
             storage_path: None,
         }
+    }
+
+    /// Get a generated key (with DID document) by DID
+    pub fn get_generated_key(&self, did: &str) -> Result<GeneratedKey> {
+        if let Ok(generated_keys) = self.generated_keys.read() {
+            if let Some(key) = generated_keys.get(did) {
+                return Ok(key.clone());
+            }
+        } else {
+            return Err(Error::FailedToAcquireResolverReadLock);
+        }
+
+        Err(Error::KeyNotFound(format!(
+            "Generated key not found for DID: {}",
+            did
+        )))
     }
 
     /// Get the key type for a signing key (for debugging)
@@ -269,6 +288,13 @@ impl KeyManager for AgentKeyManager {
             return Err(Error::FailedToAcquireResolverWriteLock);
         }
 
+        // Store the generated key for DID document access
+        if let Ok(mut generated_keys) = self.generated_keys.write() {
+            generated_keys.insert(key.did.clone(), key.clone());
+        } else {
+            return Err(Error::FailedToAcquireResolverWriteLock);
+        }
+
         // Store in all collections
         self.store_agent_key(&agent_key, &key_id)?;
 
@@ -294,6 +320,13 @@ impl KeyManager for AgentKeyManager {
         // Store the legacy secret
         if let Ok(mut secrets) = self.secrets.write() {
             secrets.insert(key.did.clone(), agent_key.clone().secret);
+        } else {
+            return Err(Error::FailedToAcquireResolverWriteLock);
+        }
+
+        // Store the generated key for DID document access
+        if let Ok(mut generated_keys) = self.generated_keys.write() {
+            generated_keys.insert(key.did.clone(), key.clone());
         } else {
             return Err(Error::FailedToAcquireResolverWriteLock);
         }
@@ -467,8 +500,20 @@ impl KeyManager for AgentKeyManager {
             // Try to find a secret with this DID or kid
             let did = kid.split('#').next().unwrap_or(kid);
             if let Some(secret) = secrets.get(did) {
+                // Detect key type from the JWK
+                let key_type = match &secret.secret_material {
+                    SecretMaterial::JWK { private_key_jwk } => {
+                        let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                        let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                        match (kty, crv) {
+                            (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            (Some("EC"), Some("P-256")) => KeyType::P256,
+                            (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
+                            _ => KeyType::Ed25519, // Default
+                        }
+                    }
+                };
                 // Create a LocalAgentKey
-                let key_type = KeyType::Ed25519; // Default to Ed25519
                 let agent_key = LocalAgentKey::new(secret.clone(), key_type);
 
                 // Add to signing keys for next time
@@ -502,8 +547,20 @@ impl KeyManager for AgentKeyManager {
             // Try to find a secret with this DID or kid
             let did = kid.split('#').next().unwrap_or(kid);
             if let Some(secret) = secrets.get(did) {
+                // Detect key type from the JWK
+                let key_type = match &secret.secret_material {
+                    SecretMaterial::JWK { private_key_jwk } => {
+                        let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                        let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                        match (kty, crv) {
+                            (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            (Some("EC"), Some("P-256")) => KeyType::P256,
+                            (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
+                            _ => KeyType::Ed25519, // Default
+                        }
+                    }
+                };
                 // Create a LocalAgentKey
-                let key_type = KeyType::Ed25519; // Default to Ed25519
                 let agent_key = LocalAgentKey::new(secret.clone(), key_type);
 
                 // Add to encryption keys for next time
@@ -539,8 +596,20 @@ impl KeyManager for AgentKeyManager {
             // Try to find a secret with this DID or kid
             let did = kid.split('#').next().unwrap_or(kid);
             if let Some(secret) = secrets.get(did) {
+                // Detect key type from the JWK
+                let key_type = match &secret.secret_material {
+                    SecretMaterial::JWK { private_key_jwk } => {
+                        let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+                        let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+                        match (kty, crv) {
+                            (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            (Some("EC"), Some("P-256")) => KeyType::P256,
+                            (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
+                            _ => KeyType::Ed25519, // Default
+                        }
+                    }
+                };
                 // Create a LocalAgentKey
-                let key_type = KeyType::Ed25519; // Default to Ed25519
                 let agent_key = LocalAgentKey::new(secret.clone(), key_type);
 
                 // Add to decryption keys for next time
@@ -627,7 +696,7 @@ impl KeyManager for AgentKeyManager {
         let signature = if let Some(kid) = expected_kid {
             jws.signatures
                 .iter()
-                .find(|s| s.header.kid == kid)
+                .find(|s| s.get_kid().as_deref() == Some(kid))
                 .ok_or_else(|| {
                     Error::Cryptography(format!("No signature found with kid: {}", kid))
                 })?
@@ -638,21 +707,16 @@ impl KeyManager for AgentKeyManager {
                 .ok_or_else(|| Error::Cryptography("No signatures in JWS".to_string()))?
         };
 
-        // Decode the protected header
-        let protected_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&signature.protected)
-            .map_err(|e| {
-                Error::Cryptography(format!("Failed to decode protected header: {}", e))
-            })?;
-
-        // Parse the protected header
-        let protected: JwsProtected = serde_json::from_slice(&protected_bytes).map_err(|e| {
-            Error::Serialization(format!("Failed to parse protected header: {}", e))
+        // Get the protected header
+        let protected = signature.get_protected_header().map_err(|e| {
+            Error::Cryptography(format!("Failed to decode protected header: {}", e))
         })?;
 
-        // Resolve the verification key
-        let verification_key =
-            KeyManager::resolve_verification_key(self, &signature.header.kid).await?;
+        // Get the verification key using kid from protected header
+        let kid = signature
+            .get_kid()
+            .ok_or_else(|| Error::Cryptography("No kid found in JWS signature".to_string()))?;
+        let verification_key = KeyManager::resolve_verification_key(self, &kid).await?;
 
         // Decode the signature
         let signature_bytes = base64::engine::general_purpose::STANDARD
@@ -843,6 +907,7 @@ impl AgentKeyManagerBuilder {
             encryption_keys: Arc::new(RwLock::new(self.encryption_keys)),
             decryption_keys: Arc::new(RwLock::new(self.decryption_keys)),
             verification_keys: Arc::new(RwLock::new(self.verification_keys)),
+            generated_keys: Arc::new(RwLock::new(HashMap::new())),
             storage_path: self.storage_path.clone(),
         };
 

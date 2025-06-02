@@ -7,7 +7,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tap_agent::TapAgent;
 use tap_msg::message::TapMessageBody;
-use tap_msg::message::Transfer;
+use tap_msg::message::{Party, Transfer};
 use tap_msg::PlainMessage;
 use tap_node::message::processor_pool::ProcessorPoolConfig;
 use tap_node::{NodeConfig, TapNode};
@@ -29,25 +29,14 @@ async fn create_test_message(
             "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
         )
         .unwrap(),
-        originator: tap_msg::Participant {
-            id: from_did.to_string(),
-            role: Some("originator".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        },
-        beneficiary: Some(tap_msg::Participant {
-            id: to_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        }),
+        originator: Party::new(from_did),
+        beneficiary: Some(Party::new(to_did)),
         amount: format!("{}.00", index),
         agents: vec![],
         settlement_id: None,
         memo: Some(format!("Test message {}", index)),
         metadata: HashMap::new(),
+        connection_id: None,
     };
 
     // Convert to DIDComm message
@@ -72,6 +61,12 @@ fn stress_test(c: &mut Criterion) {
         log_message_content: false,
         processor_pool: Some(pool_config),
         event_logger: None,
+        #[cfg(feature = "storage")]
+        storage_path: None,
+        #[cfg(feature = "storage")]
+        agent_did: None,
+        #[cfg(feature = "storage")]
+        tap_root: None,
     };
 
     // For testing, we'll create some DIDs that don't rely on external resolvers
@@ -103,7 +98,8 @@ fn stress_test(c: &mut Criterion) {
 
                     for i in 0..batch_size {
                         let (message, _) = create_test_message(&agent1_did, &agent2_did, i).await;
-                        futures.push(node.receive_message(message));
+                        let message_value = serde_json::to_value(message).unwrap();
+                        futures.push(node.receive_message(message_value));
                     }
 
                     // Wait for all messages to be processed

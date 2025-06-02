@@ -20,7 +20,7 @@ use tap_agent::error::Result;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{AddAgents, Authorize, Reject, Settle, Transfer};
-use tap_msg::Participant;
+use tap_msg::{Agent as TapAgent_, Party};
 
 fn main() -> Result<()> {
     tokio_test::block_on(async {
@@ -110,55 +110,24 @@ fn main() -> Result<()> {
         let transfer = Transfer {
             transaction_id: uuid::Uuid::new_v4().to_string(),
             asset,
-            originator: Participant {
-                id: originator_party.to_string(),
-                role: Some("originator".to_string()),
-                policies: None,
-                leiCode: None,
-                name: None,
-            },
-            beneficiary: Some(Participant {
-                id: beneficiary_party.to_string(),
-                role: Some("beneficiary".to_string()),
-                policies: None,
-                leiCode: None,
-                name: None,
-            }),
+            originator: Party::new(originator_party),
+            beneficiary: Some(Party::new(beneficiary_party)),
             amount: "100.0".to_string(),
             agents: vec![
                 // Originator agents
-                Participant {
-                    id: originator_vasp_did.clone(),
-                    role: Some("originatorVASP".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
-                Participant {
-                    id: originator_wallet_did.clone(),
-                    role: Some("originatorWallet".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
-                Participant {
-                    id: originator_wallet_api_did.clone(),
-                    role: Some("originatorWalletAPI".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
+                TapAgent_::new(&originator_vasp_did, "originatorVASP", originator_party),
+                TapAgent_::new(&originator_wallet_did, "originatorWallet", originator_party),
+                TapAgent_::new(
+                    &originator_wallet_api_did,
+                    "originatorWalletAPI",
+                    originator_party,
+                ),
                 // Beneficiary agent
-                Participant {
-                    id: beneficiary_vasp_did.clone(),
-                    role: Some("beneficiaryVASP".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
+                TapAgent_::new(&beneficiary_vasp_did, "beneficiaryVASP", beneficiary_party),
             ],
             settlement_id: None,
             memo: Some("Multi-agent transfer example with dynamic agent addition".to_string()),
+            connection_id: None,
             metadata: HashMap::new(),
         };
 
@@ -194,9 +163,10 @@ fn main() -> Result<()> {
         println!("Step 3: Beneficiary VASP receives the transfer");
 
         // Receive at VASP
-        let received_transfer_vasp: Transfer = beneficiary_vasp
+        let plain_message = beneficiary_vasp
             .receive_message(&packed_transfer_vasp)
             .await?;
+        let received_transfer_vasp: Transfer = serde_json::from_value(plain_message.body)?;
 
         println!("Transfer received by beneficiary VASP");
         println!("  Transfer ID: {}", transfer_id);
@@ -212,20 +182,16 @@ fn main() -> Result<()> {
         let add_agents = AddAgents {
             transaction_id: transfer_id.to_string(),
             agents: vec![
-                Participant {
-                    id: beneficiary_wallet_did.clone(),
-                    role: Some("beneficiaryWallet".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
-                Participant {
-                    id: beneficiary_wallet_api_did.clone(),
-                    role: Some("beneficiaryWalletAPI".to_string()),
-                    policies: None,
-                    leiCode: None,
-                    name: None,
-                },
+                TapAgent_::new(
+                    &beneficiary_wallet_did,
+                    "beneficiaryWallet",
+                    beneficiary_party,
+                ),
+                TapAgent_::new(
+                    &beneficiary_wallet_api_did,
+                    "beneficiaryWalletAPI",
+                    beneficiary_party,
+                ),
             ],
         };
 
@@ -244,8 +210,8 @@ fn main() -> Result<()> {
         println!("Step 5: Originator VASP receives the AddAgents message");
 
         // Receive AddAgents message
-        let received_add_agents: AddAgents =
-            originator_vasp.receive_message(&packed_add_agents).await?;
+        let plain_message = originator_vasp.receive_message(&packed_add_agents).await?;
+        let received_add_agents: AddAgents = serde_json::from_value(plain_message.body)?;
 
         println!("Originator VASP received AddAgents message:");
         println!("  Transfer ID: {}", received_add_agents.transaction_id);
@@ -255,15 +221,9 @@ fn main() -> Result<()> {
         println!(
             "  Added agents: {} ({}), {} ({})\n",
             received_add_agents.agents[0].id,
-            received_add_agents.agents[0]
-                .role
-                .as_ref()
-                .unwrap_or(&"unknown".to_string()),
+            received_add_agents.agents[0].role,
             received_add_agents.agents[1].id,
-            received_add_agents.agents[1]
-                .role
-                .as_ref()
-                .unwrap_or(&"unknown".to_string())
+            received_add_agents.agents[1].role
         );
 
         // Step 7: Initial rejection by beneficiary VASP for compliance
@@ -281,7 +241,8 @@ fn main() -> Result<()> {
             .await?;
 
         // Originator receives the rejection
-        let received_reject: Reject = originator_vasp.receive_message(&packed_reject).await?;
+        let plain_message = originator_vasp.receive_message(&packed_reject).await?;
+        let received_reject: Reject = serde_json::from_value(plain_message.body)?;
         println!("Originator VASP received rejection:");
         println!("  Transfer ID: {}", received_reject.transaction_id);
         println!("  Reason: {}", received_reject.reason);
@@ -295,7 +256,8 @@ fn main() -> Result<()> {
         let _settlement_address = "eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
         let authorize = Authorize {
             transaction_id: transfer_id.to_string(),
-            note: Some("Transfer authorized after compliance review".to_string()),
+            settlement_address: None,
+            expiry: None,
         };
 
         let (packed_authorize_vasp, _delivery_results) = beneficiary_vasp
@@ -303,21 +265,20 @@ fn main() -> Result<()> {
             .await?;
 
         // Originator receives the authorization
-        let received_authorize: Authorize = originator_vasp
+        let plain_message = originator_vasp
             .receive_message(&packed_authorize_vasp)
             .await?;
+        let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator VASP received authorization:");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
-        if let Some(note) = &received_authorize.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 9: Beneficiary wallet also authorizes the transfer
         println!("Step 8: Beneficiary wallet also authorizes the transfer");
 
         let authorize_wallet = Authorize {
             transaction_id: transfer_id.to_string(),
-            note: Some("Wallet ready to receive funds".to_string()),
+            settlement_address: None,
+            expiry: None,
         };
 
         let (packed_authorize_wallet, _delivery_results) = beneficiary_wallet
@@ -325,17 +286,15 @@ fn main() -> Result<()> {
             .await?;
 
         // Originator wallet receives the authorization
-        let received_authorize_wallet: Authorize = originator_wallet
+        let plain_message = originator_wallet
             .receive_message(&packed_authorize_wallet)
             .await?;
+        let received_authorize_wallet: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator wallet received authorization:");
         println!(
             "  Transfer ID: {}",
             received_authorize_wallet.transaction_id
         );
-        if let Some(note) = &received_authorize_wallet.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 10: Wallet APIs exchange information
         println!("Step 9: Wallet APIs exchange technical information for settlement");
@@ -346,10 +305,12 @@ fn main() -> Result<()> {
             transfer_id,
             uuid::Uuid::new_v4()
         );
+        println!("  - {}", api_note);
 
         let api_authorize = Authorize {
             transaction_id: transfer_id.to_string(),
-            note: Some(api_note.clone()),
+            settlement_address: None,
+            expiry: None,
         };
 
         let (packed_api_authorize, _delivery_results) = originator_wallet_api
@@ -357,14 +318,12 @@ fn main() -> Result<()> {
             .await?;
 
         // Beneficiary wallet API receives the technical details
-        let received_api_authorize: Authorize = beneficiary_wallet_api
+        let plain_message = beneficiary_wallet_api
             .receive_message(&packed_api_authorize)
             .await?;
+        let received_api_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary wallet API received technical details:");
         println!("  Transfer ID: {}", received_api_authorize.transaction_id);
-        if let Some(note) = &received_api_authorize.note {
-            println!("  Technical details: {}\n", note);
-        }
 
         // Step 11: Originator wallet initiates settlement
         println!("Step 10: Originator wallet initiates settlement");
@@ -408,9 +367,10 @@ fn main() -> Result<()> {
             .await?;
 
         // Beneficiary wallet API receives settlement confirmation
-        let received_api_settle: Settle = beneficiary_wallet_api
+        let plain_message = beneficiary_wallet_api
             .receive_message(&packed_api_settle)
             .await?;
+        let received_api_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary wallet API received settlement confirmation:");
         println!("  Transfer ID: {}", received_api_settle.transaction_id);
         println!("  Settlement ID: {}", received_api_settle.settlement_id);
@@ -422,12 +382,14 @@ fn main() -> Result<()> {
         println!("Step 12: Beneficiaries receive settlement confirmation");
 
         // Receive at VASP and wallet
-        let received_settle_vasp: Settle = beneficiary_vasp
+        let plain_message = beneficiary_vasp
             .receive_message(&packed_settle_vasp)
             .await?;
-        let _received_settle_wallet: Settle = beneficiary_wallet
+        let received_settle_vasp: Settle = serde_json::from_value(plain_message.body)?;
+        let plain_message_wallet = beneficiary_wallet
             .receive_message(&packed_settle_wallet)
             .await?;
+        let _received_settle_wallet: Settle = serde_json::from_value(plain_message_wallet.body)?;
 
         println!("Settlement received by beneficiary VASP and wallet:");
         println!("  Transfer ID: {}", received_settle_vasp.transaction_id);

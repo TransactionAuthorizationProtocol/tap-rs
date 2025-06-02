@@ -1,7 +1,16 @@
 //! TAP Node - A node implementation for the TAP protocol
 //!
 //! The TAP Node is the central component that manages TAP Agents, routes messages,
-//! processes events, and provides a scalable architecture for TAP deployments.
+//! processes events, stores transactions, and provides a scalable architecture for TAP deployments.
+//!
+//! # Architecture Overview
+//!
+//! The TAP Node acts as a message router and coordinator for multiple TAP Agents. It provides:
+//!
+//! - **Efficient Message Processing**: Different handling for plain, signed, and encrypted messages
+//! - **Centralized Verification**: Signed messages are verified once for all agents
+//! - **Smart Routing**: Encrypted messages are routed to appropriate recipient agents
+//! - **Scalable Design**: Supports multiple agents with concurrent message processing
 //!
 //! # Key Components
 //!
@@ -9,7 +18,35 @@
 //! - **Event Bus**: Publishes and distributes events throughout the system
 //! - **Message Processors**: Process incoming and outgoing messages
 //! - **Message Router**: Routes messages to the appropriate agent
-//! - **Processor Pool**: Provides scalable concurrent message processing
+//! - **DID Resolver**: Resolves DIDs for signature verification
+//! - **Storage**: Persistent SQLite storage with transaction tracking and audit trails
+//!
+//! # Message Processing Flow
+//!
+//! The TAP Node uses an optimized message processing flow based on message type:
+//!
+//! ## Signed Messages (JWS)
+//! 1. **Single Verification**: Signature verified once using DID resolver
+//! 2. **Routing**: Verified PlainMessage routed to appropriate agent
+//! 3. **Processing**: Agent receives verified message via `receive_plain_message()`
+//!
+//! ## Encrypted Messages (JWE)  
+//! 1. **Recipient Identification**: Extract recipient DIDs from JWE headers
+//! 2. **Agent Routing**: Send encrypted message to each matching agent
+//! 3. **Decryption**: Each agent attempts decryption via `receive_encrypted_message()`
+//! 4. **Processing**: Successfully decrypted messages are processed by the agent
+//!
+//! ## Plain Messages
+//! 1. **Direct Processing**: Plain messages processed through the pipeline
+//! 2. **Routing**: Routed to appropriate agent
+//! 3. **Delivery**: Agent receives via `receive_plain_message()`
+//!
+//! # Benefits of This Architecture
+//!
+//! - **Efficiency**: Signed messages verified once, not per-agent
+//! - **Scalability**: Encrypted messages naturally distributed to recipients
+//! - **Flexibility**: Agents remain fully functional standalone
+//! - **Security**: Centralized verification with distributed decryption
 //!
 //! # Thread Safety and Concurrency
 //!
@@ -18,29 +55,44 @@
 //! simultaneously. Most components within the node are either immutable or use interior
 //! mutability with appropriate synchronization.
 //!
-//! # Message Flow
+//! # Example Usage
 //!
-//! Messages in TAP Node follow a structured flow:
+//! ```rust,no_run
+//! use tap_node::{TapNode, NodeConfig};
+//! use tap_agent::TapAgent;
+//! use std::sync::Arc;
 //!
-//! 1. **Receipt**: Messages are received through the `receive_message` method
-//! 2. **Processing**: Each message is processed by the registered processors
-//! 3. **Routing**: The router determines which agent should handle the message
-//! 4. **Dispatch**: The message is delivered to the appropriate agent
-//! 5. **Response**: Responses are handled similarly in the reverse direction
-//!
-//! # Scalability
-//!
-//! The node supports scalable message processing through the optional processor pool,
-//! which uses a configurable number of worker threads to process messages concurrently.
-//! This allows a single node to handle high message throughput while maintaining
-//! shared between threads, with all mutable state protected by appropriate synchronization
-//! primitives.
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Create node
+//!     let config = NodeConfig::default();
+//!     let node = Arc::new(TapNode::new(config));
+//!     
+//!     // Create and register agent
+//!     let (agent, _did) = TapAgent::from_ephemeral_key().await?;
+//!     node.register_agent(Arc::new(agent)).await?;
+//!     
+//!     // Process incoming message (JSON Value)
+//!     let message_value = serde_json::json!({
+//!         "id": "msg-123",
+//!         "type": "test-message",
+//!         "body": {"content": "Hello"}
+//!     });
+//!     
+//!     node.receive_message(message_value).await?;
+//!     Ok(())
+//! }
+//! ```
 
 pub mod agent;
 pub mod error;
 pub mod event;
 pub mod message;
-pub mod resolver;
+#[cfg(feature = "storage")]
+pub mod state_machine;
+pub mod storage;
+#[cfg(feature = "storage")]
+pub mod validation;
 
 pub use error::{Error, Result};
 pub use event::logger::{EventLogger, EventLoggerConfig, LogDestination};
@@ -62,7 +114,7 @@ use crate::message::{
 };
 use agent::AgentRegistry;
 use event::EventBus;
-use resolver::NodeResolver;
+use tap_agent::did::MultiResolver;
 
 use async_trait::async_trait;
 
@@ -98,11 +150,13 @@ impl TapAgentExt for TapAgent {
         _to_did: &str,
     ) -> Result<String> {
         // Serialize the PlainMessage to JSON first to work around the TapMessageBody trait constraint
-        let json_value = serde_json::to_value(message).map_err(Error::Serialization)?;
+        let json_value =
+            serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
 
         // Use JSON string for transportation instead of direct message passing
         // This bypasses the need for PlainMessage to implement TapMessageBody
-        let serialized = serde_json::to_string(&json_value).map_err(Error::Serialization)?;
+        let serialized =
+            serde_json::to_string(&json_value).map_err(|e| Error::Serialization(e.to_string()))?;
 
         Ok(serialized)
     }
@@ -123,6 +177,15 @@ pub struct NodeConfig {
     pub processor_pool: Option<ProcessorPoolConfig>,
     /// Configuration for the event logger
     pub event_logger: Option<EventLoggerConfig>,
+    /// Path to the storage database (None for default)
+    #[cfg(feature = "storage")]
+    pub storage_path: Option<std::path::PathBuf>,
+    /// Agent DID for storage organization
+    #[cfg(feature = "storage")]
+    pub agent_did: Option<String>,
+    /// Custom TAP root directory (defaults to ~/.tap)
+    #[cfg(feature = "storage")]
+    pub tap_root: Option<std::path::PathBuf>,
 }
 
 /// # The TAP Node
@@ -164,11 +227,17 @@ pub struct TapNode {
     /// PlainMessage router
     router: CompositePlainMessageRouter,
     /// Resolver for DIDs
-    resolver: Arc<NodeResolver>,
+    resolver: Arc<MultiResolver>,
     /// Worker pool for handling messages
     processor_pool: Option<ProcessorPool>,
     /// Node configuration
     config: NodeConfig,
+    /// Storage for transactions
+    #[cfg(feature = "storage")]
+    storage: Option<Arc<storage::Storage>>,
+    /// Transaction state processor
+    #[cfg(feature = "storage")]
+    state_processor: Option<Arc<state_machine::StandardTransactionProcessor>>,
 }
 
 impl TapNode {
@@ -204,7 +273,13 @@ impl TapNode {
         ]);
 
         // Create the resolver
-        let resolver = Arc::new(NodeResolver::default());
+        let resolver = Arc::new(MultiResolver::default());
+
+        // Storage will be initialized on first use
+        #[cfg(feature = "storage")]
+        let storage = None;
+        #[cfg(feature = "storage")]
+        let state_processor = None;
 
         let node = Self {
             agents,
@@ -215,6 +290,10 @@ impl TapNode {
             resolver,
             processor_pool: None,
             config,
+            #[cfg(feature = "storage")]
+            storage,
+            #[cfg(feature = "storage")]
+            state_processor,
         };
 
         // Set up the event logger if configured
@@ -234,6 +313,66 @@ impl TapNode {
         node
     }
 
+    /// Initialize storage asynchronously
+    #[cfg(feature = "storage")]
+    pub async fn init_storage(&mut self) -> Result<()> {
+        let storage = if let Some(agent_did) = &self.config.agent_did {
+            // Use new DID-based storage structure
+            match storage::Storage::new_with_did(agent_did, self.config.tap_root.clone()).await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("Failed to initialize storage with DID: {}", e);
+                    return Err(Error::Storage(e.to_string()));
+                }
+            }
+        } else if let Some(storage_path) = self.config.storage_path.clone() {
+            // Use explicit path
+            match storage::Storage::new(Some(storage_path)).await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("Failed to initialize storage: {}", e);
+                    return Err(Error::Storage(e.to_string()));
+                }
+            }
+        } else {
+            // Initialize with default path
+            match storage::Storage::new(None).await {
+                Ok(s) => s,
+                Err(e) => {
+                    log::error!("Failed to initialize storage: {}", e);
+                    return Err(Error::Storage(e.to_string()));
+                }
+            }
+        };
+
+        let storage_arc = Arc::new(storage);
+
+        // Subscribe event handlers
+        let message_status_handler = Arc::new(event::handlers::MessageStatusHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(message_status_handler).await;
+
+        let transaction_state_handler = Arc::new(event::handlers::TransactionStateHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(transaction_state_handler).await;
+
+        let transaction_audit_handler = Arc::new(event::handlers::TransactionAuditHandler::new());
+        self.event_bus.subscribe(transaction_audit_handler).await;
+
+        // Create state processor
+        let state_processor = Arc::new(state_machine::StandardTransactionProcessor::new(
+            storage_arc.clone(),
+            self.event_bus.clone(),
+            self.agents.clone(),
+        ));
+
+        self.storage = Some(storage_arc);
+        self.state_processor = Some(state_processor);
+        Ok(())
+    }
+
     /// Start the node
     pub async fn start(&mut self, config: ProcessorPoolConfig) -> Result<()> {
         let processor_pool = ProcessorPool::new(config);
@@ -245,42 +384,172 @@ impl TapNode {
     ///
     /// This method handles the complete lifecycle of an incoming message:
     ///
-    /// 1. Processing the message through all registered processors
-    /// 2. Routing the message to determine the appropriate target agent
-    /// 3. Dispatching the message to the target agent
-    ///
-    /// The processing pipeline may transform or even drop the message based on
-    /// validation rules or other processing logic. If a message is dropped during
-    /// processing, this method will return Ok(()) without an error.
+    /// 1. Determining the message type (plain, signed, or encrypted)
+    /// 2. Verifying signatures or routing to agents for decryption
+    /// 3. Processing the resulting plain messages through the pipeline
+    /// 4. Routing and dispatching to the appropriate agents
     ///
     /// # Parameters
     ///
-    /// * `message` - The DIDComm message to be processed
+    /// * `message` - The message as a JSON Value (can be plain, JWS, or JWE)
     ///
     /// # Returns
     ///
-    /// * `Ok(())` if the message was successfully processed and dispatched (or intentionally dropped)
-    /// * `Err(Error)` if there was an error during processing, routing, or dispatching
-    ///
-    /// # Errors
-    ///
-    /// This method can return errors for several reasons:
-    /// * Processing errors from message processors
-    /// * Routing errors if no target agent can be determined
-    /// * Dispatch errors if the target agent cannot be found or fails to process the message
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use tap_node::{TapNode, NodeConfig};
-    /// # use tap_msg::didcomm::PlainMessage;
-    /// # async fn example(node: &TapNode, message: PlainMessage) -> Result<(), tap_node::Error> {
-    /// // Process an incoming message
-    /// node.receive_message(message).await?;
-    /// # Ok(())
-    /// # }
-    /// ```
-    pub async fn receive_message(&self, message: PlainMessage) -> Result<()> {
+    /// * `Ok(())` if the message was successfully processed
+    /// * `Err(Error)` if there was an error during processing
+    pub async fn receive_message(&self, message: serde_json::Value) -> Result<()> {
+        // Store the raw message for logging
+        let raw_message = serde_json::to_string(&message).ok();
+        use tap_agent::{verify_jws, Jwe, Jws};
+
+        // Determine message type
+        let is_encrypted =
+            message.get("protected").is_some() && message.get("recipients").is_some();
+        let is_signed = message.get("payload").is_some() && message.get("signatures").is_some();
+
+        if is_signed {
+            // Verify signature once using resolver
+            let jws: Jws = serde_json::from_value(message)
+                .map_err(|e| Error::Serialization(format!("Failed to parse JWS: {}", e)))?;
+
+            let plain_message = verify_jws(&jws, &*self.resolver)
+                .await
+                .map_err(|e| Error::Verification(format!("JWS verification failed: {}", e)))?;
+
+            // Process the verified plain message
+            self.process_plain_message(plain_message, raw_message.as_deref())
+                .await
+        } else if is_encrypted {
+            // Route encrypted message to each matching agent
+            let jwe: Jwe = serde_json::from_value(message.clone())
+                .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
+
+            // Find agents that match recipients
+            let mut processed = false;
+            for recipient in &jwe.recipients {
+                if let Some(did) = recipient.header.kid.split('#').next() {
+                    if let Ok(agent) = self.agents.get_agent(did).await {
+                        // Let the agent handle decryption and processing
+                        match agent.receive_encrypted_message(&message).await {
+                            Ok(_) => {
+                                processed = true;
+                                log::debug!(
+                                    "Agent {} successfully processed encrypted message",
+                                    did
+                                );
+                            }
+                            Err(e) => {
+                                log::debug!(
+                                    "Agent {} couldn't process encrypted message: {}",
+                                    did,
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !processed {
+                return Err(Error::Processing(
+                    "No agent could process the encrypted message".to_string(),
+                ));
+            }
+            Ok(())
+        } else {
+            // Plain message - parse and process
+            let plain_message: PlainMessage = serde_json::from_value(message).map_err(|e| {
+                Error::Serialization(format!("Failed to parse PlainMessage: {}", e))
+            })?;
+
+            self.process_plain_message(plain_message, raw_message.as_deref())
+                .await
+        }
+    }
+
+    /// Process a plain message through the pipeline
+    async fn process_plain_message(
+        &self,
+        message: PlainMessage,
+        raw_message: Option<&str>,
+    ) -> Result<()> {
+        // Validate the message if storage/validation is available
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref storage) = self.storage {
+                // Create validator
+                let validator_config = validation::StandardValidatorConfig {
+                    max_timestamp_drift_secs: 60,
+                    storage: storage.clone(),
+                };
+                let validator = validation::create_standard_validator(validator_config).await;
+
+                // Validate the message
+                use crate::validation::{MessageValidator, ValidationResult};
+                match validator.validate(&message).await {
+                    ValidationResult::Accept => {
+                        // Publish accepted event
+                        self.event_bus
+                            .publish_message_accepted(
+                                message.id.clone(),
+                                message.type_.clone(),
+                                message.from.clone(),
+                                message.to.first().cloned().unwrap_or_default(),
+                            )
+                            .await;
+                    }
+                    ValidationResult::Reject(reason) => {
+                        // Publish rejected event
+                        self.event_bus
+                            .publish_message_rejected(
+                                message.id.clone(),
+                                reason.clone(),
+                                message.from.clone(),
+                                message.to.first().cloned().unwrap_or_default(),
+                            )
+                            .await;
+
+                        // Return error to stop processing
+                        return Err(Error::Validation(reason));
+                    }
+                }
+            }
+        }
+
+        // Process message through state machine if available
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref state_processor) = self.state_processor {
+                use crate::state_machine::TransactionStateProcessor;
+                if let Err(e) = state_processor.process_message(&message).await {
+                    log::warn!("State processor error: {}", e);
+                    // Don't fail the entire message processing, just log the error
+                }
+            }
+        }
+        // Log all incoming messages for audit trail
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref storage) = self.storage {
+                // Log the message to the audit trail
+                match storage
+                    .log_message(&message, storage::MessageDirection::Incoming, raw_message)
+                    .await
+                {
+                    Ok(_) => log::debug!("Logged incoming message: {}", message.id),
+                    Err(e) => log::warn!("Failed to log incoming message: {}", e),
+                }
+
+                // Store as transaction if it's a Transfer or Payment
+                if message.type_.contains("transfer") || message.type_.contains("payment") {
+                    match storage.insert_transaction(&message).await {
+                        Ok(_) => log::debug!("Stored transaction: {}", message.id),
+                        Err(e) => log::warn!("Failed to store transaction: {}", e),
+                    }
+                }
+            }
+        }
+
         // Process the incoming message
         let processed_message = match self.incoming_processor.process_incoming(message).await? {
             Some(msg) => msg,
@@ -297,12 +566,21 @@ impl TapNode {
             }
         };
 
-        // Dispatch the message to the agent, handling any errors
-        match self.dispatch_message(target_did, processed_message).await {
+        // Get the agent
+        let agent = match self.agents.get_agent(&target_did).await {
+            Ok(a) => a,
+            Err(e) => {
+                log::warn!("Failed to get agent for dispatch: {}", e);
+                return Ok(());
+            }
+        };
+
+        // Let the agent process the plain message
+        match agent.receive_plain_message(processed_message).await {
             Ok(_) => Ok(()),
             Err(e) => {
                 // Log the error but don't fail the entire operation
-                log::warn!("Failed to dispatch message: {}", e);
+                log::warn!("Agent failed to process message: {}", e);
                 Ok(())
             }
         }
@@ -330,6 +608,29 @@ impl TapNode {
         to_did: String,
         message: PlainMessage,
     ) -> Result<String> {
+        // Log all outgoing messages for audit trail
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref storage) = self.storage {
+                // Log the message to the audit trail
+                match storage
+                    .log_message(&message, storage::MessageDirection::Outgoing, None)
+                    .await
+                {
+                    Ok(_) => log::debug!("Logged outgoing message: {}", message.id),
+                    Err(e) => log::warn!("Failed to log outgoing message: {}", e),
+                }
+
+                // Store as transaction if it's a Transfer or Payment
+                if message.type_.contains("transfer") || message.type_.contains("payment") {
+                    match storage.insert_transaction(&message).await {
+                        Ok(_) => log::debug!("Stored outgoing transaction: {}", message.id),
+                        Err(e) => log::warn!("Failed to store outgoing transaction: {}", e),
+                    }
+                }
+            }
+        }
+
         // Process the outgoing message
         let processed_message = match self.outgoing_processor.process_outgoing(message).await? {
             Some(msg) => msg,
@@ -395,12 +696,12 @@ impl TapNode {
     }
 
     /// Get a reference to the resolver
-    pub fn resolver(&self) -> &Arc<NodeResolver> {
+    pub fn resolver(&self) -> &Arc<MultiResolver> {
         &self.resolver
     }
 
     /// Get a mutable reference to the processor pool
-    /// This is a reference to Option<ProcessorPool> to allow starting the pool after node creation
+    /// This is a reference to `Option<ProcessorPool>` to allow starting the pool after node creation
     pub fn processor_pool_mut(&mut self) -> &mut Option<ProcessorPool> {
         &mut self.processor_pool
     }
@@ -408,6 +709,12 @@ impl TapNode {
     /// Get the node configuration
     pub fn config(&self) -> &NodeConfig {
         &self.config
+    }
+
+    /// Get a reference to the storage (if available)
+    #[cfg(feature = "storage")]
+    pub fn storage(&self) -> Option<&Arc<storage::Storage>> {
+        self.storage.as_ref()
     }
 }
 

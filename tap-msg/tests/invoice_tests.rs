@@ -3,8 +3,8 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::{Agent, Party};
 use tap_msg::message::{Payment, PaymentBuilder};
-use tap_msg::Participant;
 
 #[test]
 fn test_invoice_creation_and_validation() {
@@ -109,23 +109,11 @@ fn test_invoice_creation_and_validation() {
 
 #[test]
 fn test_payment_request_with_invoice() {
-    // Create a merchant participant
-    let merchant = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create a merchant party
+    let merchant = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    // Create an agent participant
-    let agent = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("agent".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create a customer party
+    let customer = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     // Create a simple invoice
     let invoice = Invoice {
@@ -170,13 +158,17 @@ fn test_payment_request_with_invoice() {
         .currency_code("USD".to_string())
         .amount("100.0".to_string())
         .merchant(merchant.clone())
-        .customer(agent.clone()) // Using agent as customer
+        .customer(customer.clone()) // Using customer agent
         .asset(asset)
         .transaction_id("payment-001".to_string())
         .build();
 
     // Add agents
-    payment_request.agents = vec![agent.clone()];
+    payment_request.agents = vec![Agent::new(
+        "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+        "customer_agent",
+        "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+    )];
 
     // Add invoice directly to payment
     payment_request.invoice = Some(invoice.clone());
@@ -200,7 +192,7 @@ fn test_payment_request_with_invoice() {
         .expect("Failed to convert Payment to DIDComm");
 
     // Verify DIDComm message type
-    assert_eq!(didcomm_message.type_, "https://tap.rsvp/schema/1.0#payment");
+    assert_eq!(didcomm_message.type_, "https://tap.rsvp/schema/1.0#Payment");
 
     // Verify that we can extract the message body
     let extracted =

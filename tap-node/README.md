@@ -19,6 +19,9 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 - **Configurable Components**: Customize node behavior with pluggable components
 - **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
 - **WASM Compatibility**: Optional WASM support for browser environments
+- **Persistent Storage**: SQLite-based storage using async SQLx with dual functionality:
+  - Transaction tracking for Transfer and Payment messages
+  - Complete audit trail of all incoming/outgoing messages
 
 ## Installation
 
@@ -36,6 +39,7 @@ tap-node = { path = "../tap-node", features = ["websocket"] } # Enable WebSocket
 tap-node = { path = "../tap-node", features = ["native-with-websocket"] } # Enable both HTTP and WebSocket
 tap-node = { path = "../tap-node", features = ["wasm"] } # Enable WASM support
 tap-node = { path = "../tap-node", features = ["wasm-with-websocket"] } # Enable WASM with WebSocket
+tap-node = { path = "../tap-node", features = ["storage"] } # Enable persistent storage (enabled by default)
 ```
 
 ## Architecture
@@ -43,16 +47,16 @@ tap-node = { path = "../tap-node", features = ["wasm-with-websocket"] } # Enable
 The TAP Node is built with a modular architecture:
 
 ```
-┌───────────────────────────────────────────────┐
-│                   TAP Node                     │
-├───────────────┬───────────────┬───────────────┤
-│ Agent Registry│ Message Router│  Event Bus    │
-├───────────────┼───────────────┼───────────────┤
-│ Message       │ Processor Pool│  Resolver     │
-│ Processors    │               │               │
-└───────────────┴───────────────┴───────────────┘
-        │               │               │
-        ▼               ▼               ▼
+┌─────────────────────────────────────────────────────────┐
+│                      TAP Node                            │
+├───────────────┬───────────────┬───────────────┬─────────┤
+│ Agent Registry│ Message Router│  Event Bus    │ Storage │
+├───────────────┼───────────────┼───────────────┼─────────┤
+│ Message       │ Processor Pool│  Resolver     │ SQLite  │
+│ Processors    │               │               │   DB    │
+└───────────────┴───────────────┴───────────────┴─────────┘
+        │               │               │               │
+        ▼               ▼               ▼               ▼
 ┌───────────────┐ ┌───────────────┐ ┌───────────────┐
 │   TAP Agent   │ │   TAP Agent   │ │   TAP Agent   │
 └───────────────┘ └───────────────┘ └───────────────┘
@@ -79,10 +83,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         enable_message_logging: true,
         log_message_content: false,
         processor_pool: None,
+        #[cfg(feature = "storage")]
+        storage_path: None, // Uses default path: ./tap-node.db
+        #[cfg(feature = "storage")]
+        agent_did: None,
+        #[cfg(feature = "storage")]
+        tap_root: None,
     };
 
     // Create a new node
     let mut node = TapNode::new(config);
+    
+    // Initialize storage (if enabled)
+    #[cfg(feature = "storage")]
+    node.init_storage().await?;
 
     // Start processor pool for high throughput
     let pool_config = tap_node::message::processor_pool::ProcessorPoolConfig {
@@ -310,6 +324,137 @@ Key benefits of the WebSocket transport:
 - Bidirectional communication
 - Connection state awareness
 - Reduced overhead for frequent messages
+
+## Persistent Storage
+
+The TAP Node includes built-in support for persistent storage using SQLite. This feature is enabled by default and provides:
+
+1. **Transaction Storage**: Automatic storage of Transfer and Payment messages for business logic processing
+2. **Message Audit Trail**: Complete logging of all incoming and outgoing messages for compliance and debugging
+
+### Storage Configuration
+
+Configure storage when creating the node:
+
+```rust
+use tap_node::{NodeConfig, TapNode};
+use std::path::PathBuf;
+
+// Use default storage location (./tap-node.db)
+let config = NodeConfig {
+    #[cfg(feature = "storage")]
+    storage_path: None,
+    ..Default::default()
+};
+
+// Or specify a custom path
+let config = NodeConfig {
+    #[cfg(feature = "storage")]
+    storage_path: Some(PathBuf::from("/path/to/database.db")),
+    ..Default::default()
+};
+
+// Or use environment variable
+std::env::set_var("TAP_NODE_DB_PATH", "/path/to/database.db");
+```
+
+### Accessing Stored Data
+
+```rust
+use tap_node::storage::MessageDirection;
+
+// Get storage handle from the node
+if let Some(storage) = node.storage() {
+    // === Transaction Operations ===
+    // Retrieve a specific transaction by message ID
+    let transaction = storage.get_transaction_by_id("msg_12345").await?;
+    
+    // List recent transactions with pagination
+    let transactions = storage.list_transactions(
+        10,  // limit: 10 transactions
+        0    // offset: 0 (first page)
+    ).await?;
+    
+    // === Message Audit Trail Operations ===
+    // Retrieve any message by ID
+    let message = storage.get_message_by_id("msg_12345").await?;
+    
+    // List all messages
+    let all_messages = storage.list_messages(
+        20,   // limit
+        0,    // offset
+        None  // no direction filter
+    ).await?;
+    
+    // List only incoming messages
+    let incoming = storage.list_messages(
+        10,
+        0,
+        Some(MessageDirection::Incoming)
+    ).await?;
+    
+    // List only outgoing messages
+    let outgoing = storage.list_messages(
+        10,
+        0,
+        Some(MessageDirection::Outgoing)
+    ).await?;
+    
+    // Examine message details
+    for msg in all_messages {
+        println!("Message: {} - Type: {} - Direction: {:?} - From: {:?} - To: {:?}", 
+            msg.message_id, 
+            msg.message_type,
+            msg.direction,
+            msg.from_did,
+            msg.to_did
+        );
+    }
+}
+```
+
+### Storage Features
+
+- **Async Database Operations**: Built on SQLx for native async support
+- **Automatic Migration**: Database schema is automatically created and migrated on startup
+- **Dual-Table Design**: Separate tables for transactions and message audit trail
+- **Append-Only Design**: All data is immutable for compliance and auditing
+- **SQLite WAL Mode**: Optimized for concurrent reads and writes
+- **Connection Pooling**: SQLx connection pool for efficient database access
+- **JSON Column Support**: Message content stored as validated JSON
+- **WASM Compatibility**: Storage is automatically disabled in WASM builds
+- **Duplicate Handling**: Duplicate messages are silently ignored (idempotent)
+
+### Database Schema
+
+The storage system maintains two tables:
+
+#### `transactions` Table
+Business logic for Transfer and Payment messages:
+- Transaction ID and type (Transfer/Payment)
+- Sender and recipient DIDs
+- Thread ID for conversation tracking
+- Full message content stored in JSON column type
+- Status tracking (pending/confirmed/failed/cancelled/reverted)
+- Timestamps for creation and updates
+
+#### `messages` Table
+Complete audit trail of all messages:
+- Message ID and type (all TAP message types)
+- Direction (incoming/outgoing)
+- Sender and recipient DIDs
+- Thread IDs (including parent threads)
+- Full message content stored in JSON column type
+- Creation timestamp
+
+### Disabling Storage
+
+To disable storage (for example, in memory-only deployments):
+
+```toml
+[dependencies]
+tap-node = { path = "../tap-node", default-features = false, features = ["native"] }
+```
 
 ## Integration with Other Crates
 

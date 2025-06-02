@@ -210,7 +210,8 @@ async fn test_from_private_key_ed25519() {
     );
 
     // Verify that the second agent can unpack the message packed by the first
-    let received_presentation: Presentation = agent2.receive_message(&packed).await.unwrap();
+    let plain_message = agent2.receive_message(&packed).await.unwrap();
+    let received_presentation: Presentation = serde_json::from_value(plain_message.body).unwrap();
 
     // Verify the received message is the same as the sent message
     assert_eq!(presentation.id, received_presentation.id);
@@ -267,7 +268,8 @@ async fn test_from_private_key_p256() {
     );
 
     // Verify that the second agent can unpack the message packed by the first
-    let received_presentation: Presentation = agent2.receive_message(&packed).await.unwrap();
+    let plain_message = agent2.receive_message(&packed).await.unwrap();
+    let received_presentation: Presentation = serde_json::from_value(plain_message.body).unwrap();
 
     // Verify the received message is the same as the sent message
     assert_eq!(presentation.id, received_presentation.id);

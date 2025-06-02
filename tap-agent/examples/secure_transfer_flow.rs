@@ -19,7 +19,7 @@ use tap_agent::error::{Error, Result};
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Reject, Settle, Transfer};
-use tap_msg::Participant;
+use tap_msg::Party;
 
 fn main() -> Result<()> {
     tokio_test::block_on(async {
@@ -109,7 +109,8 @@ fn main() -> Result<()> {
             .receive_message(&packed_transfer)
             .await
         {
-            Ok(transfer) => transfer,
+            Ok(plain_message) => serde_json::from_value(plain_message.body)
+                .map_err(|e| Error::Validation(format!("Failed to deserialize transfer: {}", e)))?,
             Err(e) => {
                 println!("Error unpacking transfer message: {}", e);
 
@@ -170,14 +171,18 @@ fn main() -> Result<()> {
             println!("Rejection sent successfully\n");
 
             // Originator receives the rejection
-            let received_reject: Reject =
-                match originator_agent.receive_message(&packed_reject).await {
-                    Ok(reject) => reject,
-                    Err(e) => {
-                        println!("Error receiving rejection: {}", e);
-                        return Err(e);
-                    }
-                };
+            let received_reject: Reject = match originator_agent
+                .receive_message(&packed_reject)
+                .await
+            {
+                Ok(plain_message) => serde_json::from_value(plain_message.body).map_err(|e| {
+                    Error::Validation(format!("Failed to deserialize reject: {}", e))
+                })?,
+                Err(e) => {
+                    println!("Error receiving rejection: {}", e);
+                    return Err(e);
+                }
+            };
 
             println!("Originator received rejection:");
             println!("  Transfer ID: {}", received_reject.transaction_id);
@@ -193,10 +198,8 @@ fn main() -> Result<()> {
         // Beneficiary VASP authorizes the transfer
         let authorize = Authorize {
             transaction_id: transfer_id.clone(),
-            note: Some(format!(
-                "Authorizing transfer to settlement address: {}",
-                settlement_address
-            )),
+            settlement_address: None,
+            expiry: None,
         };
 
         let (packed_authorize, _delivery_results) = match beneficiary_agent
@@ -217,7 +220,9 @@ fn main() -> Result<()> {
 
         let received_authorize: Authorize =
             match originator_agent.receive_message(&packed_authorize).await {
-                Ok(authorize) => authorize,
+                Ok(plain_message) => serde_json::from_value(plain_message.body).map_err(|e| {
+                    Error::Validation(format!("Failed to deserialize authorize: {}", e))
+                })?,
                 Err(e) => {
                     println!("Error receiving authorization: {}", e);
                     return Err(e);
@@ -227,15 +232,7 @@ fn main() -> Result<()> {
         println!("Authorization received and validated successfully");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
 
-        if let Some(note) = &received_authorize.note {
-            println!("  Note: {}", note);
-
-            // Check if note contains expiry information (in a real implementation, this would be a proper field)
-            if note.contains("expiry time") {
-                // In a real implementation, we would parse and validate the expiry time
-                println!("  Note contains expiry information");
-            }
-        }
+        // In a real implementation, we would parse and validate the expiry time from the expiry field
 
         println!();
 
@@ -272,7 +269,8 @@ fn main() -> Result<()> {
 
         let received_settle: Settle = match beneficiary_agent.receive_message(&packed_settle).await
         {
-            Ok(settle) => settle,
+            Ok(plain_message) => serde_json::from_value(plain_message.body)
+                .map_err(|e| Error::Validation(format!("Failed to deserialize settle: {}", e)))?,
             Err(e) => {
                 println!("Error receiving settlement: {}", e);
                 return Err(e);
@@ -342,31 +340,13 @@ fn create_transfer_message(
         return Err(Error::Validation("Invalid DIDs provided".to_string()));
     }
 
-    // Create originator and beneficiary participants
-    let originator = Participant {
-        id: originator_did.to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let beneficiary = Participant {
-        id: beneficiary_did.to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new(originator_did);
+    let beneficiary = Party::new(beneficiary_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", originator_did);
 
     // Validate asset ID
     let asset = match AssetId::from_str("eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f")
@@ -385,6 +365,7 @@ fn create_transfer_message(
         agents: vec![settlement_agent],
         settlement_id: None,
         memo: Some("Secure example transfer".to_string()),
+        connection_id: None,
         metadata: HashMap::new(),
     };
 

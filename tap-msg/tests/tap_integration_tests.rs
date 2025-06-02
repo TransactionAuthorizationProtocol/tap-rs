@@ -8,7 +8,7 @@ use tap_caip::AssetId;
 use tap_msg::error::Error;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody}; // Import trait for methods
 use tap_msg::message::{
-    Authorize, Connect, ConnectionConstraints, Participant, Payment, PaymentBuilder, Reject,
+    Agent, Authorize, Connect, ConnectionConstraints, Party, Payment, PaymentBuilder, Reject,
     Settle, TransactionLimits, Transfer, UpdateParty,
 };
 use tap_msg::Result;
@@ -27,7 +27,7 @@ fn test_full_tap_flow() -> Result<()> {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Step 2: Create a Transfer message connected to the Connect message
     let mut transfer = create_test_transfer();
@@ -35,7 +35,7 @@ fn test_full_tap_flow() -> Result<()> {
         "DEBUG: Before with_connection, transfer.connection_id() = {:?}",
         transfer.connection_id()
     );
-    transfer.with_connection(&connect_id);
+    transfer.with_connection(&connection_id);
     println!(
         "DEBUG: After with_connection, transfer.connection_id() = {:?}",
         transfer.connection_id()
@@ -43,7 +43,7 @@ fn test_full_tap_flow() -> Result<()> {
 
     // Verify connection
     assert!(transfer.connection_id().is_some()); // Check using connection_id()
-    assert_eq!(transfer.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message
     let transfer_message = transfer
@@ -60,12 +60,12 @@ fn test_full_tap_flow() -> Result<()> {
         "DEBUG: transfer_message.pthid = {:?}",
         transfer_message.pthid
     );
-    println!("DEBUG: connect_id = {:?}", connect_id);
+    println!("DEBUG: connection_id = {:?}", connection_id);
     println!(
         "DEBUG: transfer.connection_id() = {:?}",
         transfer.connection_id()
     );
-    assert_eq!(transfer_message.pthid, Some(connect_id.clone()));
+    assert_eq!(transfer_message.pthid, Some(connection_id.clone()));
 
     // Step 3: Authorize the Transfer
     let transfer_body_json = transfer_message.body.clone();
@@ -77,7 +77,8 @@ fn test_full_tap_flow() -> Result<()> {
     let _transfer_body: Transfer = serde_json::from_value(transfer_body_json.clone())?;
     let authorize_body = Authorize {
         transaction_id: transfer_message.id.clone(), // Use the ID of the message being authorized
-        note: Some("Transfer authorized".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     // Convert to DIDComm message
@@ -134,7 +135,7 @@ fn test_payment_flow() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Step 2: Create a Payment message connected to the Connect message
     let mut payment = create_test_payment_request();
@@ -142,7 +143,7 @@ fn test_payment_flow() {
         "DEBUG: Before with_connection, payment.connection_id() = {:?}",
         payment.connection_id()
     );
-    payment.with_connection(&connect_id);
+    payment.with_connection(&connection_id);
     println!(
         "DEBUG: After with_connection, payment.connection_id() = {:?}",
         payment.connection_id()
@@ -150,7 +151,7 @@ fn test_payment_flow() {
 
     // Verify connection
     assert!(payment.connection_id().is_some()); // Check using connection_id()
-    assert_eq!(payment.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(payment.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message
     let payment_message = payment
@@ -163,12 +164,13 @@ fn test_payment_flow() {
         .expect("Failed to convert Payment to DIDComm");
 
     // Check that the payment message has the correct pthid (parent thread ID)
-    assert_eq!(payment_message.pthid, Some(connect_id.clone()));
+    assert_eq!(payment_message.pthid, Some(connection_id.clone()));
 
     // Step 3: Authorize the Payment
     let authorize_body = Authorize {
         transaction_id: payment_message.id.clone(), // Use the ID of the message being authorized
-        note: Some("Payment authorized".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     // Convert to DIDComm message
@@ -193,7 +195,7 @@ fn test_payment_flow() {
         "DEBUG: Before with_connection, payment2.connection_id() = {:?}",
         payment2.connection_id()
     );
-    payment2.with_connection(&connect_id);
+    payment2.with_connection(&connection_id);
     println!(
         "DEBUG: After with_connection, payment2.connection_id() = {:?}",
         payment2.connection_id()
@@ -241,7 +243,7 @@ fn test_complex_message_flow() -> Result<()> {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert Connect to DIDComm");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Step 2: Create multiple Transfer messages connected to the Connect message
     let mut transfers = Vec::new();
@@ -255,7 +257,7 @@ fn test_complex_message_flow() -> Result<()> {
             "DEBUG: Before with_connection, transfer.connection_id() = {:?}",
             transfer.connection_id()
         );
-        transfer.with_connection(&connect_id);
+        transfer.with_connection(&connection_id);
         println!(
             "DEBUG: After with_connection, transfer.connection_id() = {:?}",
             transfer.connection_id()
@@ -294,7 +296,8 @@ fn test_complex_message_flow() -> Result<()> {
     let _transfer_body: Transfer = serde_json::from_value(transfer_body_json.clone())?;
     let authorize_body = Authorize {
         transaction_id: transfer_messages[0].id.clone(),
-        note: Some("First transfer authorized".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     // Convert to DIDComm message
@@ -361,15 +364,12 @@ fn test_complex_message_flow() -> Result<()> {
         .expect("Failed to convert Settle to DIDComm");
 
     // Step 6: UpdateParty the third transfer
-    let mut updated_originator =
-        Participant::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
-    updated_originator.leiCode = Some("NEWLEICODE123".to_string());
+    let updated_originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
     let update_party = UpdateParty {
         transaction_id: transfer_messages[2].id.clone(),
         party_type: "originator".to_string(),
         party: updated_originator.clone(),
-        note: Some("Originator LEI updated".to_string()),
         context: None,
     };
 
@@ -401,9 +401,9 @@ fn test_complex_message_flow() -> Result<()> {
         Some(transfer_messages[2].id.clone())
     );
 
-    // All transfer messages should have the connect_id as their parent thread ID
+    // All transfer messages should have the connection_id as their parent thread ID
     for transfer_message in &transfer_messages {
-        assert_eq!(transfer_message.pthid, Some(connect_id.clone()));
+        assert_eq!(transfer_message.pthid, Some(connection_id.clone()));
     }
 
     Ok(())
@@ -436,29 +436,15 @@ fn create_test_transfer() -> Transfer {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-        name: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+    )];
 
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -468,37 +454,24 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
-        metadata: HashMap::new(),
         memo: None,
+        connection_id: None,
+        metadata: HashMap::new(),
     }
 }
 
 fn create_test_payment_request() -> Payment {
     let transaction_id = uuid::Uuid::new_v4().to_string();
 
-    let merchant = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let merchant = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let customer = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let customer = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: Some("agent".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+    )];
 
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();

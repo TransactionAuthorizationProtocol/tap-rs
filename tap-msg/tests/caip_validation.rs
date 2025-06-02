@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
-use tap_msg::message::{Participant, Transfer};
+use tap_msg::message::{Agent, Party, Transfer};
 
 #[test]
 fn test_valid_transfer_body() {
@@ -9,21 +9,9 @@ fn test_valid_transfer_body() {
     let asset =
         AssetId::from_str("ethereum:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -31,8 +19,20 @@ fn test_valid_transfer_body() {
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
-        agents: vec![originator, beneficiary],
+        agents: vec![
+            Agent::new(
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+                "originator_agent",
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            ),
+            Agent::new(
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+                "beneficiary_agent",
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+            ),
+        ],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -50,21 +50,9 @@ fn test_transfer_with_empty_asset() {
     let asset =
         AssetId::from_str("ethereum:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     // Creating a body with valid values
     let body = Transfer {
@@ -73,8 +61,20 @@ fn test_transfer_with_empty_asset() {
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
-        agents: vec![originator, beneficiary],
+        agents: vec![
+            Agent::new(
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+                "originator_agent",
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            ),
+            Agent::new(
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+                "beneficiary_agent",
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+            ),
+        ],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -88,21 +88,9 @@ fn test_transfer_with_empty_amount() {
     let asset =
         AssetId::from_str("ethereum:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -110,8 +98,20 @@ fn test_transfer_with_empty_amount() {
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
         amount: "".to_string(), // Empty amount
-        agents: vec![originator, beneficiary],
+        agents: vec![
+            Agent::new(
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+                "originator_agent",
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            ),
+            Agent::new(
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+                "beneficiary_agent",
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+            ),
+        ],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };

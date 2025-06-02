@@ -6,7 +6,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Attachment, AuthorizationRequired, Connect, ConnectionConstraints, OutOfBand, Participant,
+    Agent, Attachment, AuthorizationRequired, Connect, ConnectionConstraints, OutOfBand, Party,
     Payment, PaymentBuilder, SimpleAttachmentData, TransactionLimits,
 };
 
@@ -17,21 +17,9 @@ fn test_payment_request_with_asset() {
         .parse::<AssetId>()
         .unwrap();
 
-    let merchant = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let merchant = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let agent = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("agent".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let customer = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let transaction_id = uuid::Uuid::new_v4().to_string();
 
@@ -41,8 +29,12 @@ fn test_payment_request_with_asset() {
         .asset(asset)
         .amount("100000000".to_string())
         .merchant(merchant.clone())
-        .customer(agent.clone())
-        .add_agent(agent.clone())
+        .customer(customer.clone())
+        .add_agent(Agent::new(
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+            "customer_agent",
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+        ))
         .build();
 
     // Validate the message
@@ -60,7 +52,7 @@ fn test_payment_request_with_asset() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#payment");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#Payment");
     assert!(message.created_time.is_some());
     assert_eq!(
         message.from,
@@ -75,21 +67,9 @@ fn test_payment_request_with_asset() {
 #[test]
 fn test_payment_request_with_currency() {
     // Create a Payment message with currency
-    let merchant = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let merchant = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let agent = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("agent".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let customer = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     // Create a payment with USD currency
     let fiat_asset =
@@ -100,8 +80,12 @@ fn test_payment_request_with_currency() {
         .amount("100.00".to_string())
         .transaction_id(uuid::Uuid::new_v4().to_string())
         .merchant(merchant.clone())
-        .customer(agent.clone())
-        .add_agent(agent.clone())
+        .customer(customer.clone())
+        .add_agent(Agent::new(
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+            "customer_agent",
+            "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+        ))
         .build();
 
     // Add supported assets via metadata
@@ -126,7 +110,7 @@ fn test_payment_request_with_currency() {
         .amount("".to_string()) // Empty amount should fail validation
         .transaction_id(uuid::Uuid::new_v4().to_string())
         .merchant(merchant.clone())
-        .customer(agent.clone())
+        .customer(customer.clone())
         .build();
     assert!(invalid_body.validate().is_err());
 }
@@ -167,7 +151,7 @@ fn test_connect_message() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#connect");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#Connect");
     assert!(message.created_time.is_some());
     assert_eq!(message.from, "did:example:b2b-service".to_string());
     assert_eq!(message.to, vec!["did:example:vasp".to_string()]);
@@ -214,7 +198,7 @@ fn test_authorization_required_message() {
     assert!(!message.id.is_empty());
     assert_eq!(
         message.type_,
-        "https://tap.rsvp/schema/1.0#authorizationrequired"
+        "https://tap.rsvp/schema/1.0#AuthorizationRequired"
     );
     assert!(message.created_time.is_some());
     assert_eq!(message.from, "did:example:vasp".to_string());
@@ -286,7 +270,7 @@ fn test_out_of_band_message() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#outofband");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#OutOfBand");
     assert!(message.created_time.is_some());
     assert_eq!(message.from, "did:example:sender".to_string());
     assert_eq!(message.to, vec!["did:example:recipient".to_string()]);
@@ -397,9 +381,13 @@ fn test_payment_request_message() {
         .asset(asset)
         .amount("1000000000000000000".to_string()) // 1 ETH
         .transaction_id(uuid::Uuid::new_v4().to_string())
-        .merchant(Participant::new("did:example:merchant"))
-        .customer(Participant::new("did:example:customer"))
-        .add_agent(Participant::new("did:example:agent1"))
+        .merchant(Party::new("did:example:merchant"))
+        .customer(Party::new("did:example:customer"))
+        .add_agent(Agent::new(
+            "did:example:agent1",
+            "agent",
+            "did:example:agent1",
+        ))
         .build();
 
     let message_result = payment_request_body.to_didcomm("did:example:sender");

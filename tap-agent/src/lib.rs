@@ -3,6 +3,69 @@
 //! This crate provides an agent implementation for the Transaction Authorization Protocol (TAP).
 //! The TAP Agent is responsible for sending and receiving TAP messages, managing keys, and
 //! applying policies.
+//!
+//! # Architecture Overview
+//!
+//! The TAP Agent crate is designed to work both standalone and within a TAP Node environment:
+//!
+//! - **Standalone Usage**: Agents can be used independently to send/receive messages
+//! - **Node Integration**: Agents work with TAP Node for scalable multi-agent deployments
+//!
+//! # Message Processing Flow
+//!
+//! ## For Encrypted Messages
+//! 1. Agent receives encrypted message via `receive_encrypted_message()`
+//! 2. Agent decrypts using its private keys
+//! 3. Agent processes the resulting PlainMessage
+//!
+//! ## For Signed Messages
+//! 1. Signature verification happens at the node level using `verify_jws()`
+//! 2. Verified PlainMessage is passed to agent via `receive_plain_message()`
+//! 3. Agent processes the message
+//!
+//! ## For Standalone Usage
+//! 1. Agent receives raw message via `receive_message()`
+//! 2. Agent determines message type (plain, signed, encrypted)
+//! 3. Agent handles verification/decryption and returns PlainMessage
+//!
+//! # Key Components
+//!
+//! - [`Agent`] trait: Defines the interface for all TAP agents
+//! - [`TapAgent`]: Main implementation using AgentKeyManager
+//! - [`verify_jws`]: Standalone JWS verification using DID resolution
+//! - [`AgentKeyManager`]: Manages cryptographic keys and operations
+//!
+//! # Examples
+//!
+//! ## Creating a Standalone Agent
+//!
+//! ```rust,no_run
+//! use tap_agent::{TapAgent, AgentConfig};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     // Create agent with ephemeral key
+//!     let (agent, did) = TapAgent::from_ephemeral_key().await?;
+//!     println!("Created agent with DID: {}", did);
+//!     
+//!     // Agent can now send/receive messages
+//!     Ok(())
+//! }
+//! ```
+//!
+//! ## Verifying Signed Messages
+//!
+//! ```rust,no_run
+//! use tap_agent::{verify_jws, MultiResolver};
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let resolver = MultiResolver::default();
+//!     // let jws = ...; // Get JWS from somewhere
+//!     // let plain_message = verify_jws(&jws, &resolver).await?;
+//!     Ok(())
+//! }
+//! ```
 
 /// Agent implementation
 pub mod agent;
@@ -40,6 +103,9 @@ pub mod message_packing;
 /// Key storage utilities
 pub mod storage;
 
+/// Message verification utilities
+pub mod verification;
+
 /// A trait for types that can be serialized to JSON in an type-erased way
 pub trait ErasedSerialize {
     /// Serialize to JSON string
@@ -69,8 +135,10 @@ pub use agent_key::{
     VerificationKey,
 };
 pub use local_agent_key::{LocalAgentKey, PublicVerificationKey};
-pub use message::SecurityMode;
-pub use message_packing::{KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable};
+pub use message::{Jwe, JweHeader, JweRecipient, Jws, JwsSignature, SecurityMode};
+pub use message_packing::{
+    KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable, UnpackedMessage,
+};
 pub use tap_msg::didcomm::PlainMessage;
 
 // Native-only DID resolver re-exports
@@ -84,6 +152,8 @@ pub use agent::{Agent, DeliveryResult, TapAgent};
 pub use did::{DIDMethodResolver, SyncDIDResolver};
 #[cfg(not(target_arch = "wasm32"))]
 pub use message::PRESENTATION_MESSAGE_TYPE;
+#[cfg(not(target_arch = "wasm32"))]
+pub use verification::verify_jws;
 
 // WASM-only re-exports
 #[cfg(target_arch = "wasm32")]

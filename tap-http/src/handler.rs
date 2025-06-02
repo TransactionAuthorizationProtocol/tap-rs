@@ -9,15 +9,13 @@
 use crate::error::{Error, Result};
 use crate::event::EventBus;
 use bytes::Bytes;
-use chrono;
 use serde::Serialize;
 use serde_json::json;
 use std::convert::Infallible;
 use std::sync::Arc;
 use std::time::Instant;
-use tap_msg::didcomm::PlainMessage;
 use tap_node::TapNode;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 use warp::{self, hyper::StatusCode, reply::json, Reply};
 
 /// Response structure for health checks.
@@ -78,12 +76,14 @@ pub async fn handle_health_check(
 /// Handler for DIDComm messages.
 ///
 /// This function processes incoming DIDComm messages by:
-/// 1. Converting the raw bytes to a UTF-8 string
-/// 2. Parsing the string as a DIDComm message
-/// 3. Forwarding the message to the TAP Node for further processing
+/// 1. Validating the Content-Type header
+/// 2. Converting the raw bytes to a UTF-8 string
+/// 3. Parsing the string as a DIDComm message
+/// 4. Forwarding the message to the TAP Node for further processing
 ///
 /// The handler returns appropriate success or error responses based on the outcome.
 pub async fn handle_didcomm(
+    content_type: Option<String>,
     body: Bytes,
     node: Arc<TapNode>,
     event_bus: Arc<EventBus>,
@@ -100,83 +100,57 @@ pub async fn handle_didcomm(
         )
         .await;
 
-    // Convert bytes to string
+    // Validate content type
+    if let Err(e) = validate_message_security(content_type.as_deref()) {
+        error!("Content-Type validation failed: {}", e);
+
+        let response = e.to_response();
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+
+        event_bus
+            .publish_response_sent(e.status_code(), 200, duration_ms)
+            .await;
+
+        return Ok(response);
+    }
+
+    // Parse to JSON
     let message_str = match std::str::from_utf8(&body) {
         Ok(s) => s,
         Err(e) => {
             error!("Failed to parse request body as UTF-8: {}", e);
 
-            // Log message error event
-            event_bus
-                .publish_message_error(
-                    "parse_error".to_string(),
-                    format!("Failed to parse request body as UTF-8: {}", e),
-                    None,
-                )
-                .await;
-
-            // Calculate response size and duration
             let response =
                 json_error_response(StatusCode::BAD_REQUEST, "Invalid UTF-8 in request body");
-            let response_size = 200; // Approximate size
             let duration_ms = start_time.elapsed().as_millis() as u64;
 
-            // Log response sent event
             event_bus
-                .publish_response_sent(StatusCode::BAD_REQUEST, response_size, duration_ms)
+                .publish_response_sent(StatusCode::BAD_REQUEST, 200, duration_ms)
                 .await;
 
             return Ok(response);
         }
     };
 
-    // Parse the DIDComm message
-    debug!("Parsing DIDComm message");
-    let didcomm_message: PlainMessage = match serde_json::from_str(message_str) {
-        Ok(msg) => msg,
+    let message_value: serde_json::Value = match serde_json::from_str(message_str) {
+        Ok(v) => v,
         Err(e) => {
-            error!("Failed to parse DIDComm message: {}", e);
+            error!("Failed to parse message as JSON: {}", e);
 
-            // Log message error event
-            event_bus
-                .publish_message_error(
-                    "parse_error".to_string(),
-                    format!("Failed to parse DIDComm message: {}", e),
-                    None,
-                )
-                .await;
-
-            // Calculate response size and duration
             let response =
-                json_error_response(StatusCode::BAD_REQUEST, "Invalid DIDComm message format");
-            let response_size = 200; // Approximate size
+                json_error_response(StatusCode::BAD_REQUEST, "Invalid JSON in request body");
             let duration_ms = start_time.elapsed().as_millis() as u64;
 
-            // Log response sent event
             event_bus
-                .publish_response_sent(StatusCode::BAD_REQUEST, response_size, duration_ms)
+                .publish_response_sent(StatusCode::BAD_REQUEST, 200, duration_ms)
                 .await;
 
             return Ok(response);
         }
     };
 
-    // Log message received event
-    event_bus
-        .publish_message_received(
-            didcomm_message.id.clone(),
-            didcomm_message.typ.clone(),
-            Some(didcomm_message.from.clone()),
-            if didcomm_message.to.is_empty() {
-                None
-            } else {
-                Some(didcomm_message.to.join(", "))
-            },
-        )
-        .await;
-
-    // Process the message using the TAP Node
-    match process_tap_message(didcomm_message, node).await {
+    // Let the node handle routing
+    match node.receive_message(message_value).await {
         Ok(_) => {
             info!("DIDComm message processed successfully");
 
@@ -187,46 +161,25 @@ pub async fn handle_didcomm(
 
             // Log response sent event
             event_bus
-                .publish_response_sent(StatusCode::OK, response_size, duration_ms)
+                .publish_response_sent(StatusCode::ACCEPTED, response_size, duration_ms)
                 .await;
 
             Ok(response)
         }
         Err(e) => {
-            // Log error with appropriate severity
-            match e.severity() {
-                crate::error::ErrorSeverity::Info => debug!("Message processing error: {}", e),
-                crate::error::ErrorSeverity::Warning => warn!("Message processing warning: {}", e),
-                crate::error::ErrorSeverity::Critical => {
-                    error!("Critical error processing message: {}", e)
-                }
-            }
+            error!("Failed to process message: {}", e);
 
             // Log message error event
-            let error_type = match &e {
-                Error::DIDComm(_) => "didcomm_error",
-                Error::Validation(_) => "validation_error",
-                Error::Authentication(_) => "authentication_error",
-                Error::Json(_) => "json_error",
-                Error::Http(_) => "http_error",
-                Error::Node(_) => "node_error",
-                Error::Config(_) => "configuration_error",
-                Error::Io(_) => "io_error",
-                Error::RateLimit(_) => "rate_limit_error",
-                Error::Tls(_) => "tls_error",
-                Error::Unknown(_) => "unknown_error",
-            };
-
             event_bus
                 .publish_message_error(
-                    error_type.to_string(),
+                    "node_error".to_string(),
                     e.to_string(),
                     None, // We don't have message ID in this context
                 )
                 .await;
 
             // Create error response
-            let response = e.to_response();
+            let response = json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
 
             // Calculate response size and duration (approximate)
             let response_size = 200; // Approximate size
@@ -234,153 +187,71 @@ pub async fn handle_didcomm(
 
             // Log response sent event
             event_bus
-                .publish_response_sent(e.status_code(), response_size, duration_ms)
+                .publish_response_sent(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    response_size,
+                    duration_ms,
+                )
                 .await;
 
-            // Return the structured error response
+            // Return the error response
             Ok(response)
         }
     }
 }
 
-/// Process a TAP message using the TAP Node.
+/// Validate that a message has the correct Content-Type for signed or encrypted messages.
 ///
-/// This function performs pre-processing validation on DIDComm messages before
-/// forwarding them to the TAP Node for processing. The validation includes:
-///
-/// 1. Checking for required fields (id, type)
-/// 2. Validating the message type conforms to the TAP protocol
-///    - Must contain "tap.rsvp" or "https://tap.rsvp" in the type
-///
-/// After validation, the TapNode.receive_message method will:
-/// 1. Further validate and verify the message
-/// 2. Route the message to the appropriate agent
-/// 3. Process the message according to the TAP protocol
+/// This function ensures that only secure messages are processed by the TAP HTTP server.
+/// Plain messages are rejected for security reasons.
 ///
 /// # Parameters
-/// * `message` - The DIDComm message to process
-/// * `node` - The TAP Node instance that will process the message
+/// * `content_type` - The Content-Type header value
 ///
 /// # Returns
-/// * `Ok(())` if processing succeeded
-/// * `Err(Error)` if validation fails or message processing failed
-///
-/// # Error Conditions
-/// The function will return an error if:
-/// * The message is missing required fields
-/// * The message type is not a valid TAP protocol message
-/// * The TAP Node encounters an error during processing
-async fn process_tap_message(message: PlainMessage, node: Arc<TapNode>) -> Result<()> {
-    // Basic validation for the message
-    // Ensure message has required fields
-    if message.typ.is_empty() || message.id.is_empty() {
-        return Err(Error::Validation(
-            "Missing required message fields: type or id".to_string(),
-        ));
-    }
+/// * `Ok(())` if the message has a valid signed or encrypted content type
+/// * `Err(Error)` if the message is plain or has an invalid content type
+fn validate_message_security(content_type: Option<&str>) -> Result<()> {
+    match content_type {
+        Some(ct) => {
+            // Parse the content type to handle parameters like charset
+            let ct_lower = ct.to_lowercase();
 
-    // Check for missing from/to fields if required
-    if message.from.is_empty() || message.to.is_empty() {
-        return Err(Error::Validation(
-            "Message missing sender or recipient information".to_string(),
-        ));
-    }
-
-    // Log the complete message for debugging (always log this for now)
-    error!("RECEIVED DIDCOMM MESSAGE BEFORE PROCESSING:\n- id: {}\n- typ: {}\n- type_: {}\n- from: {}\n- to: {:?}\n- body: {}\n", 
-           message.id, message.typ, message.type_, message.from, message.to,
-           serde_json::to_string_pretty(&message.body).unwrap_or_default());
-
-    // Validate the message conforms to TAP protocol
-    // Check both type_ and typ fields for TAP protocol identifiers
-    let valid_types = ["tap.rsvp", "https://tap.rsvp"];
-
-    // Check if type_ field contains TAP protocol identifier
-    let is_valid_type = valid_types
-        .iter()
-        .any(|valid_type| message.type_.contains(valid_type));
-
-    if !is_valid_type {
-        error!(
-            "TYPE FIELD VALIDATION FAILED: message.type_ = '{}'",
-            message.type_
-        );
-    }
-
-    // Also check if typ field contains TAP protocol identifier
-    let is_valid_typ = valid_types
-        .iter()
-        .any(|valid_type| message.typ.contains(valid_type));
-
-    if !is_valid_typ {
-        error!(
-            "TYP FIELD VALIDATION FAILED: message.typ = '{}'",
-            message.typ
-        );
-    }
-
-    // If either field is valid, allow the message through
-    let is_valid = is_valid_type || is_valid_typ;
-
-    if !is_valid {
-        error!(
-            "MESSAGE TYPE VALIDATION FAILED: typ={}, type_={}",
-            message.typ, message.type_
-        );
-        return Err(Error::Validation(format!(
-            "Unsupported message type: {}, expected TAP protocol message",
-            message.typ
-        )));
-    }
-
-    // Validate that message has valid timestamps
-    if let Some(created_time) = message.created_time {
-        let current_time = chrono::Utc::now().timestamp() as u64;
-
-        // Check for future timestamps (within a small margin)
-        if created_time > current_time + 300 {
-            // 5 minute margin
-            return Err(Error::Validation(format!(
-                "Message has future timestamp: {} (current time: {})",
-                created_time, current_time
-            )));
-        }
-    }
-
-    // Process the message through the TAP Node using the receive_message method
-    match node.receive_message(message).await {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            let error_str = e.to_string();
-
-            // Categorize TapNode errors
-            if error_str.contains("authentication") || error_str.contains("unauthorized") {
-                Err(Error::Authentication(format!(
-                    "Authentication failed: {}",
-                    error_str
-                )))
-            } else if error_str.contains("validation") || error_str.contains("invalid") {
-                Err(Error::Validation(format!(
-                    "Node validation failed: {}",
-                    error_str
-                )))
+            // Check for valid DIDComm content types
+            if ct_lower.contains("application/didcomm-signed+json") {
+                debug!("Message security validation passed: signed message");
+                Ok(())
+            } else if ct_lower.contains("application/didcomm-encrypted+json") {
+                debug!("Message security validation passed: encrypted message");
+                Ok(())
+            } else if ct_lower.contains("application/didcomm-plain+json") {
+                Err(Error::Validation(
+                    "Plain DIDComm messages are not allowed for security reasons. Only signed or encrypted messages are accepted.".to_string()
+                ))
             } else {
-                Err(Error::Node(error_str))
+                Err(Error::Validation(
+                    format!("Invalid Content-Type '{}'. Expected 'application/didcomm-signed+json' or 'application/didcomm-encrypted+json'.", ct)
+                ))
             }
+        }
+        None => {
+            Err(Error::Validation(
+                "Missing Content-Type header. Expected 'application/didcomm-signed+json' or 'application/didcomm-encrypted+json'.".to_string()
+            ))
         }
     }
 }
 
 /// Create a JSON success response.
 ///
-/// Returns a standardized success response with a 200 status code.
+/// Returns a standardized success response with a 202 Accepted status code.
 fn json_success_response() -> warp::reply::Response {
     warp::reply::with_status(
         json(&json!({
             "status": "success",
             "message": "Message received and processed"
         })),
-        StatusCode::OK,
+        StatusCode::ACCEPTED,
     )
     .into_response()
 }
@@ -429,19 +300,66 @@ mod tests {
         assert!(response_json["version"].is_string());
     }
 
-    #[tokio::test]
+    #[test]
+    fn test_validate_message_security() {
+        // Test plain message content type (should be rejected)
+        let result = validate_message_security(Some("application/didcomm-plain+json"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Plain DIDComm messages are not allowed"));
+
+        // Test signed message content type (should pass)
+        let result = validate_message_security(Some("application/didcomm-signed+json"));
+        assert!(result.is_ok());
+
+        // Test encrypted message content type (should pass)
+        let result = validate_message_security(Some("application/didcomm-encrypted+json"));
+        assert!(result.is_ok());
+
+        // Test with charset parameter (should pass)
+        let result =
+            validate_message_security(Some("application/didcomm-signed+json; charset=utf-8"));
+        assert!(result.is_ok());
+
+        // Test invalid content type (should be rejected)
+        let result = validate_message_security(Some("application/json"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid Content-Type"));
+
+        // Test missing content type (should be rejected)
+        let result = validate_message_security(None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing Content-Type header"));
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_invalid_didcomm() {
-        // Create a TAP Node for testing
-        let node = Arc::new(TapNode::new(NodeConfig::default()));
+        // Create a TAP Node for testing without storage
+        let mut config = NodeConfig::default();
+        config.storage_path = None; // Disable storage for tests
+        let node = Arc::new(TapNode::new(config));
 
         // Create a dummy event bus
         let event_bus = Arc::new(crate::event::EventBus::new());
 
         // Test with invalid UTF-8 data
         let invalid_bytes = Bytes::from(vec![0xFF, 0xFF]);
-        let response = handle_didcomm(invalid_bytes, node.clone(), event_bus)
-            .await
-            .unwrap();
+        let response = handle_didcomm(
+            Some("application/didcomm-signed+json".to_string()),
+            invalid_bytes,
+            node.clone(),
+            event_bus,
+        )
+        .await
+        .unwrap();
 
         // Convert the response to bytes and parse as JSON
         let response_bytes = to_bytes(response.into_response().into_body())

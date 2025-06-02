@@ -13,7 +13,7 @@ use std::str::FromStr;
 use tap_agent::agent::{Agent, TapAgent};
 use tap_caip::AssetId;
 use tap_msg::message::{Authorize, Settle, Transfer};
-use tap_msg::Participant;
+use tap_msg::Party;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -51,8 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 2: Beneficiary receives and processes the transfer request
         println!("Step 2: Beneficiary receives and processes the transfer request");
 
-        let received_transfer: Transfer =
-            beneficiary_agent.receive_message(&packed_transfer).await?;
+        let plain_message = beneficiary_agent.receive_message(&packed_transfer).await?;
+        let received_transfer: Transfer = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary received transfer request:");
         println!("  Asset: {}", received_transfer.asset);
         println!("  Amount: {}", received_transfer.amount);
@@ -70,10 +70,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let authorize = Authorize {
             transaction_id: transfer_id.clone(),
-            note: Some(format!(
-                "Authorizing transfer to settlement address: {}",
-                settlement_address
-            )),
+            settlement_address: None,
+            expiry: None,
         };
 
         let (packed_authorize, _delivery_results) = beneficiary_agent
@@ -84,13 +82,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 4: Originator receives the authorization
         println!("Step 4: Originator receives the authorization");
 
-        let received_authorize: Authorize =
-            originator_agent.receive_message(&packed_authorize).await?;
+        let plain_message = originator_agent.receive_message(&packed_authorize).await?;
+        let received_authorize: Authorize = serde_json::from_value(plain_message.body)?;
         println!("Originator received authorization:");
         println!("  Transfer ID: {}", received_authorize.transaction_id);
-        if let Some(note) = received_authorize.note {
-            println!("  Note: {}\n", note);
-        }
 
         // Step 5: Originator settles the transfer
         println!("Step 5: Originator settles the transfer");
@@ -115,7 +110,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 6: Beneficiary receives the settlement confirmation
         println!("Step 6: Beneficiary receives the settlement confirmation");
 
-        let received_settle: Settle = beneficiary_agent.receive_message(&packed_settle).await?;
+        let plain_message = beneficiary_agent.receive_message(&packed_settle).await?;
+        let received_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary received settlement confirmation:");
         println!("  Transfer ID: {}", received_settle.transaction_id);
         println!("  Settlement ID: {}", received_settle.settlement_id);
@@ -135,31 +131,13 @@ fn create_transfer_message(
     beneficiary_did: &str,
     settlement_address: &str,
 ) -> Transfer {
-    // Create originator and beneficiary participants
-    let originator = Participant {
-        id: originator_did.to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let beneficiary = Participant {
-        id: beneficiary_did.to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create originator and beneficiary parties
+    let originator = Party::new(originator_did);
+    let beneficiary = Party::new(beneficiary_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", originator_did);
 
     // Create a transfer message
     Transfer {
@@ -172,6 +150,7 @@ fn create_transfer_message(
         agents: vec![settlement_agent],
         settlement_id: None,
         memo: Some("Example transfer".to_string()),
+        connection_id: None,
         metadata: HashMap::new(),
     }
 }

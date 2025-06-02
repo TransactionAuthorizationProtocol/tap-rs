@@ -122,6 +122,7 @@
 //! by appropriate synchronization primitives. The `EventBus` can be safely shared
 //! across threads using `Arc<EventBus>`.
 
+pub mod handlers;
 pub mod logger;
 
 use async_trait::async_trait;
@@ -292,6 +293,116 @@ pub enum NodeEvent {
         did: String,
         /// The raw binary message data
         message: Vec<u8>,
+    },
+
+    /// A message was rejected by validation
+    ///
+    /// This event is triggered when a message fails validation checks and is rejected.
+    /// It contains information about why the message was rejected.
+    ///
+    /// # Parameters
+    ///
+    /// - `message_id`: The ID of the rejected message
+    /// - `reason`: The reason for rejection
+    /// - `from`: The DID of the sender
+    /// - `to`: The DID of the intended recipient
+    ///
+    /// # Example Use Cases
+    ///
+    /// - Monitoring validation failures
+    /// - Alerting on suspicious activity
+    /// - Debugging message flow issues
+    MessageRejected {
+        /// The ID of the rejected message
+        message_id: String,
+        /// The reason for rejection
+        reason: String,
+        /// The DID of the sender
+        from: String,
+        /// The DID of the intended recipient
+        to: String,
+    },
+
+    /// A message was accepted and processed
+    ///
+    /// This event is triggered when a message passes all validation checks and is accepted
+    /// for processing. It indicates successful message reception and validation.
+    ///
+    /// # Parameters
+    ///
+    /// - `message_id`: The ID of the accepted message
+    /// - `message_type`: The type of the message
+    /// - `from`: The DID of the sender
+    /// - `to`: The DID of the recipient
+    ///
+    /// # Example Use Cases
+    ///
+    /// - Tracking successful message flow
+    /// - Updating message status in database
+    /// - Triggering downstream processing
+    MessageAccepted {
+        /// The ID of the accepted message
+        message_id: String,
+        /// The type of the message
+        message_type: String,
+        /// The DID of the sender
+        from: String,
+        /// The DID of the recipient
+        to: String,
+    },
+
+    /// A reply was received for a previous message
+    ///
+    /// This event is triggered when a message is received that is a reply to a previously
+    /// sent message. It includes both the original message and the reply for context.
+    ///
+    /// # Parameters
+    ///
+    /// - `original_message_id`: The ID of the original message
+    /// - `reply_message`: The reply message
+    /// - `original_message`: The original message being replied to
+    ///
+    /// # Example Use Cases
+    ///
+    /// - Correlating request/response pairs
+    /// - Tracking conversation flow
+    /// - Implementing timeout handling
+    ReplyReceived {
+        /// The ID of the original message
+        original_message_id: String,
+        /// The reply message
+        reply_message: PlainMessage,
+        /// The original message being replied to
+        original_message: PlainMessage,
+    },
+
+    /// A transaction's state has changed
+    ///
+    /// This event is triggered when a transaction transitions from one state to another.
+    /// It includes information about the state transition and optionally the agent that
+    /// triggered the change.
+    ///
+    /// # Parameters
+    ///
+    /// - `transaction_id`: The ID of the transaction
+    /// - `old_state`: The previous state
+    /// - `new_state`: The new state
+    /// - `agent_did`: The DID of the agent that triggered the change (if applicable)
+    ///
+    /// # Example Use Cases
+    ///
+    /// - Monitoring transaction lifecycle
+    /// - Triggering state-specific actions
+    /// - Auditing state transitions
+    TransactionStateChanged {
+        /// The ID of the transaction
+        transaction_id: String,
+        /// The previous state
+        old_state: String,
+        /// The new state
+        new_state: String,
+        /// The DID of the agent that triggered the change
+        agent_did: Option<String>,
     },
 }
 
@@ -478,6 +589,72 @@ impl EventBus {
     /// Publish a DID resolved event
     pub async fn publish_did_resolved(&self, did: String, success: bool) {
         let event = NodeEvent::DidResolved { did, success };
+        self.publish_event(event).await;
+    }
+
+    /// Publish a message rejected event
+    pub async fn publish_message_rejected(
+        &self,
+        message_id: String,
+        reason: String,
+        from: String,
+        to: String,
+    ) {
+        let event = NodeEvent::MessageRejected {
+            message_id,
+            reason,
+            from,
+            to,
+        };
+        self.publish_event(event).await;
+    }
+
+    /// Publish a message accepted event
+    pub async fn publish_message_accepted(
+        &self,
+        message_id: String,
+        message_type: String,
+        from: String,
+        to: String,
+    ) {
+        let event = NodeEvent::MessageAccepted {
+            message_id,
+            message_type,
+            from,
+            to,
+        };
+        self.publish_event(event).await;
+    }
+
+    /// Publish a reply received event
+    pub async fn publish_reply_received(
+        &self,
+        original_message_id: String,
+        reply_message: PlainMessage,
+        original_message: PlainMessage,
+    ) {
+        let event = NodeEvent::ReplyReceived {
+            original_message_id,
+            reply_message,
+            original_message,
+        };
+        self.publish_event(event).await;
+    }
+
+    /// Publish a transaction state changed event
+    pub async fn publish_transaction_state_changed(
+        &self,
+        transaction_id: String,
+        old_state: String,
+        new_state: String,
+        agent_did: Option<String>,
+    ) {
+        let event = NodeEvent::TransactionStateChanged {
+            transaction_id,
+            old_state,
+            new_state,
+            agent_did,
+        };
         self.publish_event(event).await;
     }
 

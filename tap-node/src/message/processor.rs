@@ -44,6 +44,7 @@
 
 use async_trait::async_trait;
 use log::{debug, info};
+use std::sync::Arc;
 use tap_msg::didcomm::PlainMessage;
 
 use crate::error::Result;
@@ -247,31 +248,46 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         }
 
         // Protocol-specific validation based on message type
-        let typ = &message.typ;
+        let message_type = &message.type_;
 
         // Validate TAP messages
-        if typ.starts_with("https://tap.rsvp/schema/") {
+        if message_type.starts_with("https://tap.rsvp/schema/") {
             // TAP-specific validations
             // Check that it's a valid TAP message type
-            if !typ.contains("transfer")
-                && !typ.contains("authorize")
-                && !typ.contains("reject")
-                && !typ.contains("settle")
+            if !message_type.contains("Transfer")
+                && !message_type.contains("Authorize")
+                && !message_type.contains("Reject")
+                && !message_type.contains("Settle")
+                && !message_type.contains("Payment")
+                && !message_type.contains("Connect")
+                && !message_type.contains("Cancel")
+                && !message_type.contains("Revert")
+                && !message_type.contains("AddAgents")
+                && !message_type.contains("ReplaceAgent")
+                && !message_type.contains("RemoveAgent")
+                && !message_type.contains("UpdateParty")
+                && !message_type.contains("UpdatePolicies")
+                && !message_type.contains("ConfirmRelationship")
+                && !message_type.contains("OutOfBand")
+                && !message_type.contains("AuthorizationRequired")
+                && !message_type.contains("RequestPresentation")
+                && !message_type.contains("Presentation")
+                && !message_type.contains("Error")
             {
-                info!("Unknown TAP message type: {}", typ);
+                info!("Unknown TAP message type: {}", message_type);
                 return Ok(None);
             }
         }
         // Validate DIDComm messages
-        else if typ.starts_with("https://didcomm.org/") {
+        else if message_type.starts_with("https://didcomm.org/") {
             // DIDComm-specific validations
             // Add more specific DIDComm validations here
         }
         // Unknown message type protocol
-        else if !typ.starts_with("https://tap.rsvp/schema/")
-            && !typ.starts_with("https://didcomm.org/")
+        else if !message_type.starts_with("https://tap.rsvp/schema/")
+            && !message_type.starts_with("https://didcomm.org/")
         {
-            info!("Unknown message protocol: {}", typ);
+            info!("Unknown message protocol: {}", message_type);
             // Reject unknown message protocols
             return Ok(None);
         }
@@ -345,31 +361,52 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         }
 
         // Protocol-specific validation based on message type
-        let typ = &message.typ;
+        let message_type = &message.type_;
 
         // Validate TAP messages
-        if typ.starts_with("https://tap.rsvp/schema/") {
+        if message_type.starts_with("https://tap.rsvp/schema/") {
             // TAP-specific validations
             // Check that it's a valid TAP message type
-            if !typ.contains("transfer")
-                && !typ.contains("authorize")
-                && !typ.contains("reject")
-                && !typ.contains("settle")
+            if !message_type.contains("Transfer")
+                && !message_type.contains("Authorize")
+                && !message_type.contains("Reject")
+                && !message_type.contains("Settle")
+                && !message_type.contains("Payment")
+                && !message_type.contains("Connect")
+                && !message_type.contains("Cancel")
+                && !message_type.contains("Revert")
+                && !message_type.contains("AddAgents")
+                && !message_type.contains("ReplaceAgent")
+                && !message_type.contains("RemoveAgent")
+                && !message_type.contains("UpdateParty")
+                && !message_type.contains("UpdatePolicies")
+                && !message_type.contains("ConfirmRelationship")
+                && !message_type.contains("OutOfBand")
+                && !message_type.contains("AuthorizationRequired")
+                && !message_type.contains("RequestPresentation")
+                && !message_type.contains("Presentation")
+                && !message_type.contains("Error")
             {
-                info!("Unknown TAP message type in outgoing message: {}", typ);
+                info!(
+                    "Unknown TAP message type in outgoing message: {}",
+                    message_type
+                );
                 return Ok(None);
             }
         }
         // Validate DIDComm messages
-        else if typ.starts_with("https://didcomm.org/") {
+        else if message_type.starts_with("https://didcomm.org/") {
             // DIDComm-specific validations
             // Add more specific DIDComm validations here
         }
         // Unknown message type protocol
-        else if !typ.starts_with("https://tap.rsvp/schema/")
-            && !typ.starts_with("https://didcomm.org/")
+        else if !message_type.starts_with("https://tap.rsvp/schema/")
+            && !message_type.starts_with("https://didcomm.org/")
         {
-            info!("Unknown message protocol in outgoing message: {}", typ);
+            info!(
+                "Unknown message protocol in outgoing message: {}",
+                message_type
+            );
             // Reject unknown message protocols
             return Ok(None);
         }
@@ -440,6 +477,9 @@ impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
             crate::message::PlainMessageProcessorType::Validation(p) => {
                 p.process_incoming(message).await
             }
+            crate::message::PlainMessageProcessorType::StateMachine(p) => {
+                p.process_incoming(message).await
+            }
             crate::message::PlainMessageProcessorType::Composite(p) => {
                 p.process_incoming(message).await
             }
@@ -457,9 +497,80 @@ impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
             crate::message::PlainMessageProcessorType::Validation(p) => {
                 p.process_outgoing(message).await
             }
+            crate::message::PlainMessageProcessorType::StateMachine(p) => {
+                p.process_outgoing(message).await
+            }
             crate::message::PlainMessageProcessorType::Composite(p) => {
                 p.process_outgoing(message).await
             }
         }
+    }
+}
+
+/// State machine integration processor
+///
+/// This processor integrates the message processing pipeline with the transaction state machine.
+/// It processes incoming TAP messages and updates transaction state accordingly.
+#[derive(Clone)]
+pub struct StateMachineIntegrationProcessor {
+    /// Arc-wrapped state processor for thread safety
+    state_processor: Option<Arc<dyn crate::state_machine::TransactionStateProcessor>>,
+}
+
+impl std::fmt::Debug for StateMachineIntegrationProcessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StateMachineIntegrationProcessor")
+            .field("state_processor", &self.state_processor.is_some())
+            .finish()
+    }
+}
+
+impl Default for StateMachineIntegrationProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl StateMachineIntegrationProcessor {
+    /// Create a new state machine integration processor
+    pub fn new() -> Self {
+        Self {
+            state_processor: None,
+        }
+    }
+
+    /// Set the state processor
+    pub fn with_state_processor(
+        mut self,
+        processor: Arc<dyn crate::state_machine::TransactionStateProcessor>,
+    ) -> Self {
+        self.state_processor = Some(processor);
+        self
+    }
+}
+
+#[async_trait]
+impl PlainMessageProcessor for StateMachineIntegrationProcessor {
+    async fn process_incoming(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
+        // Process the message through the state machine if available
+        if let Some(state_processor) = &self.state_processor {
+            if let Err(e) = state_processor.process_message(&message).await {
+                log::warn!(
+                    "State machine processing failed for message {}: {}",
+                    message.id,
+                    e
+                );
+                // Don't fail the message processing, just log the error
+            }
+        }
+
+        // Always pass the message through for further processing
+        Ok(Some(message))
+    }
+
+    async fn process_outgoing(&self, message: PlainMessage) -> Result<Option<PlainMessage>> {
+        // For outgoing messages, we typically don't need state machine processing
+        // since they're already being sent by the state machine or agents
+        Ok(Some(message))
     }
 }

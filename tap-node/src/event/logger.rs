@@ -245,6 +245,52 @@ impl EventLogger {
                     message.len()
                 )
             }
+            NodeEvent::MessageRejected {
+                message_id,
+                reason,
+                from,
+                to,
+            } => {
+                format!(
+                    "[{}] MESSAGE REJECTED: id={}, from={}, to={}, reason={}",
+                    timestamp, message_id, from, to, reason
+                )
+            }
+            NodeEvent::MessageAccepted {
+                message_id,
+                message_type,
+                from,
+                to,
+            } => {
+                format!(
+                    "[{}] MESSAGE ACCEPTED: id={}, type={}, from={}, to={}",
+                    timestamp, message_id, message_type, from, to
+                )
+            }
+            NodeEvent::ReplyReceived {
+                original_message_id,
+                ..
+            } => {
+                format!(
+                    "[{}] REPLY RECEIVED: original_id={}",
+                    timestamp, original_message_id
+                )
+            }
+            NodeEvent::TransactionStateChanged {
+                transaction_id,
+                old_state,
+                new_state,
+                agent_did,
+            } => match agent_did {
+                Some(did) => format!(
+                    "[{}] TRANSACTION STATE CHANGED: id={}, {} -> {} (by {})",
+                    timestamp, transaction_id, old_state, new_state, did
+                ),
+                None => format!(
+                    "[{}] TRANSACTION STATE CHANGED: id={}, {} -> {}",
+                    timestamp, transaction_id, old_state, new_state
+                ),
+            },
         }
     }
 
@@ -295,6 +341,60 @@ impl EventLogger {
                     "message_length": message.len(),
                 }),
             ),
+            NodeEvent::MessageRejected {
+                message_id,
+                reason,
+                from,
+                to,
+            } => (
+                "message_rejected",
+                json!({
+                    "message_id": message_id,
+                    "reason": reason,
+                    "from": from,
+                    "to": to,
+                }),
+            ),
+            NodeEvent::MessageAccepted {
+                message_id,
+                message_type,
+                from,
+                to,
+            } => (
+                "message_accepted",
+                json!({
+                    "message_id": message_id,
+                    "message_type": message_type,
+                    "from": from,
+                    "to": to,
+                }),
+            ),
+            NodeEvent::ReplyReceived {
+                original_message_id,
+                reply_message,
+                original_message,
+            } => (
+                "reply_received",
+                json!({
+                    "original_message_id": original_message_id,
+                    "reply_message": serde_json::to_value(reply_message).unwrap_or(json!(null)),
+                    "original_message": serde_json::to_value(original_message).unwrap_or(json!(null)),
+                }),
+            ),
+            NodeEvent::TransactionStateChanged {
+                transaction_id,
+                old_state,
+                new_state,
+                agent_did,
+            } => (
+                "transaction_state_changed",
+                json!({
+                    "transaction_id": transaction_id,
+                    "old_state": old_state,
+                    "new_state": new_state,
+                    "agent_did": agent_did,
+                }),
+            ),
         };
 
         // Combine into a single JSON object
@@ -305,7 +405,7 @@ impl EventLogger {
         });
 
         // Serialize to a string
-        serde_json::to_string(&log_entry).map_err(Error::Serialization)
+        serde_json::to_string(&log_entry).map_err(|e| Error::Serialization(e.to_string()))
     }
 }
 

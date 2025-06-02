@@ -4,13 +4,24 @@ use crate::didcomm::PlainMessage;
 use crate::error::Result;
 use crate::message::{
     policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl},
-    tap_message_trait::{Authorizable, TapMessageBody},
-    Authorize, Participant, Transfer, UpdatePolicies,
+    tap_message_trait::{Authorizable, TapMessageBody, Transaction},
+    Agent, Authorize, Party, Transfer, UpdatePolicies,
 };
 
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
+
+/// Demo participant struct for examples
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct Participant {
+    pub id: String,
+    pub role: Option<String>,
+    pub policies: Option<Vec<Policy>>,
+    #[serde(rename = "leiCode")]
+    pub leiCode: Option<String>,
+    pub name: Option<String>,
+}
 
 /// This example demonstrates how to create a participant with policies
 pub fn create_participant_with_policies_example() -> Result<Participant> {
@@ -183,14 +194,13 @@ pub fn create_update_policies_using_authorizable_example(
     // 2. Deserialize the body into a Transfer struct
     let transfer_body: Transfer = serde_json::from_value(body_json.clone())
         .map_err(|e| crate::error::Error::SerializationError(e.to_string()))?;
-    // 3. Call update_policies on the Transfer struct (Authorizable trait impl)
+    // 3. Call update_policies on the Transfer struct (Transaction trait impl)
     // Extract or generate a transaction ID
-    let transaction_id = transfer_body.transaction_id.clone();
-    // Call update_policies on the Transfer struct (Authorizable trait impl)
-    let update_policies_message = transfer_body.update_policies(transaction_id, policies);
+    // Call update_policies on the Transfer struct (Transaction trait impl)
+    let update_policies_message = transfer_body.update_policies(creator_did, policies);
 
-    // Convert the update to a DIDComm message
-    let mut update_policies_reply = update_policies_message.to_didcomm(creator_did)?;
+    // The message is already a DIDComm message, so we can use it directly
+    let mut update_policies_reply = update_policies_message;
 
     // Set thread ID to maintain conversation
     update_policies_reply.thid = Some(original_message.as_ref().map_err(Clone::clone)?.id.clone());
@@ -198,7 +208,8 @@ pub fn create_update_policies_using_authorizable_example(
     // Set recipients
     update_policies_reply.to = participant_dids.iter().map(|s| s.to_string()).collect();
 
-    Ok(update_policies_reply)
+    // Convert typed PlainMessage to untyped PlainMessage
+    update_policies_reply.to_plain_message()
 }
 
 /// This example demonstrates a modified policy workflow using the Authorizable trait
@@ -212,45 +223,21 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
     let receiver_vasp_did = "did:example:receiver_vasp";
 
     // Step 1: Create a transfer message to initiate the workflow
-    let transfer = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
-        asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
-            .unwrap(),
-        originator: Participant {
-            id: originator_did.to_string(),
-            role: Some("originator".to_string()),
-            leiCode: None,
-            name: None,
-            policies: None,
-        },
-        beneficiary: Some(Participant {
-            id: beneficiary_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            leiCode: None,
-            name: None,
-            policies: None,
-        }),
-        amount: "100.00".to_string(),
-        memo: None,
-        agents: vec![
-            Participant {
-                id: sender_vasp_did.to_string(),
-                role: Some("sender_vasp".to_string()),
-                leiCode: None,
-                name: None,
-                policies: None,
-            },
-            Participant {
-                id: receiver_vasp_did.to_string(),
-                role: Some("receiver_vasp".to_string()),
-                leiCode: None,
-                name: None,
-                policies: None,
-            },
-        ],
-        settlement_id: None,
-        metadata: HashMap::new(),
-    };
+    let originator = Party::new(originator_did);
+    let beneficiary = Party::new(beneficiary_did);
+    
+    let sender_agent = Agent::new(sender_vasp_did, "sender_vasp", originator_did);
+    let receiver_agent = Agent::new(receiver_vasp_did, "receiver_vasp", beneficiary_did);
+    
+    let transfer = Transfer::builder()
+        .asset(AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48").unwrap())
+        .originator(originator)
+        .beneficiary(beneficiary)
+        .amount("100.00".to_string())
+        .add_agent(sender_agent)
+        .add_agent(receiver_agent)
+        .transaction_id(uuid::Uuid::new_v4().to_string())
+        .build();
 
     // Convert the transfer to a DIDComm message
     let transfer_message = transfer.to_didcomm_with_route(
@@ -287,11 +274,10 @@ pub fn policy_workflow_with_authorizable_example() -> Result<()> {
 
     // Step 3: Create an authorization message in response to the updated policies
     // Use the Authorizable trait's authorize method
-    let authorize_body =
-        transfer.authorize(Some("Authorization with policy constraints".to_string()));
+    let authorize_body = transfer.authorize(beneficiary_did, None, None);
 
     // Create a reply to the update policies message
-    let mut authorize_reply = authorize_body.to_didcomm(beneficiary_did)?;
+    let mut authorize_reply = authorize_body;
 
     // Set thread ID to maintain conversation
     authorize_reply.thid = Some(update_policies_message.id.clone());
@@ -309,7 +295,8 @@ pub fn create_authorize_example() -> Result<()> {
     // Create an example Authorize message body
     let authorize_message = Authorize {
         transaction_id: "transfer_12345".to_string(),
-        note: Some("Authorized with policy constraints".to_string()),
+        settlement_address: None,
+        expiry: None,
     };
 
     println!("Authorize message: {:#?}", authorize_message);

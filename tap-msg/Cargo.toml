@@ -31,6 +31,9 @@ uuid = { workspace = true }
 # Tracing
 tracing = { workspace = true }
 
+# Derive macro for TAP messages
+tap-msg-derive = { version = "0.2.0", path = "../tap-msg-derive" }
+
 # WASM support
 wasm-bindgen = { workspace = true, optional = true }
 console_error_panic_hook = { workspace = true, optional = true }

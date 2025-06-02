@@ -1,6 +1,5 @@
 use tap_msg::message::{
-    Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
-    UpdatePolicies,
+    Agent, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl, UpdatePolicies,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,21 +32,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         credentials: None,
     };
 
-    // Create the participant with policies
-    let participant = Participant {
-        id: "did:example:bob".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: Some(vec![
+    // Create the agent with policies
+    let participant = Agent::new("did:example:bob", "beneficiary", "did:example:bob")
+        .with_policies(vec![
             Policy::RequireAuthorization(auth_policy),
             Policy::RequirePresentation(presentation_policy),
-        ]),
-        leiCode: None,
-        name: None,
-    };
+        ]);
 
     // Display the participant info
     println!("  Participant: {}", participant.id);
-    println!("  Role: {:?}", participant.role);
+    println!("  Role: {}", participant.role);
 
     if let Some(policies) = &participant.policies {
         println!("  Policies:");

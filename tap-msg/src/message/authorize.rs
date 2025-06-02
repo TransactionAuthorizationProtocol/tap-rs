@@ -3,23 +3,30 @@
 //! This module defines the Authorize message type, which is used
 //! for authorizing transactions in the TAP protocol.
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
-use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 
 /// Authorize message body (TAIP-4).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Authorize")]
 pub struct Authorize {
     /// ID of the transaction being authorized.
+    #[tap(thread_id)]
     pub transaction_id: String,
 
-    /// Optional note.
+    /// Optional settlement address in CAIP-10 format.
+    /// Required when sent by a VASP representing the beneficiary unless the original
+    /// request contains an agent with the settlementAddress role.
+    #[serde(rename = "settlementAddress", skip_serializing_if = "Option::is_none")]
+    pub settlement_address: Option<String>,
+
+    /// Optional expiry timestamp in ISO 8601 format.
+    /// After this time, if settlement has not occurred, the authorization should be
+    /// considered invalid and settlement should not proceed.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub note: Option<String>,
+    pub expiry: Option<String>,
 }
 
 impl Authorize {
@@ -27,25 +34,37 @@ impl Authorize {
     pub fn new(transaction_id: &str) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
-            note: None,
+            settlement_address: None,
+            expiry: None,
         }
     }
 
-    /// Create a new Authorize message with a note
-    pub fn with_note(transaction_id: &str, note: &str) -> Self {
+    /// Create a new Authorize message with a settlement address
+    pub fn with_settlement_address(transaction_id: &str, settlement_address: &str) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
-            note: Some(note.to_string()),
+            settlement_address: Some(settlement_address.to_string()),
+            expiry: None,
+        }
+    }
+
+    /// Create a new Authorize message with all optional fields
+    pub fn with_all(
+        transaction_id: &str,
+        settlement_address: Option<&str>,
+        expiry: Option<&str>,
+    ) -> Self {
+        Self {
+            transaction_id: transaction_id.to_string(),
+            settlement_address: settlement_address.map(|s| s.to_string()),
+            expiry: expiry.map(|s| s.to_string()),
         }
     }
 }
 
-impl TapMessageBody for Authorize {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#authorize"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl Authorize {
+    /// Custom validation for Authorize messages
+    pub fn validate_authorize(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in Authorize".to_string(),
@@ -54,44 +73,4 @@ impl TapMessageBody for Authorize {
 
         Ok(())
     }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Create a JSON representation of self with explicit type field
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            // Add or update the @type field with the message type
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Create a new message with a random ID
-        let id = uuid::Uuid::new_v4().to_string();
-        let created_time = Utc::now().timestamp() as u64;
-
-        // Create the message
-        let message = PlainMessage {
-            id,
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            from: from_did.to_string(),
-            to: Vec::new(), // Empty recipients, will be determined by the framework later
-            thid: Some(self.transaction_id.clone()),
-            pthid: None,
-            created_time: Some(created_time),
-            expires_time: None,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            body: body_json,
-            attachments: None,
-        };
-
-        Ok(message)
-    }
 }
-
-impl_tap_message!(Authorize);

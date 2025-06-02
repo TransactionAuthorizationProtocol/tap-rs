@@ -1063,6 +1063,27 @@ impl DIDKeyGenerator {
 
     /// Create a Secret from a GeneratedKey for a DID
     pub fn create_secret_from_key(&self, key: &GeneratedKey) -> Secret {
+        // Determine the proper key ID based on DID method
+        let kid = if key.did.starts_with("did:key:") {
+            // For did:key, the key ID is the DID + fragment matching the multibase
+            // Get the first verification method's ID which has the proper format
+            key.did_doc
+                .verification_method
+                .first()
+                .map(|vm| vm.id.clone())
+                .unwrap_or_else(|| {
+                    // Fallback: extract the multibase part and construct the ID
+                    let multibase = key.did.strip_prefix("did:key:").unwrap_or("");
+                    format!("{}#{}", key.did, multibase)
+                })
+        } else if key.did.starts_with("did:web:") {
+            // For did:web, use #keys-1
+            format!("{}#keys-1", key.did)
+        } else {
+            // For other DID methods, use a generic pattern
+            format!("{}#key-1", key.did)
+        };
+
         match key.key_type {
             KeyType::Ed25519 => Secret {
                 id: key.did.clone(),
@@ -1070,7 +1091,7 @@ impl DIDKeyGenerator {
                 secret_material: SecretMaterial::JWK {
                     private_key_jwk: serde_json::json!({
                         "kty": "OKP",
-                        "kid": key.did,
+                        "kid": kid,
                         "crv": "Ed25519",
                         "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key),
                         "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
@@ -1083,7 +1104,7 @@ impl DIDKeyGenerator {
                 secret_material: SecretMaterial::JWK {
                     private_key_jwk: serde_json::json!({
                         "kty": "EC",
-                        "kid": key.did,
+                        "kid": kid,
                         "crv": "P-256",
                         "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
                         "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),
@@ -1097,7 +1118,7 @@ impl DIDKeyGenerator {
                 secret_material: SecretMaterial::JWK {
                     private_key_jwk: serde_json::json!({
                         "kty": "EC",
-                        "kid": key.did,
+                        "kid": kid,
                         "crv": "secp256k1",
                         "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
                         "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),

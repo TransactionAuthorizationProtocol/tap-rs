@@ -5,14 +5,21 @@
 use serde::{Deserialize, Serialize};
 
 use crate::didcomm::Attachment;
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::tap_message_trait::TapMessageBody;
-use chrono::Utc;
+use crate::TapMessage;
+
+fn default_id() -> String {
+    uuid::Uuid::new_v4().to_string()
+}
 
 /// DIDComm Presentation message body.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 pub struct DIDCommPresentation {
+    /// Message ID.
+    #[serde(default = "default_id")]
+    pub id: String,
+
     /// The format of the presentation (simplified from AttachmentFormat).
     pub formats: Vec<String>,
 
@@ -21,7 +28,20 @@ pub struct DIDCommPresentation {
 
     /// Thread ID for this presentation.
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(thread_id)]
     pub thid: Option<String>,
+}
+
+impl DIDCommPresentation {
+    /// Create a new DIDCommPresentation message.
+    pub fn new(formats: Vec<String>, attachments: Vec<Attachment>, thid: Option<String>) -> Self {
+        Self {
+            id: default_id(),
+            formats,
+            attachments,
+            thid,
+        }
+    }
 }
 
 impl TapMessageBody for DIDCommPresentation {
@@ -69,15 +89,15 @@ impl TapMessageBody for DIDCommPresentation {
         Ok(())
     }
 
-    fn to_didcomm(&self, from: &str) -> Result<PlainMessage> {
+    fn to_didcomm(&self, from: &str) -> Result<crate::didcomm::PlainMessage> {
         // Serialize the presentation to a JSON value
         let body_json =
             serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
 
-        let now = Utc::now().timestamp() as u64;
+        let now = chrono::Utc::now().timestamp() as u64;
 
         // Create a new Message with required fields
-        let message = PlainMessage {
+        let message = crate::didcomm::PlainMessage {
             id: uuid::Uuid::new_v4().to_string(),
             typ: "application/didcomm-plain+json".to_string(),
             type_: Self::message_type().to_string(),
@@ -96,7 +116,7 @@ impl TapMessageBody for DIDCommPresentation {
         Ok(message)
     }
 
-    fn from_didcomm(message: &PlainMessage) -> Result<Self> {
+    fn from_didcomm(message: &crate::didcomm::PlainMessage) -> Result<Self> {
         // Validate message type
         if message.type_ != Self::message_type() {
             return Err(Error::InvalidMessageType(format!(
@@ -172,17 +192,4 @@ impl TapMessageBody for DIDCommPresentation {
 
         Ok(presentation)
     }
-}
-
-impl DIDCommPresentation {
-    /// Create a new DIDCommPresentation message.
-    pub fn new(formats: Vec<String>, attachments: Vec<Attachment>, thid: Option<String>) -> Self {
-        Self {
-            formats,
-            attachments,
-            thid,
-        }
-    }
-
-    // Import implementation already provided by the TapMessageBody trait
 }

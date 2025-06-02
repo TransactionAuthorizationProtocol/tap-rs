@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody};
-use tap_msg::message::{Connect, Participant, Payment, Transfer};
+use tap_msg::message::{Agent, Connect, Party, Payment, Transfer};
 
 #[test]
 fn test_transfer_connectable() {
@@ -11,7 +11,7 @@ fn test_transfer_connectable() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Transfer message
     let mut transfer = create_test_transfer();
@@ -21,23 +21,21 @@ fn test_transfer_connectable() {
     assert_eq!(transfer.connection_id(), None);
 
     // Connect the transfer to the connect message
-    transfer.with_connection(&connect_id);
+    transfer.with_connection(&connection_id);
 
     // Test connected state
     assert!(transfer.has_connection());
-    assert_eq!(transfer.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message and verify the connection is preserved
     let _transfer_message = transfer
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
-    // The connection should be stored in the metadata
-    let metadata = transfer
-        .metadata
-        .get("connect_id")
-        .expect("connect_id not found in metadata");
-    assert_eq!(metadata.as_str().unwrap(), connect_id);
+    // The connection should be stored in the connection_id field
+    assert!(transfer.has_connection());
+    assert_eq!(transfer.connection_id(), Some(connection_id.as_str()));
+    assert_eq!(transfer.connection_id, Some(connection_id.clone()));
 }
 
 #[test]
@@ -47,7 +45,7 @@ fn test_payment_request_connectable() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Payment message
     let mut payment = create_test_payment_request();
@@ -57,23 +55,21 @@ fn test_payment_request_connectable() {
     assert_eq!(payment.connection_id(), None);
 
     // Connect the payment to the connect message
-    payment.with_connection(&connect_id);
+    payment.with_connection(&connection_id);
 
     // Test connected state
     assert!(payment.has_connection());
-    assert_eq!(payment.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(payment.connection_id(), Some(connection_id.as_str()));
 
     // Convert to DIDComm message and verify the connection is preserved
     let _payment_message = payment
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
 
-    // The connection should be stored in the metadata
-    let metadata = payment
-        .metadata
-        .get("connect_id")
-        .expect("connect_id not found in metadata");
-    assert_eq!(metadata.as_str().unwrap(), connect_id);
+    // The connection should be stored in the connection_id field
+    assert!(payment.has_connection());
+    assert_eq!(payment.connection_id(), Some(connection_id.as_str()));
+    assert_eq!(payment.connection_id, Some(connection_id.clone()));
 }
 
 #[test]
@@ -83,7 +79,7 @@ fn test_message_connectable() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Transfer message and convert to DIDComm message
     let transfer = create_test_transfer();
@@ -96,14 +92,17 @@ fn test_message_connectable() {
     assert_eq!(transfer_message.connection_id(), None);
 
     // Connect the message to the connect message
-    transfer_message.with_connection(&connect_id);
+    transfer_message.with_connection(&connection_id);
 
     // Test connected state
     assert!(transfer_message.has_connection());
-    assert_eq!(transfer_message.connection_id(), Some(connect_id.as_str()));
+    assert_eq!(
+        transfer_message.connection_id(),
+        Some(connection_id.as_str())
+    );
 
     // The connection should be stored in the pthid field
-    assert_eq!(transfer_message.pthid, Some(connect_id));
+    assert_eq!(transfer_message.pthid, Some(connection_id));
 }
 
 #[test]
@@ -113,11 +112,11 @@ fn test_connection_round_trip() {
     let connect_message = connect
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id = connect_message.id.clone();
+    let connection_id = connect_message.id.clone();
 
     // Create a Transfer message, connect it, and convert to DIDComm message
     let mut transfer = create_test_transfer();
-    transfer.with_connection(&connect_id);
+    transfer.with_connection(&connection_id);
     let transfer_message = transfer
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
@@ -129,7 +128,7 @@ fn test_connection_round_trip() {
     assert!(round_trip_transfer.has_connection());
     assert_eq!(
         round_trip_transfer.connection_id(),
-        Some(connect_id.as_str())
+        Some(connection_id.as_str())
     );
 }
 
@@ -140,28 +139,28 @@ fn test_multiple_connections() {
     let connect_message1 = connect1
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id1 = connect_message1.id.clone();
+    let connection_id1 = connect_message1.id.clone();
 
     let connect2 = create_test_connect();
     let connect_message2 = connect2
         .to_didcomm("did:example:sender")
         .expect("Failed to convert to DIDComm message");
-    let connect_id2 = connect_message2.id.clone();
+    let connection_id2 = connect_message2.id.clone();
 
     // Create a Transfer message and connect it to the first connect message
     let mut transfer = create_test_transfer();
-    transfer.with_connection(&connect_id1);
+    transfer.with_connection(&connection_id1);
 
     // Verify it's connected to the first connect message
     assert!(transfer.has_connection());
-    assert_eq!(transfer.connection_id(), Some(connect_id1.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id1.as_str()));
 
     // Connect it to the second connect message
-    transfer.with_connection(&connect_id2);
+    transfer.with_connection(&connection_id2);
 
     // Verify it's now connected to the second connect message
     assert!(transfer.has_connection());
-    assert_eq!(transfer.connection_id(), Some(connect_id2.as_str()));
+    assert_eq!(transfer.connection_id(), Some(connection_id2.as_str()));
 }
 
 // Helper functions to create test messages
@@ -180,29 +179,15 @@ fn create_test_transfer() -> Transfer {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-        name: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+    )];
 
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -212,8 +197,9 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
-        metadata: HashMap::new(),
         memo: None,
+        connection_id: None,
+        metadata: HashMap::new(),
     }
 }
 
@@ -221,21 +207,9 @@ fn create_test_payment_request() -> Payment {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let merchant = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let merchant = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let customer = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let customer = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     Payment {
         asset: Some(asset),
@@ -246,6 +220,7 @@ fn create_test_payment_request() -> Payment {
         memo: None,
         expiry: None,
         invoice: None,
+        connection_id: None,
         metadata: HashMap::new(),
         merchant,
         customer: Some(customer),

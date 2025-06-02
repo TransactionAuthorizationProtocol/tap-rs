@@ -171,6 +171,7 @@ impl TapHttpServer {
         // Create DIDComm endpoint
         let didcomm_route = warp::path(endpoint_path)
             .and(warp::post())
+            .and(warp::header::optional::<String>("content-type"))
             .and(warp::body::bytes())
             .and(with_node(node.clone()))
             .and(with_event_bus(event_bus.clone()))

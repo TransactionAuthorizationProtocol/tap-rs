@@ -8,12 +8,11 @@ use std::collections::HashMap;
 
 use tap_caip::AssetId;
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
-use crate::message::tap_message_trait::{Authorizable, Connectable, TapMessageBody};
-use crate::message::{Authorize, Participant, Policy, RemoveAgent, ReplaceAgent, UpdatePolicies};
-use chrono::Utc;
+use crate::message::agent::TapParticipant;
+use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
+use crate::message::{Agent, Party};
+use crate::TapMessage;
 
 /// Payment message body (TAIP-14).
 ///
@@ -21,7 +20,13 @@ use chrono::Utc;
 /// to the customer's agent to request a blockchain payment. It must include either
 /// an asset or a currency to denominate the payment, along with the amount and
 /// recipient information.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#Payment",
+    initiator,
+    authorizable,
+    transactable
+)]
 pub struct Payment {
     /// Asset identifier (CAIP-19 format).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -40,12 +45,15 @@ pub struct Payment {
 
     /// Customer (payer) details.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub customer: Option<Participant>,
+    #[tap(participant)]
+    pub customer: Option<Party>,
 
     /// Merchant (payee) details.
-    pub merchant: Participant,
+    #[tap(participant)]
+    pub merchant: Party,
 
     /// Transaction identifier.
+    #[tap(transaction_id)]
     pub transaction_id: String,
 
     /// Memo for the payment (optional).
@@ -62,7 +70,13 @@ pub struct Payment {
 
     /// Other agents involved in the payment.
     #[serde(default)]
-    pub agents: Vec<Participant>,
+    #[tap(participant_list)]
+    pub agents: Vec<Agent>,
+
+    /// Connection ID for linking to Connect messages
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(connection_id)]
+    pub connection_id: Option<String>,
 
     /// Additional metadata (optional).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -76,13 +90,13 @@ pub struct PaymentBuilder {
     amount: Option<String>,
     currency_code: Option<String>,
     supported_assets: Option<Vec<AssetId>>,
-    customer: Option<Participant>,
-    merchant: Option<Participant>,
+    customer: Option<Party>,
+    merchant: Option<Party>,
     transaction_id: Option<String>,
     memo: Option<String>,
     expiry: Option<String>,
     invoice: Option<crate::message::Invoice>,
-    agents: Vec<Participant>,
+    agents: Vec<Agent>,
     metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -122,13 +136,13 @@ impl PaymentBuilder {
     }
 
     /// Set the customer for this payment
-    pub fn customer(mut self, customer: Participant) -> Self {
+    pub fn customer(mut self, customer: Party) -> Self {
         self.customer = Some(customer);
         self
     }
 
     /// Set the merchant for this payment
-    pub fn merchant(mut self, merchant: Participant) -> Self {
+    pub fn merchant(mut self, merchant: Party) -> Self {
         self.merchant = Some(merchant);
         self
     }
@@ -158,13 +172,13 @@ impl PaymentBuilder {
     }
 
     /// Add an agent to this payment
-    pub fn add_agent(mut self, agent: Participant) -> Self {
+    pub fn add_agent(mut self, agent: Agent) -> Self {
         self.agents.push(agent);
         self
     }
 
     /// Set all agents for this payment
-    pub fn agents(mut self, agents: Vec<Participant>) -> Self {
+    pub fn agents(mut self, agents: Vec<Agent>) -> Self {
         self.agents = agents;
         self
     }
@@ -206,36 +220,83 @@ impl PaymentBuilder {
             expiry: self.expiry,
             invoice: self.invoice,
             agents: self.agents,
+            connection_id: None,
             metadata: self.metadata,
         }
     }
 }
 
-impl Connectable for Payment {
-    fn with_connection(&mut self, connect_id: &str) -> &mut Self {
-        // Store the connect_id in metadata
-        self.metadata.insert(
-            "connect_id".to_string(),
-            serde_json::Value::String(connect_id.to_string()),
-        );
-        self
+impl Payment {
+    /// Creates a new Payment with an asset
+    pub fn with_asset(asset: AssetId, amount: String, merchant: Party, agents: Vec<Agent>) -> Self {
+        Self {
+            asset: Some(asset),
+            amount,
+            currency_code: None,
+            supported_assets: None,
+            customer: None,
+            merchant,
+            transaction_id: uuid::Uuid::new_v4().to_string(),
+            memo: None,
+            expiry: None,
+            invoice: None,
+            agents,
+            connection_id: None,
+            metadata: HashMap::new(),
+        }
     }
 
-    fn has_connection(&self) -> bool {
-        self.metadata.contains_key("connect_id")
+    /// Creates a new Payment with a currency
+    pub fn with_currency(
+        currency_code: String,
+        amount: String,
+        merchant: Party,
+        agents: Vec<Agent>,
+    ) -> Self {
+        Self {
+            asset: None,
+            amount,
+            currency_code: Some(currency_code),
+            supported_assets: None,
+            customer: None,
+            merchant,
+            transaction_id: uuid::Uuid::new_v4().to_string(),
+            memo: None,
+            expiry: None,
+            invoice: None,
+            agents,
+            connection_id: None,
+            metadata: HashMap::new(),
+        }
     }
 
-    fn connection_id(&self) -> Option<&str> {
-        self.metadata.get("connect_id").and_then(|v| v.as_str())
+    /// Creates a new Payment with a currency and supported assets
+    pub fn with_currency_and_assets(
+        currency_code: String,
+        amount: String,
+        supported_assets: Vec<AssetId>,
+        merchant: Party,
+        agents: Vec<Agent>,
+    ) -> Self {
+        Self {
+            asset: None,
+            amount,
+            currency_code: Some(currency_code),
+            supported_assets: Some(supported_assets),
+            customer: None,
+            merchant,
+            transaction_id: uuid::Uuid::new_v4().to_string(),
+            memo: None,
+            expiry: None,
+            invoice: None,
+            agents,
+            connection_id: None,
+            metadata: HashMap::new(),
+        }
     }
-}
 
-impl TapMessageBody for Payment {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#payment"
-    }
-
-    fn validate(&self) -> Result<()> {
+    /// Custom validation for Payment messages
+    pub fn validate(&self) -> Result<()> {
         // Validate either asset or currency_code is provided
         if self.asset.is_none() && self.currency_code.is_none() {
             return Err(Error::Validation(
@@ -269,7 +330,7 @@ impl TapMessageBody for Payment {
         }
 
         // Validate merchant
-        if self.merchant.id.is_empty() {
+        if self.merchant.id().is_empty() {
             return Err(Error::Validation("Merchant ID is required".to_string()));
         }
 
@@ -305,204 +366,4 @@ impl TapMessageBody for Payment {
 
         Ok(())
     }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Serialize the Payment to a JSON value
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Extract agent DIDs directly from the message
-        let mut agent_dids = Vec::new();
-
-        // Add merchant DID
-        agent_dids.push(self.merchant.id.clone());
-
-        // Add customer DID if present
-        if let Some(customer) = &self.customer {
-            agent_dids.push(customer.id.clone());
-        }
-
-        // Add DIDs from agents array
-        for agent in &self.agents {
-            agent_dids.push(agent.id.clone());
-        }
-
-        // Remove duplicates
-        agent_dids.sort();
-        agent_dids.dedup();
-
-        // Remove the sender from the recipients list to avoid sending to self
-        agent_dids.retain(|did| did != from_did);
-
-        let now = Utc::now().timestamp() as u64;
-
-        // Get the connection ID if this message is connected to a previous message
-        let pthid = self
-            .connection_id()
-            .map(|connect_id| connect_id.to_string());
-
-        // Set expires_time based on the expiry field if provided
-        let expires_time = self.expiry.as_ref().and_then(|expiry| {
-            // Try to parse ISO 8601 date to epoch seconds
-            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(expiry) {
-                Some(dt.timestamp() as u64)
-            } else {
-                None
-            }
-        });
-
-        // Create a new Message with required fields
-        let message = PlainMessage {
-            id: uuid::Uuid::new_v4().to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            body: body_json,
-            from: from_did.to_string(),
-            to: agent_dids,
-            thid: Some(self.transaction_id.clone()),
-            pthid,
-            created_time: Some(now),
-            expires_time,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            attachments: None,
-        };
-
-        Ok(message)
-    }
-
-    fn from_didcomm(message: &PlainMessage) -> Result<Self> {
-        // Validate message type
-        if message.type_ != Self::message_type() {
-            return Err(Error::InvalidMessageType(format!(
-                "Expected {} but got {}",
-                Self::message_type(),
-                message.type_
-            )));
-        }
-
-        // Extract fields from message body
-        let payment: Payment = serde_json::from_value(message.body.clone())
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        Ok(payment)
-    }
 }
-
-impl Authorizable for Payment {
-    fn authorize(&self, note: Option<String>) -> Authorize {
-        Authorize {
-            transaction_id: self.transaction_id.clone(),
-            note,
-        }
-    }
-
-    fn update_policies(&self, transaction_id: String, policies: Vec<Policy>) -> UpdatePolicies {
-        UpdatePolicies {
-            transaction_id,
-            policies,
-        }
-    }
-
-    fn replace_agent(
-        &self,
-        transaction_id: String,
-        original_agent: String,
-        replacement: Participant,
-    ) -> ReplaceAgent {
-        ReplaceAgent {
-            transaction_id,
-            original: original_agent,
-            replacement,
-        }
-    }
-
-    fn remove_agent(&self, transaction_id: String, agent: String) -> RemoveAgent {
-        RemoveAgent {
-            transaction_id,
-            agent,
-        }
-    }
-}
-
-impl Payment {
-    /// Creates a new Payment with an asset
-    pub fn with_asset(
-        asset: AssetId,
-        amount: String,
-        merchant: Participant,
-        agents: Vec<Participant>,
-    ) -> Self {
-        Self {
-            asset: Some(asset),
-            amount,
-            currency_code: None,
-            supported_assets: None,
-            customer: None,
-            merchant,
-            transaction_id: uuid::Uuid::new_v4().to_string(),
-            memo: None,
-            expiry: None,
-            invoice: None,
-            agents,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// Creates a new Payment with a currency
-    pub fn with_currency(
-        currency_code: String,
-        amount: String,
-        merchant: Participant,
-        agents: Vec<Participant>,
-    ) -> Self {
-        Self {
-            asset: None,
-            amount,
-            currency_code: Some(currency_code),
-            supported_assets: None,
-            customer: None,
-            merchant,
-            transaction_id: uuid::Uuid::new_v4().to_string(),
-            memo: None,
-            expiry: None,
-            invoice: None,
-            agents,
-            metadata: HashMap::new(),
-        }
-    }
-
-    /// Creates a new Payment with a currency and supported assets
-    pub fn with_currency_and_assets(
-        currency_code: String,
-        amount: String,
-        supported_assets: Vec<AssetId>,
-        merchant: Participant,
-        agents: Vec<Participant>,
-    ) -> Self {
-        Self {
-            asset: None,
-            amount,
-            currency_code: Some(currency_code),
-            supported_assets: Some(supported_assets),
-            customer: None,
-            merchant,
-            transaction_id: uuid::Uuid::new_v4().to_string(),
-            memo: None,
-            expiry: None,
-            invoice: None,
-            agents,
-            metadata: HashMap::new(),
-        }
-    }
-}
-
-impl_tap_message!(Payment);

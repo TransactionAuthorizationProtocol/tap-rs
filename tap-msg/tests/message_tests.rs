@@ -5,18 +5,9 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::Authorizable;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Participant, Payment, PaymentBuilder, Transfer, UpdateParty};
+use tap_msg::message::{Agent, Party, Payment, PaymentBuilder, Transfer, UpdateParty};
 
-// Helper function to create a simple participant
-fn create_participant(did: &str) -> Participant {
-    Participant {
-        id: did.to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-        name: None,
-    }
-}
+// Helper function to create a simple agent
 
 #[test]
 fn test_create_message() {
@@ -25,21 +16,9 @@ fn test_create_message() {
         .parse::<AssetId>()
         .unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -47,8 +26,20 @@ fn test_create_message() {
         originator: originator.clone(),
         beneficiary: Some(beneficiary.clone()),
         amount: "100000000".to_string(),
-        agents: vec![originator, beneficiary],
+        agents: vec![
+            Agent::new(
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+                "originator_agent",
+                "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
+            ),
+            Agent::new(
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+                "beneficiary_agent",
+                "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6",
+            ),
+        ],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -65,7 +56,7 @@ fn test_create_message() {
 
     // Verify the message was created correctly
     assert!(!message.id.is_empty());
-    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#transfer");
+    assert_eq!(message.type_, "https://tap.rsvp/schema/1.0#Transfer");
     assert!(message.created_time.is_some());
     assert_eq!(
         message.from,
@@ -85,16 +76,16 @@ mod payment_tests {
 
     // Extension trait to adapt the new Payment API to the old test expectations
     trait PaymentExt {
-        fn merchant(&self) -> &Participant;
-        fn customer(&self) -> Option<&Participant>;
+        fn merchant(&self) -> &Party;
+        fn customer(&self) -> Option<&Party>;
     }
 
     impl PaymentExt for Payment {
-        fn merchant(&self) -> &Participant {
+        fn merchant(&self) -> &Party {
             &self.merchant
         }
 
-        fn customer(&self) -> Option<&Participant> {
+        fn customer(&self) -> Option<&Party> {
             self.customer.as_ref()
         }
     }
@@ -104,8 +95,8 @@ mod payment_tests {
         let customer_did = "did:key:z6MkhTBLxt9a7sWX77zn1GnzYam743kc9HvzA9qnKXqpVmXC";
         let asset_id_str = "eip155:1/slip44:60";
 
-        let merchant = create_participant(merchant_did);
-        let customer = create_participant(customer_did);
+        let merchant = Party::new(merchant_did);
+        let customer = Party::new(customer_did);
 
         PaymentBuilder::default()
             .transaction_id("pay_123".to_string())
@@ -131,8 +122,8 @@ mod payment_tests {
 
         // Missing transaction_id - now PaymentBuilder generates a random ID if not provided
         let res = PaymentBuilder::default()
-            .merchant(create_participant(merchant_did))
-            .customer(create_participant(customer_did))
+            .merchant(Party::new(merchant_did))
+            .customer(Party::new(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("100".to_string())
             .build();
@@ -141,8 +132,8 @@ mod payment_tests {
         // Amount validation - the builder now accepts any amount
         let res = PaymentBuilder::default()
             .transaction_id("pay_000".to_string())
-            .merchant(create_participant(merchant_did))
-            .customer(create_participant(customer_did))
+            .merchant(Party::new(merchant_did))
+            .customer(Party::new(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("0.00".to_string())
             .build();
@@ -188,14 +179,11 @@ mod payment_tests {
         let payment = create_valid_payment();
         let transaction_id = payment.transaction_id.clone();
 
-        // Test authorize
-        let authorize =
-            payment.authorize(Some("Authorized via manual struct creation".to_string()));
+        // Test authorize - now returns PlainMessage
+        let _authorize_message = payment.authorize("did:example:creator", None, None);
+
+        // The authorize_message is already a PlainMessage<Authorize>, so we can access the body directly
         // Don't assert on transfer_id as it's generated from message_id()
-        assert_eq!(
-            authorize.note,
-            Some("Authorized via manual struct creation".to_string())
-        );
 
         // Create a Reject directly since reject() method is removed
         let reject_code = "E001".to_string();
@@ -217,13 +205,12 @@ mod payment_tests {
 
         // Test update party
         let updated_participant =
-            Participant::new("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
+            Party::new("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
 
         let update_party = UpdateParty {
             transaction_id: transaction_id.clone(),
             party_type: "beneficiary".to_string(),
             party: updated_participant.clone(),
-            note: Some("Updated via manual struct creation".to_string()),
             context: None,
         };
         assert_eq!(update_party.transaction_id, transaction_id);

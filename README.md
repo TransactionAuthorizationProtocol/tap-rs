@@ -7,9 +7,10 @@ This repository contains a Rust implementation of the Transaction Authorization 
 TAP-RS is organized as a Rust workspace with multiple crates:
 
 - **[tap-msg](./tap-msg/README.md)**: Core message processing for TAP with integrated DIDComm support
+- **[tap-msg-derive](./tap-msg-derive/README.md)**: Procedural derive macro for automatic TAP message trait implementation
 - **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **[tap-caip](./tap-caip/README.md)**: Implementation of Chain Agnostic Identifier Standards
-- **[tap-node](./tap-node/README.md)**: TAP node orchestration and message routing
+- **[tap-node](./tap-node/README.md)**: TAP node orchestration, message routing, and transaction storage
 - **[tap-http](./tap-http/README.md)**: HTTP DIDComm server implementation
 - **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
 - **[tap-ts](./tap-ts/README.md)**: TypeScript/WASM wrapper for browser and Node.js environments
@@ -130,6 +131,11 @@ See individual tool READMEs for detailed usage instructions.
 - **WASM Compatibility**: Run in browsers and Node.js via WebAssembly
 - **TypeScript API**: Developer-friendly TypeScript wrapper for web integrations
 - **Comprehensive Validation**: All messages validated against TAP specifications
+- **Generic Typed Messages**: Compile-time type safety with `PlainMessage<Transfer>` while maintaining backward compatibility
+- **Derive Macro**: Automatic implementation of `TapMessage` and `MessageContext` traits with `#[derive(TapMessage)]`
+- **Persistent Storage**: SQLite-based storage with automatic migrations providing:
+  - Transaction tracking for Transfer and Payment messages
+  - Complete audit trail of all messages for compliance and debugging
 
 ## Getting Started with tap-msg
 
@@ -172,6 +178,77 @@ let message = transfer.to_didcomm_with_route(
 ```
 
 See the [tap-msg README](./tap-msg/README.md) for more detailed examples.
+
+## Typed Messages for Type Safety
+
+TAP-RS now supports generic typed messages for compile-time type safety while maintaining 100% backward compatibility:
+
+```rust
+use tap_msg::{PlainMessage, Transfer, Participant};
+use tap_agent::{Agent, TapAgent};
+
+// Create a strongly-typed message
+let transfer = Transfer {
+    asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse()?,
+    originator: Participant::new("did:example:alice"),
+    beneficiary: Some(Participant::new("did:example:bob")),
+    amount: "100".to_string(),
+    // ... other fields
+};
+
+// Type-safe message construction
+let typed_msg = PlainMessage::new_typed(transfer, "did:example:alice")
+    .with_recipient("did:example:bob")
+    .with_thread_id(Some("payment-123".to_string()));
+
+// Send with compile-time type checking
+let (packed, results) = agent.send_typed(typed_msg, true).await?;
+
+// Receive with type safety
+let received: PlainMessage<Transfer> = agent.receive_typed(&packed).await?;
+println!("Amount: {}", received.body.amount);
+
+// Backward compatibility - existing code unchanged
+let plain_msg: PlainMessage = serde_json::from_str(json_data)?;
+// This is now PlainMessage<Value> due to default type parameter
+```
+
+See [GENERIC_PLAINMESSAGE.md](./GENERIC_PLAINMESSAGE.md) for complete documentation.
+
+## Derive Macro for TAP Messages
+
+TAP-RS provides a procedural derive macro that automatically implements `TapMessage` and `MessageContext` traits:
+
+```rust
+use tap_msg::TapMessage;
+use tap_msg::message::{Participant, TapMessageBody};
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+pub struct CustomMessage {
+    #[tap(participant)]
+    pub sender: Participant,
+    
+    #[tap(participant)]
+    pub receiver: Option<Participant>,
+    
+    #[tap(participant_list)]
+    pub validators: Vec<Participant>,
+    
+    #[tap(transaction_id)]
+    pub transaction_id: String,
+    
+    pub data: String,
+}
+
+// The macro automatically provides:
+// - thread_id() -> transaction_id
+// - get_all_participants() -> extracts all participant DIDs
+// - participants() -> returns &Participant references
+// - transaction_context() -> creates context with ID and type
+```
+
+See the [tap-msg README](./tap-msg/README.md#derive-macro-for-tap-messages) for detailed documentation.
 
 ## Getting Started with tap-agent
 

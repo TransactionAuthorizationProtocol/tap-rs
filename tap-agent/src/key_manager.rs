@@ -486,7 +486,13 @@ impl KeyManager for DefaultKeyManager {
                 // Add to signing keys for next time
                 if let Ok(mut signing_keys) = self.signing_keys.write() {
                     let arc_key = Arc::new(agent_key.clone()) as Arc<dyn SigningKey + Send + Sync>;
-                    signing_keys.insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
+                    // Insert with both the agent's key ID and the requested kid
+                    let agent_kid = AgentKey::key_id(&agent_key).to_string();
+                    signing_keys.insert(agent_kid.clone(), arc_key.clone());
+                    // Also insert with the requested kid if different
+                    if agent_kid != kid {
+                        signing_keys.insert(kid.to_string(), arc_key.clone());
+                    }
                     return Ok(arc_key);
                 }
             }
@@ -522,8 +528,13 @@ impl KeyManager for DefaultKeyManager {
                 if let Ok(mut encryption_keys) = self.encryption_keys.write() {
                     let arc_key =
                         Arc::new(agent_key.clone()) as Arc<dyn EncryptionKey + Send + Sync>;
-                    encryption_keys
-                        .insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
+                    // Insert with both the agent's key ID and the requested kid
+                    let agent_kid = AgentKey::key_id(&agent_key).to_string();
+                    encryption_keys.insert(agent_kid.clone(), arc_key.clone());
+                    // Also insert with the requested kid if different
+                    if agent_kid != kid {
+                        encryption_keys.insert(kid.to_string(), arc_key.clone());
+                    }
                     return Ok(arc_key);
                 }
             }
@@ -559,8 +570,13 @@ impl KeyManager for DefaultKeyManager {
                 if let Ok(mut decryption_keys) = self.decryption_keys.write() {
                     let arc_key =
                         Arc::new(agent_key.clone()) as Arc<dyn DecryptionKey + Send + Sync>;
-                    decryption_keys
-                        .insert(AgentKey::key_id(&agent_key).to_string(), arc_key.clone());
+                    // Insert with both the agent's key ID and the requested kid
+                    let agent_kid = AgentKey::key_id(&agent_key).to_string();
+                    decryption_keys.insert(agent_kid.clone(), arc_key.clone());
+                    // Also insert with the requested kid if different
+                    if agent_kid != kid {
+                        decryption_keys.insert(kid.to_string(), arc_key.clone());
+                    }
                     return Ok(arc_key);
                 }
             }
@@ -1029,9 +1045,19 @@ mod tests {
         let jws = signing_key.create_jws(test_data, None).await.unwrap();
         assert!(jws.signatures.len() == 1);
         assert!(jws.signatures[0]
-            .header
-            .kid
+            .get_kid()
+            .unwrap()
             .contains(ed25519_key.did.as_str()));
+
+        // Verify that the kid is in the protected header (not unprotected header)
+        let protected_header = jws.signatures[0].get_protected_header().unwrap();
+        assert!(
+            !protected_header.kid.is_empty(),
+            "kid should be in protected header"
+        );
+        assert_eq!(&protected_header.kid, &jws.signatures[0].get_kid().unwrap());
+
+        // No unprotected header exists since we removed it completely
     }
 
     #[test]

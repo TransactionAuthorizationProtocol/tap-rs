@@ -5,7 +5,7 @@ use crate::error::Result;
 use crate::message::invoice::{Invoice, LineItem, TaxCategory, TaxSubtotal, TaxTotal};
 use crate::message::payment::PaymentBuilder;
 use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::{Participant, Payment};
+use crate::message::{Party, Payment};
 use std::collections::HashMap;
 use std::str::FromStr;
 use tap_caip::AssetId;
@@ -129,23 +129,11 @@ pub fn create_payment_request_with_invoice_example(
     merchant_did: &str,
     customer_did: Option<&str>,
 ) -> Result<PlainMessage> {
-    // Create merchant participant
-    let merchant = Participant {
-        id: merchant_did.to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create merchant party
+    let merchant = Party::new(merchant_did);
 
     // Create a merchant agent (e.g., a payment processor)
-    let agent = Participant {
-        id: "did:example:payment_processor".to_string(),
-        role: Some("agent".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let agent = Party::new("did:example:payment_processor");
 
     // Create an invoice with tax
     let invoice = create_invoice_with_tax_example()?;
@@ -157,14 +145,8 @@ pub fn create_payment_request_with_invoice_example(
     // Create transaction ID
     let transaction_id = uuid::Uuid::new_v4().to_string();
 
-    // Create a customer participant if provided
-    let customer = customer_did.map(|cust_did| Participant {
-        id: cust_did.to_string(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    });
+    // Create a customer party if provided
+    let customer = customer_did.map(|cust_did| Party::new(cust_did));
 
     // Use the builder pattern to create the payment
     let mut payment_request = PaymentBuilder::default()

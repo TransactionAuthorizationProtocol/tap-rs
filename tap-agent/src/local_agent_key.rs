@@ -11,8 +11,7 @@ use crate::did::{KeyType, VerificationMaterial};
 use crate::error::{Error, Result};
 use crate::key_manager::{Secret, SecretMaterial};
 use crate::message::{
-    EphemeralPublicKey, Jwe, JweHeader, JweProtected, JweRecipient, Jws, JwsHeader, JwsProtected,
-    JwsSignature,
+    EphemeralPublicKey, Jwe, JweHeader, JweProtected, JweRecipient, Jws, JwsProtected, JwsSignature,
 };
 use aes_gcm::{AeadInPlace, Aes256Gcm, KeyInit, Nonce};
 use async_trait::async_trait;
@@ -72,6 +71,7 @@ impl LocalAgentKey {
         let protected = JwsProtected {
             typ: "JWT".to_string(),
             alg: self.recommended_jws_alg().as_str().to_string(),
+            kid: crate::agent_key::AgentKey::key_id(self).to_string(),
         };
 
         // Verify the signature
@@ -145,7 +145,18 @@ impl LocalAgentKey {
                 if let Some(kid) = private_key_jwk.get("kid").and_then(|k| k.as_str()) {
                     kid.to_string()
                 } else {
-                    format!("{}#keys-1", did)
+                    // Generate default key ID based on DID method
+                    if did.starts_with("did:key:") {
+                        // For did:key, we can't easily reconstruct the proper fragment here
+                        // without the full key material, so we'll use a placeholder
+                        // The proper kid should be set in the JWK
+                        eprintln!("Warning: did:key JWK missing kid field, using fallback");
+                        format!("{}#keys-1", did)
+                    } else if did.starts_with("did:web:") {
+                        format!("{}#keys-1", did)
+                    } else {
+                        format!("{}#key-1", did)
+                    }
                 }
             }
         };
@@ -429,9 +440,9 @@ impl SigningKey for LocalAgentKey {
                 // Sign the message using ECDSA
                 let signature: P256Signature = signing_key.sign(data);
 
-                // Convert to bytes for JWS
-                let signature_bytes_der = signature.to_der();
-                Ok(signature_bytes_der.as_bytes().to_vec())
+                // Convert to raw bytes for JWS (R||S format, 64 bytes total)
+                let signature_bytes = signature.to_bytes();
+                Ok(signature_bytes.to_vec())
             }
             (Some("EC"), Some("secp256k1")) => {
                 // Extract the private key (d parameter in JWK)
@@ -462,9 +473,9 @@ impl SigningKey for LocalAgentKey {
                 // Sign the message using ECDSA
                 let signature: Secp256k1Signature = signing_key.sign(data);
 
-                // Convert to bytes for JWS
-                let signature_bytes_der = signature.to_der();
-                Ok(signature_bytes_der.as_bytes().to_vec())
+                // Convert to raw bytes for JWS (R||S format)
+                let signature_bytes = signature.to_bytes();
+                Ok(signature_bytes.to_vec())
             }
             // Handle unsupported key types
             _ => Err(Error::Cryptography(format!(
@@ -494,11 +505,16 @@ impl SigningKey for LocalAgentKey {
         let protected = if let Some(mut header) = protected_header {
             // Override the algorithm to match the key type
             header.alg = self.recommended_jws_alg().as_str().to_string();
+            // Only set kid if not already provided in the header
+            if header.kid.is_empty() {
+                header.kid = crate::agent_key::AgentKey::key_id(self).to_string();
+            }
             header
         } else {
             JwsProtected {
                 typ: crate::message::DIDCOMM_SIGNED.to_string(),
                 alg: self.recommended_jws_alg().as_str().to_string(),
+                kid: crate::agent_key::AgentKey::key_id(self).to_string(),
             }
         };
 
@@ -524,9 +540,6 @@ impl SigningKey for LocalAgentKey {
             signatures: vec![JwsSignature {
                 protected: protected_b64,
                 signature: signature_value,
-                header: JwsHeader {
-                    kid: crate::agent_key::AgentKey::key_id(self).to_string(),
-                },
             }],
         };
 
@@ -640,8 +653,8 @@ impl VerificationKey for LocalAgentKey {
                 }
                 let public_key = public_key_opt.unwrap();
 
-                // Parse the signature from DER format
-                let p256_signature = P256Signature::from_der(signature).map_err(|e| {
+                // Parse the signature from raw bytes (R||S format)
+                let p256_signature = P256Signature::from_slice(signature).map_err(|e| {
                     Error::Cryptography(format!("Failed to parse P-256 signature: {:?}", e))
                 })?;
 
@@ -687,8 +700,8 @@ impl VerificationKey for LocalAgentKey {
                         ))
                     })?;
 
-                // Parse the signature from DER format
-                let k256_signature = Secp256k1Signature::from_der(signature).map_err(|e| {
+                // Parse the signature from raw bytes (R||S format)
+                let k256_signature = Secp256k1Signature::from_slice(signature).map_err(|e| {
                     Error::Cryptography(format!("Failed to parse secp256k1 signature: {:?}", e))
                 })?;
 
@@ -1075,21 +1088,14 @@ impl PublicVerificationKey {
         let signature = jws
             .signatures
             .iter()
-            .find(|s| s.header.kid == self.kid)
+            .find(|s| s.get_kid().as_ref() == Some(&self.kid))
             .ok_or_else(|| {
                 Error::Cryptography(format!("No signature found with kid: {}", self.kid))
             })?;
 
-        // Decode the protected header
-        let protected_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&signature.protected)
-            .map_err(|e| {
-                Error::Cryptography(format!("Failed to decode protected header: {}", e))
-            })?;
-
-        // Parse the protected header
-        let protected: JwsProtected = serde_json::from_slice(&protected_bytes).map_err(|e| {
-            Error::Serialization(format!("Failed to parse protected header: {}", e))
+        // Get the protected header
+        let protected = signature.get_protected_header().map_err(|e| {
+            Error::Cryptography(format!("Failed to decode protected header: {}", e))
         })?;
 
         // Decode the signature
@@ -1137,6 +1143,7 @@ impl PublicVerificationKey {
         let protected = JwsProtected {
             typ: "JWT".to_string(),
             alg: alg.to_string(),
+            kid: self.kid.clone(),
         };
 
         // Verify the signature

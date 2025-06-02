@@ -757,7 +757,7 @@ async fn pack_message_async(
     mode: &str,
 ) -> Result<()> {
     // Read the plaintext message from the input file
-    let plaintext = fs::read_to_string(input_file).map_err(|e| Error::Io(e))?;
+    let plaintext = fs::read_to_string(input_file).map_err(Error::Io)?;
 
     // Parse the plaintext message
     let plain_message: PlainMessage = serde_json::from_str(&plaintext)
@@ -864,7 +864,7 @@ async fn unpack_message_async(
     recipient_did: Option<String>,
 ) -> Result<()> {
     // Read the packed message from the input file
-    let packed = fs::read_to_string(input_file).map_err(|e| Error::Io(e))?;
+    let packed = fs::read_to_string(input_file).map_err(Error::Io)?;
 
     // Load keys from storage
     let storage = KeyStorage::load_default()?;

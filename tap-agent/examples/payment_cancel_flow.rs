@@ -19,7 +19,7 @@ use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
 use tap_msg::message::Cancel;
-use tap_msg::{Participant, Payment};
+use tap_msg::{Party, Payment};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -77,7 +77,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 2: Customer receives and processes the payment request
         println!("Step 2: Customer receives and processes the payment request");
 
-        let received_payment: Payment = customer_agent.receive_message(&packed_payment).await?;
+        let plain_message = customer_agent.receive_message(&packed_payment).await?;
+        let received_payment: Payment = serde_json::from_value(plain_message.body)?;
         println!("Customer received payment request:");
         println!("  Asset: {}", received_payment.asset.as_ref().unwrap());
         println!("  Amount: {}", received_payment.amount);
@@ -92,8 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let cancel = Cancel {
             transaction_id: transaction_id.clone(),
+            by: "customer".to_string(),
             reason: Some("Changed my mind".to_string()),
-            note: Some("Will consider purchasing at a later date".to_string()),
         };
 
         let (packed_cancel, _delivery_results) = customer_agent
@@ -104,14 +105,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Step 4: Merchant receives the cancellation
         println!("Step 4: Merchant receives the cancellation");
 
-        let received_cancel: Cancel = merchant_agent.receive_message(&packed_cancel).await?;
+        let plain_message = merchant_agent.receive_message(&packed_cancel).await?;
+        let received_cancel: Cancel = serde_json::from_value(plain_message.body)?;
         println!("Merchant received cancellation:");
         println!("  Payment ID: {}", received_cancel.transaction_id);
         if let Some(reason) = &received_cancel.reason {
             println!("  Reason: {}", reason);
         }
-        if let Some(note) = &received_cancel.note {
-            println!("  Note: {}", note);
+        if let Some(reason) = &received_cancel.reason {
+            println!("  Reason: {}", reason);
         }
         println!();
 
@@ -166,31 +168,13 @@ fn create_payment_message(
     settlement_address: &str,
     transaction_id: &str,
 ) -> Payment {
-    // Create merchant and customer participants
-    let merchant = Participant {
-        id: merchant_did.to_string(),
-        role: Some("merchant".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
-
-    let customer = Participant {
-        id: customer_did.to_string(),
-        role: Some("customer".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    // Create merchant and customer parties
+    let merchant = Party::new(merchant_did);
+    let customer = Party::new(customer_did);
 
     // Create settlement agent
-    let settlement_agent = Participant {
-        id: settlement_address.to_string(),
-        role: Some("settlementAddress".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let settlement_agent =
+        tap_msg::Agent::new(settlement_address, "SettlementAddress", merchant_did);
 
     // Create a payment message
     Payment {
@@ -205,6 +189,7 @@ fn create_payment_message(
         merchant,
         customer: Some(customer),
         agents: vec![settlement_agent],
+        connection_id: None,
         metadata: HashMap::new(),
         transaction_id: transaction_id.to_string(),
         memo: Some("Payment for goods or services".to_string()),

@@ -3,29 +3,32 @@
 //! This module defines the message types for managing agents in the TAP protocol,
 //! including adding, replacing, and removing agents from transactions.
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
-use crate::message::tap_message_trait::TapMessageBody;
-use crate::message::Participant;
+use crate::message::agent::TapParticipant;
+use crate::message::Agent;
+use crate::TapMessage;
 
 /// Add agents message body (TAIP-5).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#AddAgents",
+    custom_validation
+)]
 pub struct AddAgents {
     /// ID of the transaction to add agents to.
-    #[serde(rename = "transfer_id")]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// Agents to add.
-    pub agents: Vec<Participant>,
+    #[tap(participant_list)]
+    pub agents: Vec<Agent>,
 }
 
 impl AddAgents {
     /// Create a new AddAgents message
-    pub fn new(transaction_id: &str, agents: Vec<Participant>) -> Self {
+    pub fn new(transaction_id: &str, agents: Vec<Agent>) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             agents,
@@ -33,18 +36,15 @@ impl AddAgents {
     }
 
     /// Add a single agent to this message
-    pub fn add_agent(mut self, agent: Participant) -> Self {
+    pub fn add_agent(mut self, agent: Agent) -> Self {
         self.agents.push(agent);
         self
     }
 }
 
-impl TapMessageBody for AddAgents {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#add-agents"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl AddAgents {
+    /// Custom validation for AddAgents messages
+    pub fn validate_addagents(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in AddAgents".to_string(),
@@ -59,73 +59,39 @@ impl TapMessageBody for AddAgents {
 
         // Validate each agent
         for agent in &self.agents {
-            if agent.id.is_empty() {
+            if agent.id().is_empty() {
                 return Err(Error::Validation("Agent ID cannot be empty".to_string()));
             }
         }
 
         Ok(())
     }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Create a JSON representation of self with explicit type field
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Create a new message with a random ID
-        let id = uuid::Uuid::new_v4().to_string();
-        let created_time = Utc::now().timestamp() as u64;
-
-        // Create the message
-        let message = PlainMessage {
-            id,
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            from: from_did.to_string(),
-            to: Vec::new(), // Empty recipients, will be determined by the framework later
-            thid: Some(self.transaction_id.clone()),
-            pthid: None,
-            created_time: Some(created_time),
-            expires_time: None,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            body: body_json,
-            attachments: None,
-        };
-
-        Ok(message)
-    }
 }
-
-impl_tap_message!(AddAgents);
 
 /// Replace agent message body (TAIP-5).
 ///
 /// This message type allows replacing an agent with another agent in a transaction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#ReplaceAgent",
+    custom_validation
+)]
 pub struct ReplaceAgent {
     /// ID of the transaction to replace agent in.
-    #[serde(rename = "transfer_id")]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// DID of the original agent to replace.
     pub original: String,
 
     /// Replacement agent.
-    pub replacement: Participant,
+    #[tap(participant)]
+    pub replacement: Agent,
 }
 
 impl ReplaceAgent {
     /// Create a new ReplaceAgent message
-    pub fn new(transaction_id: &str, original: &str, replacement: Participant) -> Self {
+    pub fn new(transaction_id: &str, original: &str, replacement: Agent) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             original: original.to_string(),
@@ -134,12 +100,9 @@ impl ReplaceAgent {
     }
 }
 
-impl TapMessageBody for ReplaceAgent {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#replace-agent"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl ReplaceAgent {
+    /// Custom validation for ReplaceAgent messages
+    pub fn validate_replaceagent(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in ReplaceAgent".to_string(),
@@ -152,7 +115,7 @@ impl TapMessageBody for ReplaceAgent {
             ));
         }
 
-        if self.replacement.id.is_empty() {
+        if self.replacement.id().is_empty() {
             return Err(Error::Validation(
                 "Replacement agent ID is required in ReplaceAgent".to_string(),
             ));
@@ -160,54 +123,19 @@ impl TapMessageBody for ReplaceAgent {
 
         Ok(())
     }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Create a JSON representation of self with explicit type field
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Create a new message with a random ID
-        let id = uuid::Uuid::new_v4().to_string();
-        let created_time = Utc::now().timestamp() as u64;
-
-        // Create the message
-        let message = PlainMessage {
-            id,
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            from: from_did.to_string(),
-            to: Vec::new(), // Empty recipients, will be determined by the framework later
-            thid: Some(self.transaction_id.clone()),
-            pthid: None,
-            created_time: Some(created_time),
-            expires_time: None,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            body: body_json,
-            attachments: None,
-        };
-
-        Ok(message)
-    }
 }
-
-impl_tap_message!(ReplaceAgent);
 
 /// Remove agent message body (TAIP-5).
 ///
 /// This message type allows removing an agent from a transaction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(
+    message_type = "https://tap.rsvp/schema/1.0#RemoveAgent",
+    custom_validation
+)]
 pub struct RemoveAgent {
     /// ID of the transaction to remove agent from.
-    #[serde(rename = "transfer_id")]
+    #[tap(thread_id)]
     pub transaction_id: String,
 
     /// DID of the agent to remove.
@@ -224,12 +152,9 @@ impl RemoveAgent {
     }
 }
 
-impl TapMessageBody for RemoveAgent {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#remove-agent"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl RemoveAgent {
+    /// Custom validation for RemoveAgent messages
+    pub fn validate_removeagent(&self) -> Result<()> {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation(
                 "Transaction ID is required in RemoveAgent".to_string(),
@@ -244,43 +169,4 @@ impl TapMessageBody for RemoveAgent {
 
         Ok(())
     }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Create a JSON representation of self with explicit type field
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Create a new message with a random ID
-        let id = uuid::Uuid::new_v4().to_string();
-        let created_time = Utc::now().timestamp() as u64;
-
-        // Create the message
-        let message = PlainMessage {
-            id,
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            from: from_did.to_string(),
-            to: Vec::new(), // Empty recipients, will be determined by the framework later
-            thid: Some(self.transaction_id.clone()),
-            pthid: None,
-            created_time: Some(created_time),
-            expires_time: None,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            body: body_json,
-            attachments: None,
-        };
-
-        Ok(message)
-    }
 }
-
-impl_tap_message!(RemoveAgent);

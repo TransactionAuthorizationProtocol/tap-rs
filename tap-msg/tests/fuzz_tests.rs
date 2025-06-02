@@ -3,7 +3,7 @@ use std::str::FromStr;
 use tap_caip::AssetId;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::tap_message_trait::{Connectable, TapMessageBody};
-use tap_msg::message::{Connect, Participant, Payment, Transfer};
+use tap_msg::message::{Agent, Connect, Party, Payment, Transfer};
 
 /// This module contains fuzzing tests for TAP message types.
 /// These tests are designed to ensure that our code handles malformed inputs gracefully.
@@ -135,12 +135,12 @@ fn test_fuzz_connectable_with_invalid_id() {
     // Create a Transfer message
     let mut transfer = create_test_transfer();
 
-    // Test with empty connect_id
+    // Test with empty connection_id
     transfer.with_connection("");
     assert!(transfer.has_connection());
     assert_eq!(transfer.connection_id(), Some(""));
 
-    // Test with very long connect_id
+    // Test with very long connection_id
     let long_id = "a".repeat(10000);
     transfer.with_connection(&long_id);
     assert!(transfer.has_connection());
@@ -181,13 +181,7 @@ fn test_fuzz_tap_message_body_validation() {
 
     // Test with missing originator
     let mut transfer = create_test_transfer();
-    transfer.originator = Participant {
-        id: "".to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    transfer.originator = Party::new("");
     assert!(
         transfer.validate().is_err(),
         "Transfer with empty originator ID should fail validation"
@@ -235,29 +229,15 @@ fn create_test_transfer() -> Transfer {
     let asset =
         AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap();
 
-    let originator = Participant {
-        id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
-        role: Some("originator".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let originator = Party::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK");
 
-    let beneficiary = Participant {
-        id: "did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: None,
-        leiCode: None,
-        name: None,
-    };
+    let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
-    let agents = vec![Participant {
-        id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        role: None,
-        policies: None,
-        leiCode: None,
-        name: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+        "agent",
+        "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx",
+    )];
 
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
@@ -267,7 +247,8 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
-        metadata: HashMap::new(),
         memo: None,
+        connection_id: None,
+        metadata: HashMap::new(),
     }
 }

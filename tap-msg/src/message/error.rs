@@ -3,17 +3,16 @@
 //! This module defines the ErrorBody message type, which is used
 //! to communicate errors in the TAP protocol.
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
-use crate::impl_tap_message;
-use crate::message::tap_message_trait::TapMessageBody;
+use crate::TapMessage;
 
 /// Error message body.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap(generated_id)]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Error")]
 pub struct ErrorBody {
     /// Error code.
     pub code: String,
@@ -58,12 +57,9 @@ impl ErrorBody {
     }
 }
 
-impl TapMessageBody for ErrorBody {
-    fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#error"
-    }
-
-    fn validate(&self) -> Result<()> {
+impl ErrorBody {
+    /// Custom validation for ErrorBody messages
+    pub fn validate_error(&self) -> Result<()> {
         if self.code.is_empty() {
             return Err(Error::Validation(
                 "Error code is required in ErrorBody".to_string(),
@@ -78,49 +74,4 @@ impl TapMessageBody for ErrorBody {
 
         Ok(())
     }
-
-    fn to_didcomm(&self, from_did: &str) -> Result<PlainMessage> {
-        // Create a JSON representation of self with explicit type field
-        let mut body_json =
-            serde_json::to_value(self).map_err(|e| Error::SerializationError(e.to_string()))?;
-
-        // Ensure the @type field is correctly set in the body
-        if let Some(body_obj) = body_json.as_object_mut() {
-            body_obj.insert(
-                "@type".to_string(),
-                serde_json::Value::String(Self::message_type().to_string()),
-            );
-        }
-
-        // Create a new message with a random ID
-        let id = uuid::Uuid::new_v4().to_string();
-        let created_time = Utc::now().timestamp() as u64;
-
-        // The from field is required in our PlainMessage
-        let from = from_did.to_string();
-
-        // If we have an original message ID, use it as the thread ID
-        let thid = self.original_message_id.clone();
-
-        // Create the message
-        let message = PlainMessage {
-            id,
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: Self::message_type().to_string(),
-            from,
-            to: Vec::new(), // Empty recipients
-            thid,
-            pthid: None,
-            created_time: Some(created_time),
-            expires_time: None,
-            extra_headers: std::collections::HashMap::new(),
-            from_prior: None,
-            body: body_json,
-            attachments: None,
-        };
-
-        Ok(message)
-    }
 }
-
-impl_tap_message!(ErrorBody, generated_id);

@@ -5,7 +5,7 @@ use tap_msg::didcomm::PlainMessage;
 use tap_msg::error::{Error, Result};
 use tap_msg::message::tap_message_trait::{TapMessage, TapMessageBody};
 use tap_msg::message::{
-    AddAgents, Authorize, ConfirmRelationship, Participant, RemoveAgent, ReplaceAgent, Transfer,
+    AddAgents, Agent, Authorize, ConfirmRelationship, Party, RemoveAgent, ReplaceAgent, Transfer,
 };
 // Removed unused import: Authorizable
 use uuid::Uuid;
@@ -23,23 +23,12 @@ fn test_create_reply() -> Result<()> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Participant {
-            id: _alice_did.to_string(),
-            role: Some("originator".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        },
-        beneficiary: Some(Participant {
-            id: _bob_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        }),
+        originator: Party::new(_alice_did),
+        beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: None,
     };
@@ -52,17 +41,26 @@ fn test_create_reply() -> Result<()> {
     // Create an authorize response from Bob to Alice
     let authorize = Authorize {
         transaction_id: transfer_message.id.clone(), // Get ID from message
-        note: None,
+        settlement_address: None,
+        expiry: None,
     };
 
     // Create a reply using TapMessage trait (will need implementing on PlainMessage)
     let reply_via_message = TapMessage::create_reply(&transfer_message, &authorize, _bob_did)?;
 
+    // Debug output
+    println!("Transfer message ID: {}", transfer_message.id);
+    println!("Transfer message thid: {:?}", transfer_message.thid);
+    println!("Reply message thid: {:?}", reply_via_message.thid);
+
     // Verify the reply created via the Message trait has the same properties
     assert_eq!(reply_via_message.from, _bob_did.to_string());
     assert!(reply_via_message.to.contains(&_alice_did.to_string()));
     assert!(!reply_via_message.to.contains(&_bob_did.to_string()));
-    assert_eq!(reply_via_message.thid, Some(transfer_message.id.clone()));
+
+    // The reply's thid should be the transfer message's thid (which is the transaction_id)
+    // not the transfer message's id
+    assert_eq!(reply_via_message.thid, transfer_message.thid);
 
     Ok(())
 }
@@ -77,13 +75,7 @@ fn test_add_agents() -> Result<()> {
     // Create an AddAgents message to add Charlie
     let add_agents = AddAgents {
         transaction_id: transfer_id.to_string(),
-        agents: vec![Participant {
-            id: charlie_did.to_string(),
-            role: Some("observer".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        }],
+        agents: vec![Agent::new(charlie_did, "observer", charlie_did)],
     };
 
     // Validate the message
@@ -127,13 +119,7 @@ fn test_replace_agent() -> Result<()> {
     let replace_agent = ReplaceAgent {
         transaction_id: transfer_id.to_string(),
         original: _bob_did.to_string(),
-        replacement: Participant {
-            id: charlie_did.to_string(),
-            role: Some("beneficiary".to_string()),
-            policies: None,
-            leiCode: None,
-            name: None,
-        },
+        replacement: Agent::new(charlie_did, "beneficiary", charlie_did),
     };
 
     // Validate the message
@@ -211,18 +197,18 @@ fn test_confirm_relationship() -> Result<()> {
     let transfer_id = "test-transfer-123";
     let _alice_did = "did:example:alice";
     let _bob_did = "did:example:bob";
-    let org_did = "did:example:organization";
+    let _org_did = "did:example:organization";
 
     // Create a ConfirmRelationship message to confirm Bob is acting on behalf of an organization
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        for_id: org_did.to_string(),
-        role: Some("custodian".to_string()),
+        relationship_type: "custodian".to_string(),
     };
 
-    // Validate the message
-    confirm_relationship.validate()?;
+    // Validate the message using the trait method (auto-generated)
+    use tap_msg::message::tap_message_trait::TapMessageBody;
+    TapMessageBody::validate(&confirm_relationship)?;
 
     // Create a DIDComm message from the confirm_relationship
     let mut message = confirm_relationship.to_didcomm(_alice_did)?;
@@ -245,19 +231,19 @@ fn test_confirm_relationship() -> Result<()> {
     let extracted_confirm = ConfirmRelationship::from_didcomm(&message_with_thread)?;
     assert_eq!(extracted_confirm.transaction_id, transfer_id);
     assert_eq!(extracted_confirm.agent_id, _bob_did);
-    assert_eq!(extracted_confirm.for_id, org_did);
-    assert_eq!(extracted_confirm.role, Some("custodian".to_string()));
+    assert_eq!(extracted_confirm.relationship_type, "custodian");
 
     // Test using the Authorizable trait
     let transfer = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Participant::new(_alice_did),
-        beneficiary: Some(Participant::new(_bob_did)),
+        originator: Party::new(_alice_did),
+        beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],
         settlement_id: None,
+        connection_id: None,
         metadata: HashMap::new(),
         memo: Some("Test memo".to_string()),
     };
@@ -285,8 +271,7 @@ fn test_confirm_relationship() -> Result<()> {
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        for_id: org_did.to_string(),
-        role: Some("custodian".to_string()),
+        relationship_type: "custodian".to_string(),
     };
 
     // Create a DIDComm message from the confirm_relationship
@@ -299,8 +284,11 @@ fn test_confirm_relationship() -> Result<()> {
     // The thid should be set to the transaction_id
     assert_eq!(confirm_message.thid, Some(transfer_id.to_string()));
 
-    // Check body content (role)
-    assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian");
+    // Check body content (relationship_type)
+    assert_eq!(
+        confirm_message.body["relationship_type"].as_str().unwrap(),
+        "custodian"
+    );
 
     Ok(())
 }
@@ -315,7 +303,7 @@ fn test_get_all_participants() -> Result<()> {
     let message = PlainMessage {
         id: Uuid::new_v4().to_string(),
         typ: "application/didcomm-plain+json".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: serde_json::json!({}),
         from: _alice_did.to_string(),
         to: vec![_bob_did.to_string(), charlie_did.to_string()],
@@ -345,13 +333,11 @@ fn test_get_all_participants() -> Result<()> {
 fn test_add_agents_missing_transfer_id() {
     // Test adding agents to a transfer that doesn't exist
     let _tx_id = "".to_string();
-    let agents = vec![Participant {
-        id: "did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL".to_string(),
-        role: Some("sender_agent".to_string()),
-        leiCode: None,
-        name: None,
-        policies: None,
-    }];
+    let agents = vec![Agent::new(
+        "did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL",
+        "sender_agent",
+        "did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL",
+    )];
 
     // Create an AddAgents message to add the agents
     let add_agents = AddAgents {

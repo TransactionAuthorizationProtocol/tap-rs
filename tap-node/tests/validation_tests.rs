@@ -15,12 +15,10 @@ async fn test_valid_message_passes_validation() {
     // Create a valid message
     let message = PlainMessage {
         id: "test-id-123".to_string(),
-        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        typ: "https://didcomm.org/basicmessage/2.0/message".to_string(),
+        type_: "https://didcomm.org/basicmessage/2.0/message".to_string(),
         body: json!({
-            "amount": "100.00",
-            "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
-            "transaction_id": "tx-123456"
+            "content": "Hello, this is a basic message!"
         }),
         from: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         to: vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()],
@@ -55,8 +53,8 @@ async fn test_missing_id_fails_validation() {
     // Create a message missing the required ID field
     let message = PlainMessage {
         id: "".to_string(), // Empty ID
-        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        typ: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -121,8 +119,8 @@ async fn test_invalid_from_did_fails_validation() {
     // Create a message with an invalid FROM DID
     let message = PlainMessage {
         id: "test-id-123".to_string(),
-        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        typ: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -154,8 +152,8 @@ async fn test_invalid_to_did_fails_validation() {
     // Create a message with an invalid TO DID
     let message = PlainMessage {
         id: "test-id-123".to_string(),
-        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        typ: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -187,8 +185,8 @@ async fn test_future_timestamp_fails_validation() {
     // Create a message with a timestamp too far in the future
     let message = PlainMessage {
         id: "test-id-123".to_string(),
-        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        typ: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
@@ -253,8 +251,8 @@ async fn test_missing_body_fails_validation() {
     // Create a TAP message missing a required body
     let message = PlainMessage {
         id: "test-id-123".to_string(),
-        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        typ: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: json!(null), // Empty body
         from: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
         to: vec!["did:key:z6MkiTBz1ymuepAQ4HEHYSF1H8quG5GLVVQR3djdX3mDooWp".to_string()],
@@ -311,8 +309,8 @@ async fn test_empty_pthid_fails_validation() {
     // Create a message with an empty pthid
     let message = PlainMessage {
         id: "test-id-123".to_string(),
-        typ: "https://tap.rsvp/schema/1.0#transfer".to_string(),
-        type_: "https://tap.rsvp/schema/1.0#transfer".to_string(),
+        typ: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
+        type_: "https://tap.rsvp/schema/1.0#Transfer".to_string(),
         body: json!({
             "amount": "100.00",
             "asset": "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",

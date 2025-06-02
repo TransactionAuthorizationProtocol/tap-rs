@@ -4,14 +4,16 @@
 //! Transaction Authorization Protocol (TAP).
 
 // Import all message modules
+pub mod agent;
 pub mod agent_management;
 pub mod authorize;
 pub mod cancel;
 pub mod connection;
+pub mod context;
 pub mod did_presentation;
 pub mod error;
 pub mod invoice;
-pub mod participant;
+pub mod party;
 pub mod payment;
 pub mod policy;
 pub mod presentation;
@@ -19,6 +21,7 @@ pub mod reject;
 pub mod relationship;
 pub mod revert;
 pub mod settle;
+pub mod tap_message_enum;
 pub mod tap_message_trait;
 pub mod transfer;
 pub mod update_party;
@@ -53,8 +56,11 @@ pub use invoice::{
     DocumentReference, Invoice, LineItem, OrderReference, TaxCategory, TaxSubtotal, TaxTotal,
 };
 
-// Re-export participant types
-pub use participant::Participant;
+// Re-export agent types
+pub use agent::Agent;
+
+// Re-export party types
+pub use party::Party;
 
 // Re-export payment types
 pub use payment::{Payment, PaymentBuilder};
@@ -87,4 +93,15 @@ pub use update_party::UpdateParty;
 pub use update_policies::UpdatePolicies;
 
 // Re-export the TapMessage trait and related functionality
-pub use tap_message_trait::{create_tap_message, Connectable, TapMessage, TapMessageBody};
+pub use tap_message_trait::{
+    create_tap_message, typed_plain_message, Authorizable, Connectable,
+    TapMessage as TapMessageTrait, TapMessageBody, Transaction,
+};
+
+// Re-export the TapMessage enum
+pub use tap_message_enum::TapMessage;
+
+// Re-export context types
+pub use context::{
+    MessageContext, ParticipantExtractor, Priority, RoutingHints, TransactionContext,
+};

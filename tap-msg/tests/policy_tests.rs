@@ -1,13 +1,13 @@
 //! Tests for TAIP-7 policy implementations.
 
 use tap_msg::message::{
-    Participant, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
-    TapMessage, TapMessageBody, UpdatePolicies,
+    Agent, Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl,
+    TapMessageBody, TapMessageTrait, UpdatePolicies,
 };
 
-/// Test creating a participant with policies
+/// Test creating an agent with policies
 #[test]
-fn test_participant_with_policies() {
+fn test_agent_with_policies() {
     // Create a policy
     let auth_policy = RequireAuthorization {
         from: Some(vec!["did:example:alice".to_string()]),
@@ -16,21 +16,16 @@ fn test_participant_with_policies() {
         purpose: Some("Authorization required from Alice".to_string()),
     };
 
-    // Create the participant with the policy
-    let participant = Participant {
-        id: "did:example:bob".to_string(),
-        role: Some("beneficiary".to_string()),
-        policies: Some(vec![Policy::RequireAuthorization(auth_policy)]),
-        leiCode: None,
-        name: None,
-    };
+    // Create the agent with the policy
+    let agent = Agent::new("did:example:bob", "beneficiary", "did:example:bob")
+        .with_policies(vec![Policy::RequireAuthorization(auth_policy)]);
 
     // Verify the policy is correctly included
-    assert!(participant.policies.is_some());
-    assert_eq!(participant.policies.as_ref().unwrap().len(), 1);
+    assert!(agent.policies.is_some());
+    assert_eq!(agent.policies.as_ref().unwrap().len(), 1);
 
     // Check that we can access the policy
-    if let Some(ref policies) = participant.policies {
+    if let Some(ref policies) = agent.policies {
         if let Policy::RequireAuthorization(policy) = &policies[0] {
             assert_eq!(policy.from.as_ref().unwrap()[0], "did:example:alice");
             assert_eq!(
@@ -68,7 +63,7 @@ fn test_update_policies() {
     // Check the message type
     assert_eq!(
         <UpdatePolicies as TapMessageBody>::message_type(),
-        "https://tap.rsvp/schema/1.0#update-policies"
+        "https://tap.rsvp/schema/1.0#UpdatePolicies"
     );
 
     // Validate the message
@@ -219,7 +214,7 @@ fn test_update_policies_didcomm_conversion() {
     // Check that the message type is correctly set
     assert_eq!(
         didcomm_message.get_tap_type(),
-        Some("https://tap.rsvp/schema/1.0#update-policies".to_string())
+        Some("https://tap.rsvp/schema/1.0#UpdatePolicies".to_string())
     );
 
     // Convert back from DIDComm
