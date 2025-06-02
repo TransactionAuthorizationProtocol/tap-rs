@@ -2,11 +2,11 @@ use clap::Parser;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+mod error;
 mod mcp;
+mod resources;
 mod tap_integration;
 mod tools;
-mod resources;
-mod error;
 
 use error::Result;
 
@@ -47,16 +47,15 @@ async fn main() -> Result<()> {
     info!("Starting TAP-MCP server v{}", env!("CARGO_PKG_VERSION"));
 
     // Initialize TAP integration
-    let tap_integration = tap_integration::TapIntegration::new(
-        args.tap_root.as_deref(),
-        args.db_path.as_deref(),
-    ).await?;
+    let tap_integration =
+        tap_integration::TapIntegration::new(args.tap_root.as_deref(), args.db_path.as_deref())
+            .await?;
 
     info!("TAP integration initialized");
 
     // Create and run MCP server
     let mcp_server = mcp::McpServer::new(tap_integration).await?;
-    
+
     info!("Starting MCP server on stdio");
     if let Err(e) = mcp_server.run().await {
         error!("MCP server error: {}", e);

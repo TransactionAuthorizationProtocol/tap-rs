@@ -1,8 +1,8 @@
 //! TAP MCP tools implementation
 
 mod agent_tools;
-mod transaction_tools;
 mod schema;
+mod transaction_tools;
 
 use crate::error::{Error, Result};
 use crate::mcp::protocol::{CallToolResult, Tool, ToolContent};
@@ -14,6 +14,11 @@ use tracing::{debug, error};
 
 pub use agent_tools::*;
 pub use transaction_tools::*;
+
+/// Default limit for pagination
+pub fn default_limit() -> u32 {
+    50
+}
 
 /// Registry for all available tools
 pub struct ToolRegistry {
@@ -46,6 +51,30 @@ impl ToolRegistry {
         tools.insert(
             "tap.create_transfer".to_string(),
             Box::new(CreateTransferTool::new(tap_integration.clone())),
+        );
+
+        // Transaction action tools
+        tools.insert(
+            "tap.authorize".to_string(),
+            Box::new(AuthorizeTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap.reject".to_string(),
+            Box::new(RejectTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap.cancel".to_string(),
+            Box::new(CancelTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap.settle".to_string(),
+            Box::new(SettleTool::new(tap_integration.clone())),
+        );
+
+        // Transaction management tools
+        tools.insert(
+            "tap.list_transactions".to_string(),
+            Box::new(ListTransactionsTool::new(tap_integration.clone())),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

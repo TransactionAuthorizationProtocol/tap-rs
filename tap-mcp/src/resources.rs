@@ -6,7 +6,7 @@ use crate::tap_integration::TapIntegration;
 use serde_json::json;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::debug;
 use url::Url;
 
 /// Registry for all available resources
@@ -17,9 +17,7 @@ pub struct ResourceRegistry {
 impl ResourceRegistry {
     /// Create a new resource registry
     pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
-        Self {
-            tap_integration,
-        }
+        Self { tap_integration }
     }
 
     fn tap_integration(&self) -> &TapIntegration {
@@ -65,12 +63,19 @@ impl ResourceRegistry {
             Some("agents") => self.read_agents_resource(url.path(), url.query()).await,
             Some("messages") => self.read_messages_resource(url.path(), url.query()).await,
             Some("schemas") => self.read_schemas_resource(url.path()).await,
-            _ => Err(Error::resource_not_found(format!("Unknown resource: {}", uri))),
+            _ => Err(Error::resource_not_found(format!(
+                "Unknown resource: {}",
+                uri
+            ))),
         }
     }
 
     /// Read agents resource
-    async fn read_agents_resource(&self, path: &str, query: Option<&str>) -> Result<Vec<ResourceContent>> {
+    async fn read_agents_resource(
+        &self,
+        _path: &str,
+        query: Option<&str>,
+    ) -> Result<Vec<ResourceContent>> {
         let agents = self.tap_integration().list_agents().await?;
 
         // Parse query parameters for filtering
@@ -117,7 +122,14 @@ impl ResourceRegistry {
         });
 
         Ok(vec![ResourceContent {
-            uri: format!("tap://agents{}", if query.is_some() { format!("?{}", query.unwrap()) } else { String::new() }),
+            uri: format!(
+                "tap://agents{}",
+                if query.is_some() {
+                    format!("?{}", query.unwrap())
+                } else {
+                    String::new()
+                }
+            ),
             mime_type: Some("application/json".to_string()),
             text: Some(serde_json::to_string_pretty(&content)?),
             blob: None,
@@ -125,7 +137,11 @@ impl ResourceRegistry {
     }
 
     /// Read messages resource
-    async fn read_messages_resource(&self, path: &str, query: Option<&str>) -> Result<Vec<ResourceContent>> {
+    async fn read_messages_resource(
+        &self,
+        path: &str,
+        query: Option<&str>,
+    ) -> Result<Vec<ResourceContent>> {
         // Parse path for specific message ID
         if !path.is_empty() && path != "/" {
             let message_id = path.trim_start_matches('/');
@@ -145,13 +161,13 @@ impl ResourceRegistry {
 
             thread_id_filter = params.get("thread_id").cloned();
             message_type_filter = params.get("type").cloned();
-            
+
             if let Some(limit_str) = params.get("limit") {
                 if let Ok(l) = limit_str.parse::<u32>() {
                     limit = l.min(1000); // Cap at 1000
                 }
             }
-            
+
             if let Some(offset_str) = params.get("offset") {
                 if let Ok(o) = offset_str.parse::<u32>() {
                     offset = o;
@@ -206,7 +222,14 @@ impl ResourceRegistry {
         });
 
         Ok(vec![ResourceContent {
-            uri: format!("tap://messages{}", if query.is_some() { format!("?{}", query.unwrap()) } else { String::new() }),
+            uri: format!(
+                "tap://messages{}",
+                if query.is_some() {
+                    format!("?{}", query.unwrap())
+                } else {
+                    String::new()
+                }
+            ),
             mime_type: Some("application/json".to_string()),
             text: Some(serde_json::to_string_pretty(&content)?),
             blob: None,
@@ -215,7 +238,12 @@ impl ResourceRegistry {
 
     /// Read a specific message by ID
     async fn read_specific_message(&self, message_id: &str) -> Result<Vec<ResourceContent>> {
-        match self.tap_integration().storage().get_message_by_id(message_id).await? {
+        match self
+            .tap_integration()
+            .storage()
+            .get_message_by_id(message_id)
+            .await?
+        {
             Some(message) => {
                 let content = json!({
                     "message": {
@@ -238,12 +266,15 @@ impl ResourceRegistry {
                     blob: None,
                 }])
             }
-            None => Err(Error::resource_not_found(format!("Message not found: {}", message_id))),
+            None => Err(Error::resource_not_found(format!(
+                "Message not found: {}",
+                message_id
+            ))),
         }
     }
 
     /// Read schemas resource
-    async fn read_schemas_resource(&self, path: &str) -> Result<Vec<ResourceContent>> {
+    async fn read_schemas_resource(&self, _path: &str) -> Result<Vec<ResourceContent>> {
         let schemas = json!({
             "schemas": {
                 "Transfer": {
@@ -253,13 +284,13 @@ impl ResourceRegistry {
                         "transaction_id": { "type": "string" },
                         "asset": { "type": "string", "description": "CAIP-19 asset identifier" },
                         "amount": { "type": "string" },
-                        "originator": { 
+                        "originator": {
                             "type": "object",
                             "properties": {
                                 "@id": { "type": "string" }
                             }
                         },
-                        "beneficiary": { 
+                        "beneficiary": {
                             "type": "object",
                             "properties": {
                                 "@id": { "type": "string" }

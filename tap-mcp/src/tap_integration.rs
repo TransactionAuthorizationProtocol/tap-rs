@@ -3,14 +3,14 @@
 use crate::error::{Error, Result};
 use std::path::PathBuf;
 use std::sync::Arc;
-use tap_agent::agent::Agent;
+use tap_node::event::EventBus;
 use tap_node::storage::Storage;
-use tap_node::event::{EventBus, NodeEvent};
 use tracing::{debug, info, warn};
 
 /// TAP ecosystem integration
 pub struct TapIntegration {
     storage: Storage,
+    #[allow(dead_code)]
     event_bus: Arc<EventBus>,
     agent_storage_path: PathBuf,
 }
@@ -66,11 +66,13 @@ impl TapIntegration {
     }
 
     /// Get event bus reference
+    #[allow(dead_code)]
     pub fn event_bus(&self) -> Arc<EventBus> {
         Arc::clone(&self.event_bus)
     }
 
     /// Get agent storage path
+    #[allow(dead_code)]
     pub fn agent_storage_path(&self) -> &PathBuf {
         &self.agent_storage_path
     }
@@ -86,7 +88,7 @@ impl TapIntegration {
         let mut dir = tokio::fs::read_dir(&self.agent_storage_path).await?;
         while let Some(entry) = dir.next_entry().await? {
             let path = entry.path();
-            if path.is_file() && path.extension().map_or(false, |ext| ext == "json") {
+            if path.is_file() && path.extension().is_some_and(|ext| ext == "json") {
                 match self.load_agent_from_file(&path).await {
                     Ok(agent_info) => agents.push(agent_info),
                     Err(e) => {
@@ -106,23 +108,27 @@ impl TapIntegration {
         let agent_data: serde_json::Value = serde_json::from_str(&content)?;
 
         Ok(AgentInfo {
-            id: agent_data.get("@id")
+            id: agent_data
+                .get("@id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string(),
-            role: agent_data.get("role")
+            role: agent_data
+                .get("role")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string(),
-            for_party: agent_data.get("for")
+            for_party: agent_data
+                .get("for")
                 .and_then(|v| v.as_str())
                 .unwrap_or("unknown")
                 .to_string(),
-            policies: agent_data.get("policies")
-                .and_then(|v| v.as_array())
-                .map(|arr| arr.clone())
+            policies: agent_data
+                .get("policies")
+                .and_then(|v| v.as_array()).cloned()
                 .unwrap_or_default(),
-            metadata: agent_data.get("metadata")
+            metadata: agent_data
+                .get("metadata")
                 .cloned()
                 .unwrap_or(serde_json::Value::Object(serde_json::Map::new())),
         })

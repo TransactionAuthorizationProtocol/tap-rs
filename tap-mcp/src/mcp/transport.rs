@@ -2,10 +2,7 @@
 
 use crate::error::{Error, Result};
 use crate::mcp::protocol::{JsonRpcRequest, JsonRpcResponse};
-use futures::stream::StreamExt;
-use std::io;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio_util::io::ReaderStream;
 use tracing::{debug, error, trace};
 
 /// Stdio transport for MCP communication
@@ -27,7 +24,7 @@ impl StdioTransport {
     pub async fn read_request(&mut self) -> Result<Option<JsonRpcRequest>> {
         loop {
             let mut line = String::new();
-            
+
             match self.stdin.read_line(&mut line).await {
                 Ok(0) => {
                     debug!("EOF reached on stdin");
@@ -58,7 +55,10 @@ impl StdioTransport {
             // Parse JSON-RPC request
             match serde_json::from_str::<JsonRpcRequest>(&line) {
                 Ok(request) => {
-                    debug!("Parsed request: method={}, id={:?}", request.method, request.id);
+                    debug!(
+                        "Parsed request: method={}, id={:?}",
+                        request.method, request.id
+                    );
                     return Ok(Some(request));
                 }
                 Err(e) => {
@@ -73,17 +73,22 @@ impl StdioTransport {
     pub async fn write_response(&mut self, response: JsonRpcResponse) -> Result<()> {
         let json = serde_json::to_string(&response)?;
         trace!("Sending response: {}", json);
-        
+
         self.stdout.write_all(json.as_bytes()).await?;
         self.stdout.write_all(b"\n").await?;
         self.stdout.flush().await?;
-        
+
         debug!("Sent response for id={:?}", response.id);
         Ok(())
     }
 
     /// Write a JSON-RPC error response
-    pub async fn write_error(&mut self, id: Option<serde_json::Value>, error: crate::mcp::protocol::JsonRpcError) -> Result<()> {
+    #[allow(dead_code)]
+    pub async fn write_error(
+        &mut self,
+        id: Option<serde_json::Value>,
+        error: crate::mcp::protocol::JsonRpcError,
+    ) -> Result<()> {
         let response = JsonRpcResponse::error(id, error);
         self.write_response(response).await
     }

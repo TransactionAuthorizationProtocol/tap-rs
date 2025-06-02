@@ -79,6 +79,8 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
+TAP-MCP provides 8 comprehensive tools covering the complete TAP transaction lifecycle:
+
 ### Agent Management
 
 #### `tap.create_agent`
@@ -115,10 +117,10 @@ List agents with optional filtering and pagination.
 }
 ```
 
-### Transaction Management
+### Transaction Creation
 
 #### `tap.create_transfer`
-Initiate a new TAP transfer transaction.
+Initiate a new TAP transfer transaction (TAIP-3).
 
 ```json
 {
@@ -138,6 +140,75 @@ Initiate a new TAP transfer transaction.
     }
   ],
   "memo": "Payment for services"
+}
+```
+
+### Transaction Actions
+
+#### `tap.authorize`
+Authorize a TAP transaction (TAIP-4).
+
+```json
+{
+  "transaction_id": "tx-12345",
+  "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87",
+  "expiry": "2024-12-31T23:59:59Z"
+}
+```
+
+#### `tap.reject`
+Reject a TAP transaction (TAIP-4).
+
+```json
+{
+  "transaction_id": "tx-12345",
+  "reason": "Insufficient compliance verification"
+}
+```
+
+#### `tap.cancel`
+Cancel a TAP transaction (TAIP-5).
+
+```json
+{
+  "transaction_id": "tx-12345",
+  "by": "did:example:alice",
+  "reason": "Change of plans"
+}
+```
+
+#### `tap.settle`
+Settle a TAP transaction (TAIP-6).
+
+```json
+{
+  "transaction_id": "tx-12345",
+  "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
+  "amount": "100.50"
+}
+```
+
+### Transaction Management
+
+#### `tap.list_transactions`
+List transactions with filtering and pagination support.
+
+```json
+{
+  "filter": {
+    "message_type": "Transfer",
+    "thread_id": "thread-abc123",
+    "from_did": "did:example:alice",
+    "to_did": "did:example:bob",
+    "date_from": "2024-01-01T00:00:00Z",
+    "date_to": "2024-12-31T23:59:59Z"
+  },
+  "sort": {
+    "field": "created_time",
+    "order": "desc"
+  },
+  "limit": 100,
+  "offset": 0
 }
 ```
 
@@ -219,14 +290,66 @@ echo '{
 }' | tap-mcp-client call tap.create_transfer
 ```
 
-3. **Monitor the transaction:**
+3. **Authorize the transfer:**
 
 ```bash
+echo '{
+  "transaction_id": "tx-abc123",
+  "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87",
+  "expiry": "2024-12-31T23:59:59Z"
+}' | tap-mcp-client call tap.authorize
+```
+
+4. **Settle the transaction:**
+
+```bash
+echo '{
+  "transaction_id": "tx-abc123",
+  "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
+  "amount": "250.00"
+}' | tap-mcp-client call tap.settle
+```
+
+5. **Monitor transactions:**
+
+```bash
+# List all transactions
+tap-mcp-client call tap.list_transactions
+
+# List recent transfers
+echo '{"filter": {"message_type": "Transfer"}, "limit": 10}' | \
+  tap-mcp-client call tap.list_transactions
+
+# Get specific transaction details via resources
+tap-mcp-client resource tap://messages?thread_id=tx-abc123
+
 # List recent messages
 tap-mcp-client resource tap://messages
+```
 
-# Get specific transaction details
-tap-mcp-client resource tap://messages?thread_id=transaction-thread-id
+### Alternative Workflow: Rejecting a Transaction
+
+If a transaction needs to be rejected instead of authorized:
+
+```bash
+# Reject with reason
+echo '{
+  "transaction_id": "tx-abc123",
+  "reason": "Insufficient compliance verification"
+}' | tap-mcp-client call tap.reject
+```
+
+### Canceling a Transaction
+
+Either party can cancel a transaction before settlement:
+
+```bash
+# Cancel transaction
+echo '{
+  "transaction_id": "tx-abc123",
+  "by": "did:example:alice",
+  "reason": "Change of plans"
+}' | tap-mcp-client call tap.cancel
 ```
 
 ## Integration Examples
@@ -272,7 +395,7 @@ async def main():
             print(f"Available tools: {[tool.name for tool in tools.tools]}")
             
             # Create an agent
-            result = await session.call_tool(
+            agent_result = await session.call_tool(
                 "tap.create_agent",
                 {
                     "@id": "did:example:test-agent",
@@ -280,7 +403,42 @@ async def main():
                     "for": "did:example:test-party"
                 }
             )
-            print(f"Agent created: {result}")
+            print(f"Agent created: {agent_result}")
+            
+            # Create a transfer transaction
+            transfer_result = await session.call_tool(
+                "tap.create_transfer",
+                {
+                    "asset": "eip155:1/erc20:0xa0b86a33e6a4a3c3fcb4b0f0b2a4b6e1c9f8d5c4",
+                    "amount": "100.00",
+                    "originator": {"@id": "did:example:alice"},
+                    "beneficiary": {"@id": "did:example:bob"},
+                    "agents": [
+                        {"@id": "did:example:test-agent", "role": "Exchange", "for": "did:example:alice"}
+                    ]
+                }
+            )
+            print(f"Transfer created: {transfer_result}")
+            
+            # Authorize the transaction
+            auth_result = await session.call_tool(
+                "tap.authorize",
+                {
+                    "transaction_id": "tx-12345",
+                    "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87"
+                }
+            )
+            print(f"Transaction authorized: {auth_result}")
+            
+            # List recent transactions
+            list_result = await session.call_tool(
+                "tap.list_transactions",
+                {
+                    "limit": 10,
+                    "filter": {"message_type": "Transfer"}
+                }
+            )
+            print(f"Recent transfers: {list_result}")
 
 if __name__ == "__main__":
     asyncio.run(main())

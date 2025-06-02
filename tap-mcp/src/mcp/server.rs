@@ -1,11 +1,11 @@
 //! MCP server implementation
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::mcp::protocol::*;
 use crate::mcp::transport::StdioTransport;
+use crate::resources::ResourceRegistry;
 use crate::tap_integration::TapIntegration;
 use crate::tools::ToolRegistry;
-use crate::resources::ResourceRegistry;
 use serde_json::Value;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
@@ -13,6 +13,7 @@ use tracing::{debug, error, info, warn};
 /// MCP server for TAP functionality
 pub struct McpServer {
     transport: StdioTransport,
+    #[allow(dead_code)]
     tap_integration: Arc<TapIntegration>,
     tool_registry: ToolRegistry,
     resource_registry: ResourceRegistry,
@@ -78,10 +79,7 @@ impl McpServer {
             "resources/read" => self.handle_read_resource(request.id, request.params).await,
             _ => {
                 warn!("Unknown method: {}", request.method);
-                JsonRpcResponse::error(
-                    request.id,
-                    JsonRpcError::method_not_found(request.method),
-                )
+                JsonRpcResponse::error(request.id, JsonRpcError::method_not_found(request.method))
             }
         };
 
@@ -90,7 +88,11 @@ impl McpServer {
     }
 
     /// Handle initialize request
-    async fn handle_initialize(&mut self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
+    async fn handle_initialize(
+        &mut self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
         let params: InitializeParams = match params {
             Some(p) => match serde_json::from_value(p) {
                 Ok(params) => params,
@@ -99,17 +101,24 @@ impl McpServer {
                 }
             },
             None => {
-                return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing parameters"));
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params("Missing parameters"),
+                );
             }
         };
 
-        info!("Initializing with client: {} v{}", 
-              params.client_info.name, params.client_info.version);
+        info!(
+            "Initializing with client: {} v{}",
+            params.client_info.name, params.client_info.version
+        );
 
         // Check protocol version compatibility
         if params.protocol_version != MCP_VERSION {
-            warn!("Protocol version mismatch: client={}, server={}", 
-                  params.protocol_version, MCP_VERSION);
+            warn!(
+                "Protocol version mismatch: client={}, server={}",
+                params.protocol_version, MCP_VERSION
+            );
         }
 
         let result = InitializeResult {
@@ -139,7 +148,11 @@ impl McpServer {
     }
 
     /// Handle list tools request
-    async fn handle_list_tools(&self, id: Option<Value>, _params: Option<Value>) -> JsonRpcResponse {
+    async fn handle_list_tools(
+        &self,
+        id: Option<Value>,
+        _params: Option<Value>,
+    ) -> JsonRpcResponse {
         if !self.initialized {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_request("Not initialized"));
         }
@@ -170,11 +183,18 @@ impl McpServer {
                 }
             },
             None => {
-                return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing parameters"));
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params("Missing parameters"),
+                );
             }
         };
 
-        match self.tool_registry.call_tool(&params.name, params.arguments).await {
+        match self
+            .tool_registry
+            .call_tool(&params.name, params.arguments)
+            .await
+        {
             Ok(result) => match serde_json::to_value(result) {
                 Ok(value) => JsonRpcResponse::success(id, value),
                 Err(e) => JsonRpcResponse::error(id, JsonRpcError::internal_error(e.to_string())),
@@ -189,14 +209,20 @@ impl McpServer {
                 };
                 match serde_json::to_value(result) {
                     Ok(value) => JsonRpcResponse::success(id, value),
-                    Err(e) => JsonRpcResponse::error(id, JsonRpcError::internal_error(e.to_string())),
+                    Err(e) => {
+                        JsonRpcResponse::error(id, JsonRpcError::internal_error(e.to_string()))
+                    }
                 }
             }
         }
     }
 
     /// Handle list resources request
-    async fn handle_list_resources(&self, id: Option<Value>, _params: Option<Value>) -> JsonRpcResponse {
+    async fn handle_list_resources(
+        &self,
+        id: Option<Value>,
+        _params: Option<Value>,
+    ) -> JsonRpcResponse {
         if !self.initialized {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_request("Not initialized"));
         }
@@ -214,7 +240,11 @@ impl McpServer {
     }
 
     /// Handle read resource request
-    async fn handle_read_resource(&self, id: Option<Value>, params: Option<Value>) -> JsonRpcResponse {
+    async fn handle_read_resource(
+        &self,
+        id: Option<Value>,
+        params: Option<Value>,
+    ) -> JsonRpcResponse {
         if !self.initialized {
             return JsonRpcResponse::error(id, JsonRpcError::invalid_request("Not initialized"));
         }
@@ -227,7 +257,10 @@ impl McpServer {
                 }
             },
             None => {
-                return JsonRpcResponse::error(id, JsonRpcError::invalid_params("Missing parameters"));
+                return JsonRpcResponse::error(
+                    id,
+                    JsonRpcError::invalid_params("Missing parameters"),
+                );
             }
         };
 
@@ -236,7 +269,9 @@ impl McpServer {
                 let result = ReadResourceResult { contents };
                 match serde_json::to_value(result) {
                     Ok(value) => JsonRpcResponse::success(id, value),
-                    Err(e) => JsonRpcResponse::error(id, JsonRpcError::internal_error(e.to_string())),
+                    Err(e) => {
+                        JsonRpcResponse::error(id, JsonRpcError::internal_error(e.to_string()))
+                    }
                 }
             }
             Err(e) => {
