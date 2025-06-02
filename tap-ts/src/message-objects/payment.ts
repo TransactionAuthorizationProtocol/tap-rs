@@ -1,6 +1,6 @@
 import { TAPAgent } from "../agent";
 import { BaseMessage } from "./base-message";
-import { DID, EntityReference } from "../types";
+import { DID, Agent, Party } from "../types";
 
 /**
  * PaymentMessage - Represents a TAP Payment message
@@ -61,14 +61,14 @@ export class PaymentMessage extends BaseMessage {
   /**
    * Get the merchant for the payment
    */
-  get merchant(): EntityReference {
+  get merchant(): Party {
     return this.body.merchant;
   }
 
   /**
    * Set the merchant for the payment
    */
-  setMerchant(merchant: EntityReference): this {
+  setMerchant(merchant: Party): this {
     this.body.merchant = merchant;
     return this;
   }
@@ -76,14 +76,14 @@ export class PaymentMessage extends BaseMessage {
   /**
    * Get the customer for the payment
    */
-  get customer(): EntityReference | undefined {
+  get customer(): Party | undefined {
     return this.body.customer;
   }
 
   /**
    * Set the customer for the payment
    */
-  setCustomer(customer: EntityReference): this {
+  setCustomer(customer: Party): this {
     this.body.customer = customer;
     if (customer['@id']) {
       this.setTo(customer['@id'] as DID);
@@ -139,14 +139,14 @@ export class PaymentMessage extends BaseMessage {
   /**
    * Get the agents involved in the payment
    */
-  get agents(): EntityReference[] {
+  get agents(): Agent[] {
     return this.body.agents || [];
   }
 
   /**
    * Set the agents involved in the payment
    */
-  setAgents(agents: EntityReference[]): this {
+  setAgents(agents: Agent[]): this {
     this.body.agents = agents;
     return this;
   }

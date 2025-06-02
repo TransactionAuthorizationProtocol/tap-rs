@@ -5,7 +5,8 @@ import {
   Connect,
   TAPMessage,
   MessageTypeUri,
-  EntityReference,
+  Agent,
+  Party,
   Asset,
 } from "./types";
 import { ConfigurationError, ProcessingError, SigningError } from "./errors";
@@ -163,10 +164,10 @@ export class TAPAgent {
   transfer(params: {
     asset: Asset;
     amount: string;
-    originator?: EntityReference;
-    beneficiary?: EntityReference;
+    originator?: Party;
+    beneficiary?: Party;
     memo?: string;
-    agents?: EntityReference[];
+    agents?: Agent[];
   }): TransferMessage {
     const message = this.wasmAgent.createMessage("https://tap.rsvp/schema/1.0#Transfer");
     
@@ -174,7 +175,7 @@ export class TAPAgent {
     message.body = {
       asset: params.asset,
       amount: params.amount,
-      originator: params.originator || { '@id': this.did, role: 'originator' },
+      originator: params.originator || { '@id': this.did },
       beneficiary: params.beneficiary,
       agents: params.agents || [],
       memo: params.memo
@@ -196,12 +197,12 @@ export class TAPAgent {
     asset?: string;
     currency?: string;
     amount: string;
-    merchant: EntityReference;
-    customer?: EntityReference;
+    merchant: Party;
+    customer?: Party;
     invoice?: string;
     expiry?: string;
     supportedAssets?: string[];
-    agents?: EntityReference[];
+    agents?: Agent[];
   }): PaymentMessage {
     const message = this.wasmAgent.createMessage("https://tap.rsvp/schema/1.0#Payment");
     
@@ -231,7 +232,7 @@ export class TAPAgent {
    * Create a connect message
    */
   connect(params: {
-    agent?: EntityReference;
+    agent?: Agent;
     for: string;
     constraints: any;
     expiry?: string;
@@ -240,7 +241,7 @@ export class TAPAgent {
     
     // Set the necessary fields
     message.body = {
-      agent: params.agent || { '@id': this.did, role: 'connector' },
+      agent: params.agent || { '@id': this.did, role: 'connector', for: [] },
       for: params.for,
       constraints: params.constraints,
       expiry: params.expiry

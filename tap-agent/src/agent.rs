@@ -11,6 +11,8 @@ use crate::message_packing::{PackOptions, Packable, UnpackOptions, Unpackable};
 use async_trait::async_trait;
 #[cfg(feature = "native")]
 use reqwest::Client;
+#[cfg(target_arch = "wasm32")]
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::sync::Arc;
 #[cfg(feature = "native")]

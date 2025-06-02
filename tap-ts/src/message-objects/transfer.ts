@@ -1,6 +1,6 @@
 import { TAPAgent } from "../agent";
 import { BaseMessage } from "./base-message";
-import { DID, EntityReference, Asset } from "../types";
+import { DID, Agent, Party, Asset } from "../types";
 
 /**
  * TransferMessage - Represents a TAP Transfer message
@@ -46,14 +46,14 @@ export class TransferMessage extends BaseMessage {
   /**
    * Get the originator of the transfer
    */
-  get originator(): EntityReference {
+  get originator(): Party {
     return this.body.originator;
   }
 
   /**
    * Set the originator of the transfer
    */
-  setOriginator(originator: EntityReference): this {
+  setOriginator(originator: Party): this {
     this.body.originator = originator;
     return this;
   }
@@ -61,14 +61,14 @@ export class TransferMessage extends BaseMessage {
   /**
    * Get the beneficiary of the transfer
    */
-  get beneficiary(): EntityReference | undefined {
+  get beneficiary(): Party | undefined {
     return this.body.beneficiary;
   }
 
   /**
    * Set the beneficiary of the transfer
    */
-  setBeneficiary(beneficiary: EntityReference): this {
+  setBeneficiary(beneficiary: Party): this {
     this.body.beneficiary = beneficiary;
     if (beneficiary['@id']) {
       this.setTo(beneficiary['@id'] as DID);
@@ -79,14 +79,14 @@ export class TransferMessage extends BaseMessage {
   /**
    * Get the agents involved in the transfer
    */
-  get agents(): EntityReference[] {
+  get agents(): Agent[] {
     return this.body.agents || [];
   }
 
   /**
    * Set the agents involved in the transfer
    */
-  setAgents(agents: EntityReference[]): this {
+  setAgents(agents: Agent[]): this {
     this.body.agents = agents;
     return this;
   }
