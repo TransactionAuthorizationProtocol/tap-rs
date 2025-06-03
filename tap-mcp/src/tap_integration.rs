@@ -159,25 +159,27 @@ impl TapIntegration {
     }
 
     /// Get storage for a specific agent DID
-    /// This creates a dedicated storage instance for the given agent DID
+    /// This delegates to TAP Node's AgentStorageManager for proper agent isolation
     pub async fn storage_for_agent(
         &self,
         agent_did: &str,
     ) -> Result<Arc<tap_node::storage::Storage>> {
-        // Get the TAP root from the node's configuration
-        let tap_root = self.node.config().tap_root.clone();
-
-        // Create storage for this specific agent
-        let storage = tap_node::storage::Storage::new_with_did(agent_did, tap_root)
-            .await
-            .map_err(|e| {
-                Error::configuration(format!(
-                    "Failed to create storage for agent {}: {}",
-                    agent_did, e
-                ))
-            })?;
-
-        Ok(Arc::new(storage))
+        // Use TAP Node's agent storage manager for consistent storage access
+        if let Some(storage_manager) = self.node.agent_storage_manager() {
+            storage_manager
+                .get_agent_storage(agent_did)
+                .await
+                .map_err(|e| {
+                    Error::configuration(format!(
+                        "Failed to get storage for agent {}: {}",
+                        agent_did, e
+                    ))
+                })
+        } else {
+            Err(Error::configuration(
+                "Agent storage manager not available".to_string(),
+            ))
+        }
     }
 
     /// List all registered agents (from storage and in-memory registry)
