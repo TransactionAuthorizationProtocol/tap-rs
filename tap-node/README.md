@@ -19,9 +19,15 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 - **Configurable Components**: Customize node behavior with pluggable components
 - **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
 - **WASM Compatibility**: Optional WASM support for browser environments
-- **Persistent Storage**: SQLite-based storage using async SQLx with dual functionality:
+- **Per-Agent Storage**: Agent-specific SQLite databases with automatic isolation:
+  - Each agent gets its own dedicated storage instance at `~/.tap/{sanitized_did}/transactions.db`
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all incoming/outgoing messages
+  - Multi-agent transaction storage ensuring all involved agents receive transaction data
+- **Multi-Recipient Message Delivery**: Full DIDComm specification compliance:
+  - Messages delivered to ALL recipients specified in the `to` field
+  - Storage logging to all recipient agents' databases
+  - Proper handling of multi-party transactions and communications
 
 ## Installation
 
@@ -47,19 +53,26 @@ tap-node = { path = "../tap-node", features = ["storage"] } # Enable persistent 
 The TAP Node is built with a modular architecture:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                      TAP Node                            │
-├───────────────┬───────────────┬───────────────┬─────────┤
-│ Agent Registry│ Message Router│  Event Bus    │ Storage │
-├───────────────┼───────────────┼───────────────┼─────────┤
-│ Message       │ Processor Pool│  Resolver     │ SQLite  │
-│ Processors    │               │               │   DB    │
-└───────────────┴───────────────┴───────────────┴─────────┘
-        │               │               │               │
-        ▼               ▼               ▼               ▼
-┌───────────────┐ ┌───────────────┐ ┌───────────────┐
-│   TAP Agent   │ │   TAP Agent   │ │   TAP Agent   │
-└───────────────┘ └───────────────┘ └───────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                           TAP Node                                   │
+├───────────────┬───────────────┬─────────────────┬───────────────────┤
+│ Agent Registry│ Message Router│  Event Bus      │ AgentStorageManager│
+├───────────────┼───────────────┼─────────────────┼───────────────────┤
+│ Message       │ Processor Pool│  DID Resolver   │ Per-Agent Storage │
+│ Processors    │               │                 │    Isolation      │
+└───────────────┴───────────────┴─────────────────┴───────────────────┘
+        │               │               │                       │
+        ▼               ▼               ▼                       ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌─────────────────┐
+│   TAP Agent   │ │   TAP Agent   │ │   TAP Agent   │ │ ~/.tap/{did}/   │
+│    Agent A    │ │    Agent B    │ │    Agent C    │ │ transactions.db │
+└───────────────┘ └───────────────┘ └───────────────┘ └─────────────────┘
+        │               │               │                       │
+        ▼               ▼               ▼                       ▼
+┌───────────────┐ ┌───────────────┐ ┌───────────────┐ ┌─────────────────┐
+│   SQLite DB   │ │   SQLite DB   │ │   SQLite DB   │ │ Multi-Recipient │
+│   Agent A     │ │   Agent B     │ │   Agent C     │ │ Message Delivery│
+└───────────────┘ └───────────────┘ └───────────────┘ └─────────────────┘
 ```
 
 ## Usage
@@ -84,11 +97,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         log_message_content: false,
         processor_pool: None,
         #[cfg(feature = "storage")]
-        storage_path: None, // Uses default path: ./tap-node.db
+        storage_path: None, // Uses default path for legacy centralized storage
         #[cfg(feature = "storage")]
-        agent_did: None,
+        agent_did: None, // Optional: primary agent DID for initialization
         #[cfg(feature = "storage")]
-        tap_root: None,
+        tap_root: None, // Uses default ~/.tap for per-agent storage
     };
 
     // Create a new node
@@ -107,14 +120,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node.start(pool_config).await?;
 
     // Create and register an agent
-    let agent_config = AgentConfig::new("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string());
-    let did_resolver = Arc::new(MultiResolver::default());
-    let secret_resolver = Arc::new(BasicSecretResolver::new());
-    let message_packer = Arc::new(DefaultMessagePacker::new(did_resolver, secret_resolver));
-    let agent = DefaultAgent::new(agent_config, message_packer);
+    let (agent, agent_did) = TapAgent::from_ephemeral_key().await?;
     node.register_agent(Arc::new(agent)).await?;
 
-    // The node is now ready to process messages
+    // Agent registration automatically initializes per-agent storage
+    // at ~/.tap/{sanitized_did}/transactions.db
+
+    // The node is now ready to process messages and deliver them
+    // to all recipients specified in each message's 'to' field
 
     Ok(())
 }
@@ -123,20 +136,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ### Processing Messages
 
 ```rust
-use tap_msg::PlainMessage;
+use tap_msg::didcomm::PlainMessage;
+use serde_json::json;
 
 // Receive and process an incoming message
-async fn handle_message(node: &TapNode, message: Message) -> Result<(), tap_node::Error> {
+async fn handle_message(node: &TapNode, message: serde_json::Value) -> Result<(), tap_node::Error> {
     // Process through the node's pipeline
+    // If the message has multiple recipients in the 'to' field,
+    // it will be delivered to ALL of them
     node.receive_message(message).await?;
     Ok(())
 }
 
-// Send a message from one agent to another
-async fn send_message(node: &TapNode, from_did: &str, to_did: &str, message: Message) -> Result<String, tap_node::Error> {
+// Send a message from one agent to multiple recipients
+async fn send_message(node: &TapNode, from_did: &str, to_did: &str, message: PlainMessage) -> Result<String, tap_node::Error> {
     // Process and dispatch the message, returns the packed message
+    // Storage will be logged to all involved agents' databases
     let packed = node.send_message(from_did, to_did, message).await?;
     Ok(packed)
+}
+
+// Example: Creating a multi-recipient message
+async fn send_to_multiple_recipients(node: &TapNode) -> Result<(), tap_node::Error> {
+    let message = PlainMessage {
+        id: "msg-123".to_string(),
+        typ: "application/didcomm-plain+json".to_string(),
+        type_: "basic-message".to_string(),
+        from: "did:example:sender".to_string(),
+        to: vec![
+            "did:example:recipient1".to_string(),
+            "did:example:recipient2".to_string(),
+            "did:example:recipient3".to_string(),
+        ],
+        body: json!({"content": "Hello everyone!"}),
+        // ... other fields
+        created_time: Some(chrono::Utc::now().timestamp() as u64),
+        // ... rest of fields
+    };
+
+    // This message will be delivered to all three recipients
+    // and logged in each of their storage databases
+    node.receive_message(serde_json::to_value(message)?).await?;
+    Ok(())
 }
 ```
 
@@ -325,37 +366,49 @@ Key benefits of the WebSocket transport:
 - Connection state awareness
 - Reduced overhead for frequent messages
 
-## Persistent Storage
+## Per-Agent Storage Architecture
 
-The TAP Node includes built-in support for persistent storage using SQLite. This feature is enabled by default and provides:
+The TAP Node features a sophisticated per-agent storage system using SQLite databases. This architecture provides complete data isolation between agents while ensuring all involved parties receive relevant transaction data.
 
-1. **Transaction Storage**: Automatic storage of Transfer and Payment messages for business logic processing
-2. **Message Audit Trail**: Complete logging of all incoming and outgoing messages for compliance and debugging
+### Key Features
+
+1. **Agent-Specific Databases**: Each agent gets its own SQLite database at `~/.tap/{sanitized_did}/transactions.db`
+2. **Multi-Agent Transaction Storage**: Transactions are automatically stored in ALL involved agents' databases
+3. **Multi-Recipient Message Delivery**: Messages are delivered to ALL recipients specified in the `to` field
+4. **Complete Message Audit Trail**: All incoming and outgoing messages logged per agent
+5. **Automatic Storage Initialization**: Agent storage created automatically during registration
 
 ### Storage Configuration
 
-Configure storage when creating the node:
+Configure per-agent storage when creating the node:
 
 ```rust
 use tap_node::{NodeConfig, TapNode};
 use std::path::PathBuf;
 
-// Use default storage location (./tap-node.db)
+// Use default TAP root (~/.tap) for per-agent storage
 let config = NodeConfig {
     #[cfg(feature = "storage")]
-    storage_path: None,
+    tap_root: None, // Uses ~/.tap/
+    #[cfg(feature = "storage")]
+    agent_did: None, // Primary agent DID (optional)
+    #[cfg(feature = "storage")]
+    storage_path: None, // Legacy centralized storage (optional)
     ..Default::default()
 };
 
-// Or specify a custom path
+// Or specify a custom TAP root directory
 let config = NodeConfig {
     #[cfg(feature = "storage")]
-    storage_path: Some(PathBuf::from("/path/to/database.db")),
+    tap_root: Some(PathBuf::from("/custom/tap/root")),
+    #[cfg(feature = "storage")]
+    agent_did: Some("did:example:primary-agent".to_string()),
     ..Default::default()
 };
 
-// Or use environment variable
-std::env::set_var("TAP_NODE_DB_PATH", "/path/to/database.db");
+// Agent storage locations:
+// - Default: ~/.tap/{sanitized_did}/transactions.db
+// - Custom: /custom/tap/root/{sanitized_did}/transactions.db
 ```
 
 ### Accessing Stored Data
@@ -363,38 +416,41 @@ std::env::set_var("TAP_NODE_DB_PATH", "/path/to/database.db");
 ```rust
 use tap_node::storage::MessageDirection;
 
-// Get storage handle from the node
-if let Some(storage) = node.storage() {
+// Access agent-specific storage
+if let Some(storage_manager) = node.agent_storage_manager() {
+    // Get storage for a specific agent
+    let agent_storage = storage_manager.get_agent_storage("did:example:agent").await?;
+    
     // === Transaction Operations ===
     // Retrieve a specific transaction by message ID
-    let transaction = storage.get_transaction_by_id("msg_12345").await?;
+    let transaction = agent_storage.get_transaction_by_id("msg_12345").await?;
     
     // List recent transactions with pagination
-    let transactions = storage.list_transactions(
+    let transactions = agent_storage.list_transactions(
         10,  // limit: 10 transactions
         0    // offset: 0 (first page)
     ).await?;
     
     // === Message Audit Trail Operations ===
     // Retrieve any message by ID
-    let message = storage.get_message_by_id("msg_12345").await?;
+    let message = agent_storage.get_message_by_id("msg_12345").await?;
     
-    // List all messages
-    let all_messages = storage.list_messages(
+    // List all messages for this agent
+    let all_messages = agent_storage.list_messages(
         20,   // limit
         0,    // offset
-        None  // no direction filter
+        None  // no direction filter (shows both incoming and outgoing)
     ).await?;
     
     // List only incoming messages
-    let incoming = storage.list_messages(
+    let incoming = agent_storage.list_messages(
         10,
         0,
         Some(MessageDirection::Incoming)
     ).await?;
     
     // List only outgoing messages
-    let outgoing = storage.list_messages(
+    let outgoing = agent_storage.list_messages(
         10,
         0,
         Some(MessageDirection::Outgoing)
@@ -402,7 +458,7 @@ if let Some(storage) = node.storage() {
     
     // Examine message details
     for msg in all_messages {
-        println!("Message: {} - Type: {} - Direction: {:?} - From: {:?} - To: {:?}", 
+        println!("Agent Storage - Message: {} - Type: {} - Direction: {:?} - From: {:?} - To: {:?}", 
             msg.message_id, 
             msg.message_type,
             msg.direction,
@@ -411,19 +467,29 @@ if let Some(storage) = node.storage() {
         );
     }
 }
+
+// Access legacy centralized storage (if available)
+if let Some(storage) = node.storage() {
+    // Same API as above, but accesses centralized storage
+    let transactions = storage.list_transactions(10, 0).await?;
+}
 ```
 
 ### Storage Features
 
+- **Agent Isolation**: Each agent has its own dedicated SQLite database
+- **Multi-Agent Transactions**: Transactions automatically stored in all involved agents' databases
+- **Multi-Recipient Delivery**: Messages delivered to ALL recipients in the `to` field
 - **Async Database Operations**: Built on SQLx for native async support
 - **Automatic Migration**: Database schema is automatically created and migrated on startup
-- **Dual-Table Design**: Separate tables for transactions and message audit trail
+- **Dual-Table Design**: Separate tables for transactions and message audit trail per agent
 - **Append-Only Design**: All data is immutable for compliance and auditing
 - **SQLite WAL Mode**: Optimized for concurrent reads and writes
-- **Connection Pooling**: SQLx connection pool for efficient database access
+- **Connection Pooling**: SQLx connection pool for efficient database access per agent
 - **JSON Column Support**: Message content stored as validated JSON
 - **WASM Compatibility**: Storage is automatically disabled in WASM builds
 - **Duplicate Handling**: Duplicate messages are silently ignored (idempotent)
+- **Directory Management**: Automatic creation of agent-specific directories
 
 ### Database Schema
 

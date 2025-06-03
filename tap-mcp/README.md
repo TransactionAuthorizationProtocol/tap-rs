@@ -8,9 +8,10 @@ TAP-MCP is a thin wrapper around TAP Node that exposes transaction authorization
 
 - **Agent Management**: Create TAP agents with auto-generated DIDs and manage cryptographic identities
 - **Transaction Creation**: Initiate transfers, payments, and other TAP operations  
-- **Message Monitoring**: Access transaction history and message details
+- **Agent-Specific Message Monitoring**: Access transaction history and message details from individual agent storage
+- **Multi-Recipient Message Delivery**: Full DIDComm compliance with delivery to all recipients in the `to` field
 - **Schema Access**: Get JSON schemas for TAP message types
-- **DID-based Storage**: Uses TAP Node's DID-organized database structure (~/.tap/{did}/)
+- **Per-Agent Storage**: Each agent has isolated SQLite storage at `~/.tap/{sanitized_did}/transactions.db`
 
 Key design principles:
 - Agents are cryptographic identities (DIDs) without predefined roles
@@ -238,15 +239,19 @@ tap://agents                           # All agents with their DIDs and labels
 ```
 
 ### `tap://messages`
-Access to transaction messages and history.
+Access to transaction messages and history from agent-specific storage.
 
 ```
-tap://messages                         # Recent messages
-tap://messages?thread_id=abc123        # Filter by thread
-tap://messages?type=Transfer           # Filter by message type
-tap://messages?limit=100&offset=50     # Pagination
-tap://messages/msg-id-123              # Specific message
+tap://messages?agent_did=did:key:z6Mk...           # Messages for specific agent (required)
+tap://messages?agent_did=did:key:z6Mk...&direction=incoming   # Filter by direction
+tap://messages?agent_did=did:key:z6Mk...&direction=outgoing   # Outgoing messages only
+tap://messages?agent_did=did:key:z6Mk...&thread_id=abc123     # Filter by thread
+tap://messages?agent_did=did:key:z6Mk...&type=Transfer        # Filter by message type
+tap://messages?agent_did=did:key:z6Mk...&limit=100&offset=50  # Pagination
+tap://messages/msg-id-123                          # Specific message
 ```
+
+**Important**: The `agent_did` parameter is required when accessing messages to specify which agent's storage to query. If not provided, you'll get an error message asking you to specify the agent. By default, both incoming and outgoing messages are shown unless you filter by `direction`.
 
 ### `tap://schemas`
 JSON schemas for TAP message types.
@@ -286,6 +291,8 @@ tap://schemas                          # All schemas
 - Scalable storage architecture as each agent manages its own data
 - Clear audit trails per agent identity
 - No cross-contamination of transaction data between agents
+- Multi-agent transaction storage: transactions involving multiple agents are stored in all participating agents' databases
+- Multi-recipient message delivery: messages are delivered to ALL recipients specified in the `to` field following DIDComm specification
 
 ## Examples
 
@@ -344,18 +351,22 @@ echo '{
 5. **Monitor transactions:**
 
 ```bash
-# List all transactions
-tap-mcp-client call tap_list_transactions
-
-# List recent transfers
-echo '{"filter": {"message_type": "Transfer"}, "limit": 10}' | \
+# List all transactions for a specific agent
+echo '{"agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"}' | \
   tap-mcp-client call tap_list_transactions
 
-# Get specific transaction details via resources
-tap-mcp-client resource tap://messages?thread_id=tx-abc123
+# List recent transfers for an agent
+echo '{"agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc", "filter": {"message_type": "Transfer"}, "limit": 10}' | \
+  tap-mcp-client call tap_list_transactions
 
-# List recent messages
-tap-mcp-client resource tap://messages
+# Get specific transaction details via resources (requires agent_did)
+tap-mcp-client resource "tap://messages?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc&thread_id=tx-abc123"
+
+# List recent messages for an agent (shows both incoming and outgoing by default)
+tap-mcp-client resource "tap://messages?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"
+
+# List only incoming messages for an agent
+tap-mcp-client resource "tap://messages?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc&direction=incoming"
 ```
 
 ### Alternative Workflow: Rejecting a Transaction

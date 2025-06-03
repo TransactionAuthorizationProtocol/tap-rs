@@ -12,7 +12,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["Pelle Braendgaard <pelle@notabene.id>"]
 description = "Rust implementation of the Transaction Authorization Protocol (TAP)"
@@ -33,7 +33,13 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 
 # Async runtime - minimal features for WASM compatibility
-tokio = { version = "1.32.0", default-features = false, features = ["sync", "macros", "io-util", "rt", "time"] }
+tokio = { version = "1.32.0", default-features = false, features = [
+    "sync",
+    "macros",
+    "io-util",
+    "rt",
+    "time",
+] }
 
 # Error handling
 thiserror = "1.0"

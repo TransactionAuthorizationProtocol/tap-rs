@@ -1,22 +1,27 @@
-# TAP Node Storage Implementation
+# TAP Node Per-Agent Storage Implementation
 
 ## Overview
 
-This document describes the storage implementation for TAP Node, which provides:
-1. Persistent storage for Transfer and Payment transactions
-2. Complete audit trail of all incoming and outgoing messages
-3. DID-based storage organization with configurable root directory
+This document describes the per-agent storage implementation for TAP Node, which provides:
+1. **Agent-isolated storage**: Each agent gets its own dedicated SQLite database
+2. **Multi-agent transaction storage**: Transactions are stored in all involved agents' databases
+3. **Multi-recipient message delivery**: Messages delivered to ALL recipients in the `to` field
+4. **Complete audit trail**: All incoming and outgoing messages logged per agent
+5. **Automatic storage initialization**: Agent storage created during registration
+6. **DID-based organization**: Storage organized by agent DID with configurable root directory
 
 ## Features
 
-- **SQLite-based storage** with connection pooling via sqlx
-- **Dual-table design**: Separate tables for transactions and message audit trail
+- **Agent-Specific Databases**: Each agent has its own SQLite database at `~/.tap/{sanitized_did}/transactions.db`
+- **AgentStorageManager**: Centralized management with caching and lazy loading of agent storage
+- **Multi-Agent Transaction Distribution**: Transactions automatically stored in all involved agents' databases
+- **Multi-Recipient Message Delivery**: Full DIDComm spec compliance for message delivery to all recipients
+- **Dual-table design**: Separate tables for transactions and message audit trail (per agent)
 - **Append-only design** for auditing and compliance
-- **Automatic schema migrations** on startup
+- **Automatic schema migrations** on startup per agent database
 - **WASM compatibility** through feature gates
-- **Native async API** using sqlx
-- **DID-based database paths** for multi-agent support
-- **Configurable TAP root directory** with sensible defaults
+- **Native async API** using sqlx with connection pooling per agent
+- **Configurable TAP root directory** with sensible defaults (`~/.tap`)
 
 ## Database Schema
 
@@ -47,46 +52,80 @@ Audit trail for all DIDComm messages:
 - `message_json`: Full DIDComm message as JSON
 - `created_at`: Timestamp when message was logged
 
+## Agent Storage Architecture
+
+### Storage Directory Structure
+```
+~/.tap/                                    # TAP root directory
+├── did_key_z6MkpGuzuD38tpgZKPfm/          # Agent-specific directory (sanitized DID)
+│   └── transactions.db                    # SQLite database for this agent
+├── did_web_example.com/                   # Another agent's directory
+│   └── transactions.db                    # SQLite database for this agent
+└── logs/                                  # Shared logs directory
+```
+
+### AgentStorageManager
+
+The `AgentStorageManager` provides centralized management of per-agent storage:
+
+```rust
+// Get storage for a specific agent
+let storage_manager = node.agent_storage_manager().unwrap();
+let agent_storage = storage_manager.get_agent_storage("did:example:agent").await?;
+
+// Storage is automatically cached and reused
+let same_storage = storage_manager.get_agent_storage("did:example:agent").await?;
+```
+
+### Multi-Agent Transaction Storage
+
+When a transaction involves multiple agents, it's automatically stored in all their databases:
+
+```rust
+// This Transfer will be stored in databases for:
+// - Originator (Alice)
+// - Beneficiary (Bob) 
+// - All agents in the agents array
+// - All recipients in the message's 'to' field
+let transfer = Transfer {
+    originator: Party::new("did:example:alice"),
+    beneficiary: Some(Party::new("did:example:bob")),
+    agents: vec![Agent::new("did:example:custodian", "Custodian", "did:example:alice")],
+    // ...
+};
+```
+
 ## Usage
 
 ### Configuration
 
-#### Default DID-based Storage
-By default, storage uses a DID-based path structure under `~/.tap`:
+#### Default Per-Agent Storage
+By default, each agent gets its own storage under `~/.tap`:
 ```rust
 let config = NodeConfig {
-    agent_did: Some("did:web:example.com".to_string()),
+    tap_root: None, // Uses ~/.tap
     ..Default::default()
 };
-// Creates database at ~/.tap/did_web_example.com/transactions.db
+
+// When registering agents, each gets their own database:
+// ~/.tap/did_key_z6MkpGuzuD38tpgZKPfm/transactions.db
+// ~/.tap/did_web_example.com/transactions.db
 ```
 
 #### Custom TAP Root Directory
-Set a custom root directory via environment variable:
-```bash
-export TAP_ROOT=/custom/tap/directory
-```
-
-Or configure in NodeConfig:
 ```rust
 let config = NodeConfig {
-    agent_did: Some("did:web:example.com".to_string()),
     tap_root: Some(PathBuf::from("/custom/tap/root")),
     ..Default::default()
 };
-// Creates database at /custom/tap/root/did_web_example.com/transactions.db
+// Agent databases at: /custom/tap/root/{sanitized_did}/transactions.db
 ```
 
-#### Explicit Database Path
-For backward compatibility, you can still specify an explicit path:
-```bash
-export TAP_NODE_DB_PATH=/path/to/database.db
-```
-
-Or configure in NodeConfig:
+#### Legacy Centralized Storage (Optional)
+For backward compatibility, you can still use centralized storage:
 ```rust
 let config = NodeConfig {
-    storage_path: Some(PathBuf::from("/path/to/database.db")),
+    storage_path: Some(PathBuf::from("/path/to/centralized.db")),
     ..Default::default()
 };
 ```
@@ -94,9 +133,9 @@ let config = NodeConfig {
 ### API Examples
 
 ```rust
-// Create a node with DID-based storage
+// Create a node with per-agent storage
 let config = NodeConfig {
-    agent_did: Some("did:web:example.com".to_string()),
+    tap_root: None, // Uses ~/.tap for per-agent storage
     ..Default::default()
 };
 let mut node = TapNode::new(config);
@@ -104,27 +143,36 @@ let mut node = TapNode::new(config);
 // Initialize storage (required for async initialization)
 node.init_storage().await?;
 
-// Access storage
-if let Some(storage) = node.storage() {
-    // Transaction operations
-    let tx = storage.get_transaction_by_id("msg_123").await?;
-    let txs = storage.list_transactions(10, 0).await?;
+// Register agents (automatically initializes their storage)
+let (agent1, did1) = TapAgent::from_ephemeral_key().await?;
+let (agent2, did2) = TapAgent::from_ephemeral_key().await?;
+node.register_agent(Arc::new(agent1)).await?;
+node.register_agent(Arc::new(agent2)).await?;
+
+// Access agent-specific storage
+if let Some(storage_manager) = node.agent_storage_manager() {
+    // Get storage for a specific agent
+    let agent1_storage = storage_manager.get_agent_storage(&did1).await?;
+    let agent2_storage = storage_manager.get_agent_storage(&did2).await?;
     
-    // Message audit trail operations
-    let msg = storage.get_message_by_id("msg_123").await?;
-    let all_msgs = storage.list_messages(10, 0, None).await?;
-    let incoming_msgs = storage.list_messages(10, 0, Some(MessageDirection::Incoming)).await?;
+    // Each agent has their own transaction and message data
+    let agent1_txs = agent1_storage.list_transactions(10, 0).await?;
+    let agent2_txs = agent2_storage.list_transactions(10, 0).await?;
     
-    // Manual message logging (automatic for node operations)
-    storage.log_message(&message, MessageDirection::Incoming).await?;
+    // Message audit trail operations per agent
+    let agent1_msgs = agent1_storage.list_messages(10, 0, None).await?;
+    let agent2_incoming = agent2_storage.list_messages(10, 0, Some(MessageDirection::Incoming)).await?;
 }
 
-// Direct storage creation with DID
-let storage = Storage::new_with_did("did:web:example.com", None).await?;
+// Legacy centralized storage access (if configured)
+if let Some(storage) = node.storage() {
+    let txs = storage.list_transactions(10, 0).await?;
+    let msgs = storage.list_messages(10, 0, None).await?;
+}
 
-// Get default logs directory
-let logs_dir = Storage::default_logs_dir(None);
-// Returns ~/.tap/logs
+// Direct storage creation for specific agent
+let agent_storage = Storage::new_with_did("did:web:example.com", None).await?;
+// Creates database at ~/.tap/did_web_example.com/transactions.db
 ```
 
 ## Feature Flags
