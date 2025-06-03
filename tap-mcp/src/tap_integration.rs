@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tap_agent::TapAgent;
 use tap_node::{NodeConfig, TapNode};
-use tracing::{debug, info};
+use tracing::{debug, error, info};
 
 /// TAP ecosystem integration - thin wrapper around TapNode
 pub struct TapIntegration {
@@ -63,28 +63,33 @@ impl TapIntegration {
         match tap_agent::storage::KeyStorage::load_default() {
             Ok(storage) => {
                 let stored_dids: Vec<String> = storage.keys.keys().cloned().collect();
-                if stored_dids.len() > 1 {
-                    info!("Found {} total keys in storage", stored_dids.len());
-                    
-                    for stored_did in &stored_dids {
-                        // Skip the primary agent if it's already registered
-                        if agent_did.map_or(false, |did| stored_did == did) {
-                            continue;
-                        }
+                info!("Found {} total keys in storage", stored_dids.len());
 
-                        debug!("Registering additional agent: {}", stored_did);
-                        match TapAgent::from_stored_keys(Some(stored_did.clone()), true).await {
-                            Ok(additional_agent) => {
-                                let additional_agent_arc = Arc::new(additional_agent);
-                                if let Err(e) = node_arc.register_agent(additional_agent_arc).await {
-                                    debug!("Failed to register additional agent {}: {}", stored_did, e);
-                                } else {
-                                    debug!("Successfully registered additional agent: {}", stored_did);
-                                }
+                for stored_did in &stored_dids {
+                    // Skip the primary agent if it's already registered
+                    if agent_did.map_or(false, |did| stored_did == did) {
+                        continue;
+                    }
+
+                    info!("Registering additional agent: {}", stored_did);
+                    match TapAgent::from_stored_keys(Some(stored_did.clone()), true).await {
+                        Ok(additional_agent) => {
+                            let additional_agent_arc = Arc::new(additional_agent);
+                            if let Err(e) = node_arc.register_agent(additional_agent_arc).await
+                            {
+                                error!(
+                                    "Failed to register additional agent {}: {}",
+                                    stored_did, e
+                                );
+                            } else {
+                                info!(
+                                    "Successfully registered additional agent: {}",
+                                    stored_did
+                                );
                             }
-                            Err(e) => {
-                                debug!("Failed to load additional agent {}: {}", stored_did, e);
-                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to load additional agent {}: {}", stored_did, e);
                         }
                     }
                 }
@@ -133,9 +138,10 @@ impl TapIntegration {
         };
 
         // Create a test agent for testing
-        let (test_agent, _) = TapAgent::from_ephemeral_key().await
+        let (test_agent, _) = TapAgent::from_ephemeral_key()
+            .await
             .map_err(|e| Error::configuration(format!("Failed to create test agent: {}", e)))?;
-        
+
         let node_arc = Arc::new(node);
         node_arc
             .register_agent(Arc::new(test_agent))

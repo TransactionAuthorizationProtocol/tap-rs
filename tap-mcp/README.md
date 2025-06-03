@@ -6,11 +6,17 @@ A Model Context Protocol (MCP) server that provides AI applications with standar
 
 TAP-MCP is a thin wrapper around TAP Node that exposes transaction authorization functionality through the Model Context Protocol standard. This enables AI applications to:
 
-- **Agent Management**: Create and list TAP agents with policies
+- **Agent Management**: Create TAP agents with auto-generated DIDs and manage cryptographic identities
 - **Transaction Creation**: Initiate transfers, payments, and other TAP operations  
 - **Message Monitoring**: Access transaction history and message details
 - **Schema Access**: Get JSON schemas for TAP message types
 - **DID-based Storage**: Uses TAP Node's DID-organized database structure (~/.tap/{did}/)
+
+Key design principles:
+- Agents are cryptographic identities (DIDs) without predefined roles
+- Roles (SettlementAddress, Exchange, Compliance, etc.) are specified per transaction
+- Party associations are transaction-specific, not stored with agents
+- Automatic DID generation ensures globally unique identifiers
 
 ## Installation
 
@@ -57,6 +63,9 @@ cargo run -- --agent-did "did:web:example.com"
 
 # This creates database at ~/.tap/did_web_example.com/transactions.db
 
+# Use custom TAP root directory
+cargo run -- --tap-root /path/to/custom/tap
+
 # Enable debug logging
 cargo run -- --debug
 
@@ -85,34 +94,31 @@ TAP-MCP provides 8 comprehensive tools covering the complete TAP transaction lif
 
 ### Agent Management
 
-#### `tap.create_agent`
-Create a new TAP agent with specified role and policies.
+#### `tap_create_agent`
+Create a new TAP agent with auto-generated DID. Agents are cryptographic identities; roles and party associations are specified per transaction.
 
 ```json
 {
-  "@id": "did:example:agent123",
-  "role": "SettlementAddress", 
-  "for": "did:example:party456",
-  "policies": [
-    {
-      "type": "AmountLimit",
-      "max_amount": "1000.00"
-    }
-  ],
-  "metadata": {
-    "description": "Settlement agent for party 456"
-  }
+  "label": "My Settlement Agent"
 }
 ```
 
-#### `tap.list_agents`
-List agents with optional filtering and pagination.
+Returns:
+```json
+{
+  "@id": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "label": "My Settlement Agent",
+  "created_at": "2024-01-15T10:30:00Z"
+}
+```
+
+#### `tap_list_agents`
+List all configured agents from ~/.tap/keys.json.
 
 ```json
 {
   "filter": {
-    "role": "Exchange",
-    "for_party": "did:example:party123"
+    "has_label": true
   },
   "limit": 50,
   "offset": 0
@@ -121,7 +127,7 @@ List agents with optional filtering and pagination.
 
 ### Transaction Creation
 
-#### `tap.create_transfer`
+#### `tap_create_transfer`
 Initiate a new TAP transfer transaction (TAIP-3).
 
 ```json
@@ -132,7 +138,7 @@ Initiate a new TAP transfer transaction (TAIP-3).
     "@id": "did:example:alice"
   },
   "beneficiary": {
-    "@id": "did:example:bob"  
+    "@id": "did:example:bob"
   },
   "agents": [
     {
@@ -147,7 +153,7 @@ Initiate a new TAP transfer transaction (TAIP-3).
 
 ### Transaction Actions
 
-#### `tap.authorize`
+#### `tap_authorize`
 Authorize a TAP transaction (TAIP-4).
 
 ```json
@@ -158,7 +164,7 @@ Authorize a TAP transaction (TAIP-4).
 }
 ```
 
-#### `tap.reject`
+#### `tap_reject`
 Reject a TAP transaction (TAIP-4).
 
 ```json
@@ -168,7 +174,7 @@ Reject a TAP transaction (TAIP-4).
 }
 ```
 
-#### `tap.cancel`
+#### `tap_cancel`
 Cancel a TAP transaction (TAIP-5).
 
 ```json
@@ -179,7 +185,7 @@ Cancel a TAP transaction (TAIP-5).
 }
 ```
 
-#### `tap.settle`
+#### `tap_settle`
 Settle a TAP transaction (TAIP-6).
 
 ```json
@@ -192,7 +198,7 @@ Settle a TAP transaction (TAIP-6).
 
 ### Transaction Management
 
-#### `tap.list_transactions`
+#### `tap_list_transactions`
 List transactions with filtering and pagination support.
 
 ```json
@@ -217,12 +223,10 @@ List transactions with filtering and pagination support.
 ## Available Resources
 
 ### `tap://agents`
-Read-only access to agent information with filtering support.
+Read-only access to agent information.
 
 ```
-tap://agents                           # All agents
-tap://agents?role=Exchange             # Filter by role
-tap://agents?for=did:example:party123  # Filter by party
+tap://agents                           # All agents with their DIDs and labels
 ```
 
 ### `tap://messages`
@@ -254,11 +258,11 @@ tap://schemas                          # All schemas
 ### Directory Structure
 
 ```
-~/.tap/                    # TAP root directory
-├── agents/               # Agent storage
-├── keys/                 # Cryptographic keys
-├── tap-node.db          # SQLite database
-└── config.toml          # Configuration file
+~/.tap/                               # TAP root directory
+├── keys.json                        # Agent keys storage
+├── did_web_example.com/             # DID-specific directory
+│   └── transactions.db              # SQLite database for this DID
+└── logs/                           # Log files directory
 ```
 
 ## Examples
@@ -269,12 +273,12 @@ tap://schemas                          # All schemas
 
 ```bash
 # Create settlement agent for originator
-echo '{"@id": "did:example:alice-settlement", "role": "SettlementAddress", "for": "did:example:alice"}' | \
-  tap-mcp-client call tap.create_agent
+echo '{"label": "Alice Settlement Agent"}' | \
+  tap-mcp-client call tap_create_agent
 
-# Create compliance agent for beneficiary  
-echo '{"@id": "did:example:bob-compliance", "role": "Compliance", "for": "did:example:bob"}' | \
-  tap-mcp-client call tap.create_agent
+# Create compliance agent for beneficiary
+echo '{"label": "Bob Compliance Agent"}' | \
+  tap-mcp-client call tap_create_agent
 ```
 
 2. **Initiate transfer:**
@@ -286,10 +290,10 @@ echo '{
   "originator": {"@id": "did:example:alice"},
   "beneficiary": {"@id": "did:example:bob"},
   "agents": [
-    {"@id": "did:example:alice-settlement", "role": "SettlementAddress", "for": "did:example:alice"},
-    {"@id": "did:example:bob-compliance", "role": "Compliance", "for": "did:example:bob"}
+    {"@id": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc", "role": "SettlementAddress", "for": "did:example:alice"},
+    {"@id": "did:key:z6MkhVTKxFiPPR8RdLYgfJxL8jmCW6e4NPEFhR6BEhPo8Lyy", "role": "Compliance", "for": "did:example:bob"}
   ]
-}' | tap-mcp-client call tap.create_transfer
+}' | tap-mcp-client call tap_create_transfer
 ```
 
 3. **Authorize the transfer:**
@@ -299,7 +303,7 @@ echo '{
   "transaction_id": "tx-abc123",
   "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87",
   "expiry": "2024-12-31T23:59:59Z"
-}' | tap-mcp-client call tap.authorize
+}' | tap-mcp-client call tap_authorize
 ```
 
 4. **Settle the transaction:**
@@ -309,18 +313,18 @@ echo '{
   "transaction_id": "tx-abc123",
   "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
   "amount": "250.00"
-}' | tap-mcp-client call tap.settle
+}' | tap-mcp-client call tap_settle
 ```
 
 5. **Monitor transactions:**
 
 ```bash
 # List all transactions
-tap-mcp-client call tap.list_transactions
+tap-mcp-client call tap_list_transactions
 
 # List recent transfers
 echo '{"filter": {"message_type": "Transfer"}, "limit": 10}' | \
-  tap-mcp-client call tap.list_transactions
+  tap-mcp-client call tap_list_transactions
 
 # Get specific transaction details via resources
 tap-mcp-client resource tap://messages?thread_id=tx-abc123
@@ -338,7 +342,7 @@ If a transaction needs to be rejected instead of authorized:
 echo '{
   "transaction_id": "tx-abc123",
   "reason": "Insufficient compliance verification"
-}' | tap-mcp-client call tap.reject
+}' | tap-mcp-client call tap_reject
 ```
 
 ### Canceling a Transaction
@@ -351,7 +355,7 @@ echo '{
   "transaction_id": "tx-abc123",
   "by": "did:example:alice",
   "reason": "Change of plans"
-}' | tap-mcp-client call tap.cancel
+}' | tap-mcp-client call tap_cancel
 ```
 
 ## Integration Examples
@@ -381,7 +385,6 @@ Then add this configuration to your Claude Desktop config file:
   "mcpServers": {
     "tap": {
       "command": "tap-mcp",
-      "args": ["--agent-did", "did:web:your-domain.com"],
       "env": {
         "TAP_ROOT": "/your/tap/directory",
         "RUST_LOG": "info"
@@ -401,12 +404,9 @@ Add this configuration to your Claude Desktop config file:
     "tap": {
       "command": "cargo",
       "args": [
-        "run", 
-        "--manifest-path", 
-        "/path/to/tap-rs/tap-mcp/Cargo.toml", 
-        "--",
-        "--agent-did",
-        "did:web:your-domain.com"
+        "run",
+        "--manifest-path",
+        "/path/to/tap-rs/tap-mcp/Cargo.toml",
       ],
       "env": {
         "TAP_ROOT": "/your/tap/directory",
@@ -466,7 +466,7 @@ After updating your Claude Desktop configuration:
 2. **Check the Claude Desktop logs** (usually in the app's menu under "View" → "Developer" → "Developer Tools")
 3. **Test the connection** by asking Claude: "List the available TAP tools"
 
-You should see tools like `tap.create_agent`, `tap.create_transfer`, `tap.authorize`, etc.
+You should see tools like `tap_create_agent`, `tap_create_transfer`, `tap_authorize`, etc.
 
 #### Troubleshooting Claude Desktop Integration
 
@@ -508,25 +508,23 @@ async def main():
         async with ClientSession(read, write) as session:
             # Initialize the session
             await session.initialize()
-            
+
             # List available tools
             tools = await session.list_tools()
             print(f"Available tools: {[tool.name for tool in tools.tools]}")
-            
+
             # Create an agent
             agent_result = await session.call_tool(
-                "tap.create_agent",
+                "tap_create_agent",
                 {
-                    "@id": "did:example:test-agent",
-                    "role": "Exchange", 
-                    "for": "did:example:test-party"
+                    "label": "Test Exchange Agent"
                 }
             )
             print(f"Agent created: {agent_result}")
-            
+
             # Create a transfer transaction
             transfer_result = await session.call_tool(
-                "tap.create_transfer",
+                "tap_create_transfer",
                 {
                     "asset": "eip155:1/erc20:0xa0b86a33e6a4a3c3fcb4b0f0b2a4b6e1c9f8d5c4",
                     "amount": "100.00",
@@ -538,20 +536,20 @@ async def main():
                 }
             )
             print(f"Transfer created: {transfer_result}")
-            
+
             # Authorize the transaction
             auth_result = await session.call_tool(
-                "tap.authorize",
+                "tap_authorize",
                 {
                     "transaction_id": "tx-12345",
                     "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87"
                 }
             )
             print(f"Transaction authorized: {auth_result}")
-            
+
             # List recent transactions
             list_result = await session.call_tool(
-                "tap.list_transactions",
+                "tap_list_transactions",
                 {
                     "limit": 10,
                     "filter": {"message_type": "Transfer"}

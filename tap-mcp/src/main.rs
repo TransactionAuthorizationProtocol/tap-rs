@@ -36,7 +36,7 @@ struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let mut args = Args::parse();
-    
+
     // Apply TAP_ROOT environment variable as fallback if not provided via CLI
     if args.tap_root.is_none() {
         args.tap_root = env::var("TAP_ROOT").ok();
@@ -52,7 +52,7 @@ async fn main() -> Result<()> {
         .with(
             tracing_subscriber::fmt::layer()
                 .with_writer(std::io::stderr)
-                .with_ansi(true)
+                .with_ansi(true),
         )
         .init();
 
@@ -79,14 +79,14 @@ async fn main() -> Result<()> {
             }
             Err(e) => {
                 info!("No stored keys found ({}), creating new agent...", e);
-                
+
                 // Create agent with persistent storage
                 use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
                 use tap_agent::config::AgentConfig;
                 use tap_agent::did::{DIDGenerationOptions, KeyType};
                 use tap_agent::key_manager::KeyManager;
                 use tap_agent::storage::KeyStorage;
-                
+
                 // Create a key manager with storage enabled and generate a new key
                 let default_key_path = KeyStorage::default_key_path().ok_or_else(|| {
                     std::io::Error::new(
@@ -108,7 +108,7 @@ async fn main() -> Result<()> {
                 // Create agent config and build agent
                 let config = AgentConfig::new(generated_key.did.clone()).with_debug(true);
                 let agent = TapAgent::new(config, Arc::new(key_manager));
-                
+
                 info!("New key saved to storage successfully");
                 (Arc::new(agent), generated_key.did)
             }
@@ -123,8 +123,10 @@ async fn main() -> Result<()> {
     )
     .await?;
 
-    info!("TAP integration initialized using TapNode with DID-based storage at ~/.tap/{}", 
-        agent_did.replace(':', "_"));
+    info!(
+        "TAP integration initialized using TapNode with DID-based storage at ~/.tap/{}",
+        agent_did.replace(':', "_")
+    );
 
     // Create and run MCP server
     let mcp_server = mcp::McpServer::new(tap_integration).await?;

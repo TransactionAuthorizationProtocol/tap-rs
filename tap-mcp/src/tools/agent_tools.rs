@@ -8,7 +8,7 @@ use crate::tap_integration::TapIntegration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::sync::Arc;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 /// Tool for creating new TAP agents
 pub struct CreateAgentTool {
@@ -18,31 +18,18 @@ pub struct CreateAgentTool {
 /// Parameters for creating an agent
 #[derive(Debug, Deserialize)]
 struct CreateAgentParams {
-    #[serde(rename = "@id")]
-    id: String,
-    role: String,
-    #[serde(rename = "for")]
-    for_party: String,
     #[serde(default)]
-    policies: Option<Vec<Value>>,
-    #[serde(default)]
-    metadata: Option<Value>,
+    label: Option<String>,
 }
 
 /// Response for creating an agent
 #[derive(Debug, Serialize)]
 struct CreateAgentResponse {
-    agent: AgentResponse,
-    created_at: String,
-}
-
-#[derive(Debug, Serialize)]
-struct AgentResponse {
     #[serde(rename = "@id")]
     id: String,
-    role: String,
-    #[serde(rename = "for")]
-    for_party: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
+    created_at: String,
 }
 
 impl CreateAgentTool {
@@ -68,42 +55,81 @@ impl ToolHandler for CreateAgentTool {
             }
         };
 
-        debug!(
-            "Creating agent: id={}, role={}, for={}",
-            params.id, params.role, params.for_party
-        );
+        debug!("Creating new agent with auto-generated DID");
 
-        // Create AgentInfo from parameters
-        let agent_info = crate::tap_integration::AgentInfo {
-            id: params.id.clone(),
-            role: params.role.clone(),
-            for_party: params.for_party.clone(),
-            policies: params
-                .policies
-                .unwrap_or_default()
-                .into_iter()
-                .map(|v| v.to_string())
-                .collect(),
-            metadata: params
-                .metadata
-                .map(|m| {
-                    if let serde_json::Value::Object(obj) = m {
-                        obj.into_iter().map(|(k, v)| (k, v.to_string())).collect()
-                    } else {
-                        std::collections::HashMap::new()
-                    }
-                })
-                .unwrap_or_default(),
+        // Create a DID generator and generate a new key
+        use std::sync::Arc;
+        use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
+        use tap_agent::config::AgentConfig;
+        use tap_agent::did::{DIDGenerationOptions, DIDKeyGenerator, KeyType};
+        use tap_agent::storage::KeyStorage;
+        use tap_agent::TapAgent;
+
+        let generator = DIDKeyGenerator::new();
+        let did_options = DIDGenerationOptions {
+            key_type: KeyType::Ed25519,
         };
 
-        match self.tap_integration().create_agent(&agent_info).await {
+        // Generate a new DID key
+        let generated_key = generator
+            .generate_did(did_options)
+            .map_err(|e| Error::tool_execution(format!("Failed to generate DID: {}", e)))?;
+
+        let generated_did = generated_key.did.clone();
+        debug!("Generated new DID for agent: {}", generated_did);
+
+        // Save the key to storage with optional label
+        let stored_key = if let Some(ref label) = params.label {
+            KeyStorage::from_generated_key_with_label(&generated_key, label)
+        } else {
+            KeyStorage::from_generated_key(&generated_key)
+        };
+
+        // Load existing storage or create a new one
+        let mut storage = match KeyStorage::load_default() {
+            Ok(storage) => storage,
+            Err(_) => KeyStorage::new(),
+        };
+
+        // Add the key to storage
+        storage.add_key(stored_key);
+
+        // Save the updated storage
+        storage
+            .save_default()
+            .map_err(|e| Error::tool_execution(format!("Failed to save key to storage: {}", e)))?;
+
+        debug!("Key saved to storage for DID: {}", generated_did);
+
+        // Now create the TapAgent with the saved key
+        let default_key_path = KeyStorage::default_key_path().ok_or_else(|| {
+            Error::tool_execution("Could not determine default key path".to_string())
+        })?;
+
+        let key_manager_builder = AgentKeyManagerBuilder::new().load_from_path(default_key_path);
+        let key_manager = key_manager_builder
+            .build()
+            .map_err(|e| Error::tool_execution(format!("Failed to build key manager: {}", e)))?;
+
+        // Create agent config
+        let config = AgentConfig::new(generated_did.clone()).with_debug(true);
+
+        // Create the agent
+        let agent = TapAgent::new(config, Arc::new(key_manager));
+
+        // Register the agent with the TapNode
+        match self
+            .tap_integration()
+            .node()
+            .register_agent(Arc::new(agent))
+            .await
+        {
             Ok(()) => {
+                info!("Created and registered agent with DID: {}", generated_did);
+
                 let response = CreateAgentResponse {
-                    agent: AgentResponse {
-                        id: agent_info.id,
-                        role: agent_info.role,
-                        for_party: agent_info.for_party,
-                    },
+                    id: generated_did,
+                    label: params.label,
                     created_at: chrono::Utc::now().to_rfc3339(),
                 };
 
@@ -126,7 +152,7 @@ impl ToolHandler for CreateAgentTool {
     fn get_definition(&self) -> Tool {
         Tool {
             name: "tap_create_agent".to_string(),
-            description: "Creates a new TAP agent with specified configuration and stores it in ~/.tap/agents".to_string(),
+            description: "Creates a new TAP agent with auto-generated DID and stores the keys in ~/.tap/keys.json. Returns the generated DID. Roles and party associations are specified per transaction, not during agent creation.".to_string(),
             input_schema: schema::create_agent_schema(),
         }
     }
@@ -150,8 +176,8 @@ struct ListAgentsParams {
 
 #[derive(Debug, Deserialize)]
 struct AgentFilter {
-    role: Option<String>,
-    for_party: Option<String>,
+    #[serde(default)]
+    has_label: Option<bool>,
 }
 
 /// Response for listing agents
@@ -165,9 +191,8 @@ struct ListAgentsResponse {
 struct ListAgentInfo {
     #[serde(rename = "@id")]
     id: String,
-    role: String,
-    #[serde(rename = "for")]
-    for_party: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    label: Option<String>,
     policies: Vec<Value>,
     metadata: Value,
 }
@@ -202,25 +227,8 @@ impl ToolHandler for ListAgentsTool {
 
         match self.tap_integration().list_agents().await {
             Ok(agents) => {
-                // Apply filters
-                let filtered_agents: Vec<_> = agents
-                    .into_iter()
-                    .filter(|agent| {
-                        if let Some(ref filter) = params.filter {
-                            if let Some(ref role) = filter.role {
-                                if agent.role != *role {
-                                    return false;
-                                }
-                            }
-                            if let Some(ref for_party) = filter.for_party {
-                                if agent.for_party != *for_party {
-                                    return false;
-                                }
-                            }
-                        }
-                        true
-                    })
-                    .collect();
+                // No filtering needed since we removed role/for_party
+                let filtered_agents = agents;
 
                 let total = filtered_agents.len();
 
@@ -231,8 +239,7 @@ impl ToolHandler for ListAgentsTool {
                     .take(params.limit as usize)
                     .map(|agent| ListAgentInfo {
                         id: agent.id,
-                        role: agent.role,
-                        for_party: agent.for_party,
+                        label: agent.metadata.get("label").map(|v| v.clone()),
                         policies: agent
                             .policies
                             .into_iter()
@@ -267,7 +274,7 @@ impl ToolHandler for ListAgentsTool {
     fn get_definition(&self) -> Tool {
         Tool {
             name: "tap_list_agents".to_string(),
-            description: "Lists all configured agents from the ~/.tap/agents directory with optional filtering".to_string(),
+            description: "Lists all configured agents from ~/.tap/keys.json. Agents are identified by their DIDs. Roles and party associations are transaction-specific and not stored with agents.".to_string(),
             input_schema: schema::list_agents_schema(),
         }
     }

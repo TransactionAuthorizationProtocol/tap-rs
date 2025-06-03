@@ -7,31 +7,11 @@ pub fn create_agent_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "@id": {
+            "label": {
                 "type": "string",
-                "description": "Agent DID identifier"
-            },
-            "role": {
-                "type": "string",
-                "description": "Agent role (e.g., 'SettlementAddress', 'Exchange')"
-            },
-            "for": {
-                "type": "string",
-                "description": "DID of party the agent acts for"
-            },
-            "policies": {
-                "type": "array",
-                "description": "Optional agent policies (TAIP-7)",
-                "items": {
-                    "type": "object"
-                }
-            },
-            "metadata": {
-                "type": "object",
-                "description": "Optional additional metadata"
+                "description": "Optional human-friendly label for the agent key"
             }
         },
-        "required": ["@id", "role", "for"],
         "additionalProperties": false
     })
 }
@@ -44,13 +24,9 @@ pub fn list_agents_schema() -> Value {
             "filter": {
                 "type": "object",
                 "properties": {
-                    "role": {
-                        "type": "string",
-                        "description": "Filter by agent role"
-                    },
-                    "for_party": {
-                        "type": "string",
-                        "description": "Filter by party DID"
+                    "has_label": {
+                        "type": "boolean",
+                        "description": "Filter agents that have a label"
                     }
                 },
                 "additionalProperties": false
