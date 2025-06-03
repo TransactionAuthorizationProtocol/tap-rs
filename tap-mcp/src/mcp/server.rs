@@ -62,19 +62,31 @@ impl McpServer {
     async fn handle_request(&mut self, request: JsonRpcRequest) -> Result<()> {
         debug!("Handling request: {}", request.method);
 
+        // Check if this is a notification (no id field)
+        let is_notification = request.id.is_none();
+
         let response = match request.method.as_str() {
             "initialize" => self.handle_initialize(request.id, request.params).await,
-            "initialized" => {
+            "initialized" | "notifications/initialized" => {
                 // Client confirms initialization
                 self.initialized = true;
                 info!("Client initialization confirmed");
-                return Ok(());
+                // Don't send response for notifications
+                if is_notification {
+                    return Ok(());
+                }
+                JsonRpcResponse::success(request.id, serde_json::json!({}))
             }
             "tools/list" => self.handle_list_tools(request.id, request.params).await,
             "tools/call" => self.handle_call_tool(request.id, request.params).await,
             "resources/list" => self.handle_list_resources(request.id, request.params).await,
             "resources/read" => self.handle_read_resource(request.id, request.params).await,
             _ => {
+                // Don't send response for unknown notifications
+                if is_notification {
+                    debug!("Ignoring unknown notification: {}", request.method);
+                    return Ok(());
+                }
                 warn!("Unknown method: {}", request.method);
                 JsonRpcResponse::error(request.id, JsonRpcError::method_not_found(request.method))
             }
