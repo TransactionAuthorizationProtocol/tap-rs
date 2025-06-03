@@ -207,10 +207,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
             let config = AgentConfig::new(generated_key.did.clone()).with_debug(true);
 
             #[cfg(all(not(target_arch = "wasm32"), test))]
-            let agent = {
-                let resolver = Arc::new(tap_agent::did::MultiResolver::default());
-                TapAgent::new_with_resolver(config, Arc::new(key_manager), resolver)
-            };
+            let agent = TapAgent::new(config, Arc::new(key_manager));
 
             #[cfg(all(not(target_arch = "wasm32"), not(test)))]
             let agent = TapAgent::new(config, Arc::new(key_manager));

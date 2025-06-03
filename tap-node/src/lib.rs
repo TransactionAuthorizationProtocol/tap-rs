@@ -658,8 +658,49 @@ impl TapNode {
     }
 
     /// Register a new agent with the node
+    ///
+    /// This method registers an agent with the TAP Node and automatically initializes
+    /// DID-specific storage for the agent. The storage directory structure follows:
+    /// - `~/.tap/{sanitized_did}/transactions.db` (default)
+    /// - `{tap_root}/{sanitized_did}/transactions.db` (if custom TAP root is configured)
+    ///
+    /// # Storage Initialization
+    ///
+    /// When an agent is registered, a dedicated SQLite database is created for that agent's DID.
+    /// This ensures transaction isolation between different agents while maintaining a consistent
+    /// storage structure. If storage initialization fails, the agent registration continues but
+    /// a warning is logged.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent` - The TapAgent to register with the node
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the agent was successfully registered
+    /// * `Err(Error)` if agent registration fails
     pub async fn register_agent(&self, agent: Arc<TapAgent>) -> Result<()> {
         let agent_did = agent.get_agent_did().to_string();
+
+        // Initialize storage for this agent if storage is enabled
+        #[cfg(feature = "storage")]
+        {
+            // Create a dedicated storage instance for this agent
+            match storage::Storage::new_with_did(&agent_did, self.config.tap_root.clone()).await {
+                Ok(_) => {
+                    log::info!("Initialized storage for agent: {}", agent_did);
+                }
+                Err(e) => {
+                    log::warn!(
+                        "Failed to initialize storage for agent {}: {}",
+                        agent_did,
+                        e
+                    );
+                    // Don't fail the registration, just log the warning
+                }
+            }
+        }
+
         self.agents.register_agent(agent_did.clone(), agent).await?;
 
         // Publish event about agent registration

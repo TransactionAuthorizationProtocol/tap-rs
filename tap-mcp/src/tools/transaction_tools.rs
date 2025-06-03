@@ -22,6 +22,7 @@ pub struct CreateTransferTool {
 /// Parameters for creating a transfer
 #[derive(Debug, Deserialize)]
 struct CreateTransferParams {
+    agent_did: String, // The DID of the agent that will sign and send this message
     asset: String,
     amount: String,
     originator: PartyInfo,
@@ -134,9 +135,8 @@ impl ToolHandler for CreateTransferTool {
             )));
         }
 
-        // Create DIDComm message
-        let creator_did = &transfer.originator.id;
-        let didcomm_message = match transfer.to_didcomm(creator_did) {
+        // Create DIDComm message using the specified agent DID
+        let didcomm_message = match transfer.to_didcomm(&params.agent_did) {
             Ok(msg) => msg,
             Err(e) => {
                 return Ok(error_text_response(format!(
@@ -208,6 +208,7 @@ pub struct AuthorizeTool {
 /// Parameters for authorizing a transaction
 #[derive(Debug, Deserialize)]
 struct AuthorizeParams {
+    agent_did: String, // The DID of the agent that will sign and send this message
     transaction_id: String,
     #[serde(default)]
     settlement_address: Option<String>,
@@ -264,9 +265,8 @@ impl ToolHandler for AuthorizeTool {
             )));
         }
 
-        // Create DIDComm message
-        let creator_did = "did:example:authorizer"; // TODO: Get from context
-        let didcomm_message = match authorize.to_didcomm(creator_did) {
+        // Create DIDComm message using the specified agent DID
+        let didcomm_message = match authorize.to_didcomm(&params.agent_did) {
             Ok(msg) => msg,
             Err(e) => {
                 return Ok(error_text_response(format!(
@@ -332,6 +332,7 @@ pub struct RejectTool {
 /// Parameters for rejecting a transaction
 #[derive(Debug, Deserialize)]
 struct RejectParams {
+    agent_did: String, // The DID of the agent that will sign and send this message
     transaction_id: String,
     reason: String,
 }
@@ -388,9 +389,8 @@ impl ToolHandler for RejectTool {
             )));
         }
 
-        // Create DIDComm message
-        let creator_did = "did:example:rejecter"; // TODO: Get from context
-        let didcomm_message = match reject.to_didcomm(creator_did) {
+        // Create DIDComm message using the specified agent DID
+        let didcomm_message = match reject.to_didcomm(&params.agent_did) {
             Ok(msg) => msg,
             Err(e) => {
                 return Ok(error_text_response(format!(
@@ -456,6 +456,7 @@ pub struct CancelTool {
 /// Parameters for canceling a transaction
 #[derive(Debug, Deserialize)]
 struct CancelParams {
+    agent_did: String, // The DID of the agent that will sign and send this message
     transaction_id: String,
     by: String,
     #[serde(default)]
@@ -516,9 +517,8 @@ impl ToolHandler for CancelTool {
             )));
         }
 
-        // Create DIDComm message
-        let creator_did = &params.by;
-        let didcomm_message = match cancel.to_didcomm(creator_did) {
+        // Create DIDComm message using the specified agent DID
+        let didcomm_message = match cancel.to_didcomm(&params.agent_did) {
             Ok(msg) => msg,
             Err(e) => {
                 return Ok(error_text_response(format!(
@@ -585,6 +585,7 @@ pub struct SettleTool {
 /// Parameters for settling a transaction
 #[derive(Debug, Deserialize)]
 struct SettleParams {
+    agent_did: String, // The DID of the agent that will sign and send this message
     transaction_id: String,
     settlement_id: String,
     #[serde(default)]
@@ -645,9 +646,8 @@ impl ToolHandler for SettleTool {
             )));
         }
 
-        // Create DIDComm message
-        let creator_did = "did:example:settler"; // TODO: Get from context
-        let didcomm_message = match settle.to_didcomm(creator_did) {
+        // Create DIDComm message using the specified agent DID
+        let didcomm_message = match settle.to_didcomm(&params.agent_did) {
             Ok(msg) => msg,
             Err(e) => {
                 return Ok(error_text_response(format!(

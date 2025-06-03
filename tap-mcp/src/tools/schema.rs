@@ -21,16 +21,6 @@ pub fn list_agents_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
-            "filter": {
-                "type": "object",
-                "properties": {
-                    "has_label": {
-                        "type": "boolean",
-                        "description": "Filter agents that have a label"
-                    }
-                },
-                "additionalProperties": false
-            },
             "limit": {
                 "type": "number",
                 "description": "Maximum number of agents to return",
@@ -54,6 +44,10 @@ pub fn create_transfer_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
             "asset": {
                 "type": "string",
                 "description": "CAIP-19 asset identifier (e.g., 'eip155:1/erc20:0x...')"
@@ -124,7 +118,7 @@ pub fn create_transfer_schema() -> Value {
                 "description": "Optional additional metadata"
             }
         },
-        "required": ["asset", "amount", "originator", "beneficiary"],
+        "required": ["agent_did", "asset", "amount", "originator", "beneficiary"],
         "additionalProperties": false
     })
 }
@@ -134,6 +128,10 @@ pub fn authorize_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
             "transaction_id": {
                 "type": "string",
                 "description": "Transaction ID to authorize"
@@ -147,7 +145,7 @@ pub fn authorize_schema() -> Value {
                 "description": "Optional ISO 8601 expiry time"
             }
         },
-        "required": ["transaction_id"],
+        "required": ["agent_did", "transaction_id"],
         "additionalProperties": false
     })
 }
@@ -157,6 +155,10 @@ pub fn reject_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
             "transaction_id": {
                 "type": "string",
                 "description": "Transaction ID to reject"
@@ -166,7 +168,7 @@ pub fn reject_schema() -> Value {
                 "description": "Reason for rejection"
             }
         },
-        "required": ["transaction_id", "reason"],
+        "required": ["agent_did", "transaction_id", "reason"],
         "additionalProperties": false
     })
 }
@@ -176,6 +178,10 @@ pub fn cancel_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
             "transaction_id": {
                 "type": "string",
                 "description": "Transaction ID to cancel"
@@ -189,7 +195,7 @@ pub fn cancel_schema() -> Value {
                 "description": "Optional reason for cancellation"
             }
         },
-        "required": ["transaction_id", "by"],
+        "required": ["agent_did", "transaction_id", "by"],
         "additionalProperties": false
     })
 }
@@ -199,6 +205,10 @@ pub fn settle_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
             "transaction_id": {
                 "type": "string",
                 "description": "Transaction ID to settle"
@@ -212,7 +222,7 @@ pub fn settle_schema() -> Value {
                 "description": "Optional amount settled"
             }
         },
-        "required": ["transaction_id", "settlement_id"],
+        "required": ["agent_did", "transaction_id", "settlement_id"],
         "additionalProperties": false
     })
 }

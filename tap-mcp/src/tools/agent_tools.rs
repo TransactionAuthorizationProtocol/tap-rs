@@ -17,6 +17,7 @@ pub struct CreateAgentTool {
 
 /// Parameters for creating an agent
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct CreateAgentParams {
     #[serde(default)]
     label: Option<String>,
@@ -166,18 +167,10 @@ pub struct ListAgentsTool {
 /// Parameters for listing agents
 #[derive(Debug, Deserialize)]
 struct ListAgentsParams {
-    #[serde(default)]
-    filter: Option<AgentFilter>,
     #[serde(default = "default_limit")]
     limit: u32,
     #[serde(default)]
     offset: u32,
-}
-
-#[derive(Debug, Deserialize)]
-struct AgentFilter {
-    #[serde(default)]
-    has_label: Option<bool>,
 }
 
 /// Response for listing agents
@@ -214,7 +207,6 @@ impl ToolHandler for ListAgentsTool {
             Some(args) => serde_json::from_value(args)
                 .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
             None => ListAgentsParams {
-                filter: None,
                 limit: default_limit(),
                 offset: 0,
             },
@@ -227,19 +219,16 @@ impl ToolHandler for ListAgentsTool {
 
         match self.tap_integration().list_agents().await {
             Ok(agents) => {
-                // No filtering needed since we removed role/for_party
-                let filtered_agents = agents;
-
-                let total = filtered_agents.len();
+                let total = agents.len();
 
                 // Apply pagination
-                let paginated_agents: Vec<_> = filtered_agents
+                let paginated_agents: Vec<_> = agents
                     .into_iter()
                     .skip(params.offset as usize)
                     .take(params.limit as usize)
                     .map(|agent| ListAgentInfo {
                         id: agent.id,
-                        label: agent.metadata.get("label").map(|v| v.clone()),
+                        label: agent.metadata.get("label").cloned(),
                         policies: agent
                             .policies
                             .into_iter()

@@ -7,7 +7,6 @@ use assert_matches::assert_matches;
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use tempfile::TempDir;
-use uuid::Uuid;
 
 use tap_mcp::error::Result;
 use tap_mcp::mcp::protocol::*;
@@ -179,14 +178,14 @@ async fn test_list_tools() -> Result<()> {
 
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
-        assert!(tool_names.contains(&"tap.create_agent"));
-        assert!(tool_names.contains(&"tap.list_agents"));
-        assert!(tool_names.contains(&"tap.create_transfer"));
-        assert!(tool_names.contains(&"tap.authorize"));
-        assert!(tool_names.contains(&"tap.reject"));
-        assert!(tool_names.contains(&"tap.cancel"));
-        assert!(tool_names.contains(&"tap.settle"));
-        assert!(tool_names.contains(&"tap.list_transactions"));
+        assert!(tool_names.contains(&"tap_create_agent"));
+        assert!(tool_names.contains(&"tap_list_agents"));
+        assert!(tool_names.contains(&"tap_create_transfer"));
+        assert!(tool_names.contains(&"tap_authorize"));
+        assert!(tool_names.contains(&"tap_reject"));
+        assert!(tool_names.contains(&"tap_cancel"));
+        assert!(tool_names.contains(&"tap_settle"));
+        assert!(tool_names.contains(&"tap_list_transactions"));
     }
 
     Ok(())
@@ -203,14 +202,11 @@ async fn test_create_agent_tool() -> Result<()> {
         .handle_request_direct(client.create_initialize_request())
         .await?;
 
-    // Create agent
-    let agent_id = format!("did:example:test-agent-{}", Uuid::new_v4());
+    // Create agent (auto-generates DID)
     let create_request = client.create_call_tool_request(
-        "tap.create_agent",
+        "tap_create_agent",
         json!({
-            "@id": agent_id,
-            "role": "SettlementAddress",
-            "for": "did:example:test-party"
+            "label": "Test Agent"
         }),
     );
 
@@ -249,20 +245,17 @@ async fn test_list_agents_tool() -> Result<()> {
         .await?;
 
     // Create an agent first
-    let agent_id = format!("did:example:list-test-{}", Uuid::new_v4());
     server
         .handle_request_direct(client.create_call_tool_request(
-            "tap.create_agent",
+            "tap_create_agent",
             json!({
-                "@id": agent_id,
-                "role": "Exchange",
-                "for": "did:example:party"
+                "label": "Test List Agent"
             }),
         ))
         .await?;
 
     // List agents
-    let list_request = client.create_call_tool_request("tap.list_agents", json!({}));
+    let list_request = client.create_call_tool_request("tap_list_agents", json!({}));
 
     let response = server.handle_request_direct(list_request).await?;
     assert_matches!(
@@ -296,8 +289,9 @@ async fn test_create_transfer_tool() -> Result<()> {
 
     // Create transfer
     let transfer_request = client.create_call_tool_request(
-        "tap.create_transfer",
+        "tap_create_transfer",
         json!({
+            "agent_did": "did:example:test-agent",
             "asset": "eip155:1/erc20:0xa0b86a33e6a4a3c3fcb4b0f0b2a4b6e1c9f8d5c4",
             "amount": "100.50",
             "originator": {
@@ -344,8 +338,9 @@ async fn test_authorize_tool() -> Result<()> {
 
     // Authorize transaction
     let auth_request = client.create_call_tool_request(
-        "tap.authorize",
+        "tap_authorize",
         json!({
+            "agent_did": "did:example:test-agent",
             "transaction_id": "test-tx-123",
             "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87"
         }),
@@ -384,8 +379,9 @@ async fn test_reject_tool() -> Result<()> {
 
     // Reject transaction
     let reject_request = client.create_call_tool_request(
-        "tap.reject",
+        "tap_reject",
         json!({
+            "agent_did": "did:example:test-agent",
             "transaction_id": "test-tx-456",
             "reason": "Insufficient compliance verification"
         }),
@@ -508,23 +504,27 @@ async fn test_complete_transaction_flow() -> Result<()> {
         .handle_request_direct(client.create_initialize_request())
         .await?;
 
-    // 1. Create agents
-    let alice_agent_id = format!("did:example:alice-agent-{}", Uuid::new_v4());
-    server
+    // 1. Create agent
+    let agent_response = server
         .handle_request_direct(client.create_call_tool_request(
-            "tap.create_agent",
+            "tap_create_agent",
             json!({
-                "@id": alice_agent_id,
-                "role": "SettlementAddress",
-                "for": "did:example:alice"
+                "label": "Alice Settlement Agent"
             }),
         ))
         .await?;
 
+    // Extract agent DID from response
+    let agent_result_value = agent_response.result.unwrap();
+    let agent_content = agent_result_value["content"][0]["text"].as_str().unwrap();
+    let agent_result: Value = serde_json::from_str(agent_content)?;
+    let alice_agent_id = agent_result["@id"].as_str().unwrap();
+
     // 2. Create transfer
     let transfer_response = server.handle_request_direct(client.create_call_tool_request(
-        "tap.create_transfer",
+        "tap_create_transfer",
         json!({
+            "agent_did": alice_agent_id,
             "asset": "eip155:1/erc20:0xa0b86a33e6a4a3c3fcb4b0f0b2a4b6e1c9f8d5c4",
             "amount": "250.00",
             "originator": {"@id": "did:example:alice"},
@@ -544,8 +544,9 @@ async fn test_complete_transaction_flow() -> Result<()> {
     // 3. Authorize transaction
     let auth_response = server
         .handle_request_direct(client.create_call_tool_request(
-            "tap.authorize",
+            "tap_authorize",
             json!({
+                "agent_did": alice_agent_id,
                 "transaction_id": transaction_id,
                 "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87"
             }),
@@ -560,8 +561,9 @@ async fn test_complete_transaction_flow() -> Result<()> {
     // 4. Settle transaction
     let settle_response = server
         .handle_request_direct(client.create_call_tool_request(
-            "tap.settle",
+            "tap_settle",
             json!({
+                "agent_did": alice_agent_id,
                 "transaction_id": transaction_id,
                 "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
                 "amount": "250.00"
@@ -576,7 +578,7 @@ async fn test_complete_transaction_flow() -> Result<()> {
 
     // 5. List transactions to verify
     let list_response = server
-        .handle_request_direct(client.create_call_tool_request("tap.list_transactions", json!({})))
+        .handle_request_direct(client.create_call_tool_request("tap_list_transactions", json!({})))
         .await?;
 
     let list_result_value = list_response.result.unwrap();
@@ -599,7 +601,7 @@ async fn test_error_handling() -> Result<()> {
         .await?;
 
     // Test invalid tool call
-    let invalid_request = client.create_call_tool_request("tap.invalid_tool", json!({}));
+    let invalid_request = client.create_call_tool_request("tap_invalid_tool", json!({}));
 
     let response = server.handle_request_direct(invalid_request).await?;
     assert_matches!(
@@ -621,7 +623,7 @@ async fn test_error_handling() -> Result<()> {
 
     // Test invalid parameters
     let invalid_params_request = client.create_call_tool_request(
-        "tap.create_agent",
+        "tap_create_agent",
         json!({
             "invalid": "parameters"
         }),

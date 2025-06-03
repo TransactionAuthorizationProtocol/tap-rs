@@ -17,6 +17,7 @@ Key design principles:
 - Roles (SettlementAddress, Exchange, Compliance, etc.) are specified per transaction
 - Party associations are transaction-specific, not stored with agents
 - Automatic DID generation ensures globally unique identifiers
+- All transaction and message operations require an `agent_did` parameter to specify which agent signs the message
 
 ## Installation
 
@@ -128,10 +129,11 @@ List all configured agents from ~/.tap/keys.json.
 ### Transaction Creation
 
 #### `tap_create_transfer`
-Initiate a new TAP transfer transaction (TAIP-3).
+Initiate a new TAP transfer transaction (TAIP-3). Requires specifying which agent will sign the message.
 
 ```json
 {
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "asset": "eip155:1/erc20:0xa0b86a33e6a4a3c3fcb4b0f0b2a4b6e1c9f8d5c4",
   "amount": "100.50",
   "originator": {
@@ -154,10 +156,11 @@ Initiate a new TAP transfer transaction (TAIP-3).
 ### Transaction Actions
 
 #### `tap_authorize`
-Authorize a TAP transaction (TAIP-4).
+Authorize a TAP transaction (TAIP-4). The agent_did specifies which agent signs the authorization.
 
 ```json
 {
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-12345",
   "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87",
   "expiry": "2024-12-31T23:59:59Z"
@@ -165,20 +168,22 @@ Authorize a TAP transaction (TAIP-4).
 ```
 
 #### `tap_reject`
-Reject a TAP transaction (TAIP-4).
+Reject a TAP transaction (TAIP-4). The agent_did specifies which agent signs the rejection.
 
 ```json
 {
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-12345",
   "reason": "Insufficient compliance verification"
 }
 ```
 
 #### `tap_cancel`
-Cancel a TAP transaction (TAIP-5).
+Cancel a TAP transaction (TAIP-5). The agent_did specifies which agent signs the cancellation.
 
 ```json
 {
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-12345",
   "by": "did:example:alice",
   "reason": "Change of plans"
@@ -186,10 +191,11 @@ Cancel a TAP transaction (TAIP-5).
 ```
 
 #### `tap_settle`
-Settle a TAP transaction (TAIP-6).
+Settle a TAP transaction (TAIP-6). The agent_did specifies which agent signs the settlement.
 
 ```json
 {
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-12345",
   "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
   "amount": "100.50"
@@ -260,10 +266,20 @@ tap://schemas                          # All schemas
 ```
 ~/.tap/                               # TAP root directory
 ├── keys.json                        # Agent keys storage
-├── did_web_example.com/             # DID-specific directory
-│   └── transactions.db              # SQLite database for this DID
+├── did_key_z6MkpGuzuD38tpgZKPfm/     # Auto-generated agent directory
+│   └── transactions.db              # SQLite database for this agent
+├── did_web_example.com/             # Manual agent directory
+│   └── transactions.db              # SQLite database for this agent
 └── logs/                           # Log files directory
 ```
+
+**Automatic Storage Initialization**: When you create a new agent using `tap_create_agent`, TAP-MCP automatically:
+1. Generates a unique DID for the agent
+2. Creates a sanitized directory name from the DID (replacing `:` with `_`)
+3. Initializes a dedicated SQLite database for that agent's transactions
+4. Registers the agent with the TAP Node for message processing
+
+This ensures that each agent has isolated storage while maintaining a consistent directory structure.
 
 ## Examples
 
@@ -281,10 +297,11 @@ echo '{"label": "Bob Compliance Agent"}' | \
   tap-mcp-client call tap_create_agent
 ```
 
-2. **Initiate transfer:**
+2. **Initiate transfer:** (Note: Use the DID from the created agent)
 
 ```bash
 echo '{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "asset": "eip155:1/erc20:0xa0b86a33e6a4a3c3fcb4b0f0b2a4b6e1c9f8d5c4",
   "amount": "250.00",
   "originator": {"@id": "did:example:alice"},
@@ -300,6 +317,7 @@ echo '{
 
 ```bash
 echo '{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-abc123",
   "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87",
   "expiry": "2024-12-31T23:59:59Z"
@@ -310,6 +328,7 @@ echo '{
 
 ```bash
 echo '{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-abc123",
   "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
   "amount": "250.00"
@@ -340,6 +359,7 @@ If a transaction needs to be rejected instead of authorized:
 ```bash
 # Reject with reason
 echo '{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-abc123",
   "reason": "Insufficient compliance verification"
 }' | tap-mcp-client call tap_reject
@@ -352,6 +372,7 @@ Either party can cancel a transaction before settlement:
 ```bash
 # Cancel transaction
 echo '{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "transaction_id": "tx-abc123",
   "by": "did:example:alice",
   "reason": "Change of plans"
@@ -526,6 +547,7 @@ async def main():
             transfer_result = await session.call_tool(
                 "tap_create_transfer",
                 {
+                    "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
                     "asset": "eip155:1/erc20:0xa0b86a33e6a4a3c3fcb4b0f0b2a4b6e1c9f8d5c4",
                     "amount": "100.00",
                     "originator": {"@id": "did:example:alice"},
@@ -541,6 +563,7 @@ async def main():
             auth_result = await session.call_tool(
                 "tap_authorize",
                 {
+                    "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
                     "transaction_id": "tx-12345",
                     "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87"
                 }

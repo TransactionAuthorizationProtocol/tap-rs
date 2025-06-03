@@ -75,17 +75,10 @@ impl TapIntegration {
                     match TapAgent::from_stored_keys(Some(stored_did.clone()), true).await {
                         Ok(additional_agent) => {
                             let additional_agent_arc = Arc::new(additional_agent);
-                            if let Err(e) = node_arc.register_agent(additional_agent_arc).await
-                            {
-                                error!(
-                                    "Failed to register additional agent {}: {}",
-                                    stored_did, e
-                                );
+                            if let Err(e) = node_arc.register_agent(additional_agent_arc).await {
+                                error!("Failed to register additional agent {}: {}", stored_did, e);
                             } else {
-                                info!(
-                                    "Successfully registered additional agent: {}",
-                                    stored_did
-                                );
+                                info!("Successfully registered additional agent: {}", stored_did);
                             }
                         }
                         Err(e) => {
@@ -205,53 +198,6 @@ impl TapIntegration {
         }
 
         Ok(agents)
-    }
-
-    /// Create a new agent with enhanced storage and auto-registration
-    pub async fn create_agent(&self, agent_info: &AgentInfo) -> Result<()> {
-        // Create enhanced agent with policies and metadata using tap-agent
-        // Note: role and for_party are not stored, they are determined per transaction
-        let (agent, _did) = if let Some(ref storage_path) = self.storage_path {
-            TapAgent::create_enhanced_agent_with_path(
-                agent_info.id.clone(),
-                agent_info.policies.clone(),
-                agent_info.metadata.clone(),
-                true, // Save to storage
-                Some(storage_path.clone()),
-            )
-            .await
-        } else {
-            TapAgent::create_enhanced_agent(
-                agent_info.id.clone(),
-                agent_info.policies.clone(),
-                agent_info.metadata.clone(),
-                true, // Save to storage
-            )
-            .await
-        }
-        .map_err(|e| Error::configuration(format!("Failed to create enhanced agent: {}", e)))?;
-
-        // Register with the TAP Node for message processing
-        self.node
-            .register_agent(Arc::new(agent))
-            .await
-            .map_err(|e| {
-                Error::configuration(format!("Failed to register agent with TAP Node: {}", e))
-            })?;
-
-        info!(
-            "Created enhanced agent with DID {} and registered with TAP Node",
-            agent_info.id
-        );
-        debug!(
-            "Agent directory created at ~/.tap/{}",
-            agent_info.id.replace(':', "_")
-        );
-        debug!("Policies: {:?}", agent_info.policies);
-        debug!("Metadata: {:?}", agent_info.metadata);
-        debug!("Note: role '{}' and for_party '{}' are not stored, they are determined per transaction", agent_info.role, agent_info.for_party);
-
-        Ok(())
     }
 }
 
