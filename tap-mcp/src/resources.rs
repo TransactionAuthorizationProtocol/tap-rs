@@ -36,7 +36,7 @@ impl ResourceRegistry {
             Resource {
                 uri: "tap://messages".to_string(),
                 name: "TAP Messages".to_string(),
-                description: "Recent TAP messages from the database".to_string(),
+                description: "TAP messages from agent storage. Query parameters: ?agent_did=<did>&direction=<incoming|outgoing>&type=<message_type>&thread_id=<id>&limit=<n>&offset=<n>".to_string(),
                 mime_type: Some("application/json".to_string()),
             },
             Resource {
@@ -151,6 +151,8 @@ impl ResourceRegistry {
         // Parse query parameters
         let mut thread_id_filter = None;
         let mut message_type_filter = None;
+        let mut direction_filter = None;
+        let mut agent_did_filter = None;
         let mut limit = 50;
         let mut offset = 0;
 
@@ -161,6 +163,20 @@ impl ResourceRegistry {
 
             thread_id_filter = params.get("thread_id").cloned();
             message_type_filter = params.get("type").cloned();
+            agent_did_filter = params.get("agent_did").cloned();
+
+            // Parse direction filter if provided
+            if let Some(direction_str) = params.get("direction") {
+                match direction_str.as_str() {
+                    "incoming" => {
+                        direction_filter = Some(tap_node::storage::MessageDirection::Incoming)
+                    }
+                    "outgoing" => {
+                        direction_filter = Some(tap_node::storage::MessageDirection::Outgoing)
+                    }
+                    _ => {} // Invalid direction, ignore
+                }
+            }
 
             if let Some(limit_str) = params.get("limit") {
                 if let Ok(l) = limit_str.parse::<u32>() {
@@ -176,14 +192,29 @@ impl ResourceRegistry {
         }
 
         // Get messages from storage
-        let storage = self
-            .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::resource_not_found("Storage not initialized"))?;
-        let direction_filter = None; // No direction filter for now
-        let messages = storage
-            .list_messages(limit, offset, direction_filter)
-            .await?;
+        let messages = if let Some(agent_did) = agent_did_filter.as_ref() {
+            // Use agent-specific storage
+            let agent_storage = self
+                .tap_integration()
+                .storage_for_agent(agent_did)
+                .await
+                .map_err(|e| {
+                    Error::resource_not_found(format!("Failed to get agent storage: {}", e))
+                })?;
+            agent_storage
+                .list_messages(limit, offset, direction_filter.clone())
+                .await?
+        } else {
+            // If no agent specified, try to get messages from centralized storage
+            // This is fallback behavior for backwards compatibility
+            let storage = self
+                .tap_integration()
+                .storage()
+                .ok_or_else(|| Error::resource_not_found("Storage not initialized and no agent_did specified. Please specify ?agent_did=<did> to get messages for a specific agent."))?;
+            storage
+                .list_messages(limit, offset, direction_filter.clone())
+                .await?
+        };
 
         // Apply additional filters
         let filtered_messages: Vec<_> = messages
@@ -216,6 +247,8 @@ impl ResourceRegistry {
             })).collect::<Vec<_>>(),
             "total": filtered_messages.len(),
             "applied_filters": {
+                "agent_did": agent_did_filter,
+                "direction": direction_filter.as_ref().map(|d| d.to_string()),
                 "thread_id": thread_id_filter,
                 "message_type": message_type_filter,
                 "limit": limit,
@@ -240,12 +273,10 @@ impl ResourceRegistry {
 
     /// Read a specific message by ID
     async fn read_specific_message(&self, message_id: &str) -> Result<Vec<ResourceContent>> {
-        let storage = self
-            .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::resource_not_found("Storage not initialized"))?;
-        match storage.get_message_by_id(message_id).await? {
-            Some(message) => {
+        // For specific message lookup, we'll try to find it in any agent's storage
+        // First try centralized storage for backwards compatibility
+        if let Some(storage) = self.tap_integration().storage() {
+            if let Ok(Some(message)) = storage.get_message_by_id(message_id).await {
                 let content = json!({
                     "message": {
                         "id": message.message_id,
@@ -260,18 +291,49 @@ impl ResourceRegistry {
                     }
                 });
 
-                Ok(vec![ResourceContent {
+                return Ok(vec![ResourceContent {
                     uri: format!("tap://messages/{}", message_id),
                     mime_type: Some("application/json".to_string()),
                     text: Some(serde_json::to_string_pretty(&content)?),
                     blob: None,
-                }])
+                }]);
             }
-            None => Err(Error::resource_not_found(format!(
-                "Message not found: {}",
-                message_id
-            ))),
         }
+
+        // If not found in centralized storage, search all agent storages
+        let agents = self.tap_integration().list_agents().await?;
+        for agent in agents {
+            if let Ok(agent_storage) = self.tap_integration().storage_for_agent(&agent.id).await {
+                if let Ok(Some(message)) = agent_storage.get_message_by_id(message_id).await {
+                    let content = json!({
+                        "message": {
+                            "id": message.message_id,
+                            "type": message.message_type,
+                            "thread_id": message.thread_id,
+                            "parent_thread_id": message.parent_thread_id,
+                            "from": message.from_did,
+                            "to": message.to_did,
+                            "direction": message.direction.to_string(),
+                            "created_at": message.created_at,
+                            "body": message.message_json
+                        },
+                        "found_in_agent": agent.id
+                    });
+
+                    return Ok(vec![ResourceContent {
+                        uri: format!("tap://messages/{}", message_id),
+                        mime_type: Some("application/json".to_string()),
+                        text: Some(serde_json::to_string_pretty(&content)?),
+                        blob: None,
+                    }]);
+                }
+            }
+        }
+
+        Err(Error::resource_not_found(format!(
+            "Message not found: {}",
+            message_id
+        )))
     }
 
     /// Read schemas resource

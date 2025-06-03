@@ -650,3 +650,91 @@ async fn test_error_handling() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_message_listing_shows_both_directions() -> Result<()> {
+    let env = TestEnvironment::new()?;
+    let mut server = env.create_server().await?;
+    let mut client = McpTestClient::new();
+
+    // Initialize
+    server
+        .handle_request_direct(client.create_initialize_request())
+        .await?;
+
+    // Create an agent
+    let create_agent_response = server
+        .handle_request_direct(client.create_call_tool_request(
+            "tap_create_agent",
+            json!({
+                "label": "TestAgent"
+            }),
+        ))
+        .await?;
+
+    let create_agent_result = create_agent_response.result.unwrap();
+    let agent_content = create_agent_result["content"][0]["text"].as_str().unwrap();
+    let agent_result: Value = serde_json::from_str(agent_content)?;
+    let agent_did = agent_result["@id"].as_str().unwrap();
+
+    // Read messages resource for this agent (should show both incoming and outgoing by default)
+    let resource_uri = format!("tap://messages?agent_did={}", agent_did);
+    let list_resources_response = server
+        .handle_request_direct(client.create_list_resources_request())
+        .await?;
+
+    // Check that messages resource is listed
+    let resources_result = list_resources_response.result.unwrap();
+    let resources = resources_result["resources"].as_array().unwrap();
+    let messages_resource = resources
+        .iter()
+        .find(|r| r["uri"] == "tap://messages")
+        .unwrap();
+
+    // Verify the description includes agent_did parameter
+    let description = messages_resource["description"].as_str().unwrap();
+    assert!(description.contains("agent_did"));
+    assert!(description.contains("direction"));
+
+    // Test reading the messages resource directly (this tests our implementation)
+    // Note: In a real test, we'd send messages first, but this tests the query parameter handling
+    let read_resource_request = client.create_read_resource_request(&resource_uri);
+    let read_response = server.handle_request_direct(read_resource_request).await?;
+
+    assert_matches!(
+        read_response,
+        JsonRpcResponse {
+            result: Some(_),
+            error: None,
+            ..
+        }
+    );
+
+    if let Some(result) = read_response.result {
+        let content = result["contents"][0]["text"].as_str().unwrap();
+        let json_content: Value = serde_json::from_str(content)?;
+
+        // Should include applied_filters with agent_did and direction should be null (meaning both)
+        let applied_filters = &json_content["applied_filters"];
+        assert_eq!(applied_filters["agent_did"], agent_did);
+        assert_eq!(applied_filters["direction"], serde_json::Value::Null);
+
+        // Should have a messages array (even if empty)
+        assert!(json_content["messages"].is_array());
+    }
+
+    // Test with explicit direction filter
+    let resource_uri_incoming =
+        format!("tap://messages?agent_did={}&direction=incoming", agent_did);
+    let read_incoming_request = client.create_read_resource_request(&resource_uri_incoming);
+    let read_incoming_response = server.handle_request_direct(read_incoming_request).await?;
+
+    if let Some(result) = read_incoming_response.result {
+        let content = result["contents"][0]["text"].as_str().unwrap();
+        let json_content: Value = serde_json::from_str(content)?;
+        let applied_filters = &json_content["applied_filters"];
+        assert_eq!(applied_filters["direction"], "incoming");
+    }
+
+    Ok(())
+}
