@@ -191,7 +191,7 @@ impl ToolHandler for CreateTransferTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.create_transfer".to_string(),
+            name: "tap_create_transfer".to_string(),
             description:
                 "Initiates a new transfer between parties using the TAP Transfer message (TAIP-3)"
                     .to_string(),
@@ -316,7 +316,7 @@ impl ToolHandler for AuthorizeTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.authorize".to_string(),
+            name: "tap_authorize".to_string(),
             description: "Authorizes a TAP transaction using the Authorize message (TAIP-4)"
                 .to_string(),
             input_schema: schema::authorize_schema(),
@@ -441,7 +441,7 @@ impl ToolHandler for RejectTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.reject".to_string(),
+            name: "tap_reject".to_string(),
             description: "Rejects a TAP transaction using the Reject message (TAIP-4)".to_string(),
             input_schema: schema::reject_schema(),
         }
@@ -570,7 +570,7 @@ impl ToolHandler for CancelTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.cancel".to_string(),
+            name: "tap_cancel".to_string(),
             description: "Cancels a TAP transaction using the Cancel message (TAIP-5)".to_string(),
             input_schema: schema::cancel_schema(),
         }
@@ -699,7 +699,7 @@ impl ToolHandler for SettleTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.settle".to_string(),
+            name: "tap_settle".to_string(),
             description: "Settles a TAP transaction using the Settle message (TAIP-6)".to_string(),
             input_schema: schema::settle_schema(),
         }
@@ -860,7 +860,7 @@ impl ToolHandler for ListTransactionsTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.list_transactions".to_string(),
+            name: "tap_list_transactions".to_string(),
             description: "Lists TAP transactions with filtering and pagination support".to_string(),
             input_schema: schema::list_transactions_schema(),
         }

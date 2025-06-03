@@ -125,7 +125,7 @@ impl ToolHandler for CreateAgentTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.create_agent".to_string(),
+            name: "tap_create_agent".to_string(),
             description: "Creates a new TAP agent with specified configuration and stores it in ~/.tap/agents".to_string(),
             input_schema: schema::create_agent_schema(),
         }
@@ -266,7 +266,7 @@ impl ToolHandler for ListAgentsTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap.list_agents".to_string(),
+            name: "tap_list_agents".to_string(),
             description: "Lists all configured agents from the ~/.tap/agents directory with optional filtering".to_string(),
             input_schema: schema::list_agents_schema(),
         }

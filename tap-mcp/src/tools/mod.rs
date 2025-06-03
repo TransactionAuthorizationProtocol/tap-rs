@@ -39,41 +39,41 @@ impl ToolRegistry {
 
         // Agent management tools
         tools.insert(
-            "tap.create_agent".to_string(),
+            "tap_create_agent".to_string(),
             Box::new(CreateAgentTool::new(tap_integration.clone())),
         );
         tools.insert(
-            "tap.list_agents".to_string(),
+            "tap_list_agents".to_string(),
             Box::new(ListAgentsTool::new(tap_integration.clone())),
         );
 
         // Transaction creation tools
         tools.insert(
-            "tap.create_transfer".to_string(),
+            "tap_create_transfer".to_string(),
             Box::new(CreateTransferTool::new(tap_integration.clone())),
         );
 
         // Transaction action tools
         tools.insert(
-            "tap.authorize".to_string(),
+            "tap_authorize".to_string(),
             Box::new(AuthorizeTool::new(tap_integration.clone())),
         );
         tools.insert(
-            "tap.reject".to_string(),
+            "tap_reject".to_string(),
             Box::new(RejectTool::new(tap_integration.clone())),
         );
         tools.insert(
-            "tap.cancel".to_string(),
+            "tap_cancel".to_string(),
             Box::new(CancelTool::new(tap_integration.clone())),
         );
         tools.insert(
-            "tap.settle".to_string(),
+            "tap_settle".to_string(),
             Box::new(SettleTool::new(tap_integration.clone())),
         );
 
         // Transaction management tools
         tools.insert(
-            "tap.list_transactions".to_string(),
+            "tap_list_transactions".to_string(),
             Box::new(ListTransactionsTool::new(tap_integration.clone())),
         );
 
