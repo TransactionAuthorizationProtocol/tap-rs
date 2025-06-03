@@ -36,17 +36,6 @@ TAP-RS implements this protocol with a focus on:
 
 This project has successfully implemented all core TAP message types and flows as specified in the TAIPs (Transaction Authorization Protocol Improvement Proposals). The codebase is feature-complete for standard TAP use cases.
 
-## Development Guide
-
-### Dependencies
-
-This project has specific dependency version requirements:
-
-- **UUID v0.8.2**: Required for compatibility with the didcomm crate. Do not upgrade! See [DEPENDENCIES.md](./DEPENDENCIES.md) for details.
-- **WASM Support**: Several dependencies require special features for WebAssembly compatibility.
-
-Please review the [DEPENDENCIES.md](./DEPENDENCIES.md) file before updating any dependencies or adding new crates to the workspace.
-
 ## Getting Started
 
 ### Prerequisites
@@ -90,15 +79,15 @@ Available command-line tools:
 
    # List stored keys
    tap-agent-cli keys list
-   
+
    # Pack a plaintext DIDComm message (supports signed, authcrypt, and anoncrypt modes)
    tap-agent-cli pack --input message.json --output packed.json --mode signed
    tap-agent-cli pack --input message.json --output packed.json --mode authcrypt --recipient did:key:z6Mk...
    tap-agent-cli pack --input message.json --output packed.json --mode anoncrypt --recipient did:key:z6Mk...
-   
+
    # Unpack a signed or encrypted DIDComm message
    tap-agent-cli unpack --input packed.json --output unpacked.json
-   
+
    # Pack/unpack with specific key selection
    tap-agent-cli pack --input message.json --output packed.json --mode signed --key did:key:z6Mk...
    tap-agent-cli unpack --input packed.json --output unpacked.json --key did:key:z6Mk...
@@ -228,16 +217,16 @@ use serde::{Serialize, Deserialize};
 pub struct CustomMessage {
     #[tap(participant)]
     pub sender: Participant,
-    
+
     #[tap(participant)]
     pub receiver: Option<Participant>,
-    
+
     #[tap(participant_list)]
     pub validators: Vec<Participant>,
-    
+
     #[tap(transaction_id)]
     pub transaction_id: String,
-    
+
     pub data: String,
 }
 
@@ -362,7 +351,7 @@ The `tap-agent-cli` tool provides commands for packing and unpacking DIDComm mes
 # Install the tap-agent CLI
 cargo install tap-agent
 
-# Pack a plaintext message to a signed DIDComm message 
+# Pack a plaintext message to a signed DIDComm message
 tap-agent-cli pack --input message.json --output packed.json --mode signed
 
 # Pack using authenticated encryption (requires recipient DID)

@@ -232,9 +232,12 @@ pub struct TapNode {
     processor_pool: Option<ProcessorPool>,
     /// Node configuration
     config: NodeConfig,
-    /// Storage for transactions
+    /// Storage for transactions (legacy centralized storage)
     #[cfg(feature = "storage")]
     storage: Option<Arc<storage::Storage>>,
+    /// Agent-specific storage manager
+    #[cfg(feature = "storage")]
+    agent_storage_manager: Option<Arc<storage::AgentStorageManager>>,
     /// Transaction state processor
     #[cfg(feature = "storage")]
     state_processor: Option<Arc<state_machine::StandardTransactionProcessor>>,
@@ -279,6 +282,10 @@ impl TapNode {
         #[cfg(feature = "storage")]
         let storage = None;
         #[cfg(feature = "storage")]
+        let agent_storage_manager = Some(Arc::new(storage::AgentStorageManager::new(
+            config.tap_root.clone(),
+        )));
+        #[cfg(feature = "storage")]
         let state_processor = None;
 
         let node = Self {
@@ -292,6 +299,8 @@ impl TapNode {
             config,
             #[cfg(feature = "storage")]
             storage,
+            #[cfg(feature = "storage")]
+            agent_storage_manager,
             #[cfg(feature = "storage")]
             state_processor,
         };
@@ -527,24 +536,170 @@ impl TapNode {
                 }
             }
         }
-        // Log all incoming messages for audit trail
+        // Log incoming messages to agent-specific storage
         #[cfg(feature = "storage")]
         {
-            if let Some(ref storage) = self.storage {
-                // Log the message to the audit trail
-                match storage
-                    .log_message(&message, storage::MessageDirection::Incoming, raw_message)
-                    .await
-                {
-                    Ok(_) => log::debug!("Logged incoming message: {}", message.id),
-                    Err(e) => log::warn!("Failed to log incoming message: {}", e),
-                }
+            if let Some(ref storage_manager) = self.agent_storage_manager {
+                // Check if this is a transaction message
+                let message_type_lower = message.type_.to_lowercase();
+                let is_transaction = message_type_lower.contains("transfer")
+                    || message_type_lower.contains("payment");
+                log::debug!(
+                    "Message type: {}, is_transaction: {}",
+                    message.type_,
+                    is_transaction
+                );
 
-                // Store as transaction if it's a Transfer or Payment
-                if message.type_.contains("transfer") || message.type_.contains("payment") {
-                    match storage.insert_transaction(&message).await {
-                        Ok(_) => log::debug!("Stored transaction: {}", message.id),
-                        Err(e) => log::warn!("Failed to store transaction: {}", e),
+                if is_transaction {
+                    // For transactions, store in ALL involved agents' databases
+                    let involved_agents = self.extract_transaction_agents(&message);
+
+                    if involved_agents.is_empty() {
+                        log::warn!("No registered agents found for transaction: {}", message.id);
+                    } else {
+                        log::debug!(
+                            "Storing transaction {} in {} agent databases",
+                            message.id,
+                            involved_agents.len()
+                        );
+
+                        // Store transaction in each involved agent's database
+                        for agent_did in &involved_agents {
+                            if let Ok(agent_storage) =
+                                storage_manager.get_agent_storage(agent_did).await
+                            {
+                                // Log the message
+                                match agent_storage
+                                    .log_message(
+                                        &message,
+                                        storage::MessageDirection::Incoming,
+                                        raw_message,
+                                    )
+                                    .await
+                                {
+                                    Ok(_) => log::debug!(
+                                        "Logged incoming message to agent {}: {}",
+                                        agent_did,
+                                        message.id
+                                    ),
+                                    Err(e) => log::warn!(
+                                        "Failed to log incoming message for agent {}: {}",
+                                        agent_did,
+                                        e
+                                    ),
+                                }
+
+                                // Store as transaction
+                                match agent_storage.insert_transaction(&message).await {
+                                    Ok(_) => log::debug!(
+                                        "Stored transaction for agent {}: {}",
+                                        agent_did,
+                                        message.id
+                                    ),
+                                    Err(e) => log::warn!(
+                                        "Failed to store transaction for agent {}: {}",
+                                        agent_did,
+                                        e
+                                    ),
+                                }
+                            } else {
+                                log::warn!("Failed to get storage for agent: {}", agent_did);
+                            }
+                        }
+                    }
+                } else {
+                    // For non-transaction messages, log to all recipient agents' storage
+                    let mut logged_to_any = false;
+
+                    for recipient_did in &message.to {
+                        // Check if this recipient is a registered agent
+                        if self.agents.has_agent(recipient_did) {
+                            if let Ok(agent_storage) =
+                                storage_manager.get_agent_storage(recipient_did).await
+                            {
+                                // Log the message to this recipient's storage
+                                match agent_storage
+                                    .log_message(
+                                        &message,
+                                        storage::MessageDirection::Incoming,
+                                        raw_message,
+                                    )
+                                    .await
+                                {
+                                    Ok(_) => {
+                                        log::debug!(
+                                            "Logged incoming message to recipient {}: {}",
+                                            recipient_did,
+                                            message.id
+                                        );
+                                        logged_to_any = true;
+                                    }
+                                    Err(e) => log::warn!(
+                                        "Failed to log incoming message for recipient {}: {}",
+                                        recipient_did,
+                                        e
+                                    ),
+                                }
+                            } else {
+                                log::warn!(
+                                    "Failed to get storage for recipient: {}",
+                                    recipient_did
+                                );
+                            }
+                        }
+                    }
+
+                    // If no recipients were logged, fall back to sender or router-based storage
+                    if !logged_to_any {
+                        match self.determine_message_agent(&message) {
+                            Ok(agent_did) => {
+                                if let Ok(agent_storage) =
+                                    storage_manager.get_agent_storage(&agent_did).await
+                                {
+                                    // Log the message to the agent's storage
+                                    match agent_storage
+                                        .log_message(
+                                            &message,
+                                            storage::MessageDirection::Incoming,
+                                            raw_message,
+                                        )
+                                        .await
+                                    {
+                                        Ok(_) => log::debug!(
+                                            "Logged incoming message to fallback agent {}: {}",
+                                            agent_did,
+                                            message.id
+                                        ),
+                                        Err(e) => log::warn!(
+                                            "Failed to log incoming message for fallback agent {}: {}",
+                                            agent_did,
+                                            e
+                                        ),
+                                    }
+                                } else {
+                                    log::warn!(
+                                        "Failed to get storage for fallback agent: {}",
+                                        agent_did
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                log::warn!(
+                                    "Failed to determine fallback agent for message storage: {}",
+                                    e
+                                );
+                                // Fall back to centralized storage if available
+                                if let Some(ref storage) = self.storage {
+                                    let _ = storage
+                                        .log_message(
+                                            &message,
+                                            storage::MessageDirection::Incoming,
+                                            raw_message,
+                                        )
+                                        .await;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -556,34 +711,69 @@ impl TapNode {
             None => return Ok(()), // PlainMessage was dropped during processing
         };
 
-        // Route the message to the appropriate agent
-        let target_did = match self.router.route_message(&processed_message).await {
-            Ok(did) => did,
-            Err(e) => {
-                // Log the error but don't fail the entire operation
-                log::warn!("Unable to route message: {}", e);
-                return Ok(());
-            }
-        };
+        // Deliver the message to all recipients in the 'to' field
+        let mut delivery_success = false;
 
-        // Get the agent
-        let agent = match self.agents.get_agent(&target_did).await {
-            Ok(a) => a,
-            Err(e) => {
-                log::warn!("Failed to get agent for dispatch: {}", e);
-                return Ok(());
-            }
-        };
-
-        // Let the agent process the plain message
-        match agent.receive_plain_message(processed_message).await {
-            Ok(_) => Ok(()),
-            Err(e) => {
-                // Log the error but don't fail the entire operation
-                log::warn!("Agent failed to process message: {}", e);
-                Ok(())
+        for recipient_did in &processed_message.to {
+            // Check if we have a registered agent for this recipient
+            match self.agents.get_agent(recipient_did).await {
+                Ok(agent) => {
+                    // Let the agent process the plain message
+                    match agent.receive_plain_message(processed_message.clone()).await {
+                        Ok(_) => {
+                            log::debug!(
+                                "Successfully delivered message to agent: {}",
+                                recipient_did
+                            );
+                            delivery_success = true;
+                        }
+                        Err(e) => {
+                            log::warn!("Agent {} failed to process message: {}", recipient_did, e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::debug!(
+                        "No registered agent found for recipient {}: {}",
+                        recipient_did,
+                        e
+                    );
+                    // This is not an error - the recipient might be external to this node
+                }
             }
         }
+
+        // If no recipients were successfully processed, try the router as fallback
+        if !delivery_success {
+            let target_did = match self.router.route_message(&processed_message).await {
+                Ok(did) => did,
+                Err(e) => {
+                    log::warn!("Unable to route message and no recipients processed: {}", e);
+                    return Ok(());
+                }
+            };
+
+            // Get the agent
+            let agent = match self.agents.get_agent(&target_did).await {
+                Ok(a) => a,
+                Err(e) => {
+                    log::warn!("Failed to get agent for dispatch: {}", e);
+                    return Ok(());
+                }
+            };
+
+            // Let the agent process the plain message
+            match agent.receive_plain_message(processed_message).await {
+                Ok(_) => {
+                    log::debug!("Successfully routed message to agent: {}", target_did);
+                }
+                Err(e) => {
+                    log::warn!("Agent failed to process message: {}", e);
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Dispatch a message to an agent by DID
@@ -608,24 +798,108 @@ impl TapNode {
         to_did: String,
         message: PlainMessage,
     ) -> Result<String> {
-        // Log all outgoing messages for audit trail
+        // Log outgoing messages to agent-specific storage
         #[cfg(feature = "storage")]
         {
-            if let Some(ref storage) = self.storage {
-                // Log the message to the audit trail
-                match storage
-                    .log_message(&message, storage::MessageDirection::Outgoing, None)
-                    .await
-                {
-                    Ok(_) => log::debug!("Logged outgoing message: {}", message.id),
-                    Err(e) => log::warn!("Failed to log outgoing message: {}", e),
-                }
+            if let Some(ref storage_manager) = self.agent_storage_manager {
+                // Check if this is a transaction message
+                let message_type_lower = message.type_.to_lowercase();
+                let is_transaction = message_type_lower.contains("transfer")
+                    || message_type_lower.contains("payment");
+                log::debug!(
+                    "Message type: {}, is_transaction: {}",
+                    message.type_,
+                    is_transaction
+                );
 
-                // Store as transaction if it's a Transfer or Payment
-                if message.type_.contains("transfer") || message.type_.contains("payment") {
-                    match storage.insert_transaction(&message).await {
-                        Ok(_) => log::debug!("Stored outgoing transaction: {}", message.id),
-                        Err(e) => log::warn!("Failed to store outgoing transaction: {}", e),
+                if is_transaction {
+                    // For transactions, store in ALL involved agents' databases
+                    let involved_agents = self.extract_transaction_agents(&message);
+
+                    if involved_agents.is_empty() {
+                        log::warn!(
+                            "No registered agents found for outgoing transaction: {}",
+                            message.id
+                        );
+                    } else {
+                        log::debug!(
+                            "Storing outgoing transaction {} in {} agent databases",
+                            message.id,
+                            involved_agents.len()
+                        );
+
+                        // Store transaction in each involved agent's database
+                        for agent_did in &involved_agents {
+                            if let Ok(agent_storage) =
+                                storage_manager.get_agent_storage(agent_did).await
+                            {
+                                // Log the message
+                                match agent_storage
+                                    .log_message(
+                                        &message,
+                                        storage::MessageDirection::Outgoing,
+                                        None,
+                                    )
+                                    .await
+                                {
+                                    Ok(_) => log::debug!(
+                                        "Logged outgoing message to agent {}: {}",
+                                        agent_did,
+                                        message.id
+                                    ),
+                                    Err(e) => log::warn!(
+                                        "Failed to log outgoing message for agent {}: {}",
+                                        agent_did,
+                                        e
+                                    ),
+                                }
+
+                                // Store as transaction
+                                match agent_storage.insert_transaction(&message).await {
+                                    Ok(_) => log::debug!(
+                                        "Stored outgoing transaction for agent {}: {}",
+                                        agent_did,
+                                        message.id
+                                    ),
+                                    Err(e) => log::warn!(
+                                        "Failed to store outgoing transaction for agent {}: {}",
+                                        agent_did,
+                                        e
+                                    ),
+                                }
+                            } else {
+                                log::warn!("Failed to get storage for agent: {}", agent_did);
+                            }
+                        }
+                    }
+                } else {
+                    // For non-transaction messages, just store in sender's storage
+                    if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await
+                    {
+                        // Log the message to the sender's storage
+                        match sender_storage
+                            .log_message(&message, storage::MessageDirection::Outgoing, None)
+                            .await
+                        {
+                            Ok(_) => log::debug!(
+                                "Logged outgoing message for agent {}: {}",
+                                sender_did,
+                                message.id
+                            ),
+                            Err(e) => log::warn!(
+                                "Failed to log outgoing message for agent {}: {}",
+                                sender_did,
+                                e
+                            ),
+                        }
+                    } else {
+                        log::warn!("Failed to get storage for sender agent: {}", sender_did);
+                        // Fall back to centralized storage if available
+                        if let Some(ref storage) = self.storage {
+                            let _ = storage
+                                .log_message(&message, storage::MessageDirection::Outgoing, None)
+                                .await;
+                        }
                     }
                 }
             }
@@ -658,8 +932,50 @@ impl TapNode {
     }
 
     /// Register a new agent with the node
+    ///
+    /// This method registers an agent with the TAP Node and automatically initializes
+    /// DID-specific storage for the agent. The storage directory structure follows:
+    /// - `~/.tap/{sanitized_did}/transactions.db` (default)
+    /// - `{tap_root}/{sanitized_did}/transactions.db` (if custom TAP root is configured)
+    ///
+    /// # Storage Initialization
+    ///
+    /// When an agent is registered, a dedicated SQLite database is created for that agent's DID.
+    /// This ensures transaction isolation between different agents while maintaining a consistent
+    /// storage structure. If storage initialization fails, the agent registration continues but
+    /// a warning is logged.
+    ///
+    /// # Arguments
+    ///
+    /// * `agent` - The TapAgent to register with the node
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the agent was successfully registered
+    /// * `Err(Error)` if agent registration fails
     pub async fn register_agent(&self, agent: Arc<TapAgent>) -> Result<()> {
         let agent_did = agent.get_agent_did().to_string();
+
+        // Initialize storage for this agent if storage is enabled
+        #[cfg(feature = "storage")]
+        {
+            if let Some(ref storage_manager) = self.agent_storage_manager {
+                match storage_manager.ensure_agent_storage(&agent_did).await {
+                    Ok(_) => {
+                        log::info!("Initialized storage for agent: {}", agent_did);
+                    }
+                    Err(e) => {
+                        log::warn!(
+                            "Failed to initialize storage for agent {}: {}",
+                            agent_did,
+                            e
+                        );
+                        // Don't fail the registration, just log the warning
+                    }
+                }
+            }
+        }
+
         self.agents.register_agent(agent_did.clone(), agent).await?;
 
         // Publish event about agent registration
@@ -715,6 +1031,136 @@ impl TapNode {
     #[cfg(feature = "storage")]
     pub fn storage(&self) -> Option<&Arc<storage::Storage>> {
         self.storage.as_ref()
+    }
+
+    /// Get a reference to the agent storage manager (if available)
+    #[cfg(feature = "storage")]
+    pub fn agent_storage_manager(&self) -> Option<&Arc<storage::AgentStorageManager>> {
+        self.agent_storage_manager.as_ref()
+    }
+
+    /// Determine which agent's storage should be used for a message
+    ///
+    /// This method uses the following strategy:
+    /// 1. Use the first recipient DID if it's one of our registered agents
+    /// 2. Use the sender DID if it's one of our registered agents  
+    /// 3. If no local agents are involved, fall back to the first recipient
+    #[cfg(feature = "storage")]
+    fn determine_message_agent(&self, message: &PlainMessage) -> Result<String> {
+        // Strategy 1: Use the first recipient DID if it's one of our agents
+        for recipient in &message.to {
+            if self.agents.has_agent(recipient) {
+                return Ok(recipient.clone());
+            }
+        }
+
+        // Strategy 2: Use the sender DID if it's one of our agents
+        if self.agents.has_agent(&message.from) {
+            return Ok(message.from.clone());
+        }
+
+        // Strategy 3: If no local agents involved, fall back to first recipient
+        if !message.to.is_empty() {
+            return Ok(message.to[0].clone());
+        }
+
+        Err(Error::Storage(
+            "Cannot determine agent for message storage".to_string(),
+        ))
+    }
+
+    /// Extract all agent DIDs involved in a transaction
+    ///
+    /// For Transfer and Payment messages, this includes:
+    /// - Originator/Customer from the message body
+    /// - Beneficiary/Merchant from the message body
+    /// - All agents in the agents array
+    /// - Sender (from) and recipients (to) from the message envelope
+    #[cfg(feature = "storage")]
+    fn extract_transaction_agents(&self, message: &PlainMessage) -> Vec<String> {
+        use std::collections::HashSet;
+        let mut agent_dids = HashSet::new();
+
+        log::debug!("Extracting transaction agents for message: {}", message.id);
+
+        // Add sender and recipients from message envelope
+        agent_dids.insert(message.from.clone());
+        log::debug!("Added sender: {}", message.from);
+
+        for recipient in &message.to {
+            agent_dids.insert(recipient.clone());
+            log::debug!("Added recipient: {}", recipient);
+        }
+
+        // Extract agents from message body based on type
+        let message_type_lower = message.type_.to_lowercase();
+        log::debug!("Message type: {}", message_type_lower);
+
+        if message_type_lower.contains("transfer") {
+            // Parse Transfer message body
+            if let Ok(transfer) =
+                serde_json::from_value::<tap_msg::message::Transfer>(message.body.clone())
+            {
+                // Add originator
+                agent_dids.insert(transfer.originator.id.clone());
+                log::debug!("Added originator: {}", transfer.originator.id);
+
+                // Add beneficiary if present
+                if let Some(beneficiary) = &transfer.beneficiary {
+                    agent_dids.insert(beneficiary.id.clone());
+                    log::debug!("Added beneficiary: {}", beneficiary.id);
+                }
+
+                // Add all agents
+                for agent in &transfer.agents {
+                    agent_dids.insert(agent.id.clone());
+                    log::debug!("Added agent: {}", agent.id);
+                }
+            } else {
+                log::warn!("Failed to parse Transfer message body");
+            }
+        } else if message_type_lower.contains("payment") {
+            // Parse Payment message body
+            if let Ok(payment) =
+                serde_json::from_value::<tap_msg::message::Payment>(message.body.clone())
+            {
+                // Add merchant
+                agent_dids.insert(payment.merchant.id.clone());
+                log::debug!("Added merchant: {}", payment.merchant.id);
+
+                // Add customer if present
+                if let Some(customer) = &payment.customer {
+                    agent_dids.insert(customer.id.clone());
+                    log::debug!("Added customer: {}", customer.id);
+                }
+
+                // Add all agents
+                for agent in &payment.agents {
+                    agent_dids.insert(agent.id.clone());
+                    log::debug!("Added agent: {}", agent.id);
+                }
+            } else {
+                log::warn!("Failed to parse Payment message body");
+            }
+        }
+
+        log::debug!("Total unique agents found: {}", agent_dids.len());
+
+        // Convert to Vec and filter to only include registered agents
+        let registered_agents: Vec<String> = agent_dids
+            .into_iter()
+            .filter(|did| {
+                let is_registered = self.agents.has_agent(did);
+                log::debug!("Agent {} registered: {}", did, is_registered);
+                is_registered
+            })
+            .collect();
+
+        log::debug!(
+            "Registered agents involved in transaction: {:?}",
+            registered_agents
+        );
+        registered_agents
     }
 }
 

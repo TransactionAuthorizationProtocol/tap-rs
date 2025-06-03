@@ -12,20 +12,14 @@ use tap_agent::{
 
 // Extension trait for TapAgent in WASM context
 trait WasmTapAgentExt {
-    // Get the key manager for this agent - this relies on the internal structure of TapAgent
-    // which would be better exposed through a proper method, but we're working with what we have
-    fn agent_key_manager(&self) -> Arc<AgentKeyManager>;
+    // Get the key manager for this agent
+    fn agent_key_manager(&self) -> &Arc<AgentKeyManager>;
 }
 
 impl WasmTapAgentExt for TapAgent {
-    fn agent_key_manager(&self) -> Arc<AgentKeyManager> {
-        // Create a new agent key manager for this operation
-        // This is a workaround for not having direct access to the key_manager field
-        let key_manager_builder = AgentKeyManagerBuilder::new();
-        match key_manager_builder.build() {
-            Ok(km) => Arc::new(km),
-            Err(_) => panic!("Failed to build key manager"),
-        }
+    fn agent_key_manager(&self) -> &Arc<AgentKeyManager> {
+        // Use the public key_manager() method
+        self.key_manager()
     }
 }
 use tap_msg::didcomm::PlainMessage;
@@ -161,7 +155,7 @@ impl WasmTapAgent {
 
             // Pack the message
             let key_manager = agent.agent_key_manager();
-            let packed = match tap_message.pack(&*key_manager, pack_options).await {
+            let packed = match tap_message.pack(&**key_manager, pack_options).await {
                 Ok(packed_msg) => packed_msg,
                 Err(e) => return Err(JsValue::from_str(&format!("Failed to pack message: {}", e))),
             };
@@ -218,7 +212,7 @@ impl WasmTapAgent {
             // Unpack the message
             let key_manager = agent.agent_key_manager();
             let plain_message: PlainMessage =
-                match String::unpack(&packed_message, &*key_manager, unpack_options).await {
+                match String::unpack(&packed_message, &**key_manager, unpack_options).await {
                     Ok(msg) => msg,
                     Err(e) => {
                         return Err(JsValue::from_str(&format!(

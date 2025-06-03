@@ -62,12 +62,16 @@
 //! - Transfer and Payment messages are additionally stored in the transactions table
 
 #[cfg(feature = "storage")]
+pub mod agent_storage_manager;
+#[cfg(feature = "storage")]
 pub mod db;
 #[cfg(feature = "storage")]
 pub mod error;
 #[cfg(feature = "storage")]
 pub mod models;
 
+#[cfg(feature = "storage")]
+pub use agent_storage_manager::AgentStorageManager;
 #[cfg(feature = "storage")]
 pub use db::Storage;
 #[cfg(feature = "storage")]

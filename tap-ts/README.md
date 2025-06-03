@@ -10,9 +10,9 @@ npm install @taprsvp/tap-agent
 
 ## Features
 
-- **Type-Safe API**: Fully typed using TypeScript interfaces
+- **Type-Safe API**: Fully typed using TypeScript interfaces with modern Agent/Party separation
 - **Agent Management**: Create and manage TAP agents with automatic key generation
-- **Message Creation**: Simplified API for creating different message types
+- **Message Creation**: Simplified API for creating different message types using TAIP-compliant structures
 - **Message Packing**: Pack messages for secure transmission
 - **Message Unpacking**: Unpack and verify received messages
 - **TAP Flows**: Helper methods for common message flows (transfer, payment, connection)
@@ -22,13 +22,48 @@ npm install @taprsvp/tap-agent
 - **WASM Integration**: Uses the core tap-agent code via WebAssembly for efficiency and code sharing
 - **CLI Tools**: Command-line utilities for DID generation and management
 - **Zero Configuration**: Automatic DID generation for quick setup
+- **TAIP Compliance**: Implements TAIP-5 (Agent) and TAIP-6 (Party) specifications
+
+## Core Concepts
+
+### Agent vs Party (TAIP-5/TAIP-6)
+
+This library implements the modern TAP specification with proper separation between Agents and Parties:
+
+- **Party**: A real-world entity (legal or natural person) involved in a transaction
+  - Examples: Individual users, companies, organizations
+  - Identified by any DID or IRI
+  - Contains optional metadata like country codes, LEI codes, etc.
+
+- **Agent**: A service that executes transactions on behalf of one or more parties
+  - Examples: Exchanges, custodial wallets, DeFi protocols, bridges
+  - Identified by any DID or IRI
+  - Must have a `role` field (e.g., "SettlementAddress", "Exchange")
+  - Must specify which party/parties it acts `for`
+  - Can have policies that define operational constraints
+
+```typescript
+// Party example (real-world entity)
+const party: Party = {
+  '@id': 'did:example:alice',
+  'https://schema.org/addressCountry': 'US'
+};
+
+// Agent example (service acting for a party)
+const agent: Agent = {
+  '@id': 'did:web:exchange.example.com',
+  role: 'SettlementAddress',
+  for: 'did:example:alice', // Acts for Alice
+  policies: [/* optional policies */]
+};
+```
 
 ## Usage
 
 ### Creating an Agent
 
 ```typescript
-import { TAPAgent } from '@taprsvp/tap-agent';
+import { TAPAgent, Agent, Party } from '@taprsvp/tap-agent';
 
 // Create an agent (a new DID will be generated automatically)
 // IMPORTANT: Always use the static create() method which properly initializes WASM
@@ -47,19 +82,21 @@ console.log(`Agent DID: ${agent.did}`); // e.g., did:key:z6MkhaXgBZDvotDkL5257fa
 ### Creating and Sending Messages
 
 ```typescript
-// Create a transfer message
+// Create a transfer message using Agent and Party types (TAIP-5/TAIP-6)
 const transfer = agent.transfer({
   asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
   amount: "100.0",
   originator: {
-    '@id': agent.did,
-    role: "originator"
+    '@id': agent.did // Party - real-world entity
   },
   beneficiary: {
-    '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
-    role: "beneficiary"
+    '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL" // Party - real-world entity
   },
-  agents: []
+  agents: [{
+    '@id': "did:web:exchange.example.com",
+    role: "SettlementAddress", // Agent role (TAIP-5)
+    for: agent.did // Which party this agent acts for
+  }]
 });
 
 // Pack the message for transmission
@@ -71,7 +108,7 @@ console.log("Packed message:", packedResult.message);
 
 // The recipient would create their agent with the async factory method
 const recipientAgent = await TAPAgent.create({
-  nickname: "Recipient Agent", 
+  nickname: "Recipient Agent",
   debug: true
 });
 
@@ -94,7 +131,7 @@ const packedAuthorization = await authorization.pack();
 
 ## Message Types
 
-The library supports all standard TAP message types:
+The library supports all standard TAP message types with proper Agent/Party separation (TAIP-5/TAIP-6):
 
 ### Transfer Messages
 
@@ -103,15 +140,17 @@ const transfer = agent.transfer({
   asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
   amount: "100.0",
   originator: {
-    '@id': agent.did,
-    role: "originator"
+    '@id': agent.did // Party (real-world entity)
   },
   beneficiary: {
-    '@id': recipientDid,
-    role: "beneficiary"
+    '@id': recipientDid // Party (real-world entity)
   },
   memo: "Payment for services",
-  agents: []
+  agents: [{
+    '@id': "did:web:exchange.example.com",
+    role: "SettlementAddress", // Agent role (TAIP-5)
+    for: agent.did // Which party this agent acts for
+  }]
 });
 ```
 
@@ -122,15 +161,18 @@ const payment = agent.payment({
   asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
   amount: "50.0",
   merchant: {
-    '@id': agent.did,
-    role: "merchant"
+    '@id': agent.did // Party (merchant entity)
   },
   customer: {
-    '@id': customerDid,
-    role: "customer"
+    '@id': customerDid // Party (customer entity)
   },
   invoice: "INV-12345",
-  expiry: new Date(Date.now() + 3600000).toISOString() // 1 hour from now
+  expiry: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+  agents: [{
+    '@id': "did:web:payment-processor.example.com",
+    role: "Exchange", // Agent role (TAIP-5)
+    for: agent.did // Acts for the merchant
+  }]
 });
 ```
 
@@ -139,8 +181,9 @@ const payment = agent.payment({
 ```typescript
 const connect = agent.connect({
   agent: {
-    '@id': agent.did,
-    role: "connector"
+    '@id': "did:web:connector.example.com",
+    role: "connector", // Agent role (TAIP-5)
+    for: agent.did // Acts for this party
   },
   for: "https://tap.company/services/compliance",
   constraints: {
@@ -170,22 +213,51 @@ Register handlers for different message types:
 // Note: Make sure to register handlers AFTER agent creation is complete
 agent.onMessage("Transfer", async (message) => {
   console.log("Received transfer message:", message);
-  
+
   // Process the message and return a response
   const response = agent.authorize({
     reason: "Transfer authorized",
     settlementAddress: "0x123..."
   });
-  
+
   // Link the response to the original message
   response.setThreadId(message.id);
-  
+
   return response.toJSON();
 });
 
 // Process a received message
 const result = await agent.processMessage(receivedMessage);
 ```
+
+## Type Definitions
+
+The library exports comprehensive TypeScript types for all TAP concepts:
+
+```typescript
+import {
+  TAPAgent,
+  Agent,
+  Party,
+  TapParticipant,
+  TAPMessage,
+  Transfer,
+  Payment,
+  Connect,
+  DID,
+  Asset
+} from '@taprsvp/tap-agent';
+```
+
+### Key Types
+
+- `Agent`: Service executing transactions (TAIP-5)
+- `Party`: Real-world entity (TAIP-6)
+- `TapParticipant`: Base interface for Agent and Party
+- `TAPMessage`: Generic message structure
+- `Transfer`, `Payment`, `Connect`: Specific message body types
+- `DID`: DID string type
+- `Asset`: Asset identifier string type
 
 ## Advanced Usage
 

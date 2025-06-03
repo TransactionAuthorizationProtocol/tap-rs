@@ -103,20 +103,12 @@ pub mod message_packing;
 /// Key storage utilities
 pub mod storage;
 
+/// Test utilities for temporary storage
+#[cfg(any(test, feature = "test-utils"))]
+pub mod test_utils;
+
 /// Message verification utilities
 pub mod verification;
-
-/// A trait for types that can be serialized to JSON in an type-erased way
-pub trait ErasedSerialize {
-    /// Serialize to JSON string
-    fn to_json(&self) -> std::result::Result<String, serde_json::Error>;
-}
-
-impl<T: serde::Serialize> ErasedSerialize for T {
-    fn to_json(&self) -> std::result::Result<String, serde_json::Error> {
-        serde_json::to_string(self)
-    }
-}
 
 // Re-export key types for convenience
 pub use agent_key_manager::{AgentKeyManager, AgentKeyManagerBuilder};
@@ -147,7 +139,7 @@ pub use did::MultiResolver;
 
 // Native-only re-exports
 #[cfg(not(target_arch = "wasm32"))]
-pub use agent::{Agent, DeliveryResult, TapAgent};
+pub use agent::{Agent, DeliveryResult, EnhancedAgentInfo, TapAgent};
 #[cfg(not(target_arch = "wasm32"))]
 pub use did::{DIDMethodResolver, SyncDIDResolver};
 #[cfg(not(target_arch = "wasm32"))]

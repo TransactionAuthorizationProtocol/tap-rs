@@ -24,6 +24,9 @@ pub const DEFAULT_KEYS_FILE: &str = "keys.json";
 pub struct StoredKey {
     /// The DID for this key
     pub did: String,
+    /// Human-friendly label for this key
+    #[serde(default)]
+    pub label: String,
     /// The key type (e.g., Ed25519, P256)
     #[serde(with = "key_type_serde")]
     pub key_type: KeyType,
@@ -80,6 +83,9 @@ pub struct KeyStorage {
     /// Last update timestamp
     #[serde(default = "chrono::Utc::now")]
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    /// Base directory for agent subdirectories (not serialized, runtime only)
+    #[serde(skip)]
+    base_directory: Option<PathBuf>,
 }
 
 impl KeyStorage {
@@ -89,7 +95,16 @@ impl KeyStorage {
     }
 
     /// Add a key to the storage
-    pub fn add_key(&mut self, key: StoredKey) {
+    pub fn add_key(&mut self, mut key: StoredKey) {
+        // Generate default label if not provided
+        if key.label.is_empty() {
+            key.label = self.generate_default_label();
+        }
+
+        // Ensure label is unique
+        let final_label = self.ensure_unique_label(&key.label, Some(&key.did));
+        key.label = final_label.clone();
+
         // If this is the first key, make it the default
         if self.keys.is_empty() {
             self.default_did = Some(key.did.clone());
@@ -97,6 +112,66 @@ impl KeyStorage {
 
         self.keys.insert(key.did.clone(), key);
         self.updated_at = chrono::Utc::now();
+    }
+
+    /// Generate a default label in the format agent-{n}
+    fn generate_default_label(&self) -> String {
+        let mut counter = 1;
+        loop {
+            let label = format!("agent-{}", counter);
+            if !self.keys.values().any(|key| key.label == label) {
+                return label;
+            }
+            counter += 1;
+        }
+    }
+
+    /// Ensure a label is unique, modifying it if necessary
+    fn ensure_unique_label(&self, desired_label: &str, exclude_did: Option<&str>) -> String {
+        // Check if the label exists in any key
+        if let Some(existing_key) = self.keys.values().find(|key| key.label == desired_label) {
+            // If it belongs to the same DID we're updating, it's fine
+            if exclude_did.is_some() && existing_key.did == exclude_did.unwrap() {
+                return desired_label.to_string();
+            }
+        } else {
+            // Label doesn't exist, so it's available
+            return desired_label.to_string();
+        }
+
+        // Generate a unique label by appending a number
+        let mut counter = 2;
+        loop {
+            let new_label = format!("{}-{}", desired_label, counter);
+            if !self.keys.values().any(|key| key.label == new_label) {
+                return new_label;
+            }
+            counter += 1;
+        }
+    }
+
+    /// Find a key by label
+    pub fn find_by_label(&self, label: &str) -> Option<&StoredKey> {
+        self.keys.values().find(|key| key.label == label)
+    }
+
+    /// Update a key's label
+    pub fn update_label(&mut self, did: &str, new_label: &str) -> Result<()> {
+        // First ensure the key exists
+        if !self.keys.contains_key(did) {
+            return Err(Error::Storage(format!("Key with DID '{}' not found", did)));
+        }
+
+        // Ensure new label is unique
+        let final_label = self.ensure_unique_label(new_label, Some(did));
+
+        // Update the key's label
+        if let Some(key) = self.keys.get_mut(did) {
+            key.label = final_label;
+        }
+
+        self.updated_at = chrono::Utc::now();
+        Ok(())
     }
 
     /// Get the default key path
@@ -114,17 +189,45 @@ impl KeyStorage {
 
     /// Load keys from a specific path
     pub fn load_from_path(path: &Path) -> Result<Self> {
-        if !path.exists() {
-            return Ok(Self::new());
+        let mut storage = if !path.exists() {
+            Self::new()
+        } else {
+            let contents = fs::read_to_string(path)
+                .map_err(|e| Error::Storage(format!("Failed to read key storage file: {}", e)))?;
+
+            let mut storage: KeyStorage = serde_json::from_str(&contents)
+                .map_err(|e| Error::Storage(format!("Failed to parse key storage file: {}", e)))?;
+
+            // Ensure all keys have labels (for backward compatibility)
+            storage.ensure_all_keys_have_labels();
+
+            storage
+        };
+
+        // Set base directory from the path for agent subdirectories
+        if let Some(parent) = path.parent() {
+            storage.base_directory = Some(parent.to_path_buf());
         }
 
-        let contents = fs::read_to_string(path)
-            .map_err(|e| Error::Storage(format!("Failed to read key storage file: {}", e)))?;
-
-        let storage: KeyStorage = serde_json::from_str(&contents)
-            .map_err(|e| Error::Storage(format!("Failed to parse key storage file: {}", e)))?;
-
         Ok(storage)
+    }
+
+    /// Ensure all keys have labels (for backward compatibility)
+    fn ensure_all_keys_have_labels(&mut self) {
+        let mut keys_to_update = Vec::new();
+
+        for (did, key) in &self.keys {
+            if key.label.is_empty() {
+                keys_to_update.push(did.clone());
+            }
+        }
+
+        for did in keys_to_update {
+            let new_label = self.generate_default_label();
+            if let Some(key) = self.keys.get_mut(&did) {
+                key.label = new_label;
+            }
+        }
     }
 
     /// Save keys to the default location
@@ -158,6 +261,19 @@ impl KeyStorage {
     pub fn from_generated_key(key: &GeneratedKey) -> StoredKey {
         StoredKey {
             did: key.did.clone(),
+            label: String::new(), // Will be set when added to storage
+            key_type: key.key_type,
+            private_key: base64::engine::general_purpose::STANDARD.encode(&key.private_key),
+            public_key: base64::engine::general_purpose::STANDARD.encode(&key.public_key),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Convert a GeneratedKey to a StoredKey with a specific label
+    pub fn from_generated_key_with_label(key: &GeneratedKey, label: &str) -> StoredKey {
+        StoredKey {
+            did: key.did.clone(),
+            label: label.to_string(),
             key_type: key.key_type,
             private_key: base64::engine::general_purpose::STANDARD.encode(&key.private_key),
             public_key: base64::engine::general_purpose::STANDARD.encode(&key.public_key),
@@ -175,6 +291,92 @@ impl KeyStorage {
             },
         }
     }
+    /// Create agent directory and save policies/metadata files
+    pub fn create_agent_directory(
+        &self,
+        did: &str,
+        policies: &[String],
+        metadata: &HashMap<String, String>,
+    ) -> Result<()> {
+        let sanitized_did = sanitize_did(did);
+        let agent_dir = self.get_agent_directory(&sanitized_did)?;
+
+        // Create the agent directory
+        fs::create_dir_all(&agent_dir).map_err(|e| {
+            Error::Storage(format!(
+                "Failed to create agent directory {}: {}",
+                agent_dir.display(),
+                e
+            ))
+        })?;
+
+        // Save policies.json
+        let policies_file = agent_dir.join("policies.json");
+        let policies_json = serde_json::to_string_pretty(policies)
+            .map_err(|e| Error::Storage(format!("Failed to serialize policies: {}", e)))?;
+        fs::write(&policies_file, policies_json)
+            .map_err(|e| Error::Storage(format!("Failed to write policies file: {}", e)))?;
+
+        // Save metadata.json
+        let metadata_file = agent_dir.join("metadata.json");
+        let metadata_json = serde_json::to_string_pretty(metadata)
+            .map_err(|e| Error::Storage(format!("Failed to serialize metadata: {}", e)))?;
+        fs::write(&metadata_file, metadata_json)
+            .map_err(|e| Error::Storage(format!("Failed to write metadata file: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Load policies from agent directory
+    pub fn load_agent_policies(&self, did: &str) -> Result<Vec<String>> {
+        let sanitized_did = sanitize_did(did);
+        let agent_dir = self.get_agent_directory(&sanitized_did)?;
+        let policies_file = agent_dir.join("policies.json");
+
+        if !policies_file.exists() {
+            return Ok(vec![]);
+        }
+
+        let content = fs::read_to_string(&policies_file)
+            .map_err(|e| Error::Storage(format!("Failed to read policies file: {}", e)))?;
+
+        serde_json::from_str(&content)
+            .map_err(|e| Error::Storage(format!("Failed to parse policies file: {}", e)))
+    }
+
+    /// Load metadata from agent directory
+    pub fn load_agent_metadata(&self, did: &str) -> Result<HashMap<String, String>> {
+        let sanitized_did = sanitize_did(did);
+        let agent_dir = self.get_agent_directory(&sanitized_did)?;
+        let metadata_file = agent_dir.join("metadata.json");
+
+        if !metadata_file.exists() {
+            return Ok(HashMap::new());
+        }
+
+        let content = fs::read_to_string(&metadata_file)
+            .map_err(|e| Error::Storage(format!("Failed to read metadata file: {}", e)))?;
+
+        serde_json::from_str(&content)
+            .map_err(|e| Error::Storage(format!("Failed to parse metadata file: {}", e)))
+    }
+
+    /// Get the agent directory path for a given DID
+    fn get_agent_directory(&self, sanitized_did: &str) -> Result<PathBuf> {
+        let base_dir = if let Some(ref base) = self.base_directory {
+            base.clone()
+        } else {
+            let home = home_dir()
+                .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
+            home.join(DEFAULT_TAP_DIR)
+        };
+        Ok(base_dir.join(sanitized_did))
+    }
+}
+
+/// Sanitize a DID for use as a directory name (same as TAP Node)
+fn sanitize_did(did: &str) -> String {
+    did.replace(':', "_")
 }
 
 /// Generate a JWK for a stored key

@@ -35,6 +35,7 @@
 //! 4. Verify signature using appropriate algorithm (EdDSA, ES256, ES256K)
 //! 5. Return verified PlainMessage
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
 use crate::message::{Jws, JwsProtected};
@@ -55,6 +56,7 @@ use tap_msg::didcomm::PlainMessage;
 /// # Returns
 /// * The verified PlainMessage on success
 /// * An error if verification fails or the DID cannot be resolved
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn verify_jws(jws: &Jws, resolver: &dyn SyncDIDResolver) -> Result<PlainMessage> {
     // Ensure we have at least one signature
     if jws.signatures.is_empty() {

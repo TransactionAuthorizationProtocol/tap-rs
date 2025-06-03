@@ -52,6 +52,7 @@ Options:
 - `--key-output, -k`: Output file path for the private key
 - `--save, -s`: Save key to default location (~/.tap/keys.json)
 - `--default`: Set as default key when saving
+- `--label, -l`: Label for the key (defaults to agent-{n})
 
 ### Lookup
 
@@ -77,18 +78,25 @@ Options:
 Manages stored keys in the local key store:
 
 ```bash
-# List all keys
+# List all keys (shows labels, DIDs, and key types)
 tap-agent-cli keys list
 
-# View a specific key
+# View a specific key (by DID or label)
 tap-agent-cli keys view did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli keys view "my-signing-key"
+tap-agent-cli keys view "agent-1"
 
-# Set a key as default
+# Set a key as default (by DID or label)
 tap-agent-cli keys set-default did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
+tap-agent-cli keys set-default "production-key"
 
-# Delete a key
+# Delete a key (by DID or label)
 tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
-tap-agent-cli keys delete did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK --force
+tap-agent-cli keys delete "test-key" --force
+
+# Relabel an existing key
+tap-agent-cli keys relabel "agent-1" "development-key"
+tap-agent-cli keys relabel did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK "new-label"
 ```
 
 ### Import
@@ -101,6 +109,10 @@ tap-agent-cli import key.json
 
 # Import and set as default
 tap-agent-cli import key.json --default
+
+# Import with custom label
+tap-agent-cli import key.json --label "imported-key"
+tap-agent-cli import key.json --label "backup-key" --default
 ```
 
 Options:

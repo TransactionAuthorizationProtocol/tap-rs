@@ -1,6 +1,6 @@
 import { TAPAgent } from "../agent";
 import { BaseMessage } from "./base-message";
-import { EntityReference } from "../types";
+import { Agent } from "../types";
 
 /**
  * ConnectMessage - Represents a TAP Connect message
@@ -16,14 +16,14 @@ export class ConnectMessage extends BaseMessage {
   /**
    * Get the agent making the connection
    */
-  getConnectionAgent(): EntityReference | undefined {
+  getConnectionAgent(): Agent | undefined {
     return this.body.agent;
   }
 
   /**
    * Set the agent making the connection
    */
-  setConnectionAgent(agent: EntityReference): this {
+  setConnectionAgent(agent: Agent): this {
     this.body.agent = agent;
     return this;
   }

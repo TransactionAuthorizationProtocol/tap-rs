@@ -18,44 +18,54 @@ export type MessageTypeUri = string;
 export type Asset = string;
 
 /**
- * Reference to an entity in a TAP message
+ * Base interface for TAP participants
  */
-export interface EntityReference {
+export interface TapParticipant {
   /**
-   * The ID of the entity
+   * The ID of the participant
    */
   '@id': string;
+}
 
+/**
+ * Agent in a transaction (TAIP-5)
+ * Agents are services involved in executing transactions
+ */
+export interface Agent extends TapParticipant {
   /**
-   * The role of the entity
+   * Role of the agent in this transaction (REQUIRED per TAIP-5)
    */
-  role?: string;
+  role: string;
 
   /**
-   * The name of the entity
+   * DID or IRI of another Agent or Party that this agent acts on behalf of (REQUIRED per TAIP-5)
+   * Can be a single party or multiple parties
    */
-  name?: string;
+  for: string | string[];
 
   /**
-   * The LEI code of the entity
+   * Policies of the agent according to TAIP-7 (optional)
    */
-  leiCode?: string;
+  policies?: any[];
 
   /**
-   * A hashed representation of the entity's name (for privacy)
-   */
-  nameHash?: string;
-
-  /**
-   * A reference to another entity this entity acts for
-   */
-  for?: string;
-
-  /**
-   * Additional properties
+   * Additional JSON-LD metadata for the agent
    */
   [key: string]: any;
 }
+
+/**
+ * Party in a transaction (TAIP-6)
+ * Parties are real-world entities (legal or natural persons)
+ */
+export interface Party extends TapParticipant {
+  /**
+   * Additional JSON-LD metadata for the party
+   * This allows for extensible metadata like country codes, LEI codes, MCC codes, etc.
+   */
+  [key: string]: any;
+}
+
 
 /**
  * Generic TAP message structure
@@ -134,17 +144,17 @@ export interface Transfer {
   /**
    * The originator of the transfer
    */
-  originator: EntityReference;
+  originator: Party;
 
   /**
    * The beneficiary of the transfer
    */
-  beneficiary?: EntityReference;
+  beneficiary?: Party;
 
   /**
    * The agents involved in the transfer
    */
-  agents?: EntityReference[];
+  agents?: Agent[];
 
   /**
    * A memo for the transfer
@@ -194,12 +204,12 @@ export interface Payment {
   /**
    * The merchant for the payment
    */
-  merchant: EntityReference;
+  merchant: Party;
 
   /**
    * The customer for the payment
    */
-  customer?: EntityReference;
+  customer?: Party;
 
   /**
    * The invoice ID for the payment
@@ -219,7 +229,7 @@ export interface Payment {
   /**
    * The agents involved in the payment
    */
-  agents?: EntityReference[];
+  agents?: Agent[];
 
   /**
    * Additional properties
@@ -244,7 +254,7 @@ export interface Connect {
   /**
    * The agent making the connection
    */
-  agent?: EntityReference;
+  agent?: Agent;
 
   /**
    * What the connection is for
