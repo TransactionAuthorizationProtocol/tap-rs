@@ -232,6 +232,10 @@ pub fn list_transactions_schema() -> Value {
     json!({
         "type": "object",
         "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent whose transactions to list"
+            },
             "filter": {
                 "type": "object",
                 "properties": {
@@ -292,6 +296,7 @@ pub fn list_transactions_schema() -> Value {
                 "minimum": 0
             }
         },
+        "required": ["agent_did"],
         "additionalProperties": false
     })
 }

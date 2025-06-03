@@ -578,7 +578,12 @@ async fn test_complete_transaction_flow() -> Result<()> {
 
     // 5. List transactions to verify
     let list_response = server
-        .handle_request_direct(client.create_call_tool_request("tap_list_transactions", json!({})))
+        .handle_request_direct(client.create_call_tool_request(
+            "tap_list_transactions",
+            json!({
+                "agent_did": alice_agent_id
+            }),
+        ))
         .await?;
 
     let list_result_value = list_response.result.unwrap();

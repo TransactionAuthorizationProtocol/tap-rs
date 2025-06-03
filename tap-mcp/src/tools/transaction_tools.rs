@@ -146,11 +146,11 @@ impl ToolHandler for CreateTransferTool {
             }
         };
 
-        // Store the transaction in tap-node's database
+        // Store the transaction in the agent's specific database
         let storage = self
             .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            .storage_for_agent(&params.agent_did)
+            .await?;
 
         match storage.insert_transaction(&didcomm_message).await {
             Ok(_) => {
@@ -276,11 +276,11 @@ impl ToolHandler for AuthorizeTool {
             }
         };
 
-        // Log the message in the audit trail
+        // Log the message in the agent's specific database
         let storage = self
             .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            .storage_for_agent(&params.agent_did)
+            .await?;
 
         match storage
             .log_message(
@@ -400,11 +400,11 @@ impl ToolHandler for RejectTool {
             }
         };
 
-        // Log the message in the audit trail
+        // Log the message in the agent's specific database
         let storage = self
             .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            .storage_for_agent(&params.agent_did)
+            .await?;
 
         match storage
             .log_message(
@@ -528,11 +528,11 @@ impl ToolHandler for CancelTool {
             }
         };
 
-        // Log the message in the audit trail
+        // Log the message in the agent's specific database
         let storage = self
             .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            .storage_for_agent(&params.agent_did)
+            .await?;
 
         match storage
             .log_message(
@@ -657,11 +657,11 @@ impl ToolHandler for SettleTool {
             }
         };
 
-        // Log the message in the audit trail
+        // Log the message in the agent's specific database
         let storage = self
             .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            .storage_for_agent(&params.agent_did)
+            .await?;
 
         match storage
             .log_message(
@@ -714,6 +714,7 @@ pub struct ListTransactionsTool {
 /// Parameters for listing transactions
 #[derive(Debug, Deserialize, Serialize)]
 struct ListTransactionsParams {
+    agent_did: String, // The DID of the agent whose transactions to list
     #[serde(default)]
     filter: Option<TransactionFilter>,
     #[serde(default)]
@@ -777,24 +778,23 @@ impl ToolHandler for ListTransactionsTool {
         let params: ListTransactionsParams = match arguments {
             Some(args) => serde_json::from_value(args)
                 .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
-            None => ListTransactionsParams {
-                filter: None,
-                sort: None,
-                limit: default_limit(),
-                offset: 0,
-            },
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters: agent_did is required".to_string(),
+                ))
+            }
         };
 
         debug!(
-            "Listing transactions with limit: {}, offset: {}",
-            params.limit, params.offset
+            "Listing transactions for agent {} with limit: {}, offset: {}",
+            params.agent_did, params.limit, params.offset
         );
 
-        // Get messages from storage (transactions are stored as messages)
+        // Get messages from the agent's specific storage
         let storage = self
             .tap_integration()
-            .storage()
-            .ok_or_else(|| Error::configuration("Storage not initialized"))?;
+            .storage_for_agent(&params.agent_did)
+            .await?;
         let direction_filter = None; // No direction filter for now
         let messages = storage
             .list_messages(params.limit, params.offset, direction_filter)

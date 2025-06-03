@@ -18,6 +18,7 @@ Key design principles:
 - Party associations are transaction-specific, not stored with agents
 - Automatic DID generation ensures globally unique identifiers
 - All transaction and message operations require an `agent_did` parameter to specify which agent signs the message
+- **Agent-Specific Storage**: Each agent has its own isolated SQLite database for transactions and messages
 
 ## Installation
 
@@ -205,10 +206,11 @@ Settle a TAP transaction (TAIP-6). The agent_did specifies which agent signs the
 ### Transaction Management
 
 #### `tap_list_transactions`
-List transactions with filtering and pagination support.
+List transactions with filtering and pagination support. Shows only transactions from the specified agent's storage.
 
 ```json
 {
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
   "filter": {
     "message_type": "Transfer",
     "thread_id": "thread-abc123",
@@ -279,7 +281,11 @@ tap://schemas                          # All schemas
 3. Initializes a dedicated SQLite database for that agent's transactions
 4. Registers the agent with the TAP Node for message processing
 
-This ensures that each agent has isolated storage while maintaining a consistent directory structure.
+**Agent-Specific Storage**: Each transaction operation (create, authorize, reject, cancel, settle, list) uses the storage database specific to the `agent_did` parameter. This ensures:
+- Complete transaction isolation between different agents
+- Scalable storage architecture as each agent manages its own data
+- Clear audit trails per agent identity
+- No cross-contamination of transaction data between agents
 
 ## Examples
 

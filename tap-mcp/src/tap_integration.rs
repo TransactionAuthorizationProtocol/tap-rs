@@ -153,9 +153,31 @@ impl TapIntegration {
         &self.node
     }
 
-    /// Get storage reference (if available)
+    /// Get storage reference (if available) - uses the primary node storage
     pub fn storage(&self) -> Option<&Arc<tap_node::storage::Storage>> {
         self.node.storage()
+    }
+
+    /// Get storage for a specific agent DID
+    /// This creates a dedicated storage instance for the given agent DID
+    pub async fn storage_for_agent(
+        &self,
+        agent_did: &str,
+    ) -> Result<Arc<tap_node::storage::Storage>> {
+        // Get the TAP root from the node's configuration
+        let tap_root = self.node.config().tap_root.clone();
+
+        // Create storage for this specific agent
+        let storage = tap_node::storage::Storage::new_with_did(agent_did, tap_root)
+            .await
+            .map_err(|e| {
+                Error::configuration(format!(
+                    "Failed to create storage for agent {}: {}",
+                    agent_did, e
+                ))
+            })?;
+
+        Ok(Arc::new(storage))
     }
 
     /// List all registered agents (from storage and in-memory registry)
