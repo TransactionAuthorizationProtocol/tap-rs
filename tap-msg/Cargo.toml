@@ -14,7 +14,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 
 # Chain Agnostic Identifiers
-tap-caip = { version = "0.2.0", path = "../tap-caip" }
+tap-caip = { version = "0.3.0", path = "../tap-caip" }
 
 # Date and time
 chrono = { workspace = true }
@@ -32,7 +32,7 @@ uuid = { workspace = true }
 tracing = { workspace = true }
 
 # Derive macro for TAP messages
-tap-msg-derive = { version = "0.2.0", path = "../tap-msg-derive" }
+tap-msg-derive = { version = "0.3.0", path = "../tap-msg-derive" }
 
 # WASM support
 wasm-bindgen = { workspace = true, optional = true }

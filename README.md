@@ -10,10 +10,11 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 - **[tap-msg-derive](./tap-msg-derive/README.md)**: Procedural derive macro for automatic TAP message trait implementation
 - **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **[tap-caip](./tap-caip/README.md)**: Implementation of Chain Agnostic Identifier Standards
-- **[tap-node](./tap-node/README.md)**: TAP node orchestration, message routing, and transaction storage
+- **[tap-node](./tap-node/README.md)**: TAP node orchestration with per-agent storage isolation and multi-recipient message delivery
 - **[tap-http](./tap-http/README.md)**: HTTP DIDComm server implementation
 - **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
 - **[tap-ts](./tap-ts/README.md)**: TypeScript/WASM wrapper for browser and Node.js environments
+- **[tap-mcp](./tap-mcp/README.md)**: Model Context Protocol server for AI/LLM integration
 
 ## Overview
 
@@ -28,7 +29,9 @@ The Transaction Authorization Protocol (TAP) adds a secure authorization layer t
 TAP-RS implements this protocol with a focus on:
 
 - **Security**: End-to-end encrypted messaging via DIDComm v2
-- **Interoperability**: Support for multiple blockchains through CAIP standards
+- **Interoperability**: Support for multiple blockchains through CAIP standards  
+- **Scalability**: Per-agent storage isolation with multi-recipient message delivery
+- **Compliance**: Full DIDComm specification adherence for multi-party transactions
 - **Extensibility**: Modular design allowing custom integrations
 - **Cross-Platform**: Native support and WebAssembly for browser environments
 
