@@ -153,6 +153,11 @@ impl TapIntegration {
         &self.node
     }
 
+    /// Get storage path (if available)
+    pub fn storage_path(&self) -> Option<&PathBuf> {
+        self.storage_path.as_ref()
+    }
+
     /// Get storage reference (if available) - uses the primary node storage
     pub fn storage(&self) -> Option<&Arc<tap_node::storage::Storage>> {
         self.node.storage()

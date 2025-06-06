@@ -58,65 +58,15 @@ impl ToolHandler for CreateAgentTool {
 
         debug!("Creating new agent with auto-generated DID");
 
-        // Create a DID generator and generate a new key
+        // Create an ephemeral agent for simplicity
         use std::sync::Arc;
-        use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
-        use tap_agent::config::AgentConfig;
-        use tap_agent::did::{DIDGenerationOptions, DIDKeyGenerator, KeyType};
-        use tap_agent::storage::KeyStorage;
         use tap_agent::TapAgent;
 
-        let generator = DIDKeyGenerator::new();
-        let did_options = DIDGenerationOptions {
-            key_type: KeyType::Ed25519,
-        };
+        let (agent, generated_did) = TapAgent::from_ephemeral_key()
+            .await
+            .map_err(|e| Error::tool_execution(format!("Failed to create agent: {}", e)))?;
 
-        // Generate a new DID key
-        let generated_key = generator
-            .generate_did(did_options)
-            .map_err(|e| Error::tool_execution(format!("Failed to generate DID: {}", e)))?;
-
-        let generated_did = generated_key.did.clone();
         debug!("Generated new DID for agent: {}", generated_did);
-
-        // Save the key to storage with optional label
-        let stored_key = if let Some(ref label) = params.label {
-            KeyStorage::from_generated_key_with_label(&generated_key, label)
-        } else {
-            KeyStorage::from_generated_key(&generated_key)
-        };
-
-        // Load existing storage or create a new one
-        let mut storage = match KeyStorage::load_default() {
-            Ok(storage) => storage,
-            Err(_) => KeyStorage::new(),
-        };
-
-        // Add the key to storage
-        storage.add_key(stored_key);
-
-        // Save the updated storage
-        storage
-            .save_default()
-            .map_err(|e| Error::tool_execution(format!("Failed to save key to storage: {}", e)))?;
-
-        debug!("Key saved to storage for DID: {}", generated_did);
-
-        // Now create the TapAgent with the saved key
-        let default_key_path = KeyStorage::default_key_path().ok_or_else(|| {
-            Error::tool_execution("Could not determine default key path".to_string())
-        })?;
-
-        let key_manager_builder = AgentKeyManagerBuilder::new().load_from_path(default_key_path);
-        let key_manager = key_manager_builder
-            .build()
-            .map_err(|e| Error::tool_execution(format!("Failed to build key manager: {}", e)))?;
-
-        // Create agent config
-        let config = AgentConfig::new(generated_did.clone()).with_debug(true);
-
-        // Create the agent
-        let agent = TapAgent::new(config, Arc::new(key_manager));
 
         // Register the agent with the TapNode
         match self
@@ -138,6 +88,7 @@ impl ToolHandler for CreateAgentTool {
                     Error::tool_execution(format!("Failed to serialize response: {}", e))
                 })?;
 
+                debug!("CreateAgent response JSON: {}", response_json);
                 Ok(success_text_response(response_json))
             }
             Err(e) => {

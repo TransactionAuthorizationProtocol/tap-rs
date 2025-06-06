@@ -1,6 +1,7 @@
 //! TAP MCP tools implementation
 
 mod agent_tools;
+mod communication_tools;
 mod schema;
 mod transaction_tools;
 
@@ -13,6 +14,7 @@ use std::sync::Arc;
 use tracing::{debug, error};
 
 pub use agent_tools::*;
+pub use communication_tools::*;
 pub use transaction_tools::*;
 
 /// Default limit for pagination
@@ -75,6 +77,16 @@ impl ToolRegistry {
         tools.insert(
             "tap_list_transactions".to_string(),
             Box::new(ListTransactionsTool::new(tap_integration.clone())),
+        );
+
+        // Communication tools
+        tools.insert(
+            "tap_trust_ping".to_string(),
+            Box::new(TrustPingTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_basic_message".to_string(),
+            Box::new(BasicMessageTool::new(tap_integration.clone())),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

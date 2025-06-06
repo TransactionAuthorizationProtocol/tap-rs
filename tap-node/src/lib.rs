@@ -261,17 +261,22 @@ impl TapNode {
         let logging_processor = PlainMessageProcessorType::Logging(LoggingPlainMessageProcessor);
         let validation_processor =
             PlainMessageProcessorType::Validation(ValidationPlainMessageProcessor);
+        let trust_ping_processor = PlainMessageProcessorType::TrustPing(
+            TrustPingProcessor::with_event_bus(event_bus.clone()),
+        );
         let default_processor = PlainMessageProcessorType::Default(DefaultPlainMessageProcessor);
 
         let incoming_processor = CompositePlainMessageProcessor::new(vec![
             logging_processor.clone(),
             validation_processor.clone(),
+            trust_ping_processor.clone(),
             default_processor.clone(),
         ]);
 
         let outgoing_processor = CompositePlainMessageProcessor::new(vec![
             logging_processor,
             validation_processor,
+            trust_ping_processor,
             default_processor,
         ]);
 
@@ -1171,4 +1176,5 @@ use message::processor::LoggingPlainMessageProcessor;
 use message::processor::ValidationPlainMessageProcessor;
 use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
 use message::router::DefaultPlainMessageRouter;
+use message::trust_ping_processor::TrustPingProcessor;
 use message::RouterAsyncExt;
