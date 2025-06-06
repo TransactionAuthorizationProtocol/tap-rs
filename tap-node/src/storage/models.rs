@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::str::FromStr;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -154,6 +155,14 @@ impl TryFrom<&str> for DeliveryStatus {
     }
 }
 
+impl FromStr for DeliveryStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryType {
@@ -189,6 +198,14 @@ impl TryFrom<&str> for DeliveryType {
             "pickup" => Ok(DeliveryType::Pickup),
             _ => Err(format!("Invalid delivery type: {}", value)),
         }
+    }
+}
+
+impl FromStr for DeliveryType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
     }
 }
 

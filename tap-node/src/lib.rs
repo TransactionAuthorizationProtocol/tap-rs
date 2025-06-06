@@ -981,7 +981,7 @@ impl TapNode {
     }
 
     /// Send a message to an agent
-    /// 
+    ///
     /// This method now includes comprehensive delivery tracking and actual message delivery.
     /// For internal recipients (registered agents), messages are delivered directly.
     /// For external recipients, messages are delivered via HTTP with tracking.
@@ -1122,7 +1122,7 @@ impl TapNode {
         if is_internal_recipient {
             // Internal delivery - deliver to registered agent with tracking
             log::debug!("Delivering message internally to agent: {}", to_did);
-            
+
             #[cfg(feature = "storage")]
             let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager {
                 if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
@@ -1159,15 +1159,21 @@ impl TapNode {
             };
 
             // Process the message internally
-            match self.process_plain_message(processed_message.clone(), Some(&packed)).await {
+            match self
+                .process_plain_message(processed_message.clone(), Some(&packed))
+                .await
+            {
                 Ok(_) => {
                     log::debug!("Successfully delivered message internally to: {}", to_did);
-                    
+
                     // Update delivery record to success
                     #[cfg(feature = "storage")]
-                    if let (Some(delivery_id), Some(ref storage_manager)) = 
-                        (delivery_id, &self.agent_storage_manager) {
-                        if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(sender_storage) =
+                            storage_manager.get_agent_storage(&sender_did).await
+                        {
                             if let Err(e) = sender_storage
                                 .update_delivery_status(
                                     delivery_id,
@@ -1184,12 +1190,15 @@ impl TapNode {
                 }
                 Err(e) => {
                     log::error!("Failed to deliver message internally to {}: {}", to_did, e);
-                    
+
                     // Update delivery record to failed
                     #[cfg(feature = "storage")]
-                    if let (Some(delivery_id), Some(ref storage_manager)) = 
-                        (delivery_id, &self.agent_storage_manager) {
-                        if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(sender_storage) =
+                            storage_manager.get_agent_storage(&sender_did).await
+                        {
                             if let Err(e) = sender_storage
                                 .update_delivery_status(
                                     delivery_id,
@@ -1203,49 +1212,188 @@ impl TapNode {
                             }
                         }
                     }
-                    
+
                     return Err(e);
                 }
             }
         } else {
-            // External delivery - attempt HTTP delivery with tracking
+            // External delivery - use TapAgent's built-in HTTP delivery with tracking
             log::debug!("Attempting external delivery to: {}", to_did);
-            
-            // TODO: In a real implementation, you would:
-            // 1. Resolve the DID to find HTTP endpoints
-            // 2. Use HttpPlainMessageSenderWithTracking for delivery
-            // 3. Handle delivery results and update tracking
-            
-            // For now, create a delivery record but mark it as pending
+
+            // Get the sender agent for HTTP delivery
+            let sender_agent = self.agents.get_agent(&sender_did).await?;
+
+            // Resolve the service endpoint for the recipient
+            let endpoint = match sender_agent.get_service_endpoint(&to_did).await? {
+                Some(ep) => ep,
+                None => {
+                    log::warn!("No service endpoint found for {}, delivery failed", to_did);
+
+                    // Create failed delivery record
+                    #[cfg(feature = "storage")]
+                    if let Some(ref storage_manager) = self.agent_storage_manager {
+                        if let Ok(sender_storage) =
+                            storage_manager.get_agent_storage(&sender_did).await
+                        {
+                            if let Ok(delivery_id) = sender_storage
+                                .create_delivery(
+                                    &processed_message.id,
+                                    &packed,
+                                    &to_did,
+                                    None,
+                                    storage::models::DeliveryType::Https,
+                                )
+                                .await
+                            {
+                                let _ = sender_storage
+                                    .update_delivery_status(
+                                        delivery_id,
+                                        storage::models::DeliveryStatus::Failed,
+                                        None,
+                                        Some("No service endpoint found for recipient"),
+                                    )
+                                    .await;
+                            }
+                        }
+                    }
+
+                    return Err(Error::Dispatch(format!(
+                        "No service endpoint found for recipient: {}",
+                        to_did
+                    )));
+                }
+            };
+
+            // Create delivery record before attempting delivery
             #[cfg(feature = "storage")]
-            if let Some(ref storage_manager) = self.agent_storage_manager {
+            let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager {
                 if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
-                    // Create delivery record for external delivery
                     match sender_storage
                         .create_delivery(
                             &processed_message.id,
                             &packed, // Store the signed/packed message
                             &to_did,
-                            Some("https://external-endpoint.example.com"), // TODO: Resolve from DID
+                            Some(&endpoint),
                             storage::models::DeliveryType::Https,
                         )
                         .await
                     {
-                        Ok(delivery_id) => {
+                        Ok(id) => {
                             log::debug!(
-                                "Created external delivery record {} for message {} to {}",
-                                delivery_id,
+                                "Created external delivery record {} for message {} to {} at {}",
+                                id,
                                 processed_message.id,
-                                to_did
+                                to_did,
+                                endpoint
                             );
-                            
-                            // TODO: Implement actual HTTP delivery with tracking
-                            log::warn!("External delivery not yet implemented - message {} marked as pending delivery", processed_message.id);
+                            Some(id)
                         }
                         Err(e) => {
                             log::warn!("Failed to create external delivery record: {}", e);
+                            None
                         }
                     }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Attempt HTTP delivery using TapAgent's built-in functionality
+            match sender_agent.send_to_endpoint(&packed, &endpoint).await {
+                Ok(status_code) => {
+                    log::debug!(
+                        "Successfully delivered message {} to {} at {} (HTTP {})",
+                        processed_message.id,
+                        to_did,
+                        endpoint,
+                        status_code
+                    );
+
+                    // Update delivery record to success
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(sender_storage) =
+                            storage_manager.get_agent_storage(&sender_did).await
+                        {
+                            if let Err(e) = sender_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Success,
+                                    Some(status_code as i32),
+                                    None,
+                                )
+                                .await
+                            {
+                                log::warn!(
+                                    "Failed to update external delivery status to success: {}",
+                                    e
+                                );
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!(
+                        "Failed to deliver message {} to {} at {}: {}",
+                        processed_message.id,
+                        to_did,
+                        endpoint,
+                        e
+                    );
+
+                    // Update delivery record to failed
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(sender_storage) =
+                            storage_manager.get_agent_storage(&sender_did).await
+                        {
+                            // Extract HTTP status code from error if possible
+                            let error_msg = e.to_string();
+                            let http_status_code = if error_msg.contains("status:") {
+                                error_msg
+                                    .split("status:")
+                                    .nth(1)
+                                    .and_then(|s| s.trim().split_whitespace().next())
+                                    .and_then(|s| s.parse::<i32>().ok())
+                            } else {
+                                None
+                            };
+
+                            if let Err(e2) = sender_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Failed,
+                                    http_status_code,
+                                    Some(&error_msg),
+                                )
+                                .await
+                            {
+                                log::warn!(
+                                    "Failed to update external delivery status to failed: {}",
+                                    e2
+                                );
+                            }
+
+                            // Increment retry count for future retry processing
+                            if let Err(e2) = sender_storage
+                                .increment_delivery_retry_count(delivery_id)
+                                .await
+                            {
+                                log::warn!("Failed to increment retry count: {}", e2);
+                            }
+                        }
+                    }
+
+                    return Err(Error::Dispatch(format!(
+                        "HTTP delivery failed for {}: {}",
+                        to_did, e
+                    )));
                 }
             }
         }

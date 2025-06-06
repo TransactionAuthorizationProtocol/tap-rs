@@ -1474,6 +1474,184 @@ impl Storage {
 
         Ok(deliveries)
     }
+
+    /// Get all deliveries for a specific recipient
+    ///
+    /// # Arguments
+    ///
+    /// * `recipient_did` - The DID of the recipient
+    /// * `limit` - Maximum number of deliveries to return
+    /// * `offset` - Number of deliveries to skip (for pagination)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Delivery>)` - List of deliveries
+    /// * `Err(StorageError)` on database error
+    pub async fn get_deliveries_by_recipient(
+        &self,
+        recipient_did: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Delivery>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT id, message_id, message_text, recipient_did, delivery_url, delivery_type, status, retry_count, 
+                   last_http_status_code, error_message, created_at, updated_at, delivered_at
+            FROM deliveries 
+            WHERE recipient_did = ?1
+            ORDER BY created_at DESC
+            LIMIT ?2 OFFSET ?3
+            "#,
+        )
+        .bind(recipient_did)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut deliveries = Vec::new();
+        for (
+            id,
+            message_id,
+            message_text,
+            recipient_did,
+            delivery_url,
+            delivery_type,
+            status,
+            retry_count,
+            last_http_status_code,
+            error_message,
+            created_at,
+            updated_at,
+            delivered_at,
+        ) in rows
+        {
+            deliveries.push(Delivery {
+                id,
+                message_id,
+                message_text,
+                recipient_did,
+                delivery_url,
+                delivery_type: delivery_type.parse::<DeliveryType>().unwrap_or(DeliveryType::Internal),
+                status: status.parse::<DeliveryStatus>().unwrap_or(DeliveryStatus::Pending),
+                retry_count,
+                last_http_status_code,
+                error_message,
+                created_at,
+                updated_at,
+                delivered_at,
+            });
+        }
+
+        Ok(deliveries)
+    }
+
+    /// Get all deliveries for messages in a specific thread
+    ///
+    /// # Arguments
+    ///
+    /// * `thread_id` - The thread ID to search for
+    /// * `limit` - Maximum number of deliveries to return
+    /// * `offset` - Number of deliveries to skip (for pagination)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Delivery>)` - List of deliveries for messages in the thread
+    /// * `Err(StorageError)` on database error
+    pub async fn get_deliveries_for_thread(
+        &self,
+        thread_id: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Delivery>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT d.id, d.message_id, d.message_text, d.recipient_did, d.delivery_url, 
+                   d.delivery_type, d.status, d.retry_count, d.last_http_status_code, 
+                   d.error_message, d.created_at, d.updated_at, d.delivered_at
+            FROM deliveries d
+            INNER JOIN messages m ON d.message_id = m.message_id
+            WHERE m.thread_id = ?1
+            ORDER BY d.created_at ASC
+            LIMIT ?2 OFFSET ?3
+            "#,
+        )
+        .bind(thread_id)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut deliveries = Vec::new();
+        for (
+            id,
+            message_id,
+            message_text,
+            recipient_did,
+            delivery_url,
+            delivery_type,
+            status,
+            retry_count,
+            last_http_status_code,
+            error_message,
+            created_at,
+            updated_at,
+            delivered_at,
+        ) in rows
+        {
+            deliveries.push(Delivery {
+                id,
+                message_id,
+                message_text,
+                recipient_did,
+                delivery_url,
+                delivery_type: delivery_type.parse::<DeliveryType>().unwrap_or(DeliveryType::Internal),
+                status: status.parse::<DeliveryStatus>().unwrap_or(DeliveryStatus::Pending),
+                retry_count,
+                last_http_status_code,
+                error_message,
+                created_at,
+                updated_at,
+                delivered_at,
+            });
+        }
+
+        Ok(deliveries)
+    }
 }
 
 #[cfg(test)]

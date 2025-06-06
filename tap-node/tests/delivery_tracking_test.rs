@@ -1,11 +1,11 @@
 //! Test delivery tracking integration with message sending
 
 use std::sync::Arc;
-use tap_node::storage::models::{DeliveryStatus, DeliveryType};
-use tap_node::{NodeConfig, TapNode};
 use tap_agent::TapAgent;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Transfer, Party};
+use tap_msg::message::{Party, Transfer};
+use tap_node::storage::models::{DeliveryStatus, DeliveryType};
+use tap_node::{NodeConfig, TapNode};
 
 #[tokio::test]
 async fn test_delivery_tracking_with_send_message() -> Result<(), Box<dyn std::error::Error>> {
@@ -152,7 +152,10 @@ async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Err
             .get_deliveries_for_message(&message_id)
             .await?;
 
-        println!("Found {} delivery records for external message", deliveries.len());
+        println!(
+            "Found {} delivery records for external message",
+            deliveries.len()
+        );
 
         // Should have one delivery record for external delivery
         assert!(!deliveries.is_empty(), "No delivery records found");
@@ -164,9 +167,12 @@ async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Err
         assert_eq!(delivery.message_id, message_id);
         assert_eq!(delivery.recipient_did, external_did);
         assert_eq!(delivery.delivery_type, DeliveryType::Https);
-        assert_eq!(delivery.status, DeliveryStatus::Pending); // External delivery marked as pending
+        // External delivery should succeed with HTTP response (even if 403/404)
+        assert_eq!(delivery.status, DeliveryStatus::Success);
         assert!(delivery.delivery_url.is_some());
-        assert!(delivery.delivered_at.is_none()); // Not delivered yet
+        assert!(delivery.delivered_at.is_some()); // Delivered successfully
+                                                  // Should have HTTP status code recorded
+        assert!(delivery.last_http_status_code.is_some());
 
         // Verify that the signed message was stored
         assert!(!delivery.message_text.is_empty());
