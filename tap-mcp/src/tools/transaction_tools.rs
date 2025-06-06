@@ -146,30 +146,40 @@ impl ToolHandler for CreateTransferTool {
             }
         };
 
-        // Store the transaction in the agent's specific database
-        let storage = self
-            .tap_integration()
-            .storage_for_agent(&params.agent_did)
-            .await?;
+        // Determine recipient - use beneficiary if available, otherwise first recipient in the message
+        let recipient_did = if let Some(beneficiary) = &transfer.beneficiary {
+            beneficiary.id.clone()
+        } else if !didcomm_message.to.is_empty() {
+            didcomm_message.to[0].clone()
+        } else {
+            return Ok(error_text_response(
+                "No recipient found for transfer message".to_string(),
+            ));
+        };
 
-        match storage.insert_transaction(&didcomm_message).await {
-            Ok(_) => {
-                // Log the message in the audit trail
-                if let Err(e) = storage
-                    .log_message(
-                        &didcomm_message,
-                        tap_node::storage::MessageDirection::Outgoing,
-                        None,
-                    )
-                    .await
-                {
-                    error!("Failed to log message: {}", e);
-                }
+        debug!(
+            "Sending transfer from {} to {} with transaction ID: {}",
+            params.agent_did, recipient_did, transaction_id
+        );
+
+        // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(packed_message) => {
+                debug!(
+                    "Transfer message sent successfully to {}, packed message length: {}",
+                    recipient_did,
+                    packed_message.len()
+                );
 
                 let response = CreateTransferResponse {
                     transaction_id,
                     message_id: didcomm_message.id,
-                    status: "created".to_string(),
+                    status: "sent".to_string(),
                     created_at: chrono::Utc::now().to_rfc3339(),
                 };
 
@@ -180,9 +190,9 @@ impl ToolHandler for CreateTransferTool {
                 Ok(success_text_response(response_json))
             }
             Err(e) => {
-                error!("Failed to store transaction: {}", e);
+                error!("Failed to send transfer message: {}", e);
                 Ok(error_text_response(format!(
-                    "Failed to store transaction: {}",
+                    "Failed to send transfer message: {}",
                     e
                 )))
             }
@@ -276,25 +286,38 @@ impl ToolHandler for AuthorizeTool {
             }
         };
 
-        // Log the message in the agent's specific database
-        let storage = self
-            .tap_integration()
-            .storage_for_agent(&params.agent_did)
-            .await?;
+        // Determine recipient from the message
+        let recipient_did = if !didcomm_message.to.is_empty() {
+            didcomm_message.to[0].clone()
+        } else {
+            return Ok(error_text_response(
+                "No recipient found for authorize message".to_string(),
+            ));
+        };
 
-        match storage
-            .log_message(
-                &didcomm_message,
-                tap_node::storage::MessageDirection::Outgoing,
-                None,
-            )
+        debug!(
+            "Sending authorize from {} to {} for transaction: {}",
+            params.agent_did, recipient_did, params.transaction_id
+        );
+
+        // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
             .await
         {
-            Ok(_) => {
+            Ok(packed_message) => {
+                debug!(
+                    "Authorize message sent successfully to {}, packed message length: {}",
+                    recipient_did,
+                    packed_message.len()
+                );
+
                 let response = AuthorizeResponse {
                     transaction_id: params.transaction_id,
                     message_id: didcomm_message.id,
-                    status: "authorized".to_string(),
+                    status: "sent".to_string(),
                     authorized_at: chrono::Utc::now().to_rfc3339(),
                 };
 
@@ -305,9 +328,9 @@ impl ToolHandler for AuthorizeTool {
                 Ok(success_text_response(response_json))
             }
             Err(e) => {
-                error!("Failed to log authorize message: {}", e);
+                error!("Failed to send authorize message: {}", e);
                 Ok(error_text_response(format!(
-                    "Failed to log authorize message: {}",
+                    "Failed to send authorize message: {}",
                     e
                 )))
             }
@@ -400,25 +423,38 @@ impl ToolHandler for RejectTool {
             }
         };
 
-        // Log the message in the agent's specific database
-        let storage = self
-            .tap_integration()
-            .storage_for_agent(&params.agent_did)
-            .await?;
+        // Determine recipient from the message
+        let recipient_did = if !didcomm_message.to.is_empty() {
+            didcomm_message.to[0].clone()
+        } else {
+            return Ok(error_text_response(
+                "No recipient found for reject message".to_string(),
+            ));
+        };
 
-        match storage
-            .log_message(
-                &didcomm_message,
-                tap_node::storage::MessageDirection::Outgoing,
-                None,
-            )
+        debug!(
+            "Sending reject from {} to {} for transaction: {}",
+            params.agent_did, recipient_did, params.transaction_id
+        );
+
+        // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
             .await
         {
-            Ok(_) => {
+            Ok(packed_message) => {
+                debug!(
+                    "Reject message sent successfully to {}, packed message length: {}",
+                    recipient_did,
+                    packed_message.len()
+                );
+
                 let response = RejectResponse {
                     transaction_id: params.transaction_id,
                     message_id: didcomm_message.id,
-                    status: "rejected".to_string(),
+                    status: "sent".to_string(),
                     reason: params.reason,
                     rejected_at: chrono::Utc::now().to_rfc3339(),
                 };
@@ -430,9 +466,9 @@ impl ToolHandler for RejectTool {
                 Ok(success_text_response(response_json))
             }
             Err(e) => {
-                error!("Failed to log reject message: {}", e);
+                error!("Failed to send reject message: {}", e);
                 Ok(error_text_response(format!(
-                    "Failed to log reject message: {}",
+                    "Failed to send reject message: {}",
                     e
                 )))
             }
@@ -528,25 +564,39 @@ impl ToolHandler for CancelTool {
             }
         };
 
-        // Log the message in the agent's specific database
-        let storage = self
-            .tap_integration()
-            .storage_for_agent(&params.agent_did)
-            .await?;
 
-        match storage
-            .log_message(
-                &didcomm_message,
-                tap_node::storage::MessageDirection::Outgoing,
-                None,
-            )
+        // Determine recipient from the message
+        let recipient_did = if !didcomm_message.to.is_empty() {
+            didcomm_message.to[0].clone()
+        } else {
+            return Ok(error_text_response(
+                "No recipient found for cancel message".to_string(),
+            ));
+        };
+
+        debug!(
+            "Sending cancel from {} to {} for transaction: {}",
+            params.agent_did, recipient_did, params.transaction_id
+        );
+
+        // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
             .await
         {
-            Ok(_) => {
+            Ok(packed_message) => {
+                debug!(
+                    "Cancel message sent successfully to {}, packed message length: {}",
+                    recipient_did,
+                    packed_message.len()
+                );
+
                 let response = CancelResponse {
                     transaction_id: params.transaction_id,
                     message_id: didcomm_message.id,
-                    status: "canceled".to_string(),
+                    status: "sent".to_string(),
                     canceled_by: params.by,
                     reason: params.reason,
                     canceled_at: chrono::Utc::now().to_rfc3339(),
@@ -559,9 +609,9 @@ impl ToolHandler for CancelTool {
                 Ok(success_text_response(response_json))
             }
             Err(e) => {
-                error!("Failed to log cancel message: {}", e);
+                error!("Failed to send cancel message: {}", e);
                 Ok(error_text_response(format!(
-                    "Failed to log cancel message: {}",
+                    "Failed to send cancel message: {}",
                     e
                 )))
             }
@@ -657,26 +707,40 @@ impl ToolHandler for SettleTool {
             }
         };
 
-        // Log the message in the agent's specific database
-        let storage = self
-            .tap_integration()
-            .storage_for_agent(&params.agent_did)
-            .await?;
 
-        match storage
-            .log_message(
-                &didcomm_message,
-                tap_node::storage::MessageDirection::Outgoing,
-                None,
-            )
+        // Determine recipient from the message
+        let recipient_did = if !didcomm_message.to.is_empty() {
+            didcomm_message.to[0].clone()
+        } else {
+            return Ok(error_text_response(
+                "No recipient found for settle message".to_string(),
+            ));
+        };
+
+        debug!(
+            "Sending settle from {} to {} for transaction: {}",
+            params.agent_did, recipient_did, params.transaction_id
+        );
+
+        // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
             .await
         {
-            Ok(_) => {
+            Ok(packed_message) => {
+                debug!(
+                    "Settle message sent successfully to {}, packed message length: {}",
+                    recipient_did,
+                    packed_message.len()
+                );
+
                 let response = SettleResponse {
                     transaction_id: params.transaction_id,
                     settlement_id: params.settlement_id,
                     message_id: didcomm_message.id,
-                    status: "settled".to_string(),
+                    status: "sent".to_string(),
                     amount: params.amount,
                     settled_at: chrono::Utc::now().to_rfc3339(),
                 };
@@ -688,9 +752,9 @@ impl ToolHandler for SettleTool {
                 Ok(success_text_response(response_json))
             }
             Err(e) => {
-                error!("Failed to log settle message: {}", e);
+                error!("Failed to send settle message: {}", e);
                 Ok(error_text_response(format!(
-                    "Failed to log settle message: {}",
+                    "Failed to send settle message: {}",
                     e
                 )))
             }
