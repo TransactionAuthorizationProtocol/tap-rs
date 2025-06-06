@@ -9,6 +9,7 @@ TAP-MCP is a thin wrapper around TAP Node that exposes transaction authorization
 - **Agent Management**: Create TAP agents with auto-generated DIDs and manage cryptographic identities
 - **Transaction Creation**: Initiate transfers, payments, and other TAP operations  
 - **Message Monitoring**: Access transaction history and message details
+- **Delivery Tracking**: Monitor message delivery status, retry counts, and error details
 - **Schema Access**: Get JSON schemas for TAP message types
 - **DID-based Storage**: Uses TAP Node's DID-organized database structure (~/.tap/{did}/)
 
@@ -248,6 +249,19 @@ tap://messages?limit=100&offset=50     # Pagination
 tap://messages/msg-id-123              # Specific message
 ```
 
+### `tap://deliveries`
+Access to message delivery tracking information.
+
+```
+tap://deliveries?agent_did=did:key:z6Mk... # Delivery records for specific agent
+tap://deliveries?message_id=msg-123        # Deliveries for specific message
+tap://deliveries?recipient_did=did:example:bob # Deliveries to specific recipient
+tap://deliveries?delivery_type=https       # Filter by delivery type (https/internal/return_path/pickup)
+tap://deliveries?status=failed             # Filter by status (pending/success/failed)
+tap://deliveries?limit=50&offset=100       # Pagination
+tap://deliveries/123                        # Specific delivery record by ID
+```
+
 ### `tap://schemas`
 JSON schemas for TAP message types.
 
@@ -356,6 +370,12 @@ tap-mcp-client resource tap://messages?thread_id=tx-abc123
 
 # List recent messages
 tap-mcp-client resource tap://messages
+
+# Check delivery status for the transaction
+tap-mcp-client resource tap://deliveries?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc
+
+# Check failed deliveries
+tap-mcp-client resource tap://deliveries?status=failed
 ```
 
 ### Alternative Workflow: Rejecting a Transaction

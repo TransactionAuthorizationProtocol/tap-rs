@@ -125,6 +125,7 @@ See individual tool READMEs for detailed usage instructions.
 - **Persistent Storage**: SQLite-based storage with automatic migrations providing:
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all messages for compliance and debugging
+  - **Message delivery tracking** with status monitoring, retry counts, and error logging
 
 ## Getting Started with tap-msg
 

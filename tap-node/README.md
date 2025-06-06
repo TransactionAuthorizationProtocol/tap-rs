@@ -19,9 +19,10 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 - **Configurable Components**: Customize node behavior with pluggable components
 - **Thread-Safe Design**: Safely share the node across threads with appropriate synchronization
 - **WASM Compatibility**: Optional WASM support for browser environments
-- **Persistent Storage**: SQLite-based storage using async SQLx with dual functionality:
+- **Persistent Storage**: SQLite-based storage using async SQLx with comprehensive functionality:
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all incoming/outgoing messages
+  - **Message delivery tracking** with status monitoring, retry counts, and error logging
 
 ## Installation
 
@@ -269,20 +270,20 @@ impl MessageProcessor for MyCustomProcessor {
 
 ## Message Transport
 
-TAP Node provides multiple options for sending messages between nodes:
+TAP Node provides multiple options for sending messages between nodes with optional delivery tracking:
 
 ### HTTP Message Sender
 
 For standard request-response communication patterns:
 
 ```rust
-use tap_node::{HttpMessageSender, MessageSender};
+use tap_node::{HttpPlainMessageSender, PlainMessageSender};
 
 // Create an HTTP sender with default settings
-let sender = HttpMessageSender::new("https://recipient-endpoint.example.com".to_string());
+let sender = HttpPlainMessageSender::new("https://recipient-endpoint.example.com".to_string());
 
 // Create with custom settings (timeout and retries)
-let sender = HttpMessageSender::with_options(
+let sender = HttpPlainMessageSender::with_options(
     "https://recipient-endpoint.example.com".to_string(),
     5000,  // 5 second timeout
     3      // 3 retries with exponential backoff
@@ -295,21 +296,51 @@ sender.send(
 ).await?;
 ```
 
+### HTTP Message Sender with Delivery Tracking
+
+For HTTP delivery with comprehensive tracking and monitoring:
+
+```rust
+use tap_node::{HttpPlainMessageSenderWithTracking, PlainMessageSender, Storage};
+use std::sync::Arc;
+
+// Create storage for tracking deliveries
+let storage = Arc::new(Storage::new(None).await?);
+
+// Create a sender with delivery tracking
+let sender = HttpPlainMessageSenderWithTracking::new(
+    "https://recipient-endpoint.example.com".to_string(),
+    storage
+);
+
+// Send message - delivery will be tracked automatically
+sender.send(
+    packed_message,
+    vec!["did:example:recipient".to_string()]
+).await?;
+
+// Check delivery status later using storage queries
+```
+
+This sender automatically:
+- Creates delivery records before sending with status `pending`
+- Updates status to `success` or `failed` after delivery attempts
+- Records HTTP status codes and error messages
+- Tracks retry counts for future automatic retry processing
+
 ### WebSocket Message Sender
 
 For real-time bidirectional communication:
 
 ```rust
-use tap_node::{WebSocketMessageSender, MessageSender};
+use tap_node::{WebSocketPlainMessageSender, PlainMessageSender};
 
 // Create a WebSocket sender with default settings
-let sender = WebSocketMessageSender::new("https://recipient-endpoint.example.com".to_string());
+let sender = WebSocketPlainMessageSender::new("https://recipient-endpoint.example.com".to_string());
 
 // Create with custom settings
-let sender = WebSocketMessageSender::with_options(
-    "https://recipient-endpoint.example.com".to_string(),
-    30000,  // 30 second connection timeout
-    5       // 5 reconnection attempts
+let sender = WebSocketPlainMessageSender::with_options(
+    "https://recipient-endpoint.example.com".to_string()
 );
 
 // Send a message over an established WebSocket connection
@@ -331,6 +362,86 @@ The TAP Node includes built-in support for persistent storage using SQLite. This
 
 1. **Transaction Storage**: Automatic storage of Transfer and Payment messages for business logic processing
 2. **Message Audit Trail**: Complete logging of all incoming and outgoing messages for compliance and debugging
+3. **Message Delivery Tracking**: Comprehensive tracking of message delivery attempts with status monitoring
+
+## Message Delivery Tracking
+
+TAP Node provides comprehensive delivery tracking for both external HTTP deliveries and internal agent-to-agent message routing. This feature enables monitoring, debugging, and automatic retry processing.
+
+### Delivery Types
+
+The system tracks four types of message delivery:
+
+- **`https`**: HTTP/HTTPS delivery to external endpoints
+- **`internal`**: Delivery to agents within the same TAP Node
+- **`return_path`**: Return path delivery (future implementation)  
+- **`pickup`**: Pickup delivery (future implementation)
+
+### Automatic Tracking
+
+Delivery tracking is automatic for:
+
+1. **HTTP External Deliveries**: When using `HttpPlainMessageSenderWithTracking`
+2. **Internal Agent Deliveries**: When messages are processed by the node and delivered to registered agents
+3. **Router-based Deliveries**: When messages are routed through the default router to fallback agents
+
+### Tracking Information
+
+Each delivery record includes:
+
+- **Message identification**: Message ID and full message text
+- **Recipient details**: Target DID and delivery URL (for HTTP)
+- **Status tracking**: `pending`, `success`, or `failed`
+- **Error information**: HTTP status codes and error messages
+- **Retry tracking**: Count for automatic retry processing
+- **Timestamps**: Creation, update, and delivery completion times
+
+### Querying Delivery Status
+
+```rust
+use tap_node::storage::{DeliveryStatus, DeliveryType};
+
+// Get storage from the node (agent-specific storage)
+if let Some(storage_manager) = node.agent_storage_manager() {
+    let agent_storage = storage_manager.get_agent_storage("did:example:agent").await?;
+    
+    // Get all deliveries for a specific message
+    let deliveries = agent_storage.get_deliveries_for_message("msg_12345").await?;
+    
+    // Get pending deliveries for retry processing
+    let pending = agent_storage.get_pending_deliveries(
+        10,  // max retry count
+        50   // limit
+    ).await?;
+    
+    // Get failed deliveries for a recipient
+    let failed = agent_storage.get_failed_deliveries_for_recipient(
+        "did:example:recipient",
+        20,  // limit
+        0    // offset
+    ).await?;
+    
+    // Get specific delivery by ID
+    let delivery = agent_storage.get_delivery_by_id(123).await?;
+    
+    // Examine delivery details
+    for delivery in deliveries {
+        println!("Delivery {} to {} - Status: {:?} - Type: {:?}", 
+            delivery.id,
+            delivery.recipient_did,
+            delivery.status,
+            delivery.delivery_type
+        );
+        
+        if let Some(error) = delivery.error_message {
+            println!("Error: {}", error);
+        }
+        
+        if let Some(http_status) = delivery.last_http_status_code {
+            println!("HTTP Status: {}", http_status);
+        }
+    }
+}
 
 ### Storage Configuration
 
@@ -427,7 +538,7 @@ if let Some(storage) = node.storage() {
 
 ### Database Schema
 
-The storage system maintains two tables:
+The storage system maintains three tables:
 
 #### `transactions` Table
 Business logic for Transfer and Payment messages:
@@ -446,6 +557,17 @@ Complete audit trail of all messages:
 - Thread IDs (including parent threads)
 - Full message content stored in JSON column type
 - Creation timestamp
+
+#### `deliveries` Table
+Message delivery tracking and monitoring:
+- Delivery ID (auto-incrementing primary key)
+- Message ID and full message text
+- Recipient DID and delivery URL (for HTTP)
+- Delivery type (`https`, `internal`, `return_path`, `pickup`)
+- Status (`pending`, `success`, `failed`)
+- Retry count for automatic retry processing
+- HTTP status code and error message for debugging
+- Timestamps for creation, updates, and delivery completion
 
 ### Disabling Storage
 
