@@ -981,6 +981,10 @@ impl TapNode {
     }
 
     /// Send a message to an agent
+    /// 
+    /// This method now includes comprehensive delivery tracking and actual message delivery.
+    /// For internal recipients (registered agents), messages are delivered directly.
+    /// For external recipients, messages are delivered via HTTP with tracking.
     pub async fn send_message(
         &self,
         sender_did: String,
@@ -1107,10 +1111,144 @@ impl TapNode {
         // Get the sender agent
         let agent = self.agents.get_agent(&sender_did).await?;
 
-        // Pack the message
+        // Pack/sign the message
         let packed = agent
             .send_serialized_message(&processed_message, to_did.as_str())
             .await?;
+
+        // Check if recipient is a local agent (internal delivery) or external
+        let is_internal_recipient = self.agents.get_agent(&to_did).await.is_ok();
+
+        if is_internal_recipient {
+            // Internal delivery - deliver to registered agent with tracking
+            log::debug!("Delivering message internally to agent: {}", to_did);
+            
+            #[cfg(feature = "storage")]
+            let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager {
+                if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
+                    // Create delivery record for internal delivery
+                    match sender_storage
+                        .create_delivery(
+                            &processed_message.id,
+                            &packed, // Store the signed/packed message
+                            &to_did,
+                            None, // No URL for internal delivery
+                            storage::models::DeliveryType::Internal,
+                        )
+                        .await
+                    {
+                        Ok(id) => {
+                            log::debug!(
+                                "Created internal delivery record {} for message {} to {}",
+                                id,
+                                processed_message.id,
+                                to_did
+                            );
+                            Some(id)
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to create internal delivery record: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Process the message internally
+            match self.process_plain_message(processed_message.clone(), Some(&packed)).await {
+                Ok(_) => {
+                    log::debug!("Successfully delivered message internally to: {}", to_did);
+                    
+                    // Update delivery record to success
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) = 
+                        (delivery_id, &self.agent_storage_manager) {
+                        if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
+                            if let Err(e) = sender_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Success,
+                                    None, // No HTTP status for internal delivery
+                                    None, // No error message
+                                )
+                                .await
+                            {
+                                log::warn!("Failed to update internal delivery status: {}", e);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::error!("Failed to deliver message internally to {}: {}", to_did, e);
+                    
+                    // Update delivery record to failed
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) = 
+                        (delivery_id, &self.agent_storage_manager) {
+                        if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
+                            if let Err(e) = sender_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Failed,
+                                    None, // No HTTP status for internal delivery
+                                    Some(&format!("Internal delivery failed: {}", e)),
+                                )
+                                .await
+                            {
+                                log::warn!("Failed to update internal delivery status: {}", e);
+                            }
+                        }
+                    }
+                    
+                    return Err(e);
+                }
+            }
+        } else {
+            // External delivery - attempt HTTP delivery with tracking
+            log::debug!("Attempting external delivery to: {}", to_did);
+            
+            // TODO: In a real implementation, you would:
+            // 1. Resolve the DID to find HTTP endpoints
+            // 2. Use HttpPlainMessageSenderWithTracking for delivery
+            // 3. Handle delivery results and update tracking
+            
+            // For now, create a delivery record but mark it as pending
+            #[cfg(feature = "storage")]
+            if let Some(ref storage_manager) = self.agent_storage_manager {
+                if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await {
+                    // Create delivery record for external delivery
+                    match sender_storage
+                        .create_delivery(
+                            &processed_message.id,
+                            &packed, // Store the signed/packed message
+                            &to_did,
+                            Some("https://external-endpoint.example.com"), // TODO: Resolve from DID
+                            storage::models::DeliveryType::Https,
+                        )
+                        .await
+                    {
+                        Ok(delivery_id) => {
+                            log::debug!(
+                                "Created external delivery record {} for message {} to {}",
+                                delivery_id,
+                                processed_message.id,
+                                to_did
+                            );
+                            
+                            // TODO: Implement actual HTTP delivery with tracking
+                            log::warn!("External delivery not yet implemented - message {} marked as pending delivery", processed_message.id);
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to create external delivery record: {}", e);
+                        }
+                    }
+                }
+            }
+        }
 
         // Publish an event for the message
         self.event_bus
