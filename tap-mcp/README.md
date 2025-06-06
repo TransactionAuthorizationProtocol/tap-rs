@@ -93,7 +93,7 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
-TAP-MCP provides 8 comprehensive tools covering the complete TAP transaction lifecycle:
+TAP-MCP provides 15 comprehensive tools covering the complete TAP transaction lifecycle:
 
 ### Agent Management
 
@@ -226,6 +226,67 @@ List transactions with filtering and pagination support. Shows only transactions
   },
   "limit": 100,
   "offset": 0
+}
+```
+
+### Customer and Connection Management
+
+#### `tap_list_customers`
+Lists all customers (parties) that a specific agent acts on behalf of. Analyzes transaction history to identify parties represented by the agent and includes metadata about each party.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Returns:
+```json
+{
+  "customers": [
+    {
+      "@id": "did:example:alice",
+      "metadata": {
+        "name": "Alice Smith",
+        "company": "ACME Corp"
+      },
+      "transaction_count": 5,
+      "transaction_ids": ["tx-123", "tx-456", "tx-789"]
+    }
+  ],
+  "total": 1
+}
+```
+
+#### `tap_list_connections`
+Lists all counterparties (connections) that a specific party has transacted with. Searches across all agent databases to find transaction relationships and includes role information.
+
+```json
+{
+  "party_id": "did:example:alice",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Returns:
+```json
+{
+  "connections": [
+    {
+      "@id": "did:example:bob",
+      "metadata": {
+        "name": "Bob Johnson",
+        "company": "Widget Inc"
+      },
+      "transaction_count": 3,
+      "transaction_ids": ["tx-123", "tx-456", "tx-789"],
+      "roles": ["beneficiary", "originator"]
+    }
+  ],
+  "total": 1
 }
 ```
 
@@ -376,6 +437,14 @@ tap-mcp-client resource tap://deliveries?agent_did=did:key:z6MkpGuzuD38tpgZKPfmL
 
 # Check failed deliveries
 tap-mcp-client resource tap://deliveries?status=failed
+
+# List customers that the agent represents
+echo '{"agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"}' | \
+  tap-mcp-client call tap_list_customers
+
+# List connections for a specific party
+echo '{"party_id": "did:example:alice"}' | \
+  tap-mcp-client call tap_list_connections
 ```
 
 ### Alternative Workflow: Rejecting a Transaction
@@ -537,6 +606,8 @@ Once configured, you can interact with TAP through Claude Desktop by asking ques
 - "Create a new TAP agent for settlement services"
 - "Show me recent TAP transactions"
 - "Help me authorize a transfer transaction"
+- "List all customers that my agent represents"
+- "Show me connections for a specific party"
 
 ### Python MCP Client
 
@@ -600,11 +671,30 @@ async def main():
             list_result = await session.call_tool(
                 "tap_list_transactions",
                 {
+                    "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
                     "limit": 10,
                     "filter": {"message_type": "Transfer"}
                 }
             )
             print(f"Recent transfers: {list_result}")
+
+            # List customers of the agent
+            customers_result = await session.call_tool(
+                "tap_list_customers",
+                {
+                    "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"
+                }
+            )
+            print(f"Agent customers: {customers_result}")
+
+            # List connections for a specific party
+            connections_result = await session.call_tool(
+                "tap_list_connections",
+                {
+                    "party_id": "did:example:alice"
+                }
+            )
+            print(f"Party connections: {connections_result}")
 
 if __name__ == "__main__":
     asyncio.run(main())

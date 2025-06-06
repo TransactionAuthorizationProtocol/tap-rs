@@ -2,6 +2,7 @@
 
 mod agent_tools;
 mod communication_tools;
+mod customer_tools;
 mod delivery_tools;
 mod schema;
 mod transaction_tools;
@@ -16,6 +17,7 @@ use tracing::{debug, error};
 
 pub use agent_tools::*;
 pub use communication_tools::*;
+pub use customer_tools::*;
 pub use delivery_tools::*;
 pub use transaction_tools::*;
 
@@ -103,6 +105,16 @@ impl ToolRegistry {
         tools.insert(
             "tap_list_deliveries_by_thread".to_string(),
             Box::new(ListDeliveriesByThreadTool::new(tap_integration.clone())),
+        );
+
+        // Customer and connection tools
+        tools.insert(
+            "tap_list_customers".to_string(),
+            Box::new(ListCustomersTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_list_connections".to_string(),
+            Box::new(ListConnectionsTool::new(tap_integration.clone())),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

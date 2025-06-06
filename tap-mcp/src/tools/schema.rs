@@ -300,3 +300,59 @@ pub fn list_transactions_schema() -> Value {
         "additionalProperties": false
     })
 }
+
+/// Schema for list_customers tool
+pub fn list_customers_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent whose customers to list"
+            },
+            "limit": {
+                "type": "number",
+                "description": "Maximum number of customers to return",
+                "default": 50,
+                "minimum": 1,
+                "maximum": 1000
+            },
+            "offset": {
+                "type": "number",
+                "description": "Number of customers to skip for pagination",
+                "default": 0,
+                "minimum": 0
+            }
+        },
+        "required": ["agent_did"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for list_connections tool
+pub fn list_connections_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "party_id": {
+                "type": "string",
+                "description": "The DID of the party whose connections to list"
+            },
+            "limit": {
+                "type": "number",
+                "description": "Maximum number of connections to return",
+                "default": 50,
+                "minimum": 1,
+                "maximum": 1000
+            },
+            "offset": {
+                "type": "number",
+                "description": "Number of connections to skip for pagination",
+                "default": 0,
+                "minimum": 0
+            }
+        },
+        "required": ["party_id"],
+        "additionalProperties": false
+    })
+}

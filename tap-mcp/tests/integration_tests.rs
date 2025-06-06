@@ -174,7 +174,7 @@ async fn test_list_tools() -> Result<()> {
 
     if let Some(result) = response.result {
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 13); // All 13 tools should be available (including communication and delivery tools)
+        assert_eq!(tools.len(), 15); // All 15 tools should be available (including communication, delivery, and customer tools)
 
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
@@ -191,6 +191,8 @@ async fn test_list_tools() -> Result<()> {
         assert!(tool_names.contains(&"tap_list_deliveries_by_recipient"));
         assert!(tool_names.contains(&"tap_list_deliveries_by_message"));
         assert!(tool_names.contains(&"tap_list_deliveries_by_thread"));
+        assert!(tool_names.contains(&"tap_list_customers"));
+        assert!(tool_names.contains(&"tap_list_connections"));
     }
 
     Ok(())
