@@ -4,6 +4,7 @@ mod agent_tools;
 mod communication_tools;
 mod customer_tools;
 mod delivery_tools;
+mod received_tools;
 mod schema;
 mod transaction_tools;
 
@@ -19,6 +20,7 @@ pub use agent_tools::*;
 pub use communication_tools::*;
 pub use customer_tools::*;
 pub use delivery_tools::*;
+pub use received_tools::*;
 pub use transaction_tools::*;
 
 /// Default limit for pagination
@@ -115,6 +117,20 @@ impl ToolRegistry {
         tools.insert(
             "tap_list_connections".to_string(),
             Box::new(ListConnectionsTool::new(tap_integration.clone())),
+        );
+
+        // Received message tools
+        tools.insert(
+            "tap_list_received".to_string(),
+            Box::new(ListReceivedTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_get_pending_received".to_string(),
+            Box::new(GetPendingReceivedTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_view_raw_received".to_string(),
+            Box::new(ViewRawReceivedTool::new(tap_integration)),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

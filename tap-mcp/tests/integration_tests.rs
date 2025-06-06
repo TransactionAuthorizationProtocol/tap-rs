@@ -174,7 +174,7 @@ async fn test_list_tools() -> Result<()> {
 
     if let Some(result) = response.result {
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 15); // All 15 tools should be available (including communication, delivery, and customer tools)
+        assert_eq!(tools.len(), 18); // All 18 tools should be available (including communication, delivery, customer, and received message tools)
 
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
@@ -193,6 +193,9 @@ async fn test_list_tools() -> Result<()> {
         assert!(tool_names.contains(&"tap_list_deliveries_by_thread"));
         assert!(tool_names.contains(&"tap_list_customers"));
         assert!(tool_names.contains(&"tap_list_connections"));
+        assert!(tool_names.contains(&"tap_list_received"));
+        assert!(tool_names.contains(&"tap_get_pending_received"));
+        assert!(tool_names.contains(&"tap_view_raw_received"));
     }
 
     Ok(())
@@ -556,7 +559,7 @@ async fn test_list_resources() -> Result<()> {
 
     if let Some(result) = response.result {
         let resources = result["resources"].as_array().unwrap();
-        assert_eq!(resources.len(), 4); // agents, messages, deliveries, schemas
+        assert_eq!(resources.len(), 5); // agents, messages, deliveries, schemas, received
 
         let resource_uris: Vec<&str> = resources
             .iter()
@@ -567,6 +570,7 @@ async fn test_list_resources() -> Result<()> {
         assert!(resource_uris.contains(&"tap://messages"));
         assert!(resource_uris.contains(&"tap://deliveries"));
         assert!(resource_uris.contains(&"tap://schemas"));
+        assert!(resource_uris.contains(&"tap://received"));
     }
 
     Ok(())

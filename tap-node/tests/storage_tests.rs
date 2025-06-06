@@ -133,7 +133,7 @@ mod storage_tests {
             json!({}),
         );
         assert!(storage
-            .log_message(&msg, MessageDirection::Incoming, None)
+            .log_message(&msg, MessageDirection::Incoming)
             .await
             .is_ok());
     }
@@ -238,11 +238,11 @@ mod storage_tests {
         );
 
         storage
-            .log_message(&incoming1, MessageDirection::Incoming, None)
+            .log_message(&incoming1, MessageDirection::Incoming)
             .await
             .unwrap();
         storage
-            .log_message(&incoming2, MessageDirection::Incoming, None)
+            .log_message(&incoming2, MessageDirection::Incoming)
             .await
             .unwrap();
 
@@ -259,11 +259,11 @@ mod storage_tests {
         );
 
         storage
-            .log_message(&outgoing1, MessageDirection::Outgoing, None)
+            .log_message(&outgoing1, MessageDirection::Outgoing)
             .await
             .unwrap();
         storage
-            .log_message(&outgoing2, MessageDirection::Outgoing, None)
+            .log_message(&outgoing2, MessageDirection::Outgoing)
             .await
             .unwrap();
 
@@ -302,7 +302,7 @@ mod storage_tests {
         );
 
         storage
-            .log_message(&msg, MessageDirection::Incoming, None)
+            .log_message(&msg, MessageDirection::Incoming)
             .await
             .unwrap();
 
@@ -337,13 +337,13 @@ mod storage_tests {
 
         // First insertion should succeed
         assert!(storage
-            .log_message(&msg, MessageDirection::Incoming, None)
+            .log_message(&msg, MessageDirection::Incoming)
             .await
             .is_ok());
 
         // Second insertion should silently succeed (idempotent)
         assert!(storage
-            .log_message(&msg, MessageDirection::Incoming, None)
+            .log_message(&msg, MessageDirection::Incoming)
             .await
             .is_ok());
 
@@ -374,11 +374,11 @@ mod storage_tests {
         child_msg.pthid = Some("thread_parent".to_string());
 
         storage
-            .log_message(&parent_msg, MessageDirection::Incoming, None)
+            .log_message(&parent_msg, MessageDirection::Incoming)
             .await
             .unwrap();
         storage
-            .log_message(&child_msg, MessageDirection::Outgoing, None)
+            .log_message(&child_msg, MessageDirection::Outgoing)
             .await
             .unwrap();
 
@@ -412,7 +412,7 @@ mod storage_tests {
                 json!({}),
             );
             storage
-                .log_message(&msg, MessageDirection::Incoming, None)
+                .log_message(&msg, MessageDirection::Incoming)
                 .await
                 .unwrap();
 
@@ -460,11 +460,11 @@ mod storage_tests {
 
         // Log them as messages
         storage
-            .log_message(&connect_msg, MessageDirection::Incoming, None)
+            .log_message(&connect_msg, MessageDirection::Incoming)
             .await
             .unwrap();
         storage
-            .log_message(&auth_msg, MessageDirection::Incoming, None)
+            .log_message(&auth_msg, MessageDirection::Incoming)
             .await
             .unwrap();
 
@@ -479,7 +479,7 @@ mod storage_tests {
         // Now add a transfer message
         let transfer_msg = create_transfer_message("transfer_001");
         storage
-            .log_message(&transfer_msg, MessageDirection::Incoming, None)
+            .log_message(&transfer_msg, MessageDirection::Incoming)
             .await
             .unwrap();
         storage.insert_transaction(&transfer_msg).await.unwrap();
@@ -511,7 +511,7 @@ mod storage_tests {
                     json!({}),
                 );
                 storage_clone
-                    .log_message(&msg, MessageDirection::Incoming, None)
+                    .log_message(&msg, MessageDirection::Incoming)
                     .await
             });
             handles.push(handle);
@@ -590,7 +590,7 @@ mod storage_tests {
         );
 
         storage
-            .log_message(&msg, MessageDirection::Incoming, None)
+            .log_message(&msg, MessageDirection::Incoming)
             .await
             .unwrap();
 

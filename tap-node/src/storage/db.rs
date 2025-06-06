@@ -6,8 +6,8 @@ use tracing::{debug, info};
 
 use super::error::StorageError;
 use super::models::{
-    Delivery, DeliveryStatus, DeliveryType, Message, MessageDirection, Transaction,
-    TransactionStatus, TransactionType,
+    Delivery, DeliveryStatus, DeliveryType, Message, MessageDirection, Received, ReceivedStatus,
+    SourceType, Transaction, TransactionStatus, TransactionType,
 };
 
 /// Storage backend for TAP transactions and message audit trail
@@ -795,7 +795,6 @@ impl Storage {
     ///
     /// * `message` - The DIDComm PlainMessage to log
     /// * `direction` - Whether the message is incoming or outgoing
-    /// * `raw_message` - Optional raw JWE/JWS message string
     ///
     /// # Errors
     ///
@@ -806,7 +805,6 @@ impl Storage {
         &self,
         message: &PlainMessage,
         direction: MessageDirection,
-        raw_message: Option<&str>,
     ) -> Result<(), StorageError> {
         let message_json = serde_json::to_value(message)?;
         let message_id = message.id.clone();
@@ -823,8 +821,8 @@ impl Storage {
 
         let result = sqlx::query(
             r#"
-            INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json, raw_message)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            INSERT INTO messages (message_id, message_type, from_did, to_did, thread_id, parent_thread_id, direction, message_json)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
             "#,
         )
         .bind(&message_id)
@@ -835,7 +833,6 @@ impl Storage {
         .bind(parent_thread_id)
         .bind(direction.to_string())
         .bind(sqlx::types::Json(message_json))
-        .bind(raw_message)
         .execute(&self.pool)
         .await;
 
@@ -1660,6 +1657,330 @@ impl Storage {
 
         Ok(deliveries)
     }
+
+    /// Create a new received message record
+    ///
+    /// This records a raw incoming message (JWE, JWS, or plain JSON) before processing.
+    ///
+    /// # Arguments
+    ///
+    /// * `raw_message` - The raw message content as received
+    /// * `source_type` - The type of source (https, internal, websocket, etc.)
+    /// * `source_identifier` - Optional identifier for the source (URL, agent DID, etc.)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(i64)` - The ID of the created record
+    /// * `Err(StorageError)` on database error
+    pub async fn create_received(
+        &self,
+        raw_message: &str,
+        source_type: SourceType,
+        source_identifier: Option<&str>,
+    ) -> Result<i64, StorageError> {
+        // Try to extract message ID from the raw message
+        let message_id =
+            if let Ok(json_value) = serde_json::from_str::<serde_json::Value>(raw_message) {
+                json_value
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            } else {
+                None
+            };
+
+        let result = sqlx::query(
+            r#"
+            INSERT INTO received (message_id, raw_message, source_type, source_identifier)
+            VALUES (?1, ?2, ?3, ?4)
+            "#,
+        )
+        .bind(message_id)
+        .bind(raw_message)
+        .bind(source_type.to_string())
+        .bind(source_identifier)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// Update the status of a received message
+    ///
+    /// # Arguments
+    ///
+    /// * `received_id` - The ID of the received record
+    /// * `status` - The new status (processed, failed)
+    /// * `processed_message_id` - Optional ID of the processed message in the messages table
+    /// * `error_message` - Optional error message if processing failed
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` on success
+    /// * `Err(StorageError)` on database error
+    pub async fn update_received_status(
+        &self,
+        received_id: i64,
+        status: ReceivedStatus,
+        processed_message_id: Option<&str>,
+        error_message: Option<&str>,
+    ) -> Result<(), StorageError> {
+        let now = chrono::Utc::now().to_rfc3339();
+
+        sqlx::query(
+            r#"
+            UPDATE received 
+            SET status = ?1, processed_at = ?2, processed_message_id = ?3, error_message = ?4
+            WHERE id = ?5
+            "#,
+        )
+        .bind(status.to_string())
+        .bind(&now)
+        .bind(processed_message_id)
+        .bind(error_message)
+        .bind(received_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get a received message by ID
+    ///
+    /// # Arguments
+    ///
+    /// * `received_id` - The ID of the received record
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(Received))` if found
+    /// * `Ok(None)` if not found
+    /// * `Err(StorageError)` on database error
+    pub async fn get_received_by_id(
+        &self,
+        received_id: i64,
+    ) -> Result<Option<Received>, StorageError> {
+        let result = sqlx::query_as::<
+            _,
+            (
+                i64,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+                String,
+                Option<String>,
+                String,
+                Option<String>,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT id, message_id, raw_message, source_type, source_identifier, 
+                   status, error_message, received_at, processed_at, processed_message_id
+            FROM received WHERE id = ?1
+            "#,
+        )
+        .bind(received_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match result {
+            Some((
+                id,
+                message_id,
+                raw_message,
+                source_type,
+                source_identifier,
+                status,
+                error_message,
+                received_at,
+                processed_at,
+                processed_message_id,
+            )) => Ok(Some(Received {
+                id,
+                message_id,
+                raw_message,
+                source_type: SourceType::try_from(source_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                source_identifier,
+                status: ReceivedStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                error_message,
+                received_at,
+                processed_at,
+                processed_message_id,
+            })),
+            None => Ok(None),
+        }
+    }
+
+    /// Get pending received messages for processing
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of messages to return
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Received>)` - List of pending received messages
+    /// * `Err(StorageError)` on database error
+    pub async fn get_pending_received(&self, limit: u32) -> Result<Vec<Received>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                i64,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+                String,
+                Option<String>,
+                String,
+                Option<String>,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT id, message_id, raw_message, source_type, source_identifier, 
+                   status, error_message, received_at, processed_at, processed_message_id
+            FROM received 
+            WHERE status = 'pending'
+            ORDER BY received_at ASC
+            LIMIT ?1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut received_messages = Vec::new();
+        for (
+            id,
+            message_id,
+            raw_message,
+            source_type,
+            source_identifier,
+            status,
+            error_message,
+            received_at,
+            processed_at,
+            processed_message_id,
+        ) in rows
+        {
+            received_messages.push(Received {
+                id,
+                message_id,
+                raw_message,
+                source_type: SourceType::try_from(source_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                source_identifier,
+                status: ReceivedStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                error_message,
+                received_at,
+                processed_at,
+                processed_message_id,
+            });
+        }
+
+        Ok(received_messages)
+    }
+
+    /// List received messages with optional filtering
+    ///
+    /// # Arguments
+    ///
+    /// * `limit` - Maximum number of messages to return
+    /// * `offset` - Number of messages to skip (for pagination)
+    /// * `source_type` - Optional filter by source type
+    /// * `status` - Optional filter by status
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Received>)` - List of received messages
+    /// * `Err(StorageError)` on database error
+    pub async fn list_received(
+        &self,
+        limit: u32,
+        offset: u32,
+        source_type: Option<SourceType>,
+        status: Option<ReceivedStatus>,
+    ) -> Result<Vec<Received>, StorageError> {
+        let mut query = "SELECT id, message_id, raw_message, source_type, source_identifier, status, error_message, received_at, processed_at, processed_message_id FROM received WHERE 1=1".to_string();
+        let mut bind_values: Vec<String> = Vec::new();
+
+        if let Some(st) = source_type {
+            query.push_str(" AND source_type = ?");
+            bind_values.push(st.to_string());
+        }
+
+        if let Some(s) = status {
+            query.push_str(" AND status = ?");
+            bind_values.push(s.to_string());
+        }
+
+        query.push_str(" ORDER BY received_at DESC LIMIT ? OFFSET ?");
+
+        // Build the query dynamically based on filters
+        let mut sqlx_query = sqlx::query_as::<
+            _,
+            (
+                i64,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+                String,
+                Option<String>,
+                String,
+                Option<String>,
+                Option<String>,
+            ),
+        >(&query);
+
+        for value in bind_values {
+            sqlx_query = sqlx_query.bind(value);
+        }
+
+        let rows = sqlx_query
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?;
+
+        let mut received_messages = Vec::new();
+        for (
+            id,
+            message_id,
+            raw_message,
+            source_type,
+            source_identifier,
+            status,
+            error_message,
+            received_at,
+            processed_at,
+            processed_message_id,
+        ) in rows
+        {
+            received_messages.push(Received {
+                id,
+                message_id,
+                raw_message,
+                source_type: SourceType::try_from(source_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                source_identifier,
+                status: ReceivedStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                error_message,
+                received_at,
+                processed_at,
+                processed_message_id,
+            });
+        }
+
+        Ok(received_messages)
+    }
 }
 
 #[cfg(test)]
@@ -1812,11 +2133,11 @@ mod tests {
 
         // Log messages
         storage
-            .log_message(&connect_message, MessageDirection::Incoming, None)
+            .log_message(&connect_message, MessageDirection::Incoming)
             .await
             .unwrap();
         storage
-            .log_message(&authorize_message, MessageDirection::Outgoing, None)
+            .log_message(&authorize_message, MessageDirection::Outgoing)
             .await
             .unwrap();
 
@@ -1841,7 +2162,7 @@ mod tests {
 
         // Test duplicate message handling (should not error)
         storage
-            .log_message(&connect_message, MessageDirection::Incoming, None)
+            .log_message(&connect_message, MessageDirection::Incoming)
             .await
             .unwrap();
         let all_messages_after = storage.list_messages(10, 0, None).await.unwrap();

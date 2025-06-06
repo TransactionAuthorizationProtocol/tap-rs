@@ -225,3 +225,106 @@ pub struct Delivery {
     pub updated_at: String,
     pub delivered_at: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SourceType {
+    /// HTTP/HTTPS delivery from external endpoints
+    Https,
+    /// Internal delivery from agents within the same node
+    Internal,
+    /// WebSocket connection
+    WebSocket,
+    /// Return path delivery
+    ReturnPath,
+    /// Pickup delivery
+    Pickup,
+}
+
+impl fmt::Display for SourceType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SourceType::Https => write!(f, "https"),
+            SourceType::Internal => write!(f, "internal"),
+            SourceType::WebSocket => write!(f, "websocket"),
+            SourceType::ReturnPath => write!(f, "return_path"),
+            SourceType::Pickup => write!(f, "pickup"),
+        }
+    }
+}
+
+impl TryFrom<&str> for SourceType {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "https" => Ok(SourceType::Https),
+            "internal" => Ok(SourceType::Internal),
+            "websocket" => Ok(SourceType::WebSocket),
+            "return_path" => Ok(SourceType::ReturnPath),
+            "pickup" => Ok(SourceType::Pickup),
+            _ => Err(format!("Invalid source type: {}", value)),
+        }
+    }
+}
+
+impl FromStr for SourceType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReceivedStatus {
+    Pending,
+    Processed,
+    Failed,
+}
+
+impl fmt::Display for ReceivedStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ReceivedStatus::Pending => write!(f, "pending"),
+            ReceivedStatus::Processed => write!(f, "processed"),
+            ReceivedStatus::Failed => write!(f, "failed"),
+        }
+    }
+}
+
+impl TryFrom<&str> for ReceivedStatus {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "pending" => Ok(ReceivedStatus::Pending),
+            "processed" => Ok(ReceivedStatus::Processed),
+            "failed" => Ok(ReceivedStatus::Failed),
+            _ => Err(format!("Invalid received status: {}", value)),
+        }
+    }
+}
+
+impl FromStr for ReceivedStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Received {
+    pub id: i64,
+    pub message_id: Option<String>,
+    pub raw_message: String,
+    pub source_type: SourceType,
+    pub source_identifier: Option<String>,
+    pub status: ReceivedStatus,
+    pub error_message: Option<String>,
+    pub received_at: String,
+    pub processed_at: Option<String>,
+    pub processed_message_id: Option<String>,
+}

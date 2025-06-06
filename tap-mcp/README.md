@@ -93,7 +93,7 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
-TAP-MCP provides 15 comprehensive tools covering the complete TAP transaction lifecycle:
+TAP-MCP provides 18 comprehensive tools covering the complete TAP transaction lifecycle:
 
 ### Agent Management
 
@@ -290,6 +290,41 @@ Returns:
 }
 ```
 
+### Message Debugging Tools
+
+#### `tap_list_received`
+Lists raw received messages with filtering and pagination support. Shows all incoming messages (JWE, JWS, or plain) before processing.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "status": "pending",
+  "source_type": "https",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `tap_get_pending_received`
+Gets pending received messages that haven't been processed yet. Useful for debugging message processing issues.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "limit": 50
+}
+```
+
+#### `tap_view_raw_received`
+Views the raw content of a received message. Shows the complete raw message as received (JWE, JWS, or plain JSON).
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "received_id": 42
+}
+```
+
 ## Available Resources
 
 ### `tap://agents`
@@ -328,6 +363,17 @@ JSON schemas for TAP message types.
 
 ```
 tap://schemas                          # All schemas
+```
+
+### `tap://received`
+Access to raw received messages before processing.
+
+```
+tap://received?agent_did=did:key:z6Mk... # Received messages for specific agent
+tap://received?agent_did=did:key:z6Mk...&status=pending # Filter by status (pending/processed/failed)
+tap://received?agent_did=did:key:z6Mk...&source_type=https # Filter by source type
+tap://received?agent_did=did:key:z6Mk...&limit=50&offset=100 # Pagination
+tap://received/123                      # Specific received message by ID
 ```
 
 ## Configuration

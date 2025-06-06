@@ -413,8 +413,64 @@ impl TapNode {
     /// * `Ok(())` if the message was successfully processed
     /// * `Err(Error)` if there was an error during processing
     pub async fn receive_message(&self, message: serde_json::Value) -> Result<()> {
+        // Default to internal source when no source is specified
+        self.receive_message_from_source(message, storage::SourceType::Internal, None)
+            .await
+    }
+
+    /// Receive and process an incoming message with source information
+    ///
+    /// This method handles the complete lifecycle of an incoming message with
+    /// tracking of where the message came from.
+    ///
+    /// # Parameters
+    ///
+    /// * `message` - The message as a JSON Value (can be plain, JWS, or JWE)
+    /// * `source_type` - The type of source (https, internal, websocket, etc.)
+    /// * `source_identifier` - Optional identifier for the source (URL, agent DID, etc.)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the message was successfully processed
+    /// * `Err(Error)` if there was an error during processing
+    pub async fn receive_message_from_source(
+        &self,
+        message: serde_json::Value,
+        source_type: storage::SourceType,
+        source_identifier: Option<&str>,
+    ) -> Result<()> {
         // Store the raw message for logging
         let raw_message = serde_json::to_string(&message).ok();
+
+        // Store the raw message in the received table
+        #[cfg(feature = "storage")]
+        let received_id = if let Some(ref _storage_manager) = self.agent_storage_manager {
+            // For now, store in centralized storage if available
+            if let Some(ref storage) = self.storage {
+                match storage
+                    .create_received(
+                        raw_message.as_ref().unwrap_or(&"{}".to_string()),
+                        source_type.clone(),
+                        source_identifier,
+                    )
+                    .await
+                {
+                    Ok(id) => {
+                        log::debug!("Created received record {} for incoming message", id);
+                        Some(id)
+                    }
+                    Err(e) => {
+                        log::warn!("Failed to create received record: {}", e);
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         use tap_agent::{verify_jws, Jwe, Jws};
 
         // Determine message type
@@ -432,8 +488,28 @@ impl TapNode {
                 .map_err(|e| Error::Verification(format!("JWS verification failed: {}", e)))?;
 
             // Process the verified plain message
-            self.process_plain_message(plain_message, raw_message.as_deref())
-                .await
+            let result = self.process_plain_message(plain_message).await;
+
+            // Update the received record
+            #[cfg(feature = "storage")]
+            if let (Some(id), Some(ref storage)) = (received_id, &self.storage) {
+                let status = if result.is_ok() {
+                    storage::ReceivedStatus::Processed
+                } else {
+                    storage::ReceivedStatus::Failed
+                };
+                let error_msg = result.as_ref().err().map(|e| e.to_string());
+                let _ = storage
+                    .update_received_status(
+                        id,
+                        status,
+                        None, // We'll set this after processing
+                        error_msg.as_deref(),
+                    )
+                    .await;
+            }
+
+            result
         } else if is_encrypted {
             // Route encrypted message to each matching agent
             let jwe: Jwe = serde_json::from_value(message.clone())
@@ -465,29 +541,67 @@ impl TapNode {
                 }
             }
 
-            if !processed {
-                return Err(Error::Processing(
+            let result = if !processed {
+                Err(Error::Processing(
                     "No agent could process the encrypted message".to_string(),
-                ));
+                ))
+            } else {
+                Ok(())
+            };
+
+            // Update the received record for encrypted messages
+            #[cfg(feature = "storage")]
+            if let (Some(id), Some(ref storage)) = (received_id, &self.storage) {
+                let status = if result.is_ok() {
+                    storage::ReceivedStatus::Processed
+                } else {
+                    storage::ReceivedStatus::Failed
+                };
+                let error_msg = result.as_ref().err().map(|e| e.to_string());
+                let _ = storage
+                    .update_received_status(
+                        id,
+                        status,
+                        None, // We don't have access to the decrypted message ID
+                        error_msg.as_deref(),
+                    )
+                    .await;
             }
-            Ok(())
+
+            result
         } else {
             // Plain message - parse and process
             let plain_message: PlainMessage = serde_json::from_value(message).map_err(|e| {
                 Error::Serialization(format!("Failed to parse PlainMessage: {}", e))
             })?;
 
-            self.process_plain_message(plain_message, raw_message.as_deref())
-                .await
+            let result = self.process_plain_message(plain_message).await;
+
+            // Update the received record
+            #[cfg(feature = "storage")]
+            if let (Some(id), Some(ref storage)) = (received_id, &self.storage) {
+                let status = if result.is_ok() {
+                    storage::ReceivedStatus::Processed
+                } else {
+                    storage::ReceivedStatus::Failed
+                };
+                let error_msg = result.as_ref().err().map(|e| e.to_string());
+                let _ = storage
+                    .update_received_status(
+                        id,
+                        status,
+                        None, // We'll set this after processing
+                        error_msg.as_deref(),
+                    )
+                    .await;
+            }
+
+            result
         }
     }
 
     /// Process a plain message through the pipeline
-    async fn process_plain_message(
-        &self,
-        message: PlainMessage,
-        raw_message: Option<&str>,
-    ) -> Result<()> {
+    async fn process_plain_message(&self, message: PlainMessage) -> Result<()> {
         // Validate the message if storage/validation is available
         #[cfg(feature = "storage")]
         {
@@ -576,11 +690,7 @@ impl TapNode {
                             {
                                 // Log the message
                                 match agent_storage
-                                    .log_message(
-                                        &message,
-                                        storage::MessageDirection::Incoming,
-                                        raw_message,
-                                    )
+                                    .log_message(&message, storage::MessageDirection::Incoming)
                                     .await
                                 {
                                     Ok(_) => log::debug!(
@@ -625,11 +735,7 @@ impl TapNode {
                             {
                                 // Log the message to this recipient's storage
                                 match agent_storage
-                                    .log_message(
-                                        &message,
-                                        storage::MessageDirection::Incoming,
-                                        raw_message,
-                                    )
+                                    .log_message(&message, storage::MessageDirection::Incoming)
                                     .await
                                 {
                                     Ok(_) => {
@@ -667,7 +773,6 @@ impl TapNode {
                                         .log_message(
                                             &message,
                                             storage::MessageDirection::Incoming,
-                                            raw_message,
                                         )
                                         .await
                                     {
@@ -697,11 +802,7 @@ impl TapNode {
                                 // Fall back to centralized storage if available
                                 if let Some(ref storage) = self.storage {
                                     let _ = storage
-                                        .log_message(
-                                            &message,
-                                            storage::MessageDirection::Incoming,
-                                            raw_message,
-                                        )
+                                        .log_message(&message, storage::MessageDirection::Incoming)
                                         .await;
                                 }
                             }
@@ -1018,11 +1119,7 @@ impl TapNode {
                             {
                                 // Log the message
                                 match agent_storage
-                                    .log_message(
-                                        &message,
-                                        storage::MessageDirection::Outgoing,
-                                        None,
-                                    )
+                                    .log_message(&message, storage::MessageDirection::Outgoing)
                                     .await
                                 {
                                     Ok(_) => log::debug!(
@@ -1061,7 +1158,7 @@ impl TapNode {
                     {
                         // Log the message to the sender's storage
                         match sender_storage
-                            .log_message(&message, storage::MessageDirection::Outgoing, None)
+                            .log_message(&message, storage::MessageDirection::Outgoing)
                             .await
                         {
                             Ok(_) => log::debug!(
@@ -1080,7 +1177,7 @@ impl TapNode {
                         // Fall back to centralized storage if available
                         if let Some(ref storage) = self.storage {
                             let _ = storage
-                                .log_message(&message, storage::MessageDirection::Outgoing, None)
+                                .log_message(&message, storage::MessageDirection::Outgoing)
                                 .await;
                         }
                     }
@@ -1185,10 +1282,7 @@ impl TapNode {
                 };
 
                 // Process the message internally
-                match self
-                    .process_plain_message(processed_message.clone(), Some(&packed))
-                    .await
-                {
+                match self.process_plain_message(processed_message.clone()).await {
                     Ok(_) => {
                         log::debug!(
                             "Successfully delivered message internally to: {}",

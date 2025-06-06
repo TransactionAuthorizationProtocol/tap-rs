@@ -37,7 +37,7 @@ Stores Transfer and Payment transactions for business logic processing:
 - `updated_at`: Last update timestamp
 
 ### messages table
-Audit trail for all DIDComm messages:
+Audit trail for all DIDComm messages (plaintext only):
 - `id`: Auto-incrementing primary key
 - `message_id`: Unique DIDComm message ID
 - `message_type`: TAP message type URI
@@ -48,6 +48,21 @@ Audit trail for all DIDComm messages:
 - `direction`: Message direction (incoming/outgoing)
 - `message_json`: Full DIDComm message as JSON
 - `created_at`: Timestamp when message was logged
+- `status`: Message acceptance status (pending/accepted/rejected)
+- `raw_message`: **DEPRECATED** - Raw messages are now stored in the `received` table
+
+### received table
+Stores raw incoming messages (JWE, JWS, or plain JSON) before processing:
+- `id`: Auto-incrementing primary key
+- `message_id`: Message ID extracted from raw message (if available)
+- `raw_message`: Complete raw message content as received
+- `source_type`: Source of the message (`https`, `internal`, `websocket`, `return_path`, `pickup`)
+- `source_identifier`: Optional identifier for the source (URL, agent DID, etc.)
+- `status`: Processing status (`pending`, `processed`, `failed`)
+- `error_message`: Error details if processing failed
+- `received_at`: Timestamp when message was received
+- `processed_at`: Timestamp when processing completed
+- `processed_message_id`: Foreign key to messages table for successfully processed messages
 
 ### deliveries table
 Message delivery tracking and monitoring:
@@ -136,6 +151,25 @@ if let Some(storage) = node.storage() {
     // Manual message logging (automatic for node operations)
     storage.log_message(&message, MessageDirection::Incoming).await?;
     
+    // Receive raw messages (automatic when using receive_message_from_source)
+    let received_id = storage.create_received(
+        raw_message_str,
+        SourceType::Https,
+        Some("https://example.com/sender")
+    ).await?;
+    
+    // Update processing status
+    storage.update_received_status(
+        received_id,
+        ReceivedStatus::Processed,
+        Some("msg_123"), // processed message ID
+        None
+    ).await?;
+    
+    // Query received messages
+    let pending = storage.get_pending_received(100).await?;
+    let all_received = storage.list_received(50, 0, None, None).await?;
+    
     // Delivery tracking operations
     let deliveries = storage.get_deliveries_for_message("msg_123").await?;
     let pending = storage.get_pending_deliveries(10, 50).await?;
@@ -176,14 +210,18 @@ let logs_dir = Storage::default_logs_dir(None);
 1. The `reference_id` uses the PlainMessage's `id` field as the unique identifier
 2. All incoming and outgoing messages are automatically logged to the messages table
 3. Transfer and Payment messages are additionally stored in the transactions table
-4. **Delivery tracking is automatic for:**
+4. **Raw message storage:**
+   - All incoming messages (JWE, JWS, or plain) are stored in the `received` table
+   - The `raw_message` column in `messages` table is deprecated
+   - Use `receive_message_from_source()` to specify message source information
+5. **Delivery tracking is automatic for:**
    - HTTP deliveries when using `HttpPlainMessageSenderWithTracking`
    - Internal agent deliveries within TAP Node
    - Router-based message deliveries
-5. WAL mode is enabled for better concurrency
-6. Connection pooling supports up to 10 concurrent connections
-7. Duplicate messages are silently ignored (no error on re-insertion)
-8. Delivery records include full message text for debugging and retry processing
+6. WAL mode is enabled for better concurrency
+7. Connection pooling supports up to 10 concurrent connections
+8. Duplicate messages are silently ignored (no error on re-insertion)
+9. Delivery records include full message text for debugging and retry processing
 
 ## Delivery Tracking Features
 

@@ -51,6 +51,12 @@ impl ResourceRegistry {
                 description: "JSON schemas for TAP message types".to_string(),
                 mime_type: Some("application/json".to_string()),
             },
+            Resource {
+                uri: "tap://received".to_string(),
+                name: "TAP Received Messages".to_string(),
+                description: "Raw received messages before processing. Query parameters: ?agent_did=<did>&source_type=<https|internal|websocket|return_path|pickup>&status=<pending|processed|failed>&limit=<n>&offset=<n>".to_string(),
+                mime_type: Some("application/json".to_string()),
+            },
         ]
     }
 
@@ -70,6 +76,7 @@ impl ResourceRegistry {
             Some("messages") => self.read_messages_resource(url.path(), url.query()).await,
             Some("deliveries") => self.read_deliveries_resource(url.path(), url.query()).await,
             Some("schemas") => self.read_schemas_resource(url.path()).await,
+            Some("received") => self.read_received_resource(url.path(), url.query()).await,
             _ => Err(Error::resource_not_found(format!(
                 "Unknown resource: {}",
                 uri
@@ -549,6 +556,177 @@ impl ResourceRegistry {
         Err(Error::resource_not_found(format!(
             "Delivery not found: {}",
             delivery_id
+        )))
+    }
+
+    /// Read received messages resource
+    async fn read_received_resource(
+        &self,
+        path: &str,
+        query: Option<&str>,
+    ) -> Result<Vec<ResourceContent>> {
+        // Parse path for specific received ID
+        if !path.is_empty() && path != "/" {
+            let received_id = path.trim_start_matches('/');
+            return self.read_specific_received(received_id).await;
+        }
+
+        // Parse query parameters
+        let mut source_type_filter = None;
+        let mut status_filter = None;
+        let mut agent_did_filter = None;
+        let mut limit = 50;
+        let mut offset = 0;
+
+        if let Some(query_str) = query {
+            let params: HashMap<String, String> = url::form_urlencoded::parse(query_str.as_bytes())
+                .into_owned()
+                .collect();
+
+            agent_did_filter = params.get("agent_did").cloned();
+
+            // Parse source type filter if provided
+            if let Some(source_type_str) = params.get("source_type") {
+                source_type_filter = match source_type_str.as_str() {
+                    "https" => Some(tap_node::storage::SourceType::Https),
+                    "internal" => Some(tap_node::storage::SourceType::Internal),
+                    "websocket" => Some(tap_node::storage::SourceType::WebSocket),
+                    "return_path" => Some(tap_node::storage::SourceType::ReturnPath),
+                    "pickup" => Some(tap_node::storage::SourceType::Pickup),
+                    _ => None,
+                };
+            }
+
+            // Parse status filter if provided
+            if let Some(status_str) = params.get("status") {
+                status_filter = match status_str.as_str() {
+                    "pending" => Some(tap_node::storage::ReceivedStatus::Pending),
+                    "processed" => Some(tap_node::storage::ReceivedStatus::Processed),
+                    "failed" => Some(tap_node::storage::ReceivedStatus::Failed),
+                    _ => None,
+                };
+            }
+
+            if let Some(limit_str) = params.get("limit") {
+                if let Ok(l) = limit_str.parse::<u32>() {
+                    limit = l.min(1000); // Cap at 1000
+                }
+            }
+
+            if let Some(offset_str) = params.get("offset") {
+                if let Ok(o) = offset_str.parse::<u32>() {
+                    offset = o;
+                }
+            }
+        }
+
+        // Get received messages from storage
+        let received_messages = if let Some(agent_did) = agent_did_filter.as_ref() {
+            // Use agent-specific storage
+            let agent_storage = self
+                .tap_integration()
+                .storage_for_agent(agent_did)
+                .await
+                .map_err(|e| {
+                    Error::resource_not_found(format!("Failed to get agent storage: {}", e))
+                })?;
+            agent_storage
+                .list_received(limit, offset, source_type_filter.clone(), status_filter.clone())
+                .await?
+        } else {
+            return Err(Error::resource_not_found(
+                "agent_did parameter is required to view received messages",
+            ));
+        };
+
+        let content = json!({
+            "received_messages": received_messages.iter().map(|msg| json!({
+                "id": msg.id,
+                "message_id": msg.message_id,
+                "source_type": format!("{:?}", msg.source_type).to_lowercase(),
+                "source_identifier": msg.source_identifier,
+                "status": format!("{:?}", msg.status).to_lowercase(),
+                "error_message": msg.error_message,
+                "received_at": msg.received_at,
+                "processed_at": msg.processed_at,
+                "processed_message_id": msg.processed_message_id,
+                // Include a preview of the raw message (first 200 chars)
+                "raw_message_preview": if msg.raw_message.len() > 200 {
+                    format!("{}...", &msg.raw_message[..200])
+                } else {
+                    msg.raw_message.clone()
+                }
+            })).collect::<Vec<_>>(),
+            "total": received_messages.len(),
+            "applied_filters": {
+                "agent_did": agent_did_filter,
+                "source_type": source_type_filter.as_ref().map(|s| format!("{:?}", s).to_lowercase()),
+                "status": status_filter.as_ref().map(|s| format!("{:?}", s).to_lowercase()),
+                "limit": limit,
+                "offset": offset
+            }
+        });
+
+        Ok(vec![ResourceContent {
+            uri: format!(
+                "tap://received{}",
+                if query.is_some() {
+                    format!("?{}", query.unwrap())
+                } else {
+                    String::new()
+                }
+            ),
+            mime_type: Some("application/json".to_string()),
+            text: Some(serde_json::to_string_pretty(&content)?),
+            blob: None,
+        }])
+    }
+
+    /// Read a specific received message by ID
+    async fn read_specific_received(&self, received_id: &str) -> Result<Vec<ResourceContent>> {
+        // Parse received_id as i64
+        let id: i64 = received_id
+            .parse()
+            .map_err(|_| Error::resource_not_found("Received ID must be a valid number"))?;
+
+        // Search all agent storages for the received message
+        let agents = self.tap_integration().list_agents().await?;
+        for agent in agents {
+            if let Ok(agent_storage) = self.tap_integration().storage_for_agent(&agent.id).await {
+                if let Ok(Some(received)) = agent_storage.get_received_by_id(id).await {
+                    // Try to parse raw message as JSON
+                    let raw_json = serde_json::from_str::<serde_json::Value>(&received.raw_message).ok();
+
+                    let content = json!({
+                        "received": {
+                            "id": received.id,
+                            "message_id": received.message_id,
+                            "source_type": format!("{:?}", received.source_type).to_lowercase(),
+                            "source_identifier": received.source_identifier,
+                            "status": format!("{:?}", received.status).to_lowercase(),
+                            "error_message": received.error_message,
+                            "received_at": received.received_at,
+                            "processed_at": received.processed_at,
+                            "processed_message_id": received.processed_message_id,
+                            "raw_message": received.raw_message,
+                            "raw_message_json": raw_json
+                        },
+                        "found_in_agent": agent.id
+                    });
+
+                    return Ok(vec![ResourceContent {
+                        uri: format!("tap://received/{}", received_id),
+                        mime_type: Some("application/json".to_string()),
+                        text: Some(serde_json::to_string_pretty(&content)?),
+                        blob: None,
+                    }]);
+                }
+            }
+        }
+
+        Err(Error::resource_not_found(format!(
+            "Received message not found: {}",
+            received_id
         )))
     }
 
