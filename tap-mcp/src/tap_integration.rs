@@ -205,12 +205,12 @@ impl TapIntegration {
                 // Process each stored key
                 for (did, stored_key) in &storage.keys {
                     let mut metadata = std::collections::HashMap::new();
-                    
+
                     // Include the label from the stored key
                     if !stored_key.label.is_empty() {
                         metadata.insert("label".to_string(), stored_key.label.clone());
                     }
-                    
+
                     // Also include any additional metadata from the stored key
                     for (key, value) in &stored_key.metadata {
                         metadata.insert(key.clone(), value.clone());
@@ -222,7 +222,7 @@ impl TapIntegration {
                     agents.push(AgentInfo {
                         id: did.clone(),
                         role: "Agent".to_string(), // Default role, will be determined per transaction
-                        for_party: did.clone(),   // Default to self, will be determined per transaction
+                        for_party: did.clone(), // Default to self, will be determined per transaction
                         policies,
                         metadata,
                     });

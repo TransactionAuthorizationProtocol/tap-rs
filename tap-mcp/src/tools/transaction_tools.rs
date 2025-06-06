@@ -564,7 +564,6 @@ impl ToolHandler for CancelTool {
             }
         };
 
-
         // Determine recipient from the message
         let recipient_did = if !didcomm_message.to.is_empty() {
             didcomm_message.to[0].clone()
@@ -706,7 +705,6 @@ impl ToolHandler for SettleTool {
                 )));
             }
         };
-
 
         // Determine recipient from the message
         let recipient_did = if !didcomm_message.to.is_empty() {

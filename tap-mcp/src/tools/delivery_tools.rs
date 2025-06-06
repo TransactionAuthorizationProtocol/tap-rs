@@ -77,25 +77,31 @@ impl ToolHandler for ListDeliveriesByRecipientTool {
         );
 
         // Get agent-specific storage
-        let storage = self.tap_integration.storage_for_agent(&params.agent_did)
+        let storage = self
+            .tap_integration
+            .storage_for_agent(&params.agent_did)
             .await
             .map_err(|e| Error::configuration(format!("Failed to get storage for agent: {}", e)))?;
-        
+
         // Query deliveries based on status filter
         let deliveries = match params.status_filter.as_deref() {
-            Some("failed") => {
-                storage
-                    .get_failed_deliveries_for_recipient(&params.recipient_did, params.limit, params.offset)
-                    .await
-                    .map_err(|e| Error::tool_execution(format!("Failed to get deliveries: {}", e)))?
-            }
+            Some("failed") => storage
+                .get_failed_deliveries_for_recipient(
+                    &params.recipient_did,
+                    params.limit,
+                    params.offset,
+                )
+                .await
+                .map_err(|e| Error::tool_execution(format!("Failed to get deliveries: {}", e)))?,
             _ => {
                 // For now, we only have get_failed_deliveries_for_recipient implemented
                 // We need to add a general get_deliveries_by_recipient function
                 storage
                     .get_deliveries_by_recipient(&params.recipient_did, params.limit, params.offset)
                     .await
-                    .map_err(|e| Error::tool_execution(format!("Failed to get deliveries: {}", e)))?
+                    .map_err(|e| {
+                        Error::tool_execution(format!("Failed to get deliveries: {}", e))
+                    })?
             }
         };
 
@@ -209,10 +215,12 @@ impl ToolHandler for ListDeliveriesByMessageTool {
         );
 
         // Get agent-specific storage
-        let storage = self.tap_integration.storage_for_agent(&params.agent_did)
+        let storage = self
+            .tap_integration
+            .storage_for_agent(&params.agent_did)
             .await
             .map_err(|e| Error::configuration(format!("Failed to get storage for agent: {}", e)))?;
-        
+
         // Query deliveries for the specific message
         let deliveries = storage
             .get_deliveries_for_message(&params.message_id)
@@ -315,10 +323,12 @@ impl ToolHandler for ListDeliveriesByThreadTool {
         );
 
         // Get agent-specific storage
-        let storage = self.tap_integration.storage_for_agent(&params.agent_did)
+        let storage = self
+            .tap_integration
+            .storage_for_agent(&params.agent_did)
             .await
             .map_err(|e| Error::configuration(format!("Failed to get storage for agent: {}", e)))?;
-        
+
         // Query deliveries for the specific thread
         let deliveries = storage
             .get_deliveries_for_thread(&params.thread_id, params.limit, params.offset)
@@ -361,7 +371,8 @@ impl ToolHandler for ListDeliveriesByThreadTool {
     fn get_definition(&self) -> Tool {
         Tool {
             name: "tap_list_deliveries_by_thread".to_string(),
-            description: "Lists TAP message deliveries for all messages in a specific thread".to_string(),
+            description: "Lists TAP message deliveries for all messages in a specific thread"
+                .to_string(),
             input_schema: json!({
                 "type": "object",
                 "properties": {

@@ -79,7 +79,10 @@ impl ToolHandler for ListCustomersTool {
         {
             Ok(storage) => storage,
             Err(e) => {
-                error!("Failed to get storage for agent {}: {}", params.agent_did, e);
+                error!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                );
                 return Ok(error_text_response(format!(
                     "Failed to get storage for agent {}: {}",
                     params.agent_did, e
@@ -104,7 +107,9 @@ impl ToolHandler for ListCustomersTool {
 
         // Process each transaction to find customers
         for transaction in transactions {
-            if let Ok(tap_message) = serde_json::from_value::<TapMessage>(transaction.message_json.clone()) {
+            if let Ok(tap_message) =
+                serde_json::from_value::<TapMessage>(transaction.message_json.clone())
+            {
                 // Handle Transfer messages directly
                 if let TapMessage::Transfer(ref transfer) = tap_message {
                     // Check if any agent acts for our target agent
@@ -112,16 +117,18 @@ impl ToolHandler for ListCustomersTool {
                         if agent.id == params.agent_did {
                             // Add all parties this agent acts for as customers
                             for party_id in agent.for_parties() {
-                                let customer = customers.entry(party_id.to_string()).or_insert_with(|| {
-                                    CustomerInfo {
+                                let customer = customers
+                                    .entry(party_id.to_string())
+                                    .or_insert_with(|| CustomerInfo {
                                         id: party_id.to_string(),
                                         metadata: HashMap::new(),
                                         transaction_count: 0,
                                         transaction_ids: Vec::new(),
-                                    }
-                                });
+                                    });
                                 customer.transaction_count += 1;
-                                customer.transaction_ids.push(transaction.reference_id.clone());
+                                customer
+                                    .transaction_ids
+                                    .push(transaction.reference_id.clone());
                             }
                         }
                     }
@@ -142,26 +149,31 @@ impl ToolHandler for ListCustomersTool {
                         }
                     }
                 }
-                
                 // Handle Authorize messages by looking up the original transfer
                 else if let TapMessage::Authorize(ref auth) = tap_message {
-                    if let Ok(Some(original_tx)) = storage.get_transaction_by_id(&auth.transaction_id).await {
-                        if let Ok(TapMessage::Transfer(ref original_transfer)) = serde_json::from_value::<TapMessage>(original_tx.message_json.clone()) {
+                    if let Ok(Some(original_tx)) =
+                        storage.get_transaction_by_id(&auth.transaction_id).await
+                    {
+                        if let Ok(TapMessage::Transfer(ref original_transfer)) =
+                            serde_json::from_value::<TapMessage>(original_tx.message_json.clone())
+                        {
                             // Check if any agent acts for our target agent
                             for agent in &original_transfer.agents {
                                 if agent.id == params.agent_did {
                                     // Add all parties this agent acts for as customers
                                     for party_id in agent.for_parties() {
-                                        let customer = customers.entry(party_id.to_string()).or_insert_with(|| {
-                                            CustomerInfo {
+                                        let customer = customers
+                                            .entry(party_id.to_string())
+                                            .or_insert_with(|| CustomerInfo {
                                                 id: party_id.to_string(),
                                                 metadata: HashMap::new(),
                                                 transaction_count: 0,
                                                 transaction_ids: Vec::new(),
-                                            }
-                                        });
+                                            });
                                         customer.transaction_count += 1;
-                                        customer.transaction_ids.push(transaction.reference_id.clone());
+                                        customer
+                                            .transaction_ids
+                                            .push(transaction.reference_id.clone());
                                     }
                                 }
                             }
@@ -172,11 +184,11 @@ impl ToolHandler for ListCustomersTool {
         }
 
         let total = customers.len();
-        
+
         // Apply pagination and sort by ID for consistent ordering
         let mut customer_list: Vec<CustomerInfo> = customers.into_values().collect();
         customer_list.sort_by(|a, b| a.id.cmp(&b.id));
-        
+
         let paginated_customers: Vec<CustomerInfo> = customer_list
             .into_iter()
             .skip(params.offset as usize)
@@ -188,9 +200,8 @@ impl ToolHandler for ListCustomersTool {
             total,
         };
 
-        let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
-            Error::tool_execution(format!("Failed to serialize response: {}", e))
-        })?;
+        let response_json = serde_json::to_string_pretty(&response)
+            .map_err(|e| Error::tool_execution(format!("Failed to serialize response: {}", e)))?;
 
         Ok(success_text_response(response_json))
     }
@@ -292,14 +303,19 @@ impl ToolHandler for ListConnectionsTool {
             let transactions = match storage.list_transactions(1000, 0).await {
                 Ok(transactions) => transactions,
                 Err(e) => {
-                    debug!("Failed to get transactions for agent {}: {}", agent_info.id, e);
+                    debug!(
+                        "Failed to get transactions for agent {}: {}",
+                        agent_info.id, e
+                    );
                     continue;
                 }
             };
 
             // Process each transaction
             for transaction in transactions {
-                if let Ok(tap_message) = serde_json::from_value::<TapMessage>(transaction.message_json.clone()) {
+                if let Ok(tap_message) =
+                    serde_json::from_value::<TapMessage>(transaction.message_json.clone())
+                {
                     match tap_message {
                         TapMessage::Transfer(ref transfer) => {
                             let mut party_is_involved = false;
@@ -343,17 +359,19 @@ impl ToolHandler for ListConnectionsTool {
                             // If this party is involved, record the counterparties
                             if party_is_involved {
                                 for counterparty_id in counterparties {
-                                    let connection = connections.entry(counterparty_id.clone()).or_insert_with(|| {
-                                        ConnectionInfo {
+                                    let connection = connections
+                                        .entry(counterparty_id.clone())
+                                        .or_insert_with(|| ConnectionInfo {
                                             id: counterparty_id.clone(),
                                             metadata: HashMap::new(),
                                             transaction_count: 0,
                                             transaction_ids: Vec::new(),
                                             roles: Vec::new(),
-                                        }
-                                    });
+                                        });
                                     connection.transaction_count += 1;
-                                    connection.transaction_ids.push(transaction.reference_id.clone());
+                                    connection
+                                        .transaction_ids
+                                        .push(transaction.reference_id.clone());
 
                                     // Determine role of counterparty
                                     if counterparty_id == transfer.originator.id {
@@ -363,7 +381,10 @@ impl ToolHandler for ListConnectionsTool {
                                     }
                                     if let Some(ref beneficiary) = transfer.beneficiary {
                                         if counterparty_id == beneficiary.id {
-                                            if !connection.roles.contains(&"beneficiary".to_string()) {
+                                            if !connection
+                                                .roles
+                                                .contains(&"beneficiary".to_string())
+                                            {
                                                 connection.roles.push("beneficiary".to_string());
                                             }
                                         }
@@ -378,13 +399,15 @@ impl ToolHandler for ListConnectionsTool {
                                     if let Some(ref beneficiary) = transfer.beneficiary {
                                         if counterparty_id == beneficiary.id {
                                             for (key, value) in &beneficiary.metadata {
-                                                connection.metadata.insert(key.clone(), value.clone());
+                                                connection
+                                                    .metadata
+                                                    .insert(key.clone(), value.clone());
                                             }
                                         }
                                     }
                                 }
                             }
-                        },
+                        }
                         _ => {}
                     }
                 }
@@ -392,11 +415,11 @@ impl ToolHandler for ListConnectionsTool {
         }
 
         let total = connections.len();
-        
+
         // Apply pagination and sort by ID for consistent ordering
         let mut connection_list: Vec<ConnectionInfo> = connections.into_values().collect();
         connection_list.sort_by(|a, b| a.id.cmp(&b.id));
-        
+
         let paginated_connections: Vec<ConnectionInfo> = connection_list
             .into_iter()
             .skip(params.offset as usize)
@@ -408,9 +431,8 @@ impl ToolHandler for ListConnectionsTool {
             total,
         };
 
-        let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
-            Error::tool_execution(format!("Failed to serialize response: {}", e))
-        })?;
+        let response_json = serde_json::to_string_pretty(&response)
+            .map_err(|e| Error::tool_execution(format!("Failed to serialize response: {}", e)))?;
 
         Ok(success_text_response(response_json))
     }
