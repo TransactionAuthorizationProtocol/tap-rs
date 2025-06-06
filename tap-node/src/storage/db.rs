@@ -1549,8 +1549,12 @@ impl Storage {
                 message_text,
                 recipient_did,
                 delivery_url,
-                delivery_type: delivery_type.parse::<DeliveryType>().unwrap_or(DeliveryType::Internal),
-                status: status.parse::<DeliveryStatus>().unwrap_or(DeliveryStatus::Pending),
+                delivery_type: delivery_type
+                    .parse::<DeliveryType>()
+                    .unwrap_or(DeliveryType::Internal),
+                status: status
+                    .parse::<DeliveryStatus>()
+                    .unwrap_or(DeliveryStatus::Pending),
                 retry_count,
                 last_http_status_code,
                 error_message,
@@ -1639,8 +1643,12 @@ impl Storage {
                 message_text,
                 recipient_did,
                 delivery_url,
-                delivery_type: delivery_type.parse::<DeliveryType>().unwrap_or(DeliveryType::Internal),
-                status: status.parse::<DeliveryStatus>().unwrap_or(DeliveryStatus::Pending),
+                delivery_type: delivery_type
+                    .parse::<DeliveryType>()
+                    .unwrap_or(DeliveryType::Internal),
+                status: status
+                    .parse::<DeliveryStatus>()
+                    .unwrap_or(DeliveryStatus::Pending),
                 retry_count,
                 last_http_status_code,
                 error_message,

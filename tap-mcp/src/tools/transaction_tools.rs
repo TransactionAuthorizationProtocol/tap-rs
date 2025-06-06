@@ -166,7 +166,7 @@ impl ToolHandler for CreateTransferTool {
         match self
             .tap_integration()
             .node()
-            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
             .await
         {
             Ok(packed_message) => {
@@ -304,7 +304,7 @@ impl ToolHandler for AuthorizeTool {
         match self
             .tap_integration()
             .node()
-            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
             .await
         {
             Ok(packed_message) => {
@@ -441,7 +441,7 @@ impl ToolHandler for RejectTool {
         match self
             .tap_integration()
             .node()
-            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
             .await
         {
             Ok(packed_message) => {
@@ -583,7 +583,7 @@ impl ToolHandler for CancelTool {
         match self
             .tap_integration()
             .node()
-            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
             .await
         {
             Ok(packed_message) => {
@@ -726,7 +726,7 @@ impl ToolHandler for SettleTool {
         match self
             .tap_integration()
             .node()
-            .send_message(params.agent_did.clone(), recipient_did.clone(), didcomm_message.clone())
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
             .await
         {
             Ok(packed_message) => {

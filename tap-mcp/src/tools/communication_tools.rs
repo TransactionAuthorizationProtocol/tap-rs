@@ -87,7 +87,7 @@ impl ToolHandler for TrustPingTool {
         match self
             .tap_integration
             .node()
-            .send_message(from_did.to_string(), to_did.to_string(), ping_message)
+            .send_message(from_did.to_string(), ping_message)
             .await
         {
             Ok(message_id) => {
@@ -215,7 +215,7 @@ impl ToolHandler for BasicMessageTool {
         match self
             .tap_integration
             .node()
-            .send_message(from_did.to_string(), to_did.to_string(), message)
+            .send_message(from_did.to_string(), message)
             .await
         {
             Ok(message_id) => Ok(success_text_response(format!(

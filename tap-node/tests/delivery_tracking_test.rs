@@ -48,9 +48,7 @@ async fn test_delivery_tracking_with_send_message() -> Result<(), Box<dyn std::e
 
     // Send the message
     let message_id = test_message.id.clone(); // Get the actual message ID
-    let packed_message = node
-        .send_message(sender_did.clone(), recipient_did.clone(), test_message)
-        .await?;
+    let packed_message = node.send_message(sender_did.clone(), test_message).await?;
 
     println!("Packed message: {}", packed_message);
 
@@ -134,9 +132,7 @@ async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Err
 
     // Send the message
     let message_id = test_message.id.clone(); // Get the actual message ID
-    let packed_message = node
-        .send_message(sender_did.clone(), external_did.to_string(), test_message)
-        .await?;
+    let packed_message = node.send_message(sender_did.clone(), test_message).await?;
 
     println!("Packed message for external delivery: {}", packed_message);
 
