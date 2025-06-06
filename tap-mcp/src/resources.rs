@@ -40,6 +40,12 @@ impl ResourceRegistry {
                 mime_type: Some("application/json".to_string()),
             },
             Resource {
+                uri: "tap://deliveries".to_string(),
+                name: "TAP Deliveries".to_string(),
+                description: "Message delivery tracking from agent storage. Query parameters: ?agent_did=<did>&message_id=<id>&recipient_did=<did>&delivery_type=<https|internal|return_path|pickup>&status=<pending|success|failed>&limit=<n>&offset=<n>".to_string(),
+                mime_type: Some("application/json".to_string()),
+            },
+            Resource {
                 uri: "tap://schemas".to_string(),
                 name: "TAP Schemas".to_string(),
                 description: "JSON schemas for TAP message types".to_string(),
@@ -62,6 +68,7 @@ impl ResourceRegistry {
         match url.host_str() {
             Some("agents") => self.read_agents_resource(url.path(), url.query()).await,
             Some("messages") => self.read_messages_resource(url.path(), url.query()).await,
+            Some("deliveries") => self.read_deliveries_resource(url.path(), url.query()).await,
             Some("schemas") => self.read_schemas_resource(url.path()).await,
             _ => Err(Error::resource_not_found(format!(
                 "Unknown resource: {}",
@@ -333,6 +340,215 @@ impl ResourceRegistry {
         Err(Error::resource_not_found(format!(
             "Message not found: {}",
             message_id
+        )))
+    }
+
+    /// Read deliveries resource
+    async fn read_deliveries_resource(
+        &self,
+        path: &str,
+        query: Option<&str>,
+    ) -> Result<Vec<ResourceContent>> {
+        // Parse path for specific delivery ID
+        if !path.is_empty() && path != "/" {
+            let delivery_id = path.trim_start_matches('/');
+            return self.read_specific_delivery(delivery_id).await;
+        }
+
+        // Parse query parameters
+        let mut message_id_filter = None;
+        let mut recipient_did_filter = None;
+        let mut delivery_type_filter = None;
+        let mut status_filter = None;
+        let mut agent_did_filter = None;
+        let mut limit = 50;
+        let mut offset = 0;
+
+        if let Some(query_str) = query {
+            let params: HashMap<String, String> = url::form_urlencoded::parse(query_str.as_bytes())
+                .into_owned()
+                .collect();
+
+            message_id_filter = params.get("message_id").cloned();
+            recipient_did_filter = params.get("recipient_did").cloned();
+            agent_did_filter = params.get("agent_did").cloned();
+
+            // Parse delivery type filter if provided
+            if let Some(delivery_type_str) = params.get("delivery_type") {
+                match delivery_type_str.as_str() {
+                    "https" => delivery_type_filter = Some("https".to_string()),
+                    "internal" => delivery_type_filter = Some("internal".to_string()),
+                    "return_path" => delivery_type_filter = Some("return_path".to_string()),
+                    "pickup" => delivery_type_filter = Some("pickup".to_string()),
+                    _ => {} // Invalid delivery type, ignore
+                }
+            }
+
+            // Parse status filter if provided
+            if let Some(status_str) = params.get("status") {
+                match status_str.as_str() {
+                    "pending" => status_filter = Some("pending".to_string()),
+                    "success" => status_filter = Some("success".to_string()),
+                    "failed" => status_filter = Some("failed".to_string()),
+                    _ => {} // Invalid status, ignore
+                }
+            }
+
+            if let Some(limit_str) = params.get("limit") {
+                if let Ok(l) = limit_str.parse::<u32>() {
+                    limit = l.min(1000); // Cap at 1000
+                }
+            }
+
+            if let Some(offset_str) = params.get("offset") {
+                if let Ok(o) = offset_str.parse::<u32>() {
+                    offset = o;
+                }
+            }
+        }
+
+        // Get deliveries from storage
+        let deliveries = if let Some(agent_did) = agent_did_filter.as_ref() {
+            // Use agent-specific storage
+            let agent_storage = self
+                .tap_integration()
+                .storage_for_agent(agent_did)
+                .await
+                .map_err(|e| {
+                    Error::resource_not_found(format!("Failed to get agent storage: {}", e))
+                })?;
+
+            // If message_id is specified, get deliveries for that message
+            if let Some(message_id) = message_id_filter.as_ref() {
+                agent_storage.get_deliveries_for_message(message_id).await?
+            } else {
+                // For now, we'll get pending deliveries as a default
+                // TODO: Implement a general get_all_deliveries method
+                agent_storage
+                    .get_pending_deliveries(10, limit) // max_retry_count=10
+                    .await?
+            }
+        } else {
+            return Err(Error::resource_not_found(
+                "agent_did parameter is required to view deliveries",
+            ));
+        };
+
+        // Apply additional filters
+        let filtered_deliveries: Vec<_> = deliveries
+            .into_iter()
+            .filter(|delivery| {
+                if let Some(ref message_id) = message_id_filter {
+                    if &delivery.message_id != message_id {
+                        return false;
+                    }
+                }
+                if let Some(ref recipient_did) = recipient_did_filter {
+                    if &delivery.recipient_did != recipient_did {
+                        return false;
+                    }
+                }
+                if let Some(ref delivery_type) = delivery_type_filter {
+                    if &delivery.delivery_type.to_string() != delivery_type {
+                        return false;
+                    }
+                }
+                if let Some(ref status) = status_filter {
+                    if &delivery.status.to_string() != status {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect();
+
+        let content = json!({
+            "deliveries": filtered_deliveries.iter().map(|delivery| json!({
+                "id": delivery.id,
+                "message_id": delivery.message_id,
+                "message_text": delivery.message_text,
+                "recipient_did": delivery.recipient_did,
+                "delivery_url": delivery.delivery_url,
+                "delivery_type": delivery.delivery_type.to_string(),
+                "status": delivery.status.to_string(),
+                "retry_count": delivery.retry_count,
+                "last_http_status_code": delivery.last_http_status_code,
+                "error_message": delivery.error_message,
+                "created_at": delivery.created_at,
+                "updated_at": delivery.updated_at,
+                "delivered_at": delivery.delivered_at
+            })).collect::<Vec<_>>(),
+            "total": filtered_deliveries.len(),
+            "applied_filters": {
+                "agent_did": agent_did_filter,
+                "message_id": message_id_filter,
+                "recipient_did": recipient_did_filter,
+                "delivery_type": delivery_type_filter,
+                "status": status_filter,
+                "limit": limit,
+                "offset": offset
+            }
+        });
+
+        Ok(vec![ResourceContent {
+            uri: format!(
+                "tap://deliveries{}",
+                if query.is_some() {
+                    format!("?{}", query.unwrap())
+                } else {
+                    String::new()
+                }
+            ),
+            mime_type: Some("application/json".to_string()),
+            text: Some(serde_json::to_string_pretty(&content)?),
+            blob: None,
+        }])
+    }
+
+    /// Read a specific delivery by ID
+    async fn read_specific_delivery(&self, delivery_id: &str) -> Result<Vec<ResourceContent>> {
+        // Parse delivery_id as i64
+        let id: i64 = delivery_id
+            .parse()
+            .map_err(|_| Error::resource_not_found("Delivery ID must be a valid number"))?;
+
+        // Search all agent storages for the delivery
+        let agents = self.tap_integration().list_agents().await?;
+        for agent in agents {
+            if let Ok(agent_storage) = self.tap_integration().storage_for_agent(&agent.id).await {
+                if let Ok(Some(delivery)) = agent_storage.get_delivery_by_id(id).await {
+                    let content = json!({
+                        "delivery": {
+                            "id": delivery.id,
+                            "message_id": delivery.message_id,
+                            "message_text": delivery.message_text,
+                            "recipient_did": delivery.recipient_did,
+                            "delivery_url": delivery.delivery_url,
+                            "delivery_type": delivery.delivery_type.to_string(),
+                            "status": delivery.status.to_string(),
+                            "retry_count": delivery.retry_count,
+                            "last_http_status_code": delivery.last_http_status_code,
+                            "error_message": delivery.error_message,
+                            "created_at": delivery.created_at,
+                            "updated_at": delivery.updated_at,
+                            "delivered_at": delivery.delivered_at
+                        },
+                        "found_in_agent": agent.id
+                    });
+
+                    return Ok(vec![ResourceContent {
+                        uri: format!("tap://deliveries/{}", delivery_id),
+                        mime_type: Some("application/json".to_string()),
+                        text: Some(serde_json::to_string_pretty(&content)?),
+                        blob: None,
+                    }]);
+                }
+            }
+        }
+
+        Err(Error::resource_not_found(format!(
+            "Delivery not found: {}",
+            delivery_id
         )))
     }
 

@@ -98,7 +98,13 @@ pub use error::{Error, Result};
 pub use event::logger::{EventLogger, EventLoggerConfig, LogDestination};
 pub use event::{EventSubscriber, NodeEvent};
 pub use message::sender::{
-    HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender, WebSocketPlainMessageSender,
+    HttpPlainMessageSender, HttpPlainMessageSenderWithTracking, NodePlainMessageSender,
+    PlainMessageSender, WebSocketPlainMessageSender,
+};
+#[cfg(feature = "storage")]
+pub use storage::{
+    models::{DeliveryStatus, DeliveryType},
+    Storage,
 };
 
 use std::sync::Arc;
@@ -723,6 +729,48 @@ impl TapNode {
             // Check if we have a registered agent for this recipient
             match self.agents.get_agent(recipient_did).await {
                 Ok(agent) => {
+                    // Create delivery record for internal delivery tracking
+                    #[cfg(feature = "storage")]
+                    let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager
+                    {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(recipient_did).await
+                        {
+                            // Serialize message for storage
+                            let message_text = serde_json::to_string(&processed_message)
+                                .unwrap_or_else(|_| "Failed to serialize message".to_string());
+
+                            match agent_storage
+                                .create_delivery(
+                                    &processed_message.id,
+                                    &message_text,
+                                    recipient_did,
+                                    None, // No URL for internal delivery
+                                    storage::models::DeliveryType::Internal,
+                                )
+                                .await
+                            {
+                                Ok(id) => {
+                                    log::debug!(
+                                        "Created internal delivery record {} for message {} to {}",
+                                        id,
+                                        processed_message.id,
+                                        recipient_did
+                                    );
+                                    Some(id)
+                                }
+                                Err(e) => {
+                                    log::warn!("Failed to create internal delivery record: {}", e);
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     // Let the agent process the plain message
                     match agent.receive_plain_message(processed_message.clone()).await {
                         Ok(_) => {
@@ -731,9 +779,53 @@ impl TapNode {
                                 recipient_did
                             );
                             delivery_success = true;
+
+                            // Update delivery record to success
+                            #[cfg(feature = "storage")]
+                            if let (Some(delivery_id), Some(ref storage_manager)) =
+                                (delivery_id, &self.agent_storage_manager)
+                            {
+                                if let Ok(agent_storage) =
+                                    storage_manager.get_agent_storage(recipient_did).await
+                                {
+                                    if let Err(e) = agent_storage
+                                        .update_delivery_status(
+                                            delivery_id,
+                                            storage::models::DeliveryStatus::Success,
+                                            None, // No HTTP status for internal delivery
+                                            None, // No error message
+                                        )
+                                        .await
+                                    {
+                                        log::warn!("Failed to update internal delivery record to success: {}", e);
+                                    }
+                                }
+                            }
                         }
                         Err(e) => {
                             log::warn!("Agent {} failed to process message: {}", recipient_did, e);
+
+                            // Update delivery record to failed
+                            #[cfg(feature = "storage")]
+                            if let (Some(delivery_id), Some(ref storage_manager)) =
+                                (delivery_id, &self.agent_storage_manager)
+                            {
+                                if let Ok(agent_storage) =
+                                    storage_manager.get_agent_storage(recipient_did).await
+                                {
+                                    if let Err(e2) = agent_storage
+                                        .update_delivery_status(
+                                            delivery_id,
+                                            storage::models::DeliveryStatus::Failed,
+                                            None, // No HTTP status for internal delivery
+                                            Some(&e.to_string()), // Include error message
+                                        )
+                                        .await
+                                    {
+                                        log::warn!("Failed to update internal delivery record to failed: {}", e2);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -767,13 +859,105 @@ impl TapNode {
                 }
             };
 
+            // Create delivery record for internal delivery tracking
+            #[cfg(feature = "storage")]
+            let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager {
+                if let Ok(agent_storage) = storage_manager.get_agent_storage(&target_did).await {
+                    // Serialize message for storage
+                    let message_text = serde_json::to_string(&processed_message)
+                        .unwrap_or_else(|_| "Failed to serialize message".to_string());
+
+                    match agent_storage
+                        .create_delivery(
+                            &processed_message.id,
+                            &message_text,
+                            &target_did,
+                            None, // No URL for internal delivery
+                            storage::models::DeliveryType::Internal,
+                        )
+                        .await
+                    {
+                        Ok(id) => {
+                            log::debug!(
+                                "Created internal delivery record {} for routed message {} to {}",
+                                id,
+                                processed_message.id,
+                                target_did
+                            );
+                            Some(id)
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to create internal delivery record for routing: {}",
+                                e
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             // Let the agent process the plain message
             match agent.receive_plain_message(processed_message).await {
                 Ok(_) => {
                     log::debug!("Successfully routed message to agent: {}", target_did);
+
+                    // Update delivery record to success
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(&target_did).await
+                        {
+                            if let Err(e) = agent_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Success,
+                                    None, // No HTTP status for internal delivery
+                                    None, // No error message
+                                )
+                                .await
+                            {
+                                log::warn!(
+                                    "Failed to update routed delivery record to success: {}",
+                                    e
+                                );
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     log::warn!("Agent failed to process message: {}", e);
+
+                    // Update delivery record to failed
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(&target_did).await
+                        {
+                            if let Err(e2) = agent_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Failed,
+                                    None,                 // No HTTP status for internal delivery
+                                    Some(&e.to_string()), // Include error message
+                                )
+                                .await
+                            {
+                                log::warn!(
+                                    "Failed to update routed delivery record to failed: {}",
+                                    e2
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }

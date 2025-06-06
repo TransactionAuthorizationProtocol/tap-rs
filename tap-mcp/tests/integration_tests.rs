@@ -438,7 +438,7 @@ async fn test_list_resources() -> Result<()> {
 
     if let Some(result) = response.result {
         let resources = result["resources"].as_array().unwrap();
-        assert_eq!(resources.len(), 3); // agents, messages, schemas
+        assert_eq!(resources.len(), 4); // agents, messages, deliveries, schemas
 
         let resource_uris: Vec<&str> = resources
             .iter()
@@ -447,6 +447,7 @@ async fn test_list_resources() -> Result<()> {
 
         assert!(resource_uris.contains(&"tap://agents"));
         assert!(resource_uris.contains(&"tap://messages"));
+        assert!(resource_uris.contains(&"tap://deliveries"));
         assert!(resource_uris.contains(&"tap://schemas"));
     }
 

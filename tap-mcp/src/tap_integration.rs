@@ -154,6 +154,7 @@ impl TapIntegration {
     }
 
     /// Get storage path (if available)
+    #[allow(dead_code)]
     pub fn storage_path(&self) -> Option<&PathBuf> {
         self.storage_path.as_ref()
     }

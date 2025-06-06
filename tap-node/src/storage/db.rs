@@ -5,7 +5,10 @@ use tap_msg::didcomm::PlainMessage;
 use tracing::{debug, info};
 
 use super::error::StorageError;
-use super::models::{Message, MessageDirection, Transaction, TransactionStatus, TransactionType};
+use super::models::{
+    Delivery, DeliveryStatus, DeliveryType, Message, MessageDirection, Transaction,
+    TransactionStatus, TransactionType,
+};
 
 /// Storage backend for TAP transactions and message audit trail
 ///
@@ -44,7 +47,7 @@ use super::models::{Message, MessageDirection, Transaction, TransactionStatus, T
 /// # Ok(())
 /// # }
 /// ```
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Storage {
     pool: SqlitePool,
 }
@@ -1018,6 +1021,458 @@ impl Storage {
         }
 
         Ok(messages)
+    }
+
+    /// Create a new delivery record
+    ///
+    /// # Arguments
+    ///
+    /// * `message_id` - The ID of the message being delivered
+    /// * `message_text` - The full message text being delivered
+    /// * `recipient_did` - The DID of the recipient
+    /// * `delivery_url` - Optional URL where the message is being delivered
+    /// * `delivery_type` - The type of delivery (https, internal, return_path, pickup)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(i64)` - The ID of the created delivery record
+    /// * `Err(StorageError)` on database error
+    pub async fn create_delivery(
+        &self,
+        message_id: &str,
+        message_text: &str,
+        recipient_did: &str,
+        delivery_url: Option<&str>,
+        delivery_type: DeliveryType,
+    ) -> Result<i64, StorageError> {
+        let result = sqlx::query(
+            r#"
+            INSERT INTO deliveries (message_id, message_text, recipient_did, delivery_url, delivery_type, status, retry_count)
+            VALUES (?1, ?2, ?3, ?4, ?5, 'pending', 0)
+            "#,
+        )
+        .bind(message_id)
+        .bind(message_text)
+        .bind(recipient_did)
+        .bind(delivery_url)
+        .bind(delivery_type.to_string())
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// Update delivery status
+    ///
+    /// # Arguments
+    ///
+    /// * `delivery_id` - The ID of the delivery record
+    /// * `status` - The new status (pending, success, failed)
+    /// * `http_status_code` - Optional HTTP status code from delivery attempt
+    /// * `error_message` - Optional error message if delivery failed
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` on success
+    /// * `Err(StorageError)` on database error
+    pub async fn update_delivery_status(
+        &self,
+        delivery_id: i64,
+        status: DeliveryStatus,
+        http_status_code: Option<i32>,
+        error_message: Option<&str>,
+    ) -> Result<(), StorageError> {
+        let now = chrono::Utc::now().to_rfc3339();
+        let delivered_at = if status == DeliveryStatus::Success {
+            Some(now.clone())
+        } else {
+            None
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE deliveries 
+            SET status = ?1, last_http_status_code = ?2, error_message = ?3, updated_at = ?4, delivered_at = ?5
+            WHERE id = ?6
+            "#,
+        )
+        .bind(status.to_string())
+        .bind(http_status_code)
+        .bind(error_message)
+        .bind(now)
+        .bind(delivered_at)
+        .bind(delivery_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Increment retry count for a delivery
+    ///
+    /// # Arguments
+    ///
+    /// * `delivery_id` - The ID of the delivery record
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` on success
+    /// * `Err(StorageError)` on database error
+    pub async fn increment_delivery_retry_count(
+        &self,
+        delivery_id: i64,
+    ) -> Result<(), StorageError> {
+        sqlx::query(
+            r#"
+            UPDATE deliveries 
+            SET retry_count = retry_count + 1, updated_at = ?1
+            WHERE id = ?2
+            "#,
+        )
+        .bind(chrono::Utc::now().to_rfc3339())
+        .bind(delivery_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get delivery record by ID
+    ///
+    /// # Arguments
+    ///
+    /// * `delivery_id` - The ID of the delivery record
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(Delivery))` if found
+    /// * `Ok(None)` if not found
+    /// * `Err(StorageError)` on database error
+    pub async fn get_delivery_by_id(
+        &self,
+        delivery_id: i64,
+    ) -> Result<Option<Delivery>, StorageError> {
+        let result = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT id, message_id, message_text, recipient_did, delivery_url, delivery_type, status, retry_count, 
+                   last_http_status_code, error_message, created_at, updated_at, delivered_at
+            FROM deliveries WHERE id = ?1
+            "#,
+        )
+        .bind(delivery_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match result {
+            Some((
+                id,
+                message_id,
+                message_text,
+                recipient_did,
+                delivery_url,
+                delivery_type,
+                status,
+                retry_count,
+                last_http_status_code,
+                error_message,
+                created_at,
+                updated_at,
+                delivered_at,
+            )) => Ok(Some(Delivery {
+                id,
+                message_id,
+                message_text,
+                recipient_did,
+                delivery_url,
+                delivery_type: DeliveryType::try_from(delivery_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                status: DeliveryStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                retry_count,
+                last_http_status_code,
+                error_message,
+                created_at,
+                updated_at,
+                delivered_at,
+            })),
+            None => Ok(None),
+        }
+    }
+
+    /// Get all deliveries for a message
+    ///
+    /// # Arguments
+    ///
+    /// * `message_id` - The ID of the message
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Delivery>)` - List of deliveries for the message
+    /// * `Err(StorageError)` on database error
+    pub async fn get_deliveries_for_message(
+        &self,
+        message_id: &str,
+    ) -> Result<Vec<Delivery>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT id, message_id, message_text, recipient_did, delivery_url, delivery_type, status, retry_count, 
+                   last_http_status_code, error_message, created_at, updated_at, delivered_at
+            FROM deliveries WHERE message_id = ?1
+            ORDER BY created_at ASC
+            "#,
+        )
+        .bind(message_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut deliveries = Vec::new();
+        for (
+            id,
+            message_id,
+            message_text,
+            recipient_did,
+            delivery_url,
+            delivery_type,
+            status,
+            retry_count,
+            last_http_status_code,
+            error_message,
+            created_at,
+            updated_at,
+            delivered_at,
+        ) in rows
+        {
+            deliveries.push(Delivery {
+                id,
+                message_id,
+                message_text,
+                recipient_did,
+                delivery_url,
+                delivery_type: DeliveryType::try_from(delivery_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                status: DeliveryStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                retry_count,
+                last_http_status_code,
+                error_message,
+                created_at,
+                updated_at,
+                delivered_at,
+            });
+        }
+
+        Ok(deliveries)
+    }
+
+    /// Get pending deliveries for retry processing
+    ///
+    /// # Arguments
+    ///
+    /// * `max_retry_count` - Maximum retry count to include
+    /// * `limit` - Maximum number of deliveries to return
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Delivery>)` - List of pending deliveries
+    /// * `Err(StorageError)` on database error
+    pub async fn get_pending_deliveries(
+        &self,
+        max_retry_count: i32,
+        limit: u32,
+    ) -> Result<Vec<Delivery>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT id, message_id, message_text, recipient_did, delivery_url, delivery_type, status, retry_count, 
+                   last_http_status_code, error_message, created_at, updated_at, delivered_at
+            FROM deliveries 
+            WHERE status = 'pending' AND retry_count < ?1
+            ORDER BY created_at ASC
+            LIMIT ?2
+            "#,
+        )
+        .bind(max_retry_count)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut deliveries = Vec::new();
+        for (
+            id,
+            message_id,
+            message_text,
+            recipient_did,
+            delivery_url,
+            delivery_type,
+            status,
+            retry_count,
+            last_http_status_code,
+            error_message,
+            created_at,
+            updated_at,
+            delivered_at,
+        ) in rows
+        {
+            deliveries.push(Delivery {
+                id,
+                message_id,
+                message_text,
+                recipient_did,
+                delivery_url,
+                delivery_type: DeliveryType::try_from(delivery_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                status: DeliveryStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                retry_count,
+                last_http_status_code,
+                error_message,
+                created_at,
+                updated_at,
+                delivered_at,
+            });
+        }
+
+        Ok(deliveries)
+    }
+
+    /// Get failed deliveries for a specific recipient
+    ///
+    /// # Arguments
+    ///
+    /// * `recipient_did` - The DID of the recipient
+    /// * `limit` - Maximum number of deliveries to return
+    /// * `offset` - Number of deliveries to skip (for pagination)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<Delivery>)` - List of failed deliveries
+    /// * `Err(StorageError)` on database error
+    pub async fn get_failed_deliveries_for_recipient(
+        &self,
+        recipient_did: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Delivery>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                String,
+                i32,
+                Option<i32>,
+                Option<String>,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            r#"
+            SELECT id, message_id, message_text, recipient_did, delivery_url, delivery_type, status, retry_count, 
+                   last_http_status_code, error_message, created_at, updated_at, delivered_at
+            FROM deliveries 
+            WHERE recipient_did = ?1 AND status = 'failed'
+            ORDER BY updated_at DESC
+            LIMIT ?2 OFFSET ?3
+            "#,
+        )
+        .bind(recipient_did)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut deliveries = Vec::new();
+        for (
+            id,
+            message_id,
+            message_text,
+            recipient_did,
+            delivery_url,
+            delivery_type,
+            status,
+            retry_count,
+            last_http_status_code,
+            error_message,
+            created_at,
+            updated_at,
+            delivered_at,
+        ) in rows
+        {
+            deliveries.push(Delivery {
+                id,
+                message_id,
+                message_text,
+                recipient_did,
+                delivery_url,
+                delivery_type: DeliveryType::try_from(delivery_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                status: DeliveryStatus::try_from(status.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                retry_count,
+                last_http_status_code,
+                error_message,
+                created_at,
+                updated_at,
+                delivered_at,
+            });
+        }
+
+        Ok(deliveries)
     }
 }
 

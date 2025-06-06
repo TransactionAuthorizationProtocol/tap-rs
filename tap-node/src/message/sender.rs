@@ -73,6 +73,10 @@ use std::fmt::{self, Debug};
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
+use crate::storage::{
+    models::{DeliveryStatus, DeliveryType},
+    Storage,
+};
 
 /// PlainMessage sender trait for sending packed messages to recipients
 #[async_trait]
@@ -190,7 +194,7 @@ impl HttpPlainMessageSender {
     }
 
     /// Helper to construct the endpoint URL for a recipient
-    fn get_endpoint_url(&self, recipient_did: &str) -> String {
+    pub fn get_endpoint_url(&self, recipient_did: &str) -> String {
         // In a production implementation, this would map DID to HTTP endpoint
         // This could involve DID resolution or a lookup table
 
@@ -940,5 +944,204 @@ impl PlainMessageSender for HttpPlainMessageSender {
 
         log::warn!("HTTP sender is running in WASM without the web-sys feature enabled. No actual HTTP requests will be made.");
         Ok(())
+    }
+}
+
+/// HTTP message sender with delivery tracking
+///
+/// This sender extends HttpPlainMessageSender with delivery tracking capabilities,
+/// recording delivery attempts, success/failure status, HTTP status codes, and retry counts
+/// in the database for monitoring and automatic retry processing.
+///
+/// # Features
+/// - All capabilities of HttpPlainMessageSender
+/// - Delivery record creation before sending
+/// - Status updates after delivery attempts
+/// - Retry count tracking
+/// - HTTP status code recording
+/// - Error message logging
+///
+/// # Usage
+///
+/// ```no_run
+/// # use std::sync::Arc;
+/// # use tap_node::{HttpPlainMessageSenderWithTracking, PlainMessageSender, Storage};
+/// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+/// // Create storage instance
+/// let storage = Arc::new(Storage::new(None).await?);
+///
+/// // Create sender with tracking
+/// let sender = HttpPlainMessageSenderWithTracking::new(
+///     "https://recipient.example.com".to_string(),
+///     storage
+/// );
+///
+/// // Send message - delivery will be tracked automatically
+/// sender.send("packed_message".to_string(), vec!["did:example:recipient".to_string()]).await?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug)]
+pub struct HttpPlainMessageSenderWithTracking {
+    /// The underlying HTTP sender
+    http_sender: HttpPlainMessageSender,
+    /// Storage for tracking deliveries
+    storage: Arc<Storage>,
+}
+
+impl HttpPlainMessageSenderWithTracking {
+    /// Create a new HttpPlainMessageSenderWithTracking
+    pub fn new(base_url: String, storage: Arc<Storage>) -> Self {
+        Self {
+            http_sender: HttpPlainMessageSender::new(base_url),
+            storage,
+        }
+    }
+
+    /// Create a new HttpPlainMessageSenderWithTracking with custom options
+    pub fn with_options(
+        base_url: String,
+        timeout_ms: u64,
+        max_retries: u32,
+        storage: Arc<Storage>,
+    ) -> Self {
+        Self {
+            http_sender: HttpPlainMessageSender::with_options(base_url, timeout_ms, max_retries),
+            storage,
+        }
+    }
+}
+
+#[async_trait]
+impl PlainMessageSender for HttpPlainMessageSenderWithTracking {
+    async fn send(&self, packed_message: String, recipient_dids: Vec<String>) -> Result<()> {
+        if recipient_dids.is_empty() {
+            return Err(Error::Dispatch("No recipients specified".to_string()));
+        }
+
+        // Extract message ID from packed message for tracking
+        // This is a simplified approach - in production you might want a more robust way to get the message ID
+        let message_id = format!("msg_{}", uuid::Uuid::new_v4());
+
+        // Create delivery records for each recipient before attempting delivery
+        let mut delivery_ids = Vec::new();
+        for recipient in &recipient_dids {
+            let delivery_url = Some(self.http_sender.get_endpoint_url(recipient));
+            match self
+                .storage
+                .create_delivery(
+                    &message_id,
+                    &packed_message,
+                    recipient,
+                    delivery_url.as_deref(),
+                    DeliveryType::Https,
+                )
+                .await
+            {
+                Ok(delivery_id) => {
+                    delivery_ids.push((recipient.clone(), delivery_id));
+                    log::debug!(
+                        "Created delivery record {} for message {} to {}",
+                        delivery_id,
+                        message_id,
+                        recipient
+                    );
+                }
+                Err(e) => {
+                    log::error!("Failed to create delivery record for {}: {}", recipient, e);
+                    // Continue with delivery attempt even if we can't track it
+                    delivery_ids.push((recipient.clone(), -1)); // Use -1 to indicate no tracking
+                }
+            }
+        }
+
+        // Now attempt delivery using the underlying HTTP sender
+        let delivery_result = self
+            .http_sender
+            .send(packed_message, recipient_dids.clone())
+            .await;
+
+        // Update delivery records based on the result
+        for (_recipient, delivery_id) in delivery_ids {
+            if delivery_id == -1 {
+                continue; // Skip if we couldn't create the delivery record
+            }
+
+            match &delivery_result {
+                Ok(_) => {
+                    // Delivery successful
+                    if let Err(e) = self
+                        .storage
+                        .update_delivery_status(
+                            delivery_id,
+                            DeliveryStatus::Success,
+                            Some(200), // Assume 200 for successful delivery
+                            None,
+                        )
+                        .await
+                    {
+                        log::error!(
+                            "Failed to update delivery record {} to success: {}",
+                            delivery_id,
+                            e
+                        );
+                    } else {
+                        log::debug!("Updated delivery record {} to success", delivery_id);
+                    }
+                }
+                Err(e) => {
+                    // Delivery failed - extract HTTP status code if possible
+                    let error_msg = e.to_string();
+                    let http_status_code = if error_msg.contains("HTTP error: ") {
+                        // Try to extract status code from error message
+                        error_msg
+                            .split("HTTP error: ")
+                            .nth(1)
+                            .and_then(|s| s.split(' ').next())
+                            .and_then(|s| s.parse::<i32>().ok())
+                    } else {
+                        None
+                    };
+
+                    if let Err(e) = self
+                        .storage
+                        .update_delivery_status(
+                            delivery_id,
+                            DeliveryStatus::Failed,
+                            http_status_code,
+                            Some(&error_msg),
+                        )
+                        .await
+                    {
+                        log::error!(
+                            "Failed to update delivery record {} to failed: {}",
+                            delivery_id,
+                            e
+                        );
+                    } else {
+                        log::debug!(
+                            "Updated delivery record {} to failed with error: {}",
+                            delivery_id,
+                            error_msg
+                        );
+                    }
+
+                    // Increment retry count for future retry processing
+                    if let Err(e) = self
+                        .storage
+                        .increment_delivery_retry_count(delivery_id)
+                        .await
+                    {
+                        log::error!(
+                            "Failed to increment retry count for delivery record {}: {}",
+                            delivery_id,
+                            e
+                        );
+                    }
+                }
+            }
+        }
+
+        delivery_result
     }
 }

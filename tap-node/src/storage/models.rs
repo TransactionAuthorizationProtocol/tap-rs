@@ -122,3 +122,89 @@ pub struct Message {
     pub message_json: serde_json::Value,
     pub created_at: String,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryStatus {
+    Pending,
+    Success,
+    Failed,
+}
+
+impl fmt::Display for DeliveryStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeliveryStatus::Pending => write!(f, "pending"),
+            DeliveryStatus::Success => write!(f, "success"),
+            DeliveryStatus::Failed => write!(f, "failed"),
+        }
+    }
+}
+
+impl TryFrom<&str> for DeliveryStatus {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "pending" => Ok(DeliveryStatus::Pending),
+            "success" => Ok(DeliveryStatus::Success),
+            "failed" => Ok(DeliveryStatus::Failed),
+            _ => Err(format!("Invalid delivery status: {}", value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DeliveryType {
+    /// HTTP/HTTPS delivery to external endpoints
+    Https,
+    /// Internal delivery to agents within the same node
+    Internal,
+    /// Return path delivery for future implementation
+    ReturnPath,
+    /// Pickup delivery for future implementation
+    Pickup,
+}
+
+impl fmt::Display for DeliveryType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeliveryType::Https => write!(f, "https"),
+            DeliveryType::Internal => write!(f, "internal"),
+            DeliveryType::ReturnPath => write!(f, "return_path"),
+            DeliveryType::Pickup => write!(f, "pickup"),
+        }
+    }
+}
+
+impl TryFrom<&str> for DeliveryType {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "https" => Ok(DeliveryType::Https),
+            "internal" => Ok(DeliveryType::Internal),
+            "return_path" => Ok(DeliveryType::ReturnPath),
+            "pickup" => Ok(DeliveryType::Pickup),
+            _ => Err(format!("Invalid delivery type: {}", value)),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Delivery {
+    pub id: i64,
+    pub message_id: String,
+    pub message_text: String,
+    pub recipient_did: String,
+    pub delivery_url: Option<String>,
+    pub delivery_type: DeliveryType,
+    pub status: DeliveryStatus,
+    pub retry_count: i32,
+    pub last_http_status_code: Option<i32>,
+    pub error_message: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+    pub delivered_at: Option<String>,
+}
