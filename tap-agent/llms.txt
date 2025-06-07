@@ -1,0 +1,160 @@
+# tap-agent
+
+## Overview
+The `tap-agent` crate provides cryptographic agent functionality for the Travel Asset Protocol. It handles DID-based identity, message signing/verification, encryption/decryption, and secure communication between TAP participants.
+
+## Purpose
+- Manage cryptographic identities using DIDs (Decentralized Identifiers)
+- Sign and verify messages using Ed25519 signatures
+- Encrypt and decrypt messages using X25519 key agreement
+- Pack and unpack DIDComm messages
+- Provide secure agent-to-agent communication
+
+## Key Components
+
+### Core Traits
+```rust
+pub trait Agent: Send + Sync {
+    fn did(&self) -> &str;
+    async fn sign(&self, message: &[u8]) -> Result<Vec<u8>>;
+    async fn encrypt(&self, plaintext: &[u8], recipient_dids: &[&str]) -> Result<Jwe>;
+    async fn decrypt(&self, jwe: &Jwe) -> Result<Vec<u8>>;
+}
+```
+
+### Agent Types
+- **LocalAgent**: File-based key storage with encryption
+- **InMemoryAgent**: Ephemeral agents for testing
+- **Custom Agents**: Implement the Agent trait for HSM, cloud KMS, etc.
+
+### Key Management
+```rust
+pub struct AgentKeyManager {
+    // Manages multiple agent keys
+    // Supports labels for organization
+    // Thread-safe for concurrent access
+}
+
+pub struct LocalAgentKey {
+    // Individual agent key with Ed25519 signing
+    // X25519 key agreement for encryption
+    // Secure storage with password protection
+}
+```
+
+### Message Packing
+```rust
+// Pack a plain message into JWS format
+pub async fn pack_signed(
+    message: &PlainMessage,
+    agent: &dyn Agent,
+) -> Result<String>;
+
+// Pack into encrypted JWE format
+pub async fn pack_encrypted(
+    message: &PlainMessage,
+    agent: &dyn Agent,
+    recipient_dids: &[&str],
+) -> Result<String>;
+
+// Unpack any DIDComm message
+pub async fn unpack(
+    packed_message: &str,
+    agent: &dyn Agent,
+    resolver: &dyn Resolver,
+) -> Result<PlainMessage>;
+```
+
+## Usage Examples
+
+### Creating an Agent
+```rust
+use tap_agent::{LocalAgent, Agent};
+
+// Create a new agent with generated keys
+let agent = LocalAgent::new()?;
+println!("Agent DID: {}", agent.did());
+
+// Create from existing key file
+let agent = LocalAgent::from_file("path/to/agent.json", "password")?;
+
+// Save agent keys
+agent.save_to_file("path/to/agent.json", "password")?;
+```
+
+### Signing Messages
+```rust
+use tap_agent::sign_plain_message;
+
+let plain_message = create_transfer_message();
+let jws = sign_plain_message(&plain_message, &agent).await?;
+```
+
+### Encrypting Messages
+```rust
+use tap_agent::pack_encrypted;
+
+let encrypted = pack_encrypted(
+    &plain_message,
+    &agent,
+    &["did:key:recipient1", "did:key:recipient2"],
+).await?;
+```
+
+### Message Verification
+```rust
+use tap_agent::{verify_jws, Resolver};
+
+let resolver = MyResolver::new();
+let verified_message = verify_jws(&jws, &resolver).await?;
+```
+
+### Agent Key Manager
+```rust
+use tap_agent::AgentKeyManager;
+
+let manager = AgentKeyManager::new();
+
+// Add agents with labels
+manager.add_agent_with_label(agent1, "primary").await?;
+manager.add_agent_with_label(agent2, "backup").await?;
+
+// Get agent by label
+let agent = manager.get_agent_by_label("primary").await?;
+
+// List all agents
+let agents = manager.list_agents().await;
+```
+
+## Key Features
+- **DID Support**: Uses did:key method for self-sovereign identity
+- **Cryptographic Operations**: Ed25519 signing, X25519 encryption
+- **DIDComm Compatible**: Full support for DIDComm message formats
+- **Secure Storage**: Password-protected key storage
+- **Thread-Safe**: Async/await support with thread safety
+- **Extensible**: Trait-based design for custom implementations
+
+## Security Considerations
+- Private keys are encrypted at rest using AES-256-GCM
+- Password-based key derivation using Argon2
+- Secure random number generation
+- Memory zeroization for sensitive data
+- No private key material in logs or debug output
+
+## Dependencies
+- `ed25519-dalek`: Ed25519 signatures
+- `x25519-dalek`: X25519 key agreement
+- `aes-gcm`: Authenticated encryption
+- `argon2`: Password hashing
+- `tap-msg`: Message types
+- `async-trait`: Async trait support
+
+## Testing
+```bash
+cargo test --package tap-agent
+```
+
+## Related Crates
+- `tap-msg`: Defines message types
+- `tap-node`: Uses agents for message processing
+- `tap-wasm`: WebAssembly bindings for browser usage

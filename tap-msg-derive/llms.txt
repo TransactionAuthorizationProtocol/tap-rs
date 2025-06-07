@@ -1,0 +1,241 @@
+# tap-msg-derive
+
+## Overview
+The `tap-msg-derive` crate provides procedural macros for automatically implementing the `TapMessage` trait on custom message types. It simplifies creating new TAP message types by generating boilerplate code for serialization, validation, and message conversion.
+
+## Purpose
+- Generate `TapMessage` trait implementations
+- Reduce boilerplate for custom message types
+- Ensure consistent message structure
+- Enable rapid protocol extension
+- Maintain type safety for new messages
+
+## Key Macros
+
+### `#[derive(TapMessage)]`
+The main derive macro that implements the `TapMessage` trait:
+
+```rust
+use tap_msg_derive::TapMessage;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap_message(message_type = "org.example.custom_message")]
+pub struct CustomMessage {
+    pub id: String,
+    pub data: String,
+    pub timestamp: String,
+}
+```
+
+### Attributes
+
+#### `#[tap_message(...)]`
+Container-level attributes:
+- `message_type = "..."` - Sets the message type identifier
+- `authorizable = true` - Implements `Authorizable` trait
+- `connectable = true` - Implements `Connectable` trait
+- `thread_id_field = "..."` - Custom thread ID field name
+
+#### `#[tap_field(...)]`
+Field-level attributes:
+- `rename = "..."` - Rename field in JSON
+- `skip` - Skip field in serialization
+- `flatten` - Flatten nested structure
+
+## Usage Examples
+
+### Basic Message Type
+```rust
+use tap_msg_derive::TapMessage;
+use serde::{Serialize, Deserialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap_message(message_type = "com.company.notification")]
+pub struct NotificationMessage {
+    pub title: String,
+    pub body: String,
+    pub priority: String,
+    pub recipient_did: String,
+}
+
+// Automatically implements:
+impl TapMessage for NotificationMessage {
+    fn to_plain_message(&self, from: &str, to: Vec<&str>, thread_id: Option<String>) -> Result<PlainMessage>;
+    fn from_plain_message(message: &PlainMessage) -> Result<Self>;
+    fn message_type() -> &'static str;
+}
+```
+
+### Authorizable Message
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap_message(
+    message_type = "com.company.payment_request",
+    authorizable = true
+)]
+pub struct PaymentRequest {
+    pub request_id: String,
+    pub amount: String,
+    pub currency: String,
+    pub authorization_url: Option<String>,
+}
+
+// Also implements Authorizable trait
+```
+
+### Connectable Message
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap_message(
+    message_type = "com.company.connection_request",
+    connectable = true
+)]
+pub struct ConnectionRequest {
+    pub connection_id: String,
+    pub invitation_url: String,
+    pub metadata: serde_json::Value,
+}
+
+// Also implements Connectable trait
+```
+
+### Custom Thread ID
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap_message(
+    message_type = "com.company.threaded_message",
+    thread_id_field = "conversation_id"
+)]
+pub struct ThreadedMessage {
+    pub conversation_id: Option<String>,  // Used as thread_id
+    pub content: String,
+}
+```
+
+### Complex Message with Nested Types
+```rust
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PaymentDetails {
+    pub method: String,
+    pub account: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[tap_message(message_type = "com.company.invoice")]
+pub struct Invoice {
+    pub invoice_id: String,
+    pub items: Vec<LineItem>,
+    #[tap_field(flatten)]
+    pub payment: PaymentDetails,
+    #[tap_field(skip)]
+    pub internal_notes: String,  // Not included in messages
+}
+```
+
+## Generated Code
+
+The macro generates implementations for:
+
+### TapMessage Trait
+```rust
+impl TapMessage for CustomMessage {
+    fn to_plain_message(
+        &self,
+        from: &str,
+        to: Vec<&str>,
+        thread_id: Option<String>
+    ) -> Result<PlainMessage> {
+        // Generated serialization code
+    }
+    
+    fn from_plain_message(message: &PlainMessage) -> Result<Self> {
+        // Generated deserialization code
+    }
+    
+    fn message_type() -> &'static str {
+        "org.example.custom_message"
+    }
+}
+```
+
+### Validation (if implemented)
+```rust
+impl Validation for CustomMessage {
+    fn validate(&self) -> Result<(), ValidationError> {
+        // Calls custom validation if defined
+    }
+}
+```
+
+## Best Practices
+
+### Message Type Naming
+Use reverse domain notation:
+- `com.company.message_name`
+- `org.protocol.message_name`
+- `tap.standard.message_name`
+
+### Field Requirements
+- All messages should be `Serialize` and `Deserialize`
+- Use `String` for IDs and timestamps
+- Use `Option<T>` for optional fields
+- Implement `Clone` for message copying
+
+### Validation
+Implement custom validation:
+```rust
+impl CustomMessage {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.data.is_empty() {
+            return Err("Data cannot be empty".to_string());
+        }
+        Ok(())
+    }
+}
+```
+
+## Integration with tap-msg
+
+The derive macro ensures compatibility with core TAP message types:
+```rust
+use tap_msg::{TapMessage, PlainMessage};
+
+let msg = CustomMessage {
+    id: "msg-123".to_string(),
+    data: "test".to_string(),
+    timestamp: chrono::Utc::now().to_rfc3339(),
+};
+
+// Convert to PlainMessage
+let plain = msg.to_plain_message(
+    "did:key:sender",
+    vec!["did:key:recipient"],
+    None
+)?;
+
+// Convert back
+let restored = CustomMessage::from_plain_message(&plain)?;
+```
+
+## Error Handling
+The macro generates proper error handling:
+- Serialization errors
+- Deserialization errors
+- Type mismatch errors
+- Missing field errors
+
+## Testing
+```bash
+cargo test --package tap-msg-derive
+```
+
+## Dependencies
+- `proc-macro2`: Token manipulation
+- `quote`: Code generation
+- `syn`: Rust syntax parsing
+
+## Related Crates
+- `tap-msg`: Uses the generated implementations
+- `tap-node`: Processes custom messages
+- `tap-agent`: Signs/encrypts custom messages
