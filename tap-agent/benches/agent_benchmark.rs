@@ -3,14 +3,14 @@
 //! Run with: cargo bench --bench agent_benchmark
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use std::env;
 use std::str::FromStr;
 use std::sync::Arc;
 use tap_agent::{Agent, TapAgent};
 use tap_caip::AssetId;
 use tap_msg::message::{Party, Transfer};
-use uuid::Uuid;
-use std::env;
 use tempfile::TempDir;
+use uuid::Uuid;
 
 /// Create a test agent with ephemeral key for benchmarking
 fn create_test_agent() -> (Arc<TapAgent>, String) {
@@ -31,9 +31,6 @@ fn create_test_agent() -> (Arc<TapAgent>, String) {
 
     (agent, did)
 }
-</end>
-
-</edits>
 
 /// Create a test transfer message
 fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {

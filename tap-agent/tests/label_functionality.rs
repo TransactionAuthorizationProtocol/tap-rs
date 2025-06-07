@@ -1,10 +1,10 @@
 //! Tests for key label functionality
 
+use std::env;
 use std::fs;
 use tap_agent::did::{DIDKeyGenerator, KeyType};
 use tap_agent::error::Result;
 use tap_agent::storage::KeyStorage;
-use std::env;
 use tempfile::TempDir;
 
 #[test]

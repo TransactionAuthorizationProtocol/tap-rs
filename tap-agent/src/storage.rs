@@ -74,35 +74,34 @@ mod key_type_serde {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use std::env;
     use tempfile::TempDir;
-    use serial_test::serial;
 
     #[test]
     #[serial]
     fn test_tap_home_environment_variable() {
-        
         // Save current env vars
         let old_home = env::var("TAP_HOME").ok();
         let old_test = env::var("TAP_TEST_DIR").ok();
-        
+
         // Clear env vars
         env::remove_var("TAP_HOME");
         env::remove_var("TAP_TEST_DIR");
-        
+
         // Create a temporary directory
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
-        
+
         // Set TAP_HOME
         env::set_var("TAP_HOME", &temp_path);
-        
+
         // Get the default key path
         let key_path = KeyStorage::default_key_path().unwrap();
-        
+
         // Verify it uses TAP_HOME
         assert_eq!(key_path, temp_path.join(DEFAULT_KEYS_FILE));
-        
+
         // Restore env vars
         env::remove_var("TAP_HOME");
         if let Some(val) = old_home {
@@ -116,28 +115,30 @@ mod tests {
     #[test]
     #[serial]
     fn test_tap_test_dir_environment_variable() {
-        
         // Save current env vars
         let old_home = env::var("TAP_HOME").ok();
         let old_test = env::var("TAP_TEST_DIR").ok();
-        
+
         // Clear env vars
         env::remove_var("TAP_HOME");
         env::remove_var("TAP_TEST_DIR");
-        
+
         // Create a temporary directory
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
-        
+
         // Set TAP_TEST_DIR
         env::set_var("TAP_TEST_DIR", &temp_path);
-        
+
         // Get the default key path
         let key_path = KeyStorage::default_key_path().unwrap();
-        
+
         // Verify it uses TAP_TEST_DIR/.tap
-        assert_eq!(key_path, temp_path.join(DEFAULT_TAP_DIR).join(DEFAULT_KEYS_FILE));
-        
+        assert_eq!(
+            key_path,
+            temp_path.join(DEFAULT_TAP_DIR).join(DEFAULT_KEYS_FILE)
+        );
+
         // Restore env vars
         env::remove_var("TAP_TEST_DIR");
         if let Some(val) = old_home {
@@ -151,28 +152,27 @@ mod tests {
     #[test]
     #[serial]
     fn test_environment_variable_priority() {
-        
         // Save current env vars
         let old_home = env::var("TAP_HOME").ok();
         let old_test = env::var("TAP_TEST_DIR").ok();
-        
+
         // Create temporary directories
         let home_dir = TempDir::new().unwrap();
         let test_dir = TempDir::new().unwrap();
-        
+
         let home_path = home_dir.path().to_path_buf();
         let test_path = test_dir.path().to_path_buf();
-        
+
         // Set both TAP_HOME and TAP_TEST_DIR
         env::set_var("TAP_HOME", &home_path);
         env::set_var("TAP_TEST_DIR", &test_path);
-        
+
         // Get the default key path
         let key_path = KeyStorage::default_key_path().unwrap();
-        
+
         // Verify TAP_HOME takes priority
         assert_eq!(key_path, home_path.join(DEFAULT_KEYS_FILE));
-        
+
         // Restore env vars
         env::remove_var("TAP_HOME");
         env::remove_var("TAP_TEST_DIR");
@@ -187,31 +187,30 @@ mod tests {
     #[test]
     #[serial]
     fn test_agent_directory_with_tap_home() {
-        
         // Save current env vars
         let old_home = env::var("TAP_HOME").ok();
         let old_test = env::var("TAP_TEST_DIR").ok();
-        
+
         // Clear env vars
         env::remove_var("TAP_HOME");
         env::remove_var("TAP_TEST_DIR");
-        
+
         // Create a temporary directory
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
-        
+
         // Set TAP_HOME
         env::set_var("TAP_HOME", &temp_path);
-        
+
         // Create a storage instance
         let storage = KeyStorage::new();
-        
+
         // Get agent directory
         let agent_dir = storage.get_agent_directory("did:key:test123").unwrap();
-        
+
         // Verify it uses TAP_HOME with sanitized DID
         assert_eq!(agent_dir, temp_path.join("did:key:test123"));
-        
+
         // Restore env vars
         env::remove_var("TAP_HOME");
         if let Some(val) = old_home {
@@ -225,22 +224,21 @@ mod tests {
     #[test]
     #[serial]
     fn test_storage_persistence_with_temp_dir() {
-        
         // Save current env vars
         let old_home = env::var("TAP_HOME").ok();
         let old_test = env::var("TAP_TEST_DIR").ok();
-        
+
         // Clear env vars
         env::remove_var("TAP_HOME");
         env::remove_var("TAP_TEST_DIR");
-        
+
         // Create a temporary directory
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
-        
+
         // Set TAP_HOME
         env::set_var("TAP_HOME", &temp_path);
-        
+
         // Create and save storage
         let mut storage = KeyStorage::new();
         storage.add_key(StoredKey {
@@ -251,19 +249,19 @@ mod tests {
             public_key: "test-public".to_string(),
             metadata: HashMap::new(),
         });
-        
+
         // Save to default location
         storage.save_default().unwrap();
-        
+
         // Verify file was created in temp directory
         let expected_path = temp_path.join(DEFAULT_KEYS_FILE);
         assert!(expected_path.exists());
-        
+
         // Load it back
         let loaded = KeyStorage::load_default().unwrap();
         assert_eq!(loaded.keys.len(), 1);
         assert!(loaded.keys.contains_key("did:key:test"));
-        
+
         // Restore env vars
         env::remove_var("TAP_HOME");
         if let Some(val) = old_home {
@@ -385,12 +383,16 @@ impl KeyStorage {
         if let Ok(tap_home) = env::var("TAP_HOME") {
             return Some(PathBuf::from(tap_home).join(DEFAULT_KEYS_FILE));
         }
-        
+
         // Check for TAP_TEST_DIR environment variable (for tests/examples)
         if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
-            return Some(PathBuf::from(test_dir).join(DEFAULT_TAP_DIR).join(DEFAULT_KEYS_FILE));
+            return Some(
+                PathBuf::from(test_dir)
+                    .join(DEFAULT_TAP_DIR)
+                    .join(DEFAULT_KEYS_FILE),
+            );
         }
-        
+
         // Default to home directory
         home_dir().map(|home| home.join(DEFAULT_TAP_DIR).join(DEFAULT_KEYS_FILE))
     }
@@ -589,8 +591,9 @@ impl KeyStorage {
                 // For tests, use TAP_TEST_DIR/.tap
                 PathBuf::from(test_dir).join(DEFAULT_TAP_DIR)
             } else {
-                let home = home_dir()
-                    .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
+                let home = home_dir().ok_or_else(|| {
+                    Error::Storage("Could not determine home directory".to_string())
+                })?;
                 home.join(DEFAULT_TAP_DIR)
             }
         };

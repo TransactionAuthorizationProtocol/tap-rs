@@ -5,9 +5,9 @@
 
 use crate::error::Result;
 use crate::storage::KeyStorage;
+use std::env;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use std::env;
 
 /// Test storage wrapper that uses a temporary directory
 pub struct TestStorage {
@@ -66,10 +66,10 @@ impl Default for TestStorage {
 /// This creates the storage file in a temporary directory
 pub fn temp_storage_path() -> PathBuf {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
-    
+
     // Set TAP_HOME to the temp directory
     env::set_var("TAP_HOME", temp_dir.path());
-    
+
     let path = temp_dir.path().join("keys.json");
 
     // We need to leak the temp_dir to keep it alive for the test
@@ -88,7 +88,7 @@ pub fn temp_tap_directory() -> PathBuf {
 
     // Create the .tap directory
     std::fs::create_dir_all(&tap_dir).expect("Failed to create .tap directory");
-    
+
     // Set TAP_HOME to point to the .tap directory
     env::set_var("TAP_HOME", &tap_dir);
 
