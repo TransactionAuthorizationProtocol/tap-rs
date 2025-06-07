@@ -7,7 +7,7 @@ use crate::tools::{error_text_response, success_text_response, ToolHandler};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Column, Connection, Row, SqliteConnection};
 use std::sync::Arc;
 use tracing::{debug, error};
 
@@ -149,7 +149,7 @@ impl ToolHandler for QueryDatabaseTool {
                 if !rows.is_empty() {
                     // Get column names from the first row
                     let first_row = &rows[0];
-                    for (i, column) in first_row.columns().iter().enumerate() {
+                    for column in first_row.columns().iter() {
                         columns.push(column.name().to_string());
                     }
 

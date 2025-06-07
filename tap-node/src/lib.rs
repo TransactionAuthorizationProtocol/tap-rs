@@ -508,7 +508,7 @@ impl TapNode {
                 if let Some(ref storage_manager) = self.agent_storage_manager {
                     let empty_msg = "{}".to_string();
                     let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
-                    
+
                     // Store for each recipient agent
                     for recipient_did in &plain_message.to {
                         if self.agents.has_agent(recipient_did) {
@@ -518,7 +518,9 @@ impl TapNode {
                                 raw_msg,
                                 &source_type,
                                 source_identifier,
-                            ).await {
+                            )
+                            .await
+                            {
                                 received_ids.push((recipient_did.clone(), id));
                             }
                         }
@@ -532,7 +534,9 @@ impl TapNode {
                             raw_msg,
                             &source_type,
                             source_identifier,
-                        ).await {
+                        )
+                        .await
+                        {
                             received_ids.push((plain_message.from.clone(), id));
                         }
                     }
@@ -552,9 +556,11 @@ impl TapNode {
                         storage::ReceivedStatus::Failed
                     };
                     let error_msg = result.as_ref().err().map(|e| e.to_string());
-                    
+
                     for (agent_did, received_id) in &received_ids {
-                        if let Ok(agent_storage) = storage_manager.get_agent_storage(agent_did).await {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(agent_did).await
+                        {
                             let _ = agent_storage
                                 .update_received_status(
                                     *received_id,
@@ -580,7 +586,7 @@ impl TapNode {
                 if let Some(ref storage_manager) = self.agent_storage_manager {
                     let empty_msg = "{}".to_string();
                     let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
-                    
+
                     // Store for each recipient agent based on JWE recipients
                     for recipient in &jwe.recipients {
                         if let Some(did) = recipient.header.kid.split('#').next() {
@@ -591,7 +597,9 @@ impl TapNode {
                                     raw_msg,
                                     &source_type,
                                     source_identifier,
-                                ).await {
+                                )
+                                .await
+                                {
                                     received_ids.push((did.to_string(), id));
                                 }
                             }
@@ -644,9 +652,11 @@ impl TapNode {
                         storage::ReceivedStatus::Failed
                     };
                     let error_msg = result.as_ref().err().map(|e| e.to_string());
-                    
+
                     for (agent_did, received_id) in &received_ids {
-                        if let Ok(agent_storage) = storage_manager.get_agent_storage(agent_did).await {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(agent_did).await
+                        {
                             let _ = agent_storage
                                 .update_received_status(
                                     *received_id,
@@ -673,7 +683,7 @@ impl TapNode {
                 if let Some(ref storage_manager) = self.agent_storage_manager {
                     let empty_msg = "{}".to_string();
                     let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
-                    
+
                     // Store for each recipient agent
                     for recipient_did in &plain_message.to {
                         if self.agents.has_agent(recipient_did) {
@@ -683,7 +693,9 @@ impl TapNode {
                                 raw_msg,
                                 &source_type,
                                 source_identifier,
-                            ).await {
+                            )
+                            .await
+                            {
                                 received_ids.push((recipient_did.clone(), id));
                             }
                         }
@@ -697,7 +709,9 @@ impl TapNode {
                             raw_msg,
                             &source_type,
                             source_identifier,
-                        ).await {
+                        )
+                        .await
+                        {
                             received_ids.push((plain_message.from.clone(), id));
                         }
                     }
@@ -716,9 +730,11 @@ impl TapNode {
                         storage::ReceivedStatus::Failed
                     };
                     let error_msg = result.as_ref().err().map(|e| e.to_string());
-                    
+
                     for (agent_did, received_id) in &received_ids {
-                        if let Ok(agent_storage) = storage_manager.get_agent_storage(agent_did).await {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(agent_did).await
+                        {
                             let _ = agent_storage
                                 .update_received_status(
                                     *received_id,
