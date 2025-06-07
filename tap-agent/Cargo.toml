@@ -9,8 +9,8 @@ license.workspace = true
 readme = "README.md"
 
 [dependencies]
-tap-msg = { version = "0.2.0", path = "../tap-msg" }
-tap-caip = { version = "0.2.0", path = "../tap-caip" }
+tap-msg = { version = "0.3.0", path = "../tap-msg" }
+tap-caip = { version = "0.3.0", path = "../tap-caip" }
 async-trait = { workspace = true }
 thiserror = "1.0"
 serde = { workspace = true }
@@ -40,7 +40,15 @@ wasm-bindgen = { workspace = true, optional = true }
 js-sys = { workspace = true, optional = true }
 wasm-bindgen-futures = { workspace = true, optional = true }
 getrandom = { workspace = true, features = ["js"], optional = true }
-web-sys = { version = "0.3", features = ["console", "Window", "Request", "RequestInit", "RequestMode", "Response", "Headers"], optional = true }
+web-sys = { version = "0.3", features = [
+    "console",
+    "Window",
+    "Request",
+    "RequestInit",
+    "RequestMode",
+    "Response",
+    "Headers",
+], optional = true }
 aes-gcm = "0.10.3"
 
 [dev-dependencies]
