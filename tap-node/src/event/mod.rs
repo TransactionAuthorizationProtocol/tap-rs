@@ -124,6 +124,7 @@
 
 pub mod handlers;
 pub mod logger;
+pub mod trust_ping_handler;
 
 use async_trait::async_trait;
 use serde_json::Value;

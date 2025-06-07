@@ -6,6 +6,9 @@ pub mod processor;
 pub mod processor_pool;
 pub mod router;
 pub mod sender;
+pub mod trust_ping_processor;
+#[cfg(test)]
+pub mod trust_ping_tests;
 
 // Re-export processors, routers, and senders
 pub use processor::{
@@ -15,6 +18,7 @@ pub use processor::{
 pub use processor_pool::{ProcessorPool, ProcessorPoolConfig};
 pub use router::{DefaultPlainMessageRouter, IntraNodePlainMessageRouter};
 pub use sender::{HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender};
+pub use trust_ping_processor::TrustPingProcessor;
 
 // Import the PlainMessage type from tap-msg
 use crate::error::Result;
@@ -48,6 +52,7 @@ pub enum PlainMessageProcessorType {
     Logging(LoggingPlainMessageProcessor),
     Validation(ValidationPlainMessageProcessor),
     StateMachine(StateMachineIntegrationProcessor),
+    TrustPing(TrustPingProcessor),
     Composite(CompositePlainMessageProcessor),
 }
 
@@ -95,6 +100,9 @@ impl PlainMessageProcessor for CompositePlainMessageProcessor {
                 PlainMessageProcessorType::StateMachine(p) => {
                     p.process_incoming(current_message).await?
                 }
+                PlainMessageProcessorType::TrustPing(p) => {
+                    p.process_incoming(current_message).await?
+                }
                 PlainMessageProcessorType::Composite(p) => {
                     p.process_incoming(current_message).await?
                 }
@@ -126,6 +134,9 @@ impl PlainMessageProcessor for CompositePlainMessageProcessor {
                     p.process_outgoing(current_message).await?
                 }
                 PlainMessageProcessorType::StateMachine(p) => {
+                    p.process_outgoing(current_message).await?
+                }
+                PlainMessageProcessorType::TrustPing(p) => {
                     p.process_outgoing(current_message).await?
                 }
                 PlainMessageProcessorType::Composite(p) => {

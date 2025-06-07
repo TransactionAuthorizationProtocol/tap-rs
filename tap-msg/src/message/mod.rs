@@ -7,6 +7,7 @@
 pub mod agent;
 pub mod agent_management;
 pub mod authorize;
+pub mod basic_message;
 pub mod cancel;
 pub mod connection;
 pub mod context;
@@ -24,6 +25,7 @@ pub mod settle;
 pub mod tap_message_enum;
 pub mod tap_message_trait;
 pub mod transfer;
+pub mod trust_ping;
 pub mod update_party;
 pub mod update_policies;
 pub mod validation;
@@ -36,6 +38,9 @@ pub use crate::didcomm::{Attachment, AttachmentData, SimpleAttachmentData};
 
 // Re-export authorization types
 pub use authorize::Authorize;
+
+// Re-export basic message types
+pub use basic_message::BasicMessage;
 
 // Re-export cancel type
 pub use cancel::Cancel;
@@ -85,6 +90,9 @@ pub use settle::Settle;
 
 // Re-export transfer types
 pub use transfer::Transfer;
+
+// Re-export trust ping types
+pub use trust_ping::{TrustPing, TrustPingResponse};
 
 // Re-export update party type
 pub use update_party::UpdateParty;

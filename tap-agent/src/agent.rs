@@ -20,6 +20,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tap_msg::didcomm::{PlainMessage, PlainMessageExt};
 use tap_msg::TapMessageBody;
+use tracing::{debug, error, info, warn};
 
 /// Type alias for enhanced agent information: (DID, policies, metadata)
 pub type EnhancedAgentInfo = (
@@ -67,7 +68,7 @@ pub struct DeliveryResult {
 /// async fn process_encrypted_message(agent: &TapAgent, jwe_json: &serde_json::Value) {
 ///     // This would typically be called by TAP Node
 ///     if let Err(e) = agent.receive_encrypted_message(jwe_json).await {
-///         eprintln!("Failed to process encrypted message: {}", e);
+///         tracing::error!("Failed to process encrypted message: {}", e);
 ///     }
 /// }
 /// ```
@@ -822,7 +823,7 @@ impl TapAgent {
     async fn process_message_internal(&self, message: PlainMessage) -> Result<()> {
         // This is where actual message processing logic would go
         // For now, just log that we processed it
-        println!(
+        debug!(
             "Processing message: {} of type {}",
             message.id, message.type_
         );
@@ -990,7 +991,7 @@ impl TapAgent {
         let status = response.status().as_u16();
 
         // Log the response status
-        println!("Message sent to endpoint {}, status: {}", endpoint, status);
+        debug!("Message sent to endpoint {}, status: {}", endpoint, status);
 
         Ok(status)
     }
@@ -1242,9 +1243,9 @@ impl crate::agent::Agent for TapAgent {
         }
 
         // Log the plaintext message
-        println!("\n==== SENDING TAP MESSAGE ====");
-        println!("Message Type: {}", T::message_type());
-        println!("Recipients: {:?}", to);
+        debug!("\n==== SENDING TAP MESSAGE ====");
+        debug!("Message Type: {}", T::message_type());
+        debug!("Recipients: {:?}", to);
 
         // Convert the TapMessageBody to a PlainMessage with explicit routing
         let plain_message =
@@ -1252,12 +1253,12 @@ impl crate::agent::Agent for TapAgent {
 
         // Determine the appropriate security mode
         let security_mode = self.determine_security_mode::<T>();
-        println!("Security Mode: {:?}", security_mode);
+        debug!("Security Mode: {:?}", security_mode);
 
         // For each recipient, look up service endpoint before sending
         for recipient in &to {
             if let Ok(Some(endpoint)) = self.get_service_endpoint(recipient).await {
-                println!("Found service endpoint for {}: {}", recipient, endpoint);
+                debug!("Found service endpoint for {}: {}", recipient, endpoint);
             }
         }
 
@@ -1280,14 +1281,14 @@ impl crate::agent::Agent for TapAgent {
         let packed = plain_message.pack(&*self.key_manager, pack_options).await?;
 
         // Log the packed message
-        println!("--- PACKED MESSAGE ---");
-        println!(
+        debug!("--- PACKED MESSAGE ---");
+        debug!(
             "{}",
-            serde_json::from_str::<Value>(&packed)
+            serde_json::from_str::<serde_json::Value>(&packed)
                 .map(|v| serde_json::to_string_pretty(&v).unwrap_or(packed.clone()))
                 .unwrap_or(packed.clone())
         );
-        println!("=====================");
+        debug!("=====================");
 
         // If delivery is not requested, just return the packed message
         if !deliver {
@@ -1300,7 +1301,7 @@ impl crate::agent::Agent for TapAgent {
         for recipient in &to {
             match self.get_service_endpoint(recipient).await {
                 Ok(Some(endpoint)) => {
-                    println!("Delivering message to {} at {}", recipient, endpoint);
+                    debug!("Delivering message to {} at {}", recipient, endpoint);
 
                     // Extract message ID for logging
                     let message_id = match serde_json::from_str::<Value>(&packed) {
@@ -1315,7 +1316,7 @@ impl crate::agent::Agent for TapAgent {
                     // Attempt to deliver the message
                     match self.send_to_endpoint(&packed, &endpoint).await {
                         Ok(status) => {
-                            println!(
+                            info!(
                                 "✅ Delivered message {} to {} at {}",
                                 message_id, recipient, endpoint
                             );
@@ -1333,7 +1334,7 @@ impl crate::agent::Agent for TapAgent {
                                 "Failed to deliver message {} to {} at {}: {}",
                                 message_id, recipient, endpoint, e
                             );
-                            println!("❌ {}", error_msg);
+                            error!("❌ {}", error_msg);
 
                             delivery_results.push(DeliveryResult {
                                 did: recipient.to_string(),
@@ -1345,7 +1346,7 @@ impl crate::agent::Agent for TapAgent {
                     }
                 }
                 Ok(None) => {
-                    println!(
+                    warn!(
                         "⚠️ No service endpoint found for {}, skipping delivery",
                         recipient
                     );
@@ -1356,7 +1357,7 @@ impl crate::agent::Agent for TapAgent {
                         "Failed to resolve service endpoint for {}: {}",
                         recipient, e
                     );
-                    println!("❌ {}", error_msg);
+                    error!("❌ {}", error_msg);
                 }
             }
         }
@@ -1366,8 +1367,8 @@ impl crate::agent::Agent for TapAgent {
 
     async fn receive_encrypted_message(&self, jwe_value: &Value) -> Result<()> {
         // Log the received encrypted message
-        println!("\n==== RECEIVING ENCRYPTED MESSAGE ====");
-        println!("Agent DID: {}", self.get_agent_did());
+        debug!("\n==== RECEIVING ENCRYPTED MESSAGE ====");
+        debug!("Agent DID: {}", self.get_agent_did());
 
         // Parse as JWE
         let jwe: crate::message::Jwe = serde_json::from_value(jwe_value.clone())
@@ -1393,17 +1394,17 @@ impl crate::agent::Agent for TapAgent {
 
     async fn receive_plain_message(&self, message: PlainMessage) -> Result<()> {
         // Process already verified/decrypted message
-        println!("\n==== RECEIVING PLAIN MESSAGE ====");
-        println!("Message ID: {}", message.id);
-        println!("Message Type: {}", message.type_);
+        debug!("\n==== RECEIVING PLAIN MESSAGE ====");
+        debug!("Message ID: {}", message.id);
+        debug!("Message Type: {}", message.type_);
 
         self.process_message_internal(message).await
     }
 
     async fn receive_message(&self, raw_message: &str) -> Result<PlainMessage> {
         // Log the received raw message
-        println!("\n==== RECEIVING RAW MESSAGE ====");
-        println!("Agent DID: {}", self.get_agent_did());
+        debug!("\n==== RECEIVING RAW MESSAGE ====");
+        debug!("Agent DID: {}", self.get_agent_did());
 
         // First try to parse as JSON to determine message type
         let json_value: Value = serde_json::from_str(raw_message)
@@ -1415,19 +1416,19 @@ impl crate::agent::Agent for TapAgent {
         let is_signed =
             json_value.get("payload").is_some() && json_value.get("signatures").is_some();
 
-        println!(
+        debug!(
             "Message type detection: encrypted={}, signed={}",
             is_encrypted, is_signed
         );
 
         if is_signed {
-            println!("Detected signed message");
-            println!("--- SIGNED MESSAGE ---");
-            println!(
+            debug!("Detected signed message");
+            debug!("--- SIGNED MESSAGE ---");
+            debug!(
                 "{}",
                 serde_json::to_string_pretty(&json_value).unwrap_or(raw_message.to_string())
             );
-            println!("---------------------");
+            debug!("---------------------");
 
             // Parse as JWS
             let jws: crate::message::Jws = serde_json::from_value(json_value)
@@ -1459,23 +1460,23 @@ impl crate::agent::Agent for TapAgent {
             };
 
             // Log the unpacked message
-            println!("--- UNPACKED CONTENT ---");
-            println!(
+            debug!("--- UNPACKED CONTENT ---");
+            debug!(
                 "{}",
                 serde_json::to_string_pretty(&plain_message)
                     .unwrap_or_else(|_| format!("{:?}", plain_message))
             );
-            println!("------------------------");
+            debug!("------------------------");
 
             Ok(plain_message)
         } else if is_encrypted {
-            println!("Detected encrypted message");
-            println!("--- ENCRYPTED MESSAGE ---");
-            println!(
+            debug!("Detected encrypted message");
+            debug!("--- ENCRYPTED MESSAGE ---");
+            debug!(
                 "{}",
                 serde_json::to_string_pretty(&json_value).unwrap_or(raw_message.to_string())
             );
-            println!("---------------------");
+            debug!("---------------------");
 
             // Get our encryption key ID
             let our_kid = self.get_signing_kid().await.ok();
@@ -1487,7 +1488,7 @@ impl crate::agent::Agent for TapAgent {
                 require_signature: false,
             };
 
-            println!("Unpacking with options: {:?}", unpack_options);
+            debug!("Unpacking with options: {:?}", unpack_options);
 
             // Unpack the message
             let plain_message: PlainMessage =
@@ -1496,30 +1497,30 @@ impl crate::agent::Agent for TapAgent {
                 {
                     Ok(msg) => msg,
                     Err(e) => {
-                        println!("Failed to unpack message: {}", e);
+                        error!("Failed to unpack message: {}", e);
                         return Err(e);
                     }
                 };
 
             // Log the unpacked message
-            println!("--- UNPACKED CONTENT ---");
-            println!(
+            debug!("--- UNPACKED CONTENT ---");
+            debug!(
                 "{}",
                 serde_json::to_string_pretty(&plain_message)
                     .unwrap_or_else(|_| format!("{:?}", plain_message))
             );
-            println!("------------------------");
+            debug!("------------------------");
 
             Ok(plain_message)
         } else {
             // It's already a plain message
-            println!("Detected plain message");
-            println!("--- PLAIN MESSAGE ---");
-            println!(
+            debug!("Detected plain message");
+            debug!("--- PLAIN MESSAGE ---");
+            debug!(
                 "{}",
                 serde_json::to_string_pretty(&json_value).unwrap_or(raw_message.to_string())
             );
-            println!("---------------------");
+            debug!("---------------------");
 
             // Parse directly as PlainMessage
             serde_json::from_str::<PlainMessage>(raw_message)

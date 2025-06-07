@@ -95,7 +95,7 @@ mod tests {
 
         // Store the message first
         storage
-            .log_message(&message, MessageDirection::Incoming, None)
+            .log_message(&message, MessageDirection::Incoming)
             .await
             .unwrap();
 

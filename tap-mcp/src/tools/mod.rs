@@ -1,6 +1,11 @@
 //! TAP MCP tools implementation
 
 mod agent_tools;
+mod communication_tools;
+mod customer_tools;
+mod database_tools;
+mod delivery_tools;
+mod received_tools;
 mod schema;
 mod transaction_tools;
 
@@ -13,6 +18,11 @@ use std::sync::Arc;
 use tracing::{debug, error};
 
 pub use agent_tools::*;
+pub use communication_tools::*;
+pub use customer_tools::*;
+pub use database_tools::*;
+pub use delivery_tools::*;
+pub use received_tools::*;
 pub use transaction_tools::*;
 
 /// Default limit for pagination
@@ -75,6 +85,64 @@ impl ToolRegistry {
         tools.insert(
             "tap_list_transactions".to_string(),
             Box::new(ListTransactionsTool::new(tap_integration.clone())),
+        );
+
+        // Communication tools
+        tools.insert(
+            "tap_trust_ping".to_string(),
+            Box::new(TrustPingTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_basic_message".to_string(),
+            Box::new(BasicMessageTool::new(tap_integration.clone())),
+        );
+
+        // Delivery tools
+        tools.insert(
+            "tap_list_deliveries_by_recipient".to_string(),
+            Box::new(ListDeliveriesByRecipientTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_list_deliveries_by_message".to_string(),
+            Box::new(ListDeliveriesByMessageTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_list_deliveries_by_thread".to_string(),
+            Box::new(ListDeliveriesByThreadTool::new(tap_integration.clone())),
+        );
+
+        // Customer and connection tools
+        tools.insert(
+            "tap_list_customers".to_string(),
+            Box::new(ListCustomersTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_list_connections".to_string(),
+            Box::new(ListConnectionsTool::new(tap_integration.clone())),
+        );
+
+        // Received message tools
+        tools.insert(
+            "tap_list_received".to_string(),
+            Box::new(ListReceivedTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_get_pending_received".to_string(),
+            Box::new(GetPendingReceivedTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_view_raw_received".to_string(),
+            Box::new(ViewRawReceivedTool::new(tap_integration.clone())),
+        );
+
+        // Database tools
+        tools.insert(
+            "tap_query_database".to_string(),
+            Box::new(QueryDatabaseTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_get_database_schema".to_string(),
+            Box::new(GetDatabaseSchemaTool::new(tap_integration)),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

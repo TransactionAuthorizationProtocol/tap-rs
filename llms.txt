@@ -1,0 +1,237 @@
+# TAP-RS: Travel Asset Protocol Implementation
+
+## Overview
+TAP-RS is a comprehensive Rust implementation of the Travel Asset Protocol (TAP), designed to enable secure, compliant cryptocurrency transfers that meet Travel Rule requirements. This workspace contains multiple crates that work together to provide a complete TAP solution.
+
+## What is TAP?
+The Travel Asset Protocol is an open standard for exchanging Travel Rule information between Virtual Asset Service Providers (VASPs). It enables:
+- Secure peer-to-peer communication between VASPs
+- Travel Rule compliance for cryptocurrency transfers
+- Self-sovereign identity using DIDs (Decentralized Identifiers)
+- End-to-end encryption and message authentication
+- Multi-blockchain support via CAIP standards
+
+## Workspace Structure
+
+### Core Crates
+- **`tap-msg`** - Message types and protocol definitions
+  - [Detailed documentation](./tap-msg/llms.txt)
+  - Defines all TAP message formats (Transfer, Connect, Authorize, etc.)
+  - Handles validation and serialization
+
+- **`tap-agent`** - Cryptographic agent implementation
+  - [Detailed documentation](./tap-agent/llms.txt)
+  - DID-based identity management
+  - Message signing, encryption, and verification
+  - Key management and storage
+
+- **`tap-node`** - Core TAP node runtime
+  - [Detailed documentation](./tap-node/llms.txt)
+  - Message processing and routing
+  - Transaction state management
+  - Persistent storage with per-agent isolation
+
+### Protocol Integration
+- **`tap-http`** - HTTP/WebSocket server and client
+  - [Detailed documentation](./tap-http/llms.txt)
+  - REST API for TAP operations
+  - WebSocket support for real-time messaging
+
+- **`tap-mcp`** - Model Context Protocol server
+  - [Detailed documentation](./tap-mcp/llms.txt)
+  - Exposes TAP as MCP tools for AI assistants
+  - Natural language interface to TAP
+
+### Language Bindings
+- **`tap-wasm`** - WebAssembly bindings
+  - [Detailed documentation](./tap-wasm/llms.txt)
+  - Browser and Node.js support
+  - JavaScript/TypeScript interop
+
+- **`tap-ts`** - TypeScript/JavaScript SDK
+  - [Detailed documentation](./tap-ts/llms.txt)
+  - High-level TypeScript APIs
+  - CLI tools and utilities
+
+### Supporting Crates
+- **`tap-caip`** - Chain Agnostic Improvement Proposal implementation
+  - [Detailed documentation](./tap-caip/llms.txt)
+  - Multi-blockchain identifier support
+  - CAIP-2, CAIP-10, CAIP-19 standards
+
+- **`tap-msg-derive`** - Derive macros for custom messages
+  - [Detailed documentation](./tap-msg-derive/llms.txt)
+  - Simplifies creating custom TAP messages
+
+## Quick Start
+
+### Building the Project
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/tap-rs
+cd tap-rs
+
+# Build all crates
+cargo build
+
+# Run tests
+cargo test
+
+# Build specific crate
+cargo build -p tap-node
+```
+
+### Creating a TAP Node
+```rust
+use tap_node::{Node, Config};
+use tap_agent::LocalAgent;
+
+// Create node
+let node = Node::new(Config::default()).await?;
+
+// Add agent
+let agent = LocalAgent::new()?;
+node.add_agent(Box::new(agent)).await?;
+
+// Enable storage
+node.enable_storage(Some("data/node.db")).await?;
+
+// Start HTTP server
+use tap_http::server::TapServer;
+let server = TapServer::new(node);
+server.start("0.0.0.0:8080").await?;
+```
+
+### Sending a Transfer Message
+```rust
+use tap_msg::{Transfer, TapMessage};
+
+let transfer = Transfer {
+    reference_id: "tx-123".to_string(),
+    sender: Party { /* ... */ },
+    recipient: Party { /* ... */ },
+    amount: "100.00".to_string(),
+    asset: Asset { code: "USDC".to_string(), issuer: None },
+    settlement_details: None,
+};
+
+let plain_message = transfer.to_plain_message(
+    "did:key:sender",
+    vec!["did:key:recipient"],
+    None
+)?;
+
+node.send_message(&agent_did, plain_message).await?;
+```
+
+## Architecture Principles
+
+### Security First
+- End-to-end encryption using X25519
+- Digital signatures using Ed25519
+- DID-based authentication
+- No private keys in logs or storage
+
+### Modular Design
+- Clear separation of concerns
+- Pluggable transport protocols
+- Extensible message types
+- Storage abstraction
+
+### Standards Compliance
+- TAP Implementation Proposals (TAIPs)
+- DIDComm messaging
+- CAIP blockchain identifiers
+- W3C DID specification
+
+### Developer Experience
+- Type-safe APIs
+- Comprehensive error handling
+- Extensive documentation
+- Example implementations
+
+## Common Use Cases
+
+### VASP Integration
+```rust
+// Create VASP node with multiple agents
+let mut node = Node::new(config).await?;
+node.add_agent(Box::new(hot_wallet_agent)).await?;
+node.add_agent(Box::new(cold_wallet_agent)).await?;
+node.add_agent(Box::new(compliance_agent)).await?;
+```
+
+### Compliance Workflow
+```rust
+// Receive transfer request
+let transfer = receive_transfer_message().await?;
+
+// Check compliance
+if requires_travel_rule(&transfer) {
+    // Request additional information
+    node.send_message(&agent_did, 
+        UpdateParty::new(/* KYC data */)
+    ).await?;
+}
+
+// Authorize transaction
+node.send_message(&agent_did,
+    Authorize::for_transfer(&transfer)
+).await?;
+```
+
+### Multi-Chain Support
+```rust
+use tap_caip::{AccountId, AssetId};
+
+let sender_account = AccountId::from_str(
+    "eip155:1:0x123..."  // Ethereum mainnet
+)?;
+
+let recipient_account = AccountId::from_str(
+    "eip155:137:0x456..."  // Polygon
+)?;
+
+let asset = AssetId::from_str(
+    "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"  // USDC
+)?;
+```
+
+## Development Guidelines
+
+### Adding New Features
+1. Start with the appropriate crate's `llms.txt`
+2. Follow existing patterns and conventions
+3. Add tests for new functionality
+4. Update documentation
+
+### Testing
+```bash
+# Run all tests
+cargo test
+
+# Run specific crate tests
+cargo test -p tap-msg
+
+# Run integration tests
+cargo test --features integration
+
+# Run benchmarks
+cargo bench
+```
+
+### Contributing
+- Follow Rust style guidelines
+- Write descriptive commit messages
+- Add tests for new features
+- Update relevant `llms.txt` files
+- Run `cargo fmt` and `cargo clippy`
+
+## Resources
+- [TAP Specification](https://tap.is)
+- [TAIP Repository](./prds/taips/)
+- [Example Implementations](./examples/)
+- [API Documentation](https://docs.rs/tap-rs)
+
+## License
+This project is licensed under the MIT License. See LICENSE file for details.

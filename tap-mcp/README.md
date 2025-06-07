@@ -7,9 +7,9 @@ A Model Context Protocol (MCP) server that provides AI applications with standar
 TAP-MCP is a thin wrapper around TAP Node that exposes transaction authorization functionality through the Model Context Protocol standard. This enables AI applications to:
 
 - **Agent Management**: Create TAP agents with auto-generated DIDs and manage cryptographic identities
-- **Transaction Creation**: Initiate transfers, payments, and other TAP operations  
-- **Agent-Specific Message Monitoring**: Access transaction history and message details from individual agent storage
-- **Multi-Recipient Message Delivery**: Full DIDComm compliance with delivery to all recipients in the `to` field
+- **Transaction Creation**: Initiate transfers, payments, and other TAP operations
+- **Message Monitoring**: Access transaction history and message details
+- **Delivery Tracking**: Monitor message delivery status, retry counts, and error details
 - **Schema Access**: Get JSON schemas for TAP message types
 - **Per-Agent Storage**: Each agent has isolated SQLite storage at `~/.tap/{sanitized_did}/transactions.db`
 
@@ -93,7 +93,7 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
-TAP-MCP provides 8 comprehensive tools covering the complete TAP transaction lifecycle:
+TAP-MCP provides 18 comprehensive tools covering the complete TAP transaction lifecycle:
 
 ### Agent Management
 
@@ -229,6 +229,102 @@ List transactions with filtering and pagination support. Shows only transactions
 }
 ```
 
+### Customer and Connection Management
+
+#### `tap_list_customers`
+Lists all customers (parties) that a specific agent acts on behalf of. Analyzes transaction history to identify parties represented by the agent and includes metadata about each party.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Returns:
+```json
+{
+  "customers": [
+    {
+      "@id": "did:example:alice",
+      "metadata": {
+        "name": "Alice Smith",
+        "company": "ACME Corp"
+      },
+      "transaction_count": 5,
+      "transaction_ids": ["tx-123", "tx-456", "tx-789"]
+    }
+  ],
+  "total": 1
+}
+```
+
+#### `tap_list_connections`
+Lists all counterparties (connections) that a specific party has transacted with. Searches across all agent databases to find transaction relationships and includes role information.
+
+```json
+{
+  "party_id": "did:example:alice",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+Returns:
+```json
+{
+  "connections": [
+    {
+      "@id": "did:example:bob",
+      "metadata": {
+        "name": "Bob Johnson",
+        "company": "Widget Inc"
+      },
+      "transaction_count": 3,
+      "transaction_ids": ["tx-123", "tx-456", "tx-789"],
+      "roles": ["beneficiary", "originator"]
+    }
+  ],
+  "total": 1
+}
+```
+
+### Message Debugging Tools
+
+#### `tap_list_received`
+Lists raw received messages with filtering and pagination support. Shows all incoming messages (JWE, JWS, or plain) before processing.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "status": "pending",
+  "source_type": "https",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `tap_get_pending_received`
+Gets pending received messages that haven't been processed yet. Useful for debugging message processing issues.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "limit": 50
+}
+```
+
+#### `tap_view_raw_received`
+Views the raw content of a received message. Shows the complete raw message as received (JWE, JWS, or plain JSON).
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "received_id": 42
+}
+```
+
 ## Available Resources
 
 ### `tap://agents`
@@ -251,13 +347,35 @@ tap://messages?agent_did=did:key:z6Mk...&limit=100&offset=50  # Pagination
 tap://messages/msg-id-123                          # Specific message
 ```
 
-**Important**: The `agent_did` parameter is required when accessing messages to specify which agent's storage to query. If not provided, you'll get an error message asking you to specify the agent. By default, both incoming and outgoing messages are shown unless you filter by `direction`.
+### `tap://deliveries`
+Access to message delivery tracking information.
+
+```
+tap://deliveries?agent_did=did:key:z6Mk... # Delivery records for specific agent
+tap://deliveries?message_id=msg-123        # Deliveries for specific message
+tap://deliveries?recipient_did=did:example:bob # Deliveries to specific recipient
+tap://deliveries?delivery_type=https       # Filter by delivery type (https/internal/return_path/pickup)
+tap://deliveries?status=failed             # Filter by status (pending/success/failed)
+tap://deliveries?limit=50&offset=100       # Pagination
+tap://deliveries/123                        # Specific delivery record by ID
+```
 
 ### `tap://schemas`
 JSON schemas for TAP message types.
 
 ```
 tap://schemas                          # All schemas
+```
+
+### `tap://received`
+Access to raw received messages before processing.
+
+```
+tap://received?agent_did=did:key:z6Mk... # Received messages for specific agent
+tap://received?agent_did=did:key:z6Mk...&status=pending # Filter by status (pending/processed/failed)
+tap://received?agent_did=did:key:z6Mk...&source_type=https # Filter by source type
+tap://received?agent_did=did:key:z6Mk...&limit=50&offset=100 # Pagination
+tap://received/123                      # Specific received message by ID
 ```
 
 ## Configuration
@@ -359,14 +477,22 @@ echo '{"agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"}'
 echo '{"agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc", "filter": {"message_type": "Transfer"}, "limit": 10}' | \
   tap-mcp-client call tap_list_transactions
 
-# Get specific transaction details via resources (requires agent_did)
-tap-mcp-client resource "tap://messages?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc&thread_id=tx-abc123"
+# List recent messages
+tap-mcp-client resource tap://messages
 
-# List recent messages for an agent (shows both incoming and outgoing by default)
-tap-mcp-client resource "tap://messages?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"
+# Check delivery status for the transaction
+tap-mcp-client resource tap://deliveries?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc
 
-# List only incoming messages for an agent
-tap-mcp-client resource "tap://messages?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc&direction=incoming"
+# Check failed deliveries
+tap-mcp-client resource tap://deliveries?status=failed
+
+# List customers that the agent represents
+echo '{"agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"}' | \
+  tap-mcp-client call tap_list_customers
+
+# List connections for a specific party
+echo '{"party_id": "did:example:alice"}' | \
+  tap-mcp-client call tap_list_connections
 ```
 
 ### Alternative Workflow: Rejecting a Transaction
@@ -528,6 +654,8 @@ Once configured, you can interact with TAP through Claude Desktop by asking ques
 - "Create a new TAP agent for settlement services"
 - "Show me recent TAP transactions"
 - "Help me authorize a transfer transaction"
+- "List all customers that my agent represents"
+- "Show me connections for a specific party"
 
 ### Python MCP Client
 
@@ -591,11 +719,30 @@ async def main():
             list_result = await session.call_tool(
                 "tap_list_transactions",
                 {
+                    "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
                     "limit": 10,
                     "filter": {"message_type": "Transfer"}
                 }
             )
             print(f"Recent transfers: {list_result}")
+
+            # List customers of the agent
+            customers_result = await session.call_tool(
+                "tap_list_customers",
+                {
+                    "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"
+                }
+            )
+            print(f"Agent customers: {customers_result}")
+
+            # List connections for a specific party
+            connections_result = await session.call_tool(
+                "tap_list_connections",
+                {
+                    "party_id": "did:example:alice"
+                }
+            )
+            print(f"Party connections: {connections_result}")
 
 if __name__ == "__main__":
     asyncio.run(main())

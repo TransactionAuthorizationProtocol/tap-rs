@@ -1,0 +1,250 @@
+# tap-wasm
+
+## Overview
+The `tap-wasm` crate provides WebAssembly bindings for TAP functionality, enabling browser-based and JavaScript/TypeScript applications to use TAP agents and cryptographic operations. It compiles core TAP functionality to WASM for use in web browsers and Node.js environments.
+
+## Purpose
+- Enable TAP functionality in web browsers
+- Provide JavaScript/TypeScript bindings for TAP agents
+- Support client-side message signing and encryption
+- Enable DID-based authentication in web apps
+- Bridge Rust TAP implementation to JavaScript ecosystem
+
+## Key Components
+
+### WASM Agent
+```rust
+#[wasm_bindgen]
+pub struct WasmAgent {
+    inner: InMemoryAgent,
+}
+
+#[wasm_bindgen]
+impl WasmAgent {
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Result<WasmAgent, JsValue>;
+    
+    #[wasm_bindgen(js_name = "fromPrivateKey")]
+    pub fn from_private_key(private_key: &str) -> Result<WasmAgent, JsValue>;
+    
+    pub fn did(&self) -> String;
+    
+    pub async fn sign(&self, message: &str) -> Result<String, JsValue>;
+    
+    pub async fn encrypt(
+        &self,
+        message: &str,
+        recipient_dids: &JsValue
+    ) -> Result<String, JsValue>;
+    
+    pub async fn decrypt(&self, jwe: &str) -> Result<String, JsValue>;
+}
+```
+
+### Message Operations
+```rust
+#[wasm_bindgen]
+pub async fn pack_signed(
+    message: &str,
+    agent: &WasmAgent
+) -> Result<String, JsValue>;
+
+#[wasm_bindgen]
+pub async fn pack_encrypted(
+    message: &str,
+    agent: &WasmAgent,
+    recipients: &JsValue
+) -> Result<String, JsValue>;
+
+#[wasm_bindgen]
+pub async fn unpack(
+    packed_message: &str,
+    agent: &WasmAgent
+) -> Result<String, JsValue>;
+
+#[wasm_bindgen]
+pub async fn verify_jws(
+    jws: &str,
+    resolver: &WasmResolver
+) -> Result<String, JsValue>;
+```
+
+### Utilities
+```rust
+#[wasm_bindgen]
+pub fn generate_did() -> String;
+
+#[wasm_bindgen]
+pub fn create_transfer_message(
+    from_did: &str,
+    to_dids: &JsValue,
+    amount: &str,
+    asset_code: &str,
+    // ... other parameters
+) -> Result<String, JsValue>;
+```
+
+## Usage Examples
+
+### Browser Usage
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <script type="module">
+        import init, { WasmAgent, pack_signed } from './tap_wasm.js';
+        
+        async function main() {
+            // Initialize WASM module
+            await init();
+            
+            // Create new agent
+            const agent = new WasmAgent();
+            console.log('Agent DID:', agent.did());
+            
+            // Create and sign message
+            const message = {
+                type: "basic_message",
+                from: agent.did(),
+                to: ["did:key:recipient"],
+                body: { text: "Hello from browser!" }
+            };
+            
+            const signed = await pack_signed(
+                JSON.stringify(message),
+                agent
+            );
+            console.log('Signed message:', signed);
+        }
+        
+        main().catch(console.error);
+    </script>
+</head>
+</html>
+```
+
+### Node.js/TypeScript Usage
+```typescript
+import { WasmAgent, pack_encrypted, unpack } from 'tap-wasm';
+
+// Initialize WASM (required in Node.js)
+await init();
+
+// Create agent from private key
+const agent = WasmAgent.fromPrivateKey(privateKeyHex);
+
+// Encrypt message for multiple recipients
+const encrypted = await pack_encrypted(
+    JSON.stringify(message),
+    agent,
+    ["did:key:recipient1", "did:key:recipient2"]
+);
+
+// Decrypt received message
+const decrypted = await unpack(encrypted, agent);
+```
+
+### React Integration
+```tsx
+import { useEffect, useState } from 'react';
+import init, { WasmAgent } from 'tap-wasm';
+
+function TapAgentProvider({ children }) {
+    const [agent, setAgent] = useState<WasmAgent | null>(null);
+    
+    useEffect(() => {
+        init().then(() => {
+            const newAgent = new WasmAgent();
+            setAgent(newAgent);
+        });
+    }, []);
+    
+    return (
+        <TapContext.Provider value={{ agent }}>
+            {children}
+        </TapContext.Provider>
+    );
+}
+```
+
+### Creating TAP Messages
+```typescript
+import { create_transfer_message } from 'tap-wasm';
+
+const transferJson = create_transfer_message(
+    agent.did(),
+    ["did:key:recipient"],
+    "100.00",
+    "USDC",
+    "Alice",
+    "0x123...",
+    "Bob", 
+    "0x456...",
+    "tx-123"
+);
+
+const signed = await pack_signed(transferJson, agent);
+```
+
+## Building
+
+### For Browsers
+```bash
+# Build WASM module
+wasm-pack build --target web --out-dir pkg
+
+# Files generated:
+# - pkg/tap_wasm.js (ES modules)
+# - pkg/tap_wasm_bg.wasm (WASM binary)
+# - pkg/tap_wasm.d.ts (TypeScript definitions)
+```
+
+### For Node.js
+```bash
+wasm-pack build --target nodejs --out-dir pkg-node
+```
+
+### For Bundlers (Webpack, Vite)
+```bash
+wasm-pack build --target bundler --out-dir pkg-bundler
+```
+
+## Key Features
+- **Browser Compatible**: Runs in modern web browsers
+- **TypeScript Support**: Full type definitions
+- **Async/Await**: Modern JavaScript API
+- **Memory Safe**: Automatic memory management
+- **Small Size**: Optimized WASM binary (~200KB gzipped)
+- **No Dependencies**: Self-contained WASM module
+
+## Performance Considerations
+- WASM initialization is async and should be done once
+- Agent creation involves key generation (expensive)
+- Consider caching agents in IndexedDB
+- Use Web Workers for heavy cryptographic operations
+
+## Security Notes
+- Private keys are held in WASM memory
+- No automatic persistence (keys are ephemeral)
+- Use secure storage (like browser crypto.subtle) for persistence
+- Always use HTTPS in production
+
+## Testing
+```bash
+# Rust tests
+cargo test --package tap-wasm
+
+# Browser tests
+wasm-pack test --headless --firefox
+```
+
+## Dependencies
+- `wasm-bindgen`: Rust/JS interop
+- `tap-agent`: Core agent functionality
+- `tap-msg`: Message types
+- `getrandom`: Browser-compatible RNG
+
+## Related Crates
+- `tap-agent`: Core agent implementation
+- `tap-ts`: TypeScript wrapper library
+- `tap-msg`: Message definitions

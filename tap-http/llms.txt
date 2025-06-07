@@ -1,0 +1,216 @@
+# tap-http
+
+## Overview
+The `tap-http` crate provides HTTP and WebSocket server/client implementations for TAP nodes. It enables TAP protocol communication over standard web protocols, making it easy to integrate with existing infrastructure and build REST APIs for TAP functionality.
+
+## Purpose
+- HTTP server for receiving TAP messages
+- WebSocket support for real-time bidirectional communication
+- REST API endpoints for TAP operations
+- HTTP client for sending messages to other TAP nodes
+- Event streaming and webhooks
+- Mock servers for testing
+
+## Key Components
+
+### Server Implementation
+```rust
+pub struct TapServer {
+    node: Arc<Node>,
+    config: ServerConfig,
+}
+
+impl TapServer {
+    // Start HTTP server
+    pub async fn start(&self, addr: &str) -> Result<()>;
+    
+    // Key endpoints:
+    // POST /messages - Receive TAP messages
+    // GET /agents - List node agents
+    // POST /agents/{did}/send - Send message from agent
+    // GET /transactions/{id} - Query transaction
+    // WS /ws - WebSocket connection
+}
+```
+
+### Client Implementation
+```rust
+pub struct TapClient {
+    http_client: reqwest::Client,
+    base_url: String,
+}
+
+impl TapClient {
+    // Send TAP message to remote node
+    pub async fn send_message(&self, message: &str) -> Result<Response>;
+    
+    // Query remote node
+    pub async fn get_transaction(&self, id: &str) -> Result<Transaction>;
+}
+```
+
+### WebSocket Support
+```rust
+pub struct WebSocketHandler {
+    node: Arc<Node>,
+    connections: Arc<RwLock<HashMap<String, WebSocketConnection>>>,
+}
+
+// Bidirectional message flow
+// Automatic reconnection
+// Event streaming
+```
+
+### Event Streaming
+```rust
+pub struct EventStream {
+    // Server-sent events (SSE)
+    // WebSocket event streaming
+    // Webhook dispatching
+}
+```
+
+## Usage Examples
+
+### Starting HTTP Server
+```rust
+use tap_http::server::TapServer;
+use tap_node::Node;
+
+let node = Node::new(config).await?;
+let server = TapServer::new(node);
+
+// Start on port 8080
+server.start("0.0.0.0:8080").await?;
+```
+
+### Sending Messages via HTTP
+```rust
+use tap_http::client::TapClient;
+
+let client = TapClient::new("https://peer.example.com");
+
+// Send TAP message
+let response = client.send_message(&jws_message).await?;
+```
+
+### WebSocket Communication
+```rust
+use tap_http::websocket::connect_websocket;
+
+// Connect to WebSocket endpoint
+let ws = connect_websocket("wss://peer.example.com/ws").await?;
+
+// Send message
+ws.send_message(&message).await?;
+
+// Receive messages
+while let Some(msg) = ws.receive_message().await? {
+    process_message(msg);
+}
+```
+
+### REST API Usage
+```bash
+# Send message
+curl -X POST http://localhost:8080/messages \
+  -H "Content-Type: application/json" \
+  -d '{"payload":"...", "signatures":[...]}'
+
+# Query transaction
+curl http://localhost:8080/transactions/tx-123
+
+# List agents
+curl http://localhost:8080/agents
+
+# Send from specific agent
+curl -X POST http://localhost:8080/agents/did:key:xyz/send \
+  -H "Content-Type: application/json" \
+  -d '{"to":["did:key:abc"], "body":{...}}'
+```
+
+### Mock Server for Testing
+```rust
+use tap_http::mock::MockTapServer;
+
+#[tokio::test]
+async fn test_tap_flow() {
+    // Start mock server
+    let mock = MockTapServer::start().await;
+    
+    // Configure expected messages
+    mock.expect_message()
+        .with_type("tap.transfer")
+        .return_status(200);
+    
+    // Run test
+    let client = TapClient::new(&mock.url());
+    let result = client.send_message(&message).await?;
+    
+    // Verify
+    mock.assert();
+}
+```
+
+## API Endpoints
+
+### Core Endpoints
+- `POST /messages` - Receive TAP messages (JWS/JWE format)
+- `GET /agents` - List node's agents
+- `GET /agents/{did}` - Get specific agent info
+- `POST /agents/{did}/send` - Send message from agent
+
+### Transaction Endpoints
+- `GET /transactions` - List transactions
+- `GET /transactions/{id}` - Get transaction details
+- `GET /transactions/{id}/messages` - Get transaction messages
+
+### Storage Endpoints
+- `GET /messages` - Query message history
+- `GET /deliveries` - Check delivery status
+- `GET /received` - View received messages
+
+### WebSocket
+- `/ws` - WebSocket endpoint for bidirectional communication
+
+## Configuration
+```rust
+pub struct ServerConfig {
+    pub host: String,
+    pub port: u16,
+    pub tls: Option<TlsConfig>,
+    pub cors: CorsConfig,
+    pub auth: Option<AuthConfig>,
+    pub rate_limit: Option<RateLimitConfig>,
+}
+```
+
+## Key Features
+- **REST API**: Full REST API for TAP operations
+- **WebSocket**: Real-time bidirectional messaging
+- **Event Streaming**: SSE and webhook support
+- **TLS Support**: Secure HTTPS/WSS connections
+- **CORS**: Configurable CORS for browser clients
+- **Authentication**: Optional auth mechanisms
+- **Rate Limiting**: Protect against abuse
+- **Health Checks**: Monitoring endpoints
+
+## Testing
+```bash
+cargo test --package tap-http
+
+# Run example server
+cargo run --example http_message_flow
+```
+
+## Dependencies
+- `axum`: Web framework
+- `tokio`: Async runtime
+- `reqwest`: HTTP client
+- `tokio-tungstenite`: WebSocket support
+- `tap-node`: Core node functionality
+
+## Related Crates
+- `tap-node`: Core TAP node implementation
+- `tap-msg`: Message types
+- `tap-ts`: TypeScript/JavaScript client

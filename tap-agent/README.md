@@ -34,6 +34,22 @@ tap-agent
 ├── storage      - Persistent storage for keys and DIDs
 ```
 
+## Environment Variables
+
+The TAP Agent supports environment variables to control storage location, which is particularly useful for testing and development:
+
+- **`TAP_HOME`**: Sets the TAP home directory (replaces `~/.tap`)
+- **`TAP_TEST_DIR`**: Sets a test directory where `.tap` will be created
+- **`TAP_ROOT`**: Alternative to `TAP_HOME`, used by some components
+
+Priority order:
+1. `TAP_HOME` (highest priority)
+2. `TAP_ROOT` 
+3. `TAP_TEST_DIR`
+4. `~/.tap` (default)
+
+This ensures that tests, examples, and benchmarks can run in isolated environments without affecting your production `~/.tap` directory.
+
 This architecture follows clean separation of concerns principles:
 - Core agent functionality is independent from specific cryptographic implementations
 - DID resolution is pluggable with support for multiple methods

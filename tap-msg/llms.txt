@@ -1,0 +1,124 @@
+# tap-msg
+
+## Overview
+The `tap-msg` crate provides the core message types and structures for the Travel Asset Protocol (TAP). It implements all TAP message formats for secure, compliant cryptocurrency transfers that adhere to the Travel Rule requirements.
+
+## Purpose
+- Define and implement all TAP message types (Transfer, Connect, Authorize, etc.)
+- Provide validation and serialization for TAP messages
+- Support both plain and DIDComm formats
+- Enable Travel Rule compliance for cryptocurrency transfers
+
+## Key Components
+
+### Message Types
+- **Transfer**: Core transaction messages for asset transfers
+- **Connect**: Establish connections between parties
+- **Authorize**: Permission and authorization messages
+- **Settle**: Settlement confirmation messages
+- **Cancel**: Transaction cancellation
+- **Reject**: Rejection messages
+- **Revert**: Transaction reversal
+- **PaymentRequest**: Request payment messages
+- **UpdateParty**: Update party information
+- **UpdatePolicies**: Policy management
+- **AddAgent/RemoveAgent/ReplaceAgent**: Agent management
+- **Presentation**: Credential and proof presentations
+- **BasicMessage**: Simple text messages
+- **TrustPing**: Connection testing
+
+### Core Traits
+- `TapMessage`: Base trait for all TAP messages
+- `Validation`: Message validation trait
+- `Authorizable`: Messages requiring authorization
+- `Connectable`: Messages that can establish connections
+
+### Message Structure
+```rust
+pub struct PlainMessage {
+    pub id: String,
+    pub from: String,  // DID of sender
+    pub to: Vec<String>,  // DIDs of recipients
+    pub thread_id: Option<String>,
+    pub message_type: MessageType,
+    pub body: Value,  // JSON body specific to message type
+    pub attachments: Option<Vec<Attachment>>,
+    pub created_time: String,
+    pub expires_time: Option<String>,
+}
+```
+
+### DIDComm Support
+- Conversion between plain messages and DIDComm format
+- Support for encrypted and signed messages
+- Thread management for message conversations
+
+## Usage Examples
+
+### Creating a Transfer Message
+```rust
+use tap_msg::{Transfer, TapMessage};
+
+let transfer = Transfer {
+    reference_id: "tx-123".to_string(),
+    sender: Party { /* ... */ },
+    recipient: Party { /* ... */ },
+    amount: "100.50".to_string(),
+    asset: Asset {
+        code: "USDC".to_string(),
+        issuer: Some("Centre".to_string()),
+    },
+    settlement_details: None,
+};
+
+let plain_message = transfer.to_plain_message(
+    "did:key:sender",
+    vec!["did:key:recipient"],
+    None,  // thread_id
+)?;
+```
+
+### Message Validation
+```rust
+use tap_msg::Validation;
+
+// All messages implement validation
+transfer.validate()?;
+```
+
+### Converting to DIDComm
+```rust
+use tap_msg::didcomm::{to_didcomm, from_didcomm};
+
+// Convert to DIDComm format
+let didcomm_msg = to_didcomm(&plain_message)?;
+
+// Parse from DIDComm
+let plain_message = from_didcomm(&didcomm_msg)?;
+```
+
+## Key Features
+- **Type Safety**: Strongly typed message structures
+- **Validation**: Built-in validation for all message types
+- **Extensibility**: Support for custom message types via derive macros
+- **Standards Compliance**: Follows TAP specification (TAIPs)
+- **DIDComm Integration**: Native support for DIDComm messaging
+
+## Dependencies
+- `serde`: Serialization/deserialization
+- `serde_json`: JSON support
+- `thiserror`: Error handling
+- `tap-msg-derive`: Derive macros for custom messages
+- `chrono`: Timestamp handling
+- `uuid`: Message ID generation
+
+## Testing
+Run tests with:
+```bash
+cargo test --package tap-msg
+```
+
+## Related Crates
+- `tap-msg-derive`: Derive macros for implementing TapMessage
+- `tap-agent`: Uses messages for agent communication
+- `tap-node`: Processes and routes messages

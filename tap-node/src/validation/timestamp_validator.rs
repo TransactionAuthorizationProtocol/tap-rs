@@ -28,14 +28,25 @@ impl TimestampValidator {
 
     /// Convert a Unix timestamp to DateTime
     fn timestamp_to_datetime(timestamp: u64) -> DateTime<Utc> {
+        // Detect if timestamp is in seconds or milliseconds
+        // Timestamps in seconds since 1970 are much smaller than timestamps in milliseconds
+        // A reasonable cutoff is 10^10 (around year 2286 in seconds, or year 1970 + 4 months in milliseconds)
+        let timestamp_seconds = if timestamp < 10_000_000_000 {
+            // Timestamp is likely in seconds
+            timestamp
+        } else {
+            // Timestamp is likely in milliseconds, convert to seconds
+            timestamp / 1000
+        };
+
         // Check if timestamp would overflow when converting to i64
-        if timestamp > i64::MAX as u64 {
+        if timestamp_seconds > i64::MAX as u64 {
             // Return a date far in the future (year 3000+)
             DateTime::parse_from_rfc3339("3000-01-01T00:00:00Z")
                 .unwrap()
                 .with_timezone(&Utc)
         } else {
-            DateTime::from_timestamp(timestamp as i64, 0).unwrap_or_else(Utc::now)
+            DateTime::from_timestamp(timestamp_seconds as i64, 0).unwrap_or_else(Utc::now)
         }
     }
 }
@@ -178,10 +189,54 @@ mod tests {
         )
         .with_recipient("did:example:receiver");
 
-        // Set created_time to a very large number that would fail datetime conversion
-        message.created_time = Some(u64::MAX);
+        // Set created_time to year 3000 in milliseconds (well beyond reasonable future)
+        // 3000-01-01 = approximately 32503680000 seconds = 32503680000000 milliseconds
+        message.created_time = Some(32503680000000);
 
-        // With u64::MAX, this should be far in the future and fail validation
+        // This should be far in the future and fail validation
+        match validator.validate(&message).await {
+            ValidationResult::Accept => panic!("Expected reject, got accept"),
+            ValidationResult::Reject(reason) => {
+                assert!(reason.contains("too far in the future"));
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_timestamp_milliseconds() {
+        let validator = TimestampValidator::new(60);
+        let mut message = PlainMessage::new(
+            "test_msg_3".to_string(),
+            "test_type".to_string(),
+            serde_json::json!({}),
+            "did:example:sender".to_string(),
+        )
+        .with_recipient("did:example:receiver");
+
+        // Set created_time to current time in milliseconds
+        message.created_time = Some(Utc::now().timestamp_millis() as u64);
+
+        match validator.validate(&message).await {
+            ValidationResult::Accept => {} // Expected
+            ValidationResult::Reject(reason) => panic!("Expected accept, got reject: {}", reason),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_future_timestamp_milliseconds_exceeds_drift() {
+        let validator = TimestampValidator::new(60);
+        let mut message = PlainMessage::new(
+            "test_msg_4".to_string(),
+            "test_type".to_string(),
+            serde_json::json!({}),
+            "did:example:sender".to_string(),
+        )
+        .with_recipient("did:example:receiver");
+
+        // Set created_time to 2 minutes in the future in milliseconds (exceeds allowed drift)
+        let future_time = Utc::now() + Duration::seconds(120);
+        message.created_time = Some(future_time.timestamp_millis() as u64);
+
         match validator.validate(&message).await {
             ValidationResult::Accept => panic!("Expected reject, got accept"),
             ValidationResult::Reject(reason) => {

@@ -61,6 +61,12 @@ chrono = { version = "0.4", features = ["serde"] }
 # Directory utilities
 dirs = "5.0"
 
+# Database access
+sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite"] }
+
+# Base64 encoding
+base64 = "0.22"
+
 [dev-dependencies]
 tempfile = "3.0"
 test-log = "0.2"

@@ -332,7 +332,7 @@ async fn test_outgoing_transaction_multi_storage() {
     let didcomm_message = transfer.to_didcomm(&sender_did).unwrap();
 
     // Send the message (this should trigger outgoing storage)
-    node.send_message(sender_did.clone(), recipient_did.clone(), didcomm_message)
+    node.send_message(sender_did.clone(), didcomm_message)
         .await
         .unwrap();
 

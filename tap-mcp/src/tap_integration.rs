@@ -153,6 +153,12 @@ impl TapIntegration {
         &self.node
     }
 
+    /// Get storage path (if available)
+    #[allow(dead_code)]
+    pub fn storage_path(&self) -> Option<&PathBuf> {
+        self.storage_path.as_ref()
+    }
+
     /// Get storage reference (if available) - uses the primary node storage
     pub fn storage(&self) -> Option<&Arc<tap_node::storage::Storage>> {
         self.node.storage()
@@ -186,30 +192,51 @@ impl TapIntegration {
     pub async fn list_agents(&self) -> Result<Vec<AgentInfo>> {
         let mut agents = Vec::new();
 
-        // Get agents from tap-agent storage with policies and metadata
-        let enhanced_agents = if let Some(ref storage_path) = self.storage_path {
-            TapAgent::list_enhanced_agents_with_path(Some(storage_path.clone()))
+        // Load agents directly from KeyStorage to get labels
+        use tap_agent::storage::KeyStorage;
+        let key_storage = if let Some(ref storage_path) = self.storage_path {
+            KeyStorage::load_from_path(storage_path)
         } else {
-            TapAgent::list_enhanced_agents()
-        }
-        .map_err(|e| Error::configuration(format!("Failed to list enhanced agents: {}", e)))?;
+            KeyStorage::load_default()
+        };
 
-        for (did, policies, metadata) in enhanced_agents {
-            // Role and for_party are not stored in metadata anymore
-            // They will be determined per transaction
-            agents.push(AgentInfo {
-                id: did.clone(),
-                role: "Agent".to_string(), // Default role, will be determined per transaction
-                for_party: did.clone(),    // Default to self, will be determined per transaction
-                policies,
-                metadata,
-            });
+        match key_storage {
+            Ok(storage) => {
+                // Process each stored key
+                for (did, stored_key) in &storage.keys {
+                    let mut metadata = std::collections::HashMap::new();
+
+                    // Include the label from the stored key
+                    if !stored_key.label.is_empty() {
+                        metadata.insert("label".to_string(), stored_key.label.clone());
+                    }
+
+                    // Also include any additional metadata from the stored key
+                    for (key, value) in &stored_key.metadata {
+                        metadata.insert(key.clone(), value.clone());
+                    }
+
+                    // Try to load policies for this agent
+                    let policies = storage.load_agent_policies(did).unwrap_or_default();
+
+                    agents.push(AgentInfo {
+                        id: did.clone(),
+                        role: "Agent".to_string(), // Default role, will be determined per transaction
+                        for_party: did.clone(), // Default to self, will be determined per transaction
+                        policies,
+                        metadata,
+                    });
+                }
+            }
+            Err(e) => {
+                debug!("Could not load key storage: {}", e);
+            }
         }
 
         // Also include any agents only registered in TapNode (for backward compatibility)
         let node_agent_dids = self.node.list_agents();
         for did in node_agent_dids {
-            // Check if we already have this agent from enhanced storage
+            // Check if we already have this agent from key storage
             if !agents.iter().any(|a| a.id == did) {
                 agents.push(AgentInfo {
                     id: did.clone(),

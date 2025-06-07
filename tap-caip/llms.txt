@@ -1,0 +1,237 @@
+# tap-caip
+
+## Overview
+The `tap-caip` crate implements Chain Agnostic Improvement Proposal (CAIP) standards for TAP. It provides parsing, validation, and utilities for CAIP-2 (Chain IDs), CAIP-10 (Account IDs), and CAIP-19 (Asset IDs), enabling TAP to work across different blockchain networks in a standardized way.
+
+## Purpose
+- Parse and validate CAIP identifiers
+- Support multi-chain cryptocurrency transfers
+- Provide type-safe blockchain identifiers
+- Enable chain-agnostic TAP messages
+- Standardize cross-chain asset references
+
+## Key Components
+
+### CAIP-2: Chain ID
+```rust
+pub struct ChainId {
+    pub namespace: String,  // e.g., "eip155" for Ethereum
+    pub reference: String,  // e.g., "1" for mainnet
+}
+
+impl ChainId {
+    // Parse from string like "eip155:1"
+    pub fn from_str(s: &str) -> Result<Self, Error>;
+    
+    // Common chains
+    pub fn ethereum_mainnet() -> Self;
+    pub fn bitcoin_mainnet() -> Self;
+    pub fn polygon_mainnet() -> Self;
+}
+```
+
+### CAIP-10: Account ID
+```rust
+pub struct AccountId {
+    pub chain_id: ChainId,
+    pub address: String,
+}
+
+impl AccountId {
+    // Parse from string like "eip155:1:0x123..."
+    pub fn from_str(s: &str) -> Result<Self, Error>;
+    
+    // Validation
+    pub fn validate(&self) -> Result<(), Error>;
+}
+```
+
+### CAIP-19: Asset ID
+```rust
+pub struct AssetId {
+    pub chain_id: ChainId,
+    pub asset_namespace: String,
+    pub asset_reference: String,
+}
+
+impl AssetId {
+    // Parse from string like "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    pub fn from_str(s: &str) -> Result<Self, Error>;
+    
+    // Common assets
+    pub fn usdc_ethereum() -> Self;
+    pub fn usdt_ethereum() -> Self;
+    pub fn native_token(chain_id: ChainId) -> Self;
+}
+```
+
+### Validation
+```rust
+pub trait Validation {
+    fn validate(&self) -> Result<(), Error>;
+}
+
+// All CAIP types implement validation
+chain_id.validate()?;
+account_id.validate()?;
+asset_id.validate()?;
+```
+
+## Usage Examples
+
+### Parsing CAIP Identifiers
+```rust
+use tap_caip::{ChainId, AccountId, AssetId};
+
+// Parse chain ID
+let chain = ChainId::from_str("eip155:1")?;
+assert_eq!(chain.namespace, "eip155");
+assert_eq!(chain.reference, "1");
+
+// Parse account ID
+let account = AccountId::from_str(
+    "eip155:1:0x742d35Cc6634C0532925a3b844Bc9e7595f8fA3e"
+)?;
+
+// Parse asset ID (USDC on Ethereum)
+let asset = AssetId::from_str(
+    "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+)?;
+```
+
+### Creating CAIP Identifiers
+```rust
+// Create Ethereum mainnet account
+let account = AccountId {
+    chain_id: ChainId::ethereum_mainnet(),
+    address: "0x742d35Cc6634C0532925a3b844Bc9e7595f8fA3e".to_string(),
+};
+
+// Create Bitcoin account
+let btc_account = AccountId {
+    chain_id: ChainId::bitcoin_mainnet(),
+    address: "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh".to_string(),
+};
+```
+
+### Using with TAP Messages
+```rust
+use tap_msg::{Transfer, Party};
+use tap_caip::AccountId;
+
+let transfer = Transfer {
+    sender: Party {
+        name: "Alice".to_string(),
+        account: AccountId::from_str(
+            "eip155:1:0x123..."
+        )?.to_string(),
+        // ...
+    },
+    recipient: Party {
+        name: "Bob".to_string(),
+        account: AccountId::from_str(
+            "eip155:137:0x456..."  // Polygon
+        )?.to_string(),
+        // ...
+    },
+    // ...
+};
+```
+
+### Asset References
+```rust
+// Native tokens
+let eth = AssetId::native_token(ChainId::ethereum_mainnet());
+let matic = AssetId::native_token(ChainId::from_str("eip155:137")?);
+
+// ERC-20 tokens
+let usdc = AssetId::from_str(
+    "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+)?;
+
+// NFTs
+let nft = AssetId::from_str(
+    "eip155:1/erc721:0xbc4ca0eda7647a8ab7c2061c2e118a18a936f13d"
+)?;
+```
+
+### Validation Examples
+```rust
+use tap_caip::Validation;
+
+// Valid chain ID
+let chain = ChainId::from_str("eip155:1")?;
+chain.validate()?; // Ok
+
+// Invalid namespace
+let invalid = ChainId::from_str("invalid:1");
+assert!(invalid.is_err());
+
+// Invalid Ethereum address
+let account = AccountId {
+    chain_id: ChainId::ethereum_mainnet(),
+    address: "not-an-address".to_string(),
+};
+assert!(account.validate().is_err());
+```
+
+## Supported Namespaces
+
+### Chain Namespaces (CAIP-2)
+- `eip155` - Ethereum and EVM chains
+- `bip122` - Bitcoin
+- `cosmos` - Cosmos chains
+- `polkadot` - Polkadot chains
+- `solana` - Solana
+
+### Asset Namespaces (CAIP-19)
+- `native` - Native blockchain tokens
+- `erc20` - Ethereum ERC-20 tokens
+- `erc721` - Ethereum NFTs
+- `erc1155` - Ethereum multi-tokens
+- `slip44` - BIP-44 coin types
+
+## Key Features
+- **Standards Compliant**: Follows CAIP specifications
+- **Multi-Chain**: Support for various blockchains
+- **Type Safety**: Strongly typed identifiers
+- **Validation**: Built-in format validation
+- **Serialization**: Serde support for JSON
+- **Zero-Copy**: Efficient string handling
+
+## Error Handling
+```rust
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("Invalid format: {0}")]
+    InvalidFormat(String),
+    
+    #[error("Invalid namespace: {0}")]
+    InvalidNamespace(String),
+    
+    #[error("Invalid address for chain: {0}")]
+    InvalidAddress(String),
+    
+    #[error("Validation failed: {0}")]
+    ValidationError(String),
+}
+```
+
+## Testing
+```bash
+cargo test --package tap-caip
+
+# Run benchmarks
+cargo bench --package tap-caip
+```
+
+## Dependencies
+- `thiserror`: Error handling
+- `serde`: Serialization
+- `regex`: Format validation
+- `once_cell`: Lazy static regex
+
+## Related Crates
+- `tap-msg`: Uses CAIP for account/asset IDs
+- `tap-node`: Processes CAIP identifiers
+- `tap-ts`: JavaScript CAIP support

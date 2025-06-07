@@ -6,9 +6,10 @@
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::{
-    AddAgents, AuthorizationRequired, Authorize, Cancel, ConfirmRelationship, Connect,
-    DIDCommPresentation, ErrorBody, OutOfBand, Payment, Presentation, Reject, RemoveAgent,
-    ReplaceAgent, RequestPresentation, Revert, Settle, Transfer, UpdateParty, UpdatePolicies,
+    AddAgents, AuthorizationRequired, Authorize, BasicMessage, Cancel, ConfirmRelationship,
+    Connect, DIDCommPresentation, ErrorBody, OutOfBand, Payment, Presentation, Reject, RemoveAgent,
+    ReplaceAgent, RequestPresentation, Revert, Settle, Transfer, TrustPing, TrustPingResponse,
+    UpdateParty, UpdatePolicies,
 };
 use serde::{Deserialize, Serialize};
 
@@ -23,6 +24,8 @@ pub enum TapMessage {
     Authorize(Authorize),
     /// Authorization required message (TAIP-2)
     AuthorizationRequired(AuthorizationRequired),
+    /// Basic message (DIDComm 2.0)
+    BasicMessage(BasicMessage),
     /// Cancel message (TAIP-11)
     Cancel(Cancel),
     /// Confirm relationship message (TAIP-14)
@@ -53,6 +56,10 @@ pub enum TapMessage {
     Settle(Settle),
     /// Transfer message (TAIP-3)
     Transfer(Transfer),
+    /// Trust Ping message (DIDComm 2.0)
+    TrustPing(TrustPing),
+    /// Trust Ping Response message (DIDComm 2.0)
+    TrustPingResponse(TrustPingResponse),
     /// Update party message (TAIP-4)
     UpdateParty(UpdateParty),
     /// Update policies message (TAIP-7)
@@ -108,6 +115,13 @@ impl TapMessage {
                         ))
                     })?;
                 Ok(TapMessage::AuthorizationRequired(msg))
+            }
+            "https://didcomm.org/basicmessage/2.0/message" => {
+                let msg: BasicMessage =
+                    serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                        Error::SerializationError(format!("Failed to parse BasicMessage: {}", e))
+                    })?;
+                Ok(TapMessage::BasicMessage(msg))
             }
             "https://tap.rsvp/schema/1.0#Cancel" => {
                 let msg: Cancel = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
@@ -231,6 +245,23 @@ impl TapMessage {
                     })?;
                 Ok(TapMessage::UpdatePolicies(msg))
             }
+            "https://didcomm.org/trust-ping/2.0/ping" => {
+                let msg: TrustPing =
+                    serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                        Error::SerializationError(format!("Failed to parse TrustPing: {}", e))
+                    })?;
+                Ok(TapMessage::TrustPing(msg))
+            }
+            "https://didcomm.org/trust-ping/2.0/ping-response" => {
+                let msg: TrustPingResponse = serde_json::from_value(plain_msg.body.clone())
+                    .map_err(|e| {
+                        Error::SerializationError(format!(
+                            "Failed to parse TrustPingResponse: {}",
+                            e
+                        ))
+                    })?;
+                Ok(TapMessage::TrustPingResponse(msg))
+            }
             _ => Err(Error::Validation(format!(
                 "Unknown message type: {}",
                 message_type
@@ -246,6 +277,7 @@ impl TapMessage {
             TapMessage::AuthorizationRequired(_) => {
                 "https://tap.rsvp/schema/1.0#AuthorizationRequired"
             }
+            TapMessage::BasicMessage(_) => "https://didcomm.org/basicmessage/2.0/message",
             TapMessage::Cancel(_) => "https://tap.rsvp/schema/1.0#Cancel",
             TapMessage::ConfirmRelationship(_) => "https://tap.rsvp/schema/1.0#ConfirmRelationship",
             TapMessage::Connect(_) => "https://tap.rsvp/schema/1.0#Connect",
@@ -263,6 +295,8 @@ impl TapMessage {
             TapMessage::Revert(_) => "https://tap.rsvp/schema/1.0#Revert",
             TapMessage::Settle(_) => "https://tap.rsvp/schema/1.0#Settle",
             TapMessage::Transfer(_) => "https://tap.rsvp/schema/1.0#Transfer",
+            TapMessage::TrustPing(_) => "https://didcomm.org/trust-ping/2.0/ping",
+            TapMessage::TrustPingResponse(_) => "https://didcomm.org/trust-ping/2.0/ping-response",
             TapMessage::UpdateParty(_) => "https://tap.rsvp/schema/1.0#UpdateParty",
             TapMessage::UpdatePolicies(_) => "https://tap.rsvp/schema/1.0#UpdatePolicies",
         }
