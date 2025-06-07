@@ -502,26 +502,70 @@ impl TapNode {
                 .await
                 .map_err(|e| Error::Verification(format!("JWS verification failed: {}", e)))?;
 
+            // Store in recipient agents' storage
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let empty_msg = "{}".to_string();
+                    let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
+                    
+                    // Store for each recipient agent
+                    for recipient_did in &plain_message.to {
+                        if self.agents.has_agent(recipient_did) {
+                            if let Some(id) = store_received_for_agent(
+                                storage_manager,
+                                recipient_did,
+                                raw_msg,
+                                &source_type,
+                                source_identifier,
+                            ).await {
+                                received_ids.push((recipient_did.clone(), id));
+                            }
+                        }
+                    }
+
+                    // If no recipients are registered agents, store for sender if they're an agent
+                    if received_ids.is_empty() && self.agents.has_agent(&plain_message.from) {
+                        if let Some(id) = store_received_for_agent(
+                            storage_manager,
+                            &plain_message.from,
+                            raw_msg,
+                            &source_type,
+                            source_identifier,
+                        ).await {
+                            received_ids.push((plain_message.from.clone(), id));
+                        }
+                    }
+                }
+            }
+
             // Process the verified plain message
             let result = self.process_plain_message(plain_message).await;
 
-            // Update the received record
+            // Update the received records
             #[cfg(feature = "storage")]
-            if let (Some(id), Some(ref storage)) = (received_id, &self.storage) {
-                let status = if result.is_ok() {
-                    storage::ReceivedStatus::Processed
-                } else {
-                    storage::ReceivedStatus::Failed
-                };
-                let error_msg = result.as_ref().err().map(|e| e.to_string());
-                let _ = storage
-                    .update_received_status(
-                        id,
-                        status,
-                        None, // We'll set this after processing
-                        error_msg.as_deref(),
-                    )
-                    .await;
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let status = if result.is_ok() {
+                        storage::ReceivedStatus::Processed
+                    } else {
+                        storage::ReceivedStatus::Failed
+                    };
+                    let error_msg = result.as_ref().err().map(|e| e.to_string());
+                    
+                    for (agent_did, received_id) in &received_ids {
+                        if let Ok(agent_storage) = storage_manager.get_agent_storage(agent_did).await {
+                            let _ = agent_storage
+                                .update_received_status(
+                                    *received_id,
+                                    status.clone(),
+                                    None, // We'll set this after processing
+                                    error_msg.as_deref(),
+                                )
+                                .await;
+                        }
+                    }
+                }
             }
 
             result
@@ -529,6 +573,32 @@ impl TapNode {
             // Route encrypted message to each matching agent
             let jwe: Jwe = serde_json::from_value(message.clone())
                 .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
+
+            // Store in recipient agents' storage
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let empty_msg = "{}".to_string();
+                    let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
+                    
+                    // Store for each recipient agent based on JWE recipients
+                    for recipient in &jwe.recipients {
+                        if let Some(did) = recipient.header.kid.split('#').next() {
+                            if self.agents.has_agent(did) {
+                                if let Some(id) = store_received_for_agent(
+                                    storage_manager,
+                                    did,
+                                    raw_msg,
+                                    &source_type,
+                                    source_identifier,
+                                ).await {
+                                    received_ids.push((did.to_string(), id));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Find agents that match recipients
             let mut processed = false;
@@ -564,23 +634,30 @@ impl TapNode {
                 Ok(())
             };
 
-            // Update the received record for encrypted messages
+            // Update the received records for encrypted messages
             #[cfg(feature = "storage")]
-            if let (Some(id), Some(ref storage)) = (received_id, &self.storage) {
-                let status = if result.is_ok() {
-                    storage::ReceivedStatus::Processed
-                } else {
-                    storage::ReceivedStatus::Failed
-                };
-                let error_msg = result.as_ref().err().map(|e| e.to_string());
-                let _ = storage
-                    .update_received_status(
-                        id,
-                        status,
-                        None, // We don't have access to the decrypted message ID
-                        error_msg.as_deref(),
-                    )
-                    .await;
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let status = if result.is_ok() {
+                        storage::ReceivedStatus::Processed
+                    } else {
+                        storage::ReceivedStatus::Failed
+                    };
+                    let error_msg = result.as_ref().err().map(|e| e.to_string());
+                    
+                    for (agent_did, received_id) in &received_ids {
+                        if let Ok(agent_storage) = storage_manager.get_agent_storage(agent_did).await {
+                            let _ = agent_storage
+                                .update_received_status(
+                                    *received_id,
+                                    status.clone(),
+                                    None, // We don't have access to the decrypted message ID
+                                    error_msg.as_deref(),
+                                )
+                                .await;
+                        }
+                    }
+                }
             }
 
             result
@@ -590,25 +667,69 @@ impl TapNode {
                 Error::Serialization(format!("Failed to parse PlainMessage: {}", e))
             })?;
 
+            // Store in recipient agents' storage
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let empty_msg = "{}".to_string();
+                    let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
+                    
+                    // Store for each recipient agent
+                    for recipient_did in &plain_message.to {
+                        if self.agents.has_agent(recipient_did) {
+                            if let Some(id) = store_received_for_agent(
+                                storage_manager,
+                                recipient_did,
+                                raw_msg,
+                                &source_type,
+                                source_identifier,
+                            ).await {
+                                received_ids.push((recipient_did.clone(), id));
+                            }
+                        }
+                    }
+
+                    // If no recipients are registered agents, store for sender if they're an agent
+                    if received_ids.is_empty() && self.agents.has_agent(&plain_message.from) {
+                        if let Some(id) = store_received_for_agent(
+                            storage_manager,
+                            &plain_message.from,
+                            raw_msg,
+                            &source_type,
+                            source_identifier,
+                        ).await {
+                            received_ids.push((plain_message.from.clone(), id));
+                        }
+                    }
+                }
+            }
+
             let result = self.process_plain_message(plain_message).await;
 
-            // Update the received record
+            // Update the received records
             #[cfg(feature = "storage")]
-            if let (Some(id), Some(ref storage)) = (received_id, &self.storage) {
-                let status = if result.is_ok() {
-                    storage::ReceivedStatus::Processed
-                } else {
-                    storage::ReceivedStatus::Failed
-                };
-                let error_msg = result.as_ref().err().map(|e| e.to_string());
-                let _ = storage
-                    .update_received_status(
-                        id,
-                        status,
-                        None, // We'll set this after processing
-                        error_msg.as_deref(),
-                    )
-                    .await;
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let status = if result.is_ok() {
+                        storage::ReceivedStatus::Processed
+                    } else {
+                        storage::ReceivedStatus::Failed
+                    };
+                    let error_msg = result.as_ref().err().map(|e| e.to_string());
+                    
+                    for (agent_did, received_id) in &received_ids {
+                        if let Ok(agent_storage) = storage_manager.get_agent_storage(agent_did).await {
+                            let _ = agent_storage
+                                .update_received_status(
+                                    *received_id,
+                                    status.clone(),
+                                    None, // We'll set this after processing
+                                    error_msg.as_deref(),
+                                )
+                                .await;
+                        }
+                    }
+                }
             }
 
             result
