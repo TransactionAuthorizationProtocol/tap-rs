@@ -7,13 +7,24 @@
 //! - Use labels in CLI commands
 
 use tap_agent::{
-    did::{DIDKeyGenerator, DIDGenerationOptions, KeyType},
+    did::DIDKeyGenerator,
     storage::KeyStorage,
     error::Result,
 };
+use std::env;
+use tempfile::TempDir;
 
 fn main() -> Result<()> {
     println!("TAP Key Labels Demo\n");
+
+    // Create temporary directory for this demo
+    let temp_dir = TempDir::new().map_err(|e| tap_agent::error::Error::Storage(e.to_string()))?;
+    
+    // Set TAP_HOME to temporary directory to protect production ~/.tap
+    env::set_var("TAP_HOME", temp_dir.path());
+    
+    println!("Using temporary storage at: {:?}", temp_dir.path());
+    println!("(This protects your production ~/.tap directory)\n");
 
     // Example 1: Generate keys with custom labels
     generate_keys_with_labels()?;
@@ -26,6 +37,9 @@ fn main() -> Result<()> {
     
     // Example 4: Show CLI usage examples
     show_cli_examples();
+
+    println!("\nDemo completed! All operations used temporary storage.");
+    println!("Your production ~/.tap directory was not affected.");
 
     Ok(())
 }
@@ -58,7 +72,7 @@ fn generate_keys_with_labels() -> Result<()> {
     
     // Save to storage
     storage.save_default()?;
-    println!("\n✓ Keys saved to ~/.tap/keys.json\n");
+    println!("\n✓ Keys saved to temporary storage\n");
     
     Ok(())
 }
@@ -159,12 +173,17 @@ fn show_cli_examples() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
+    use std::env;
+    use tempfile::TempDir;
     
     #[test]
     fn test_label_examples() -> Result<()> {
+        // Set up temporary storage
+        let temp_dir = TempDir::new().unwrap();
+        env::set_var("TAP_HOME", temp_dir.path());
+        
         // Create temporary storage
-        let temp_path = std::env::temp_dir().join("tap_label_demo_test.json");
+        let temp_path = temp_dir.path().join("tap_label_demo_test.json");
         
         // Test generating with labels
         let generator = DIDKeyGenerator::new();

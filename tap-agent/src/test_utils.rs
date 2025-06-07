@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::storage::KeyStorage;
 use std::path::PathBuf;
 use tempfile::TempDir;
+use std::env;
 
 /// Test storage wrapper that uses a temporary directory
 pub struct TestStorage {
@@ -22,6 +23,9 @@ impl TestStorage {
         let temp_dir = tempfile::tempdir().map_err(|e| {
             crate::error::Error::Storage(format!("Failed to create temp dir: {}", e))
         })?;
+
+        // Set TAP_HOME to the temp directory to ensure all TAP operations use it
+        env::set_var("TAP_HOME", temp_dir.path());
 
         let storage_path = temp_dir.path().join("keys.json");
 
@@ -58,10 +62,14 @@ impl Default for TestStorage {
     }
 }
 
-/// Create a temporary storage path for testing
-/// This is a simple utility function for tests that need just a path
+/// Creates a temporary storage path for testing
+/// This creates the storage file in a temporary directory
 pub fn temp_storage_path() -> PathBuf {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    
+    // Set TAP_HOME to the temp directory
+    env::set_var("TAP_HOME", temp_dir.path());
+    
     let path = temp_dir.path().join("keys.json");
 
     // We need to leak the temp_dir to keep it alive for the test
@@ -72,6 +80,7 @@ pub fn temp_storage_path() -> PathBuf {
 }
 
 /// Create a temporary directory path for testing
+/// Creates a temporary .tap directory for testing
 /// This creates the .tap equivalent in a temporary directory
 pub fn temp_tap_directory() -> PathBuf {
     let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
@@ -79,11 +88,28 @@ pub fn temp_tap_directory() -> PathBuf {
 
     // Create the .tap directory
     std::fs::create_dir_all(&tap_dir).expect("Failed to create .tap directory");
+    
+    // Set TAP_HOME to point to the .tap directory
+    env::set_var("TAP_HOME", &tap_dir);
 
     // We need to leak the temp_dir to keep it alive for the test
     std::mem::forget(temp_dir);
 
     tap_dir
+}
+
+/// Setup test environment with isolated TAP directory
+/// This should be called at the beginning of each test to ensure isolation
+pub fn setup_test_environment() {
+    let temp_dir = tempfile::tempdir().expect("Failed to create temp dir");
+    env::set_var("TAP_TEST_DIR", temp_dir.path());
+    std::mem::forget(temp_dir);
+}
+
+/// Reset test environment (removes TAP_TEST_DIR and TAP_HOME)
+pub fn reset_test_environment() {
+    env::remove_var("TAP_TEST_DIR");
+    env::remove_var("TAP_HOME");
 }
 
 #[cfg(test)]
@@ -94,12 +120,15 @@ mod tests {
 
     #[test]
     fn test_storage_can_be_created() {
+        setup_test_environment();
         let test_storage = TestStorage::new().unwrap();
         assert!(test_storage.storage_path.ends_with("keys.json"));
+        reset_test_environment();
     }
 
     #[test]
     fn test_storage_save_and_load() {
+        setup_test_environment();
         let test_storage = TestStorage::new().unwrap();
 
         // Create a test key
@@ -120,18 +149,23 @@ mod tests {
         // Load from test storage
         let loaded_storage = test_storage.load().unwrap();
         assert!(loaded_storage.keys.contains_key("did:test:example"));
+        reset_test_environment();
     }
 
     #[test]
     fn test_temp_storage_path() {
+        setup_test_environment();
         let path = temp_storage_path();
         assert!(path.ends_with("keys.json"));
+        reset_test_environment();
     }
 
     #[test]
     fn test_temp_tap_directory() {
+        setup_test_environment();
         let dir = temp_tap_directory();
         assert!(dir.ends_with(".tap"));
         assert!(dir.exists());
+        reset_test_environment();
     }
 }

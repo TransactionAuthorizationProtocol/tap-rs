@@ -15,6 +15,7 @@ use tap_agent::{
     storage::{KeyStorage, StoredKey},
     error::Result,
 };
+use base64::{Engine as _, engine::general_purpose};
 use tempfile::TempDir;
 
 fn main() -> Result<()> {
@@ -64,9 +65,10 @@ fn generate_new_key(storage_path: &PathBuf) -> Result<()> {
     // Convert to storage format
     let stored_key = StoredKey {
         did: generated_key.did.clone(),
+        label: "example-ed25519".to_string(),
         key_type: generated_key.key_type,
-        private_key: base64::encode(&generated_key.private_key),
-        public_key: base64::encode(&generated_key.public_key),
+        private_key: general_purpose::STANDARD.encode(&generated_key.private_key),
+        public_key: general_purpose::STANDARD.encode(&generated_key.public_key),
         metadata: {
             let mut meta = HashMap::new();
             meta.insert("created_by".to_string(), "key_management_example".to_string());
@@ -147,14 +149,14 @@ fn generate_multiple_key_types(storage_path: &PathBuf) -> Result<()> {
     for (key_type, description) in key_types {
         println!("\nGenerating {} key...", description);
         
-        let options = DIDGenerationOptions { key_type };
-        let generated_key = generator.generate_did(options)?;
+        let generated_key = generator.generate_did(DIDGenerationOptions { key_type })?;
         
         let stored_key = StoredKey {
             did: generated_key.did.clone(),
+            label: format!("example-{}", description.to_lowercase().replace(' ', "-")),
             key_type: generated_key.key_type,
-            private_key: base64::encode(&generated_key.private_key),
-            public_key: base64::encode(&generated_key.public_key),
+            private_key: general_purpose::STANDARD.encode(&generated_key.private_key),
+            public_key: general_purpose::STANDARD.encode(&generated_key.public_key),
             metadata: {
                 let mut meta = HashMap::new();
                 meta.insert("key_type_description".to_string(), description.to_string());
@@ -194,13 +196,14 @@ fn demonstrate_key_rotation(storage_path: &PathBuf) -> Result<()> {
     
     let stored_key = StoredKey {
         did: new_key.did.clone(),
+        label: "rotated-key".to_string(),
         key_type: new_key.key_type,
-        private_key: base64::encode(&new_key.private_key),
-        public_key: base64::encode(&new_key.public_key),
+        private_key: general_purpose::STANDARD.encode(&new_key.private_key),
+        public_key: general_purpose::STANDARD.encode(&new_key.public_key),
         metadata: {
             let mut meta = HashMap::new();
             meta.insert("purpose".to_string(), "key_rotation".to_string());
-            meta.insert("rotated_from".to_string(), 
+            meta.insert("rotated_from".to_string(),
                 old_default.unwrap_or_else(|| "none".to_string()));
             meta.insert("rotation_date".to_string(), 
                 chrono::Utc::now().to_rfc3339());
@@ -246,9 +249,10 @@ mod tests {
         // Create stored key
         let stored_key = StoredKey {
             did: key.did.clone(),
+            label: "updated-key".to_string(),
             key_type: key.key_type,
-            private_key: base64::encode(&key.private_key),
-            public_key: base64::encode(&key.public_key),
+            private_key: general_purpose::STANDARD.encode(&key.private_key),
+            public_key: general_purpose::STANDARD.encode(&key.public_key),
             metadata: HashMap::new(),
         };
         

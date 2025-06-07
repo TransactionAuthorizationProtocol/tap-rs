@@ -107,6 +107,10 @@ pub mod storage;
 #[cfg(any(test, feature = "test-utils"))]
 pub mod test_utils;
 
+/// Example utilities for temporary storage
+#[cfg(feature = "examples")]
+pub mod examples;
+
 /// Message verification utilities
 pub mod verification;
 

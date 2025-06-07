@@ -76,11 +76,18 @@ impl Storage {
         tap_root: Option<PathBuf>,
     ) -> Result<Self, StorageError> {
         let root_dir = tap_root.unwrap_or_else(|| {
-            env::var("TAP_ROOT").map(PathBuf::from).unwrap_or_else(|_| {
+            // Check TAP_HOME first (for tests)
+            if let Ok(tap_home) = env::var("TAP_HOME") {
+                PathBuf::from(tap_home)
+            } else if let Ok(tap_root) = env::var("TAP_ROOT") {
+                PathBuf::from(tap_root)
+            } else if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
+                PathBuf::from(test_dir).join(".tap")
+            } else {
                 dirs::home_dir()
                     .expect("Could not find home directory")
                     .join(".tap")
-            })
+            }
         });
 
         // Sanitize the DID for use as a directory name
@@ -161,11 +168,18 @@ impl Storage {
     /// * `tap_root` - Optional custom root directory (defaults to ~/.tap)
     pub fn default_logs_dir(tap_root: Option<PathBuf>) -> PathBuf {
         let root_dir = tap_root.unwrap_or_else(|| {
-            env::var("TAP_ROOT").map(PathBuf::from).unwrap_or_else(|_| {
+            // Check TAP_HOME first (for tests)
+            if let Ok(tap_home) = env::var("TAP_HOME") {
+                PathBuf::from(tap_home)
+            } else if let Ok(tap_root) = env::var("TAP_ROOT") {
+                PathBuf::from(tap_root)
+            } else if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
+                PathBuf::from(test_dir).join(".tap")
+            } else {
                 dirs::home_dir()
                     .expect("Could not find home directory")
                     .join(".tap")
-            })
+            }
         });
 
         root_dir.join("logs")

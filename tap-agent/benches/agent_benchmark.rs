@@ -9,10 +9,16 @@ use tap_agent::{Agent, TapAgent};
 use tap_caip::AssetId;
 use tap_msg::message::{Party, Transfer};
 use uuid::Uuid;
+use std::env;
+use tempfile::TempDir;
 
 /// Create a test agent with ephemeral key for benchmarking
 fn create_test_agent() -> (Arc<TapAgent>, String) {
     let rt = tokio::runtime::Runtime::new().unwrap();
+
+    // Set up temporary directory to ensure benchmarks don't use ~/.tap
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
 
     // Create agent with ephemeral key
     let (agent, did) = rt.block_on(async {
@@ -20,8 +26,14 @@ fn create_test_agent() -> (Arc<TapAgent>, String) {
         (Arc::new(agent), did)
     });
 
+    // Leak the temp_dir to keep it alive for the benchmark
+    std::mem::forget(temp_dir);
+
     (agent, did)
 }
+</end>
+
+</edits>
 
 /// Create a test transfer message
 fn create_transfer_message(from_did: &str, to_did: &str) -> Transfer {

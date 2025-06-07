@@ -1,19 +1,16 @@
 //! Tests for key label functionality
 
 use std::fs;
-use std::path::PathBuf;
 use tap_agent::did::{DIDKeyGenerator, KeyType};
 use tap_agent::error::Result;
 use tap_agent::storage::KeyStorage;
-
-fn temp_storage_path() -> PathBuf {
-    let mut path = std::env::temp_dir();
-    path.push(format!("tap_test_keys_{}.json", uuid::Uuid::new_v4()));
-    path
-}
+use std::env;
+use tempfile::TempDir;
 
 #[test]
 fn test_default_label_generation() -> Result<()> {
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
     let mut storage = KeyStorage::new();
 
     // Generate and add keys without labels
@@ -36,11 +33,14 @@ fn test_default_label_generation() -> Result<()> {
         assert!(storage.keys.values().any(|key| key.label == label));
     }
 
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_custom_label() -> Result<()> {
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
     let mut storage = KeyStorage::new();
     let generator = DIDKeyGenerator::new();
 
@@ -56,11 +56,14 @@ fn test_custom_label() -> Result<()> {
     // Verify label is set correctly
     assert_eq!(storage.keys.get(&key.did).unwrap().label, "production-key");
 
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_label_uniqueness() -> Result<()> {
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
     let mut storage = KeyStorage::new();
     let generator = DIDKeyGenerator::new();
 
@@ -81,11 +84,14 @@ fn test_label_uniqueness() -> Result<()> {
     assert_eq!(added_key1.label, "test-key");
     assert_eq!(added_key2.label, "test-key-2");
 
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_find_by_label() -> Result<()> {
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
     let mut storage = KeyStorage::new();
     let generator = DIDKeyGenerator::new();
 
@@ -114,11 +120,14 @@ fn test_find_by_label() -> Result<()> {
     let not_found = storage.find_by_label("non-existent");
     assert!(not_found.is_none());
 
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_update_label() -> Result<()> {
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
     let mut storage = KeyStorage::new();
     let generator = DIDKeyGenerator::new();
 
@@ -142,12 +151,15 @@ fn test_update_label() -> Result<()> {
     assert!(found.is_some());
     assert_eq!(found.unwrap().did, key.did);
 
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_storage_persistence_with_labels() -> Result<()> {
-    let path = temp_storage_path();
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
+    let path = temp_dir.path().join("keys.json");
 
     // Create and save storage with labeled keys
     {
@@ -184,15 +196,16 @@ fn test_storage_persistence_with_labels() -> Result<()> {
         assert_eq!(key2.unwrap().key_type, KeyType::P256);
     }
 
-    // Cleanup
-    fs::remove_file(&path).ok();
-
+    // Cleanup happens automatically when temp_dir is dropped
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_backward_compatibility() -> Result<()> {
-    let path = temp_storage_path();
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
+    let path = temp_dir.path().join("keys.json");
 
     // Create old-style storage without labels
     let old_storage_json = r#"{
@@ -238,14 +251,15 @@ fn test_backward_compatibility() -> Result<()> {
     let key2 = loaded_storage.find_by_label("agent-2");
     assert!(key2.is_some());
 
-    // Cleanup
-    fs::remove_file(&path).ok();
-
+    // Cleanup happens automatically when temp_dir is dropped
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_mixed_labeled_and_unlabeled_keys() -> Result<()> {
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
     let mut storage = KeyStorage::new();
     let generator = DIDKeyGenerator::new();
 
@@ -272,11 +286,14 @@ fn test_mixed_labeled_and_unlabeled_keys() -> Result<()> {
     assert_eq!(storage.keys.get(&key2.did).unwrap().label, "agent-1");
     assert_eq!(storage.keys.get(&key3.did).unwrap().label, "another-custom");
 
+    env::remove_var("TAP_HOME");
     Ok(())
 }
 
 #[test]
 fn test_label_collision_with_auto_generated() -> Result<()> {
+    let temp_dir = TempDir::new().unwrap();
+    env::set_var("TAP_HOME", temp_dir.path());
     let mut storage = KeyStorage::new();
     let generator = DIDKeyGenerator::new();
 
@@ -296,5 +313,6 @@ fn test_label_collision_with_auto_generated() -> Result<()> {
     assert_eq!(storage.keys.get(&key2.did).unwrap().label, "agent-1");
     assert_eq!(storage.keys.get(&key3.did).unwrap().label, "agent-3");
 
+    env::remove_var("TAP_HOME");
     Ok(())
 }

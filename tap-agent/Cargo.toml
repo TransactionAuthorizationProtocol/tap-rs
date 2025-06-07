@@ -49,6 +49,7 @@ assert_matches = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
 criterion = "0.5"
 tempfile = "3.8"
+serial_test = "3.0"
 
 [[bench]]
 name = "agent_benchmark"
@@ -58,6 +59,7 @@ harness = false
 default = ["native"]
 native = ["reqwest"]
 test-utils = ["tempfile"]
+examples = ["tempfile"]
 wasm = [
     "tap-msg/wasm",
     "wasm-bindgen",
