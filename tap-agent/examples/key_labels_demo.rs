@@ -7,6 +7,7 @@
 //! - Use labels in CLI commands
 
 use std::env;
+use std::fs;
 use tap_agent::{did::DIDKeyGenerator, error::Result, storage::KeyStorage};
 use tempfile::TempDir;
 

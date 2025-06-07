@@ -254,6 +254,7 @@ fn run_test_vector(vector_path: &Path) -> Result<TestResult, String> {
 
 /// Main test entry point
 #[test]
+#[ignore = "Test vectors not available in this branch"]
 fn test_tap_vectors() {
     // Path to the test vectors directory
     let test_vectors_dir = Path::new(env!("CARGO_MANIFEST_DIR"))

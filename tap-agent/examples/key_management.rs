@@ -239,8 +239,6 @@ fn demonstrate_key_rotation(storage_path: &PathBuf) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::path::PathBuf;
 
     #[test]
     fn test_key_generation() {
