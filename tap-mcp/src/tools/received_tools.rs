@@ -3,9 +3,7 @@
 use crate::error::Result;
 use crate::mcp::protocol::{CallToolResult, Tool};
 use crate::tap_integration::TapIntegration;
-use crate::tools::{
-    default_limit, error_text_response, ToolContent, ToolHandler,
-};
+use crate::tools::{default_limit, error_text_response, ToolContent, ToolHandler};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -162,7 +160,8 @@ impl ToolHandler for ListReceivedTool {
                             "source_type": input.source_type,
                             "status": input.status
                         }
-                    })).unwrap_or_else(|_| "Failed to serialize JSON".to_string())
+                    }))
+                    .unwrap_or_else(|_| "Failed to serialize JSON".to_string()),
                 },
             ],
             is_error: Some(false),
@@ -306,7 +305,8 @@ impl ToolHandler for GetPendingReceivedTool {
                         "messages": received_messages,
                         "total": received_messages.len(),
                         "agent_did": input.agent_did
-                    })).unwrap_or_else(|_| "Failed to serialize JSON".to_string())
+                    }))
+                    .unwrap_or_else(|_| "Failed to serialize JSON".to_string()),
                 },
             ],
             is_error: Some(false),
@@ -434,7 +434,8 @@ impl ToolHandler for ViewRawReceivedTool {
                         "processed_message_id": received.processed_message_id,
                         "raw_message": received.raw_message,
                         "raw_message_json": raw_json
-                    })).unwrap_or_else(|_| "Failed to serialize JSON".to_string())
+                    }))
+                    .unwrap_or_else(|_| "Failed to serialize JSON".to_string()),
                 },
             ],
             is_error: Some(false),

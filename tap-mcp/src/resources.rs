@@ -631,7 +631,12 @@ impl ResourceRegistry {
                     Error::resource_not_found(format!("Failed to get agent storage: {}", e))
                 })?;
             agent_storage
-                .list_received(limit, offset, source_type_filter.clone(), status_filter.clone())
+                .list_received(
+                    limit,
+                    offset,
+                    source_type_filter.clone(),
+                    status_filter.clone(),
+                )
                 .await?
         } else {
             return Err(Error::resource_not_found(
@@ -695,7 +700,8 @@ impl ResourceRegistry {
             if let Ok(agent_storage) = self.tap_integration().storage_for_agent(&agent.id).await {
                 if let Ok(Some(received)) = agent_storage.get_received_by_id(id).await {
                     // Try to parse raw message as JSON
-                    let raw_json = serde_json::from_str::<serde_json::Value>(&received.raw_message).ok();
+                    let raw_json =
+                        serde_json::from_str::<serde_json::Value>(&received.raw_message).ok();
 
                     let content = json!({
                         "received": {
