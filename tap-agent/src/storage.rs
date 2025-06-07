@@ -115,29 +115,28 @@ mod tests {
     #[test]
     #[serial]
     fn test_tap_test_dir_environment_variable() {
-        
         // Save current env vars
         let old_home = env::var("TAP_HOME").ok();
         let old_test = env::var("TAP_TEST_DIR").ok();
-        
+
         // Clear env vars
         env::remove_var("TAP_HOME");
         env::remove_var("TAP_TEST_DIR");
-        
+
         // Create a temporary directory and keep it alive
         let temp_dir = TempDir::new().unwrap();
         let temp_path = temp_dir.path().to_path_buf();
-        
+
         // Set TAP_TEST_DIR
         env::set_var("TAP_TEST_DIR", &temp_path);
-        
+
         // Get the default key path
         let key_path = KeyStorage::default_key_path().unwrap();
-        
+
         // Verify it uses TAP_TEST_DIR/.tap
         let expected_path = temp_path.join(DEFAULT_TAP_DIR).join(DEFAULT_KEYS_FILE);
         assert_eq!(key_path, expected_path);
-        
+
         // Restore env vars
         env::remove_var("TAP_TEST_DIR");
         if let Some(val) = old_home {
@@ -146,7 +145,7 @@ mod tests {
         if let Some(val) = old_test {
             env::set_var("TAP_TEST_DIR", val);
         }
-        
+
         // Keep temp_dir alive until the end of the test
         drop(temp_dir);
     }
