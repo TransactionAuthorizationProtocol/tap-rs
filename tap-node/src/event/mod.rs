@@ -122,11 +122,11 @@
 //! by appropriate synchronization primitives. The `EventBus` can be safely shared
 //! across threads using `Arc<EventBus>`.
 
+#[cfg(feature = "storage")]
+pub mod customer_handler;
 pub mod handlers;
 pub mod logger;
 pub mod trust_ping_handler;
-#[cfg(feature = "storage")]
-pub mod customer_handler;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -409,7 +409,7 @@ pub enum NodeEvent {
     },
 
     /// New events for customer extraction and compliance
-    
+
     /// A message was received from a source
     MessageReceived {
         /// The received message
@@ -417,7 +417,7 @@ pub enum NodeEvent {
         /// The source of the message
         source: String,
     },
-    
+
     /// A message was sent to a destination
     MessageSent {
         /// The sent message
@@ -425,7 +425,7 @@ pub enum NodeEvent {
         /// The destination of the message
         destination: String,
     },
-    
+
     /// A new transaction was created
     TransactionCreated {
         /// The transaction data
@@ -433,7 +433,7 @@ pub enum NodeEvent {
         /// The agent that created the transaction
         agent_did: String,
     },
-    
+
     /// A customer record was created or updated
     CustomerUpdated {
         /// The customer ID

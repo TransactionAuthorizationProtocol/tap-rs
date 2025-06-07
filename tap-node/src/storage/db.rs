@@ -2076,7 +2076,12 @@ impl Storage {
         .bind(&customer.postal_code)
         .bind(&customer.street_address)
         .bind(serde_json::to_string(&customer.profile).unwrap())
-        .bind(customer.ivms101_data.as_ref().map(|v| serde_json::to_string(v).unwrap()))
+        .bind(
+            customer
+                .ivms101_data
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap()),
+        )
         .bind(&customer.verified_at)
         .bind(&customer.created_at)
         .bind(&customer.updated_at)
@@ -2103,36 +2108,38 @@ impl Storage {
         .await?;
 
         match row {
-            Some(row) => {
-                Ok(Some(Customer {
-                    id: row.get("id"),
-                    agent_did: row.get("agent_did"),
-                    schema_type: SchemaType::try_from(row.get::<String, _>("schema_type").as_str())
-                        .map_err(StorageError::InvalidTransactionType)?,
-                    given_name: row.get("given_name"),
-                    family_name: row.get("family_name"),
-                    display_name: row.get("display_name"),
-                    legal_name: row.get("legal_name"),
-                    lei_code: row.get("lei_code"),
-                    mcc_code: row.get("mcc_code"),
-                    address_country: row.get("address_country"),
-                    address_locality: row.get("address_locality"),
-                    postal_code: row.get("postal_code"),
-                    street_address: row.get("street_address"),
-                    profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
-                    ivms101_data: row.get::<Option<String>, _>("ivms101_data")
-                        .map(|v| serde_json::from_str(&v).unwrap()),
-                    verified_at: row.get("verified_at"),
-                    created_at: row.get("created_at"),
-                    updated_at: row.get("updated_at"),
-                }))
-            }
+            Some(row) => Ok(Some(Customer {
+                id: row.get("id"),
+                agent_did: row.get("agent_did"),
+                schema_type: SchemaType::try_from(row.get::<String, _>("schema_type").as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                given_name: row.get("given_name"),
+                family_name: row.get("family_name"),
+                display_name: row.get("display_name"),
+                legal_name: row.get("legal_name"),
+                lei_code: row.get("lei_code"),
+                mcc_code: row.get("mcc_code"),
+                address_country: row.get("address_country"),
+                address_locality: row.get("address_locality"),
+                postal_code: row.get("postal_code"),
+                street_address: row.get("street_address"),
+                profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
+                ivms101_data: row
+                    .get::<Option<String>, _>("ivms101_data")
+                    .map(|v| serde_json::from_str(&v).unwrap()),
+                verified_at: row.get("verified_at"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })),
             None => Ok(None),
         }
     }
 
     /// Get a customer by identifier
-    pub async fn get_customer_by_identifier(&self, identifier: &str) -> Result<Option<Customer>, StorageError> {
+    pub async fn get_customer_by_identifier(
+        &self,
+        identifier: &str,
+    ) -> Result<Option<Customer>, StorageError> {
         let row = sqlx::query_as::<_, (String,)>(
             r#"
             SELECT customer_id
@@ -2193,7 +2200,8 @@ impl Storage {
                 postal_code: row.get("postal_code"),
                 street_address: row.get("street_address"),
                 profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
-                ivms101_data: row.get::<Option<String>, _>("ivms101_data")
+                ivms101_data: row
+                    .get::<Option<String>, _>("ivms101_data")
                     .map(|v| serde_json::from_str(&v).unwrap()),
                 verified_at: row.get("verified_at"),
                 created_at: row.get("created_at"),
@@ -2240,9 +2248,18 @@ impl Storage {
         &self,
         customer_id: &str,
     ) -> Result<Vec<CustomerIdentifier>, StorageError> {
-        let rows = sqlx::query_as::<_, (
-            String, String, String, bool, Option<String>, Option<String>, String
-        )>(
+        let rows = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                bool,
+                Option<String>,
+                Option<String>,
+                String,
+            ),
+        >(
             r#"
             SELECT id, customer_id, identifier_type, verified, verification_method,
                    verified_at, created_at
@@ -2256,9 +2273,15 @@ impl Storage {
 
         let mut identifiers = Vec::new();
         for (
-            id, customer_id, identifier_type, verified, verification_method,
-            verified_at, created_at
-        ) in rows {
+            id,
+            customer_id,
+            identifier_type,
+            verified,
+            verification_method,
+            verified_at,
+            created_at,
+        ) in rows
+        {
             identifiers.push(CustomerIdentifier {
                 id,
                 customer_id,
@@ -2295,7 +2318,12 @@ impl Storage {
         .bind(&relationship.customer_id)
         .bind(&relationship.relationship_type)
         .bind(&relationship.related_identifier)
-        .bind(relationship.proof.as_ref().map(|v| serde_json::to_string(v).unwrap()))
+        .bind(
+            relationship
+                .proof
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap()),
+        )
         .bind(&relationship.confirmed_at)
         .bind(&relationship.created_at)
         .execute(&self.pool)
@@ -2309,9 +2337,18 @@ impl Storage {
         &self,
         customer_id: &str,
     ) -> Result<Vec<CustomerRelationship>, StorageError> {
-        let rows = sqlx::query_as::<_, (
-            String, String, String, String, Option<String>, Option<String>, String
-        )>(
+        let rows = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                String,
+            ),
+        >(
             r#"
             SELECT id, customer_id, relationship_type, related_identifier,
                    proof, confirmed_at, created_at
@@ -2325,9 +2362,15 @@ impl Storage {
 
         let mut relationships = Vec::new();
         for (
-            id, customer_id, relationship_type, related_identifier,
-            proof, confirmed_at, created_at
-        ) in rows {
+            id,
+            customer_id,
+            relationship_type,
+            related_identifier,
+            proof,
+            confirmed_at,
+            created_at,
+        ) in rows
+        {
             relationships.push(CustomerRelationship {
                 id,
                 customer_id,
@@ -2350,7 +2393,7 @@ impl Storage {
         limit: u32,
     ) -> Result<Vec<Customer>, StorageError> {
         let search_pattern = format!("%{}%", query);
-        
+
         let rows = sqlx::query(
             r#"
             SELECT DISTINCT c.id, c.agent_did, c.schema_type, c.given_name, c.family_name, c.display_name,
@@ -2395,7 +2438,8 @@ impl Storage {
                 postal_code: row.get("postal_code"),
                 street_address: row.get("street_address"),
                 profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
-                ivms101_data: row.get::<Option<String>, _>("ivms101_data")
+                ivms101_data: row
+                    .get::<Option<String>, _>("ivms101_data")
                     .map(|v| serde_json::from_str(&v).unwrap()),
                 verified_at: row.get("verified_at"),
                 created_at: row.get("created_at"),

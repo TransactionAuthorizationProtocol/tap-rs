@@ -297,7 +297,10 @@ impl EventLogger {
                     timestamp, source, message.type_, message.id
                 )
             }
-            NodeEvent::MessageSent { message, destination } => {
+            NodeEvent::MessageSent {
+                message,
+                destination,
+            } => {
                 format!(
                     "[{}] MESSAGE SENT: destination={}, type={}, id={}",
                     timestamp, destination, message.type_, message.id
@@ -433,21 +436,31 @@ impl EventLogger {
                     "source": source,
                 }),
             ),
-            NodeEvent::MessageSent { message, destination } => (
+            NodeEvent::MessageSent {
+                message,
+                destination,
+            } => (
                 "message_sent_new",
                 json!({
                     "message": serde_json::to_value(message).unwrap_or(json!(null)),
                     "destination": destination,
                 }),
             ),
-            NodeEvent::TransactionCreated { transaction, agent_did } => (
+            NodeEvent::TransactionCreated {
+                transaction,
+                agent_did,
+            } => (
                 "transaction_created",
                 json!({
                     "transaction_id": transaction.id,
                     "agent_did": agent_did,
                 }),
             ),
-            NodeEvent::CustomerUpdated { customer_id, agent_did, update_type } => (
+            NodeEvent::CustomerUpdated {
+                customer_id,
+                agent_did,
+                update_type,
+            } => (
                 "customer_updated",
                 json!({
                     "customer_id": customer_id,

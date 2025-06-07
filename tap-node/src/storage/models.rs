@@ -373,29 +373,29 @@ pub struct Customer {
     pub id: String,
     pub agent_did: String,
     pub schema_type: SchemaType,
-    
+
     // Core fields for natural persons
     pub given_name: Option<String>,
     pub family_name: Option<String>,
     pub display_name: Option<String>,
-    
-    // Core fields for organizations  
+
+    // Core fields for organizations
     pub legal_name: Option<String>,
     pub lei_code: Option<String>,
     pub mcc_code: Option<String>,
-    
+
     // Address fields
     pub address_country: Option<String>,
     pub address_locality: Option<String>,
     pub postal_code: Option<String>,
     pub street_address: Option<String>,
-    
+
     // Full schema.org JSON-LD profile
     pub profile: serde_json::Value,
-    
+
     // Cached IVMS101 data
     pub ivms101_data: Option<serde_json::Value>,
-    
+
     // Metadata
     pub verified_at: Option<String>,
     pub created_at: String,
