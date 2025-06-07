@@ -78,8 +78,9 @@ pub use db::Storage;
 pub use error::StorageError;
 #[cfg(feature = "storage")]
 pub use models::{
-    Delivery, DeliveryStatus, DeliveryType, Message, MessageDirection, Received, ReceivedStatus,
-    SourceType, Transaction, TransactionStatus, TransactionType,
+    Customer, CustomerIdentifier, CustomerRelationship, Delivery, DeliveryStatus, DeliveryType,
+    IdentifierType, Message, MessageDirection, Received, ReceivedStatus, SchemaType, SourceType,
+    Transaction, TransactionStatus, TransactionType,
 };
 
 #[cfg(not(feature = "storage"))]

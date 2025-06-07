@@ -125,6 +125,8 @@
 pub mod handlers;
 pub mod logger;
 pub mod trust_ping_handler;
+#[cfg(feature = "storage")]
+pub mod customer_handler;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -405,6 +407,42 @@ pub enum NodeEvent {
         /// The DID of the agent that triggered the change
         agent_did: Option<String>,
     },
+
+    /// New events for customer extraction and compliance
+    
+    /// A message was received from a source
+    MessageReceived {
+        /// The received message
+        message: PlainMessage,
+        /// The source of the message
+        source: String,
+    },
+    
+    /// A message was sent to a destination
+    MessageSent {
+        /// The sent message
+        message: PlainMessage,
+        /// The destination of the message
+        destination: String,
+    },
+    
+    /// A new transaction was created
+    TransactionCreated {
+        /// The transaction data
+        transaction: crate::storage::Transaction,
+        /// The agent that created the transaction
+        agent_did: String,
+    },
+    
+    /// A customer record was created or updated
+    CustomerUpdated {
+        /// The customer ID
+        customer_id: String,
+        /// The agent that owns the customer
+        agent_did: String,
+        /// The type of update (created, updated, verified)
+        update_type: String,
+    },
 }
 
 /// Event subscriber trait for receiving node events
@@ -660,7 +698,7 @@ impl EventBus {
     }
 
     /// Publish an event to all subscribers
-    async fn publish_event(&self, event: NodeEvent) {
+    pub async fn publish_event(&self, event: NodeEvent) {
         // Send to channel
         let _ = self.sender.send(event.clone());
 

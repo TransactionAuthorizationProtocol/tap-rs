@@ -328,3 +328,146 @@ pub struct Received {
     pub processed_at: Option<String>,
     pub processed_message_id: Option<String>,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SchemaType {
+    Person,
+    Organization,
+    Thing,
+}
+
+impl fmt::Display for SchemaType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SchemaType::Person => write!(f, "Person"),
+            SchemaType::Organization => write!(f, "Organization"),
+            SchemaType::Thing => write!(f, "Thing"),
+        }
+    }
+}
+
+impl TryFrom<&str> for SchemaType {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "Person" => Ok(SchemaType::Person),
+            "Organization" => Ok(SchemaType::Organization),
+            "Thing" => Ok(SchemaType::Thing),
+            _ => Err(format!("Invalid schema type: {}", value)),
+        }
+    }
+}
+
+impl FromStr for SchemaType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Customer {
+    pub id: String,
+    pub agent_did: String,
+    pub schema_type: SchemaType,
+    
+    // Core fields for natural persons
+    pub given_name: Option<String>,
+    pub family_name: Option<String>,
+    pub display_name: Option<String>,
+    
+    // Core fields for organizations  
+    pub legal_name: Option<String>,
+    pub lei_code: Option<String>,
+    pub mcc_code: Option<String>,
+    
+    // Address fields
+    pub address_country: Option<String>,
+    pub address_locality: Option<String>,
+    pub postal_code: Option<String>,
+    pub street_address: Option<String>,
+    
+    // Full schema.org JSON-LD profile
+    pub profile: serde_json::Value,
+    
+    // Cached IVMS101 data
+    pub ivms101_data: Option<serde_json::Value>,
+    
+    // Metadata
+    pub verified_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IdentifierType {
+    Did,
+    Email,
+    Phone,
+    Url,
+    Account,
+    Other,
+}
+
+impl fmt::Display for IdentifierType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IdentifierType::Did => write!(f, "did"),
+            IdentifierType::Email => write!(f, "email"),
+            IdentifierType::Phone => write!(f, "phone"),
+            IdentifierType::Url => write!(f, "url"),
+            IdentifierType::Account => write!(f, "account"),
+            IdentifierType::Other => write!(f, "other"),
+        }
+    }
+}
+
+impl TryFrom<&str> for IdentifierType {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "did" => Ok(IdentifierType::Did),
+            "email" => Ok(IdentifierType::Email),
+            "phone" => Ok(IdentifierType::Phone),
+            "url" => Ok(IdentifierType::Url),
+            "account" => Ok(IdentifierType::Account),
+            "other" => Ok(IdentifierType::Other),
+            _ => Err(format!("Invalid identifier type: {}", value)),
+        }
+    }
+}
+
+impl FromStr for IdentifierType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerIdentifier {
+    pub id: String, // The IRI itself
+    pub customer_id: String,
+    pub identifier_type: IdentifierType,
+    pub verified: bool,
+    pub verification_method: Option<String>,
+    pub verified_at: Option<String>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CustomerRelationship {
+    pub id: String,
+    pub customer_id: String,
+    pub relationship_type: String,
+    pub related_identifier: String,
+    pub proof: Option<serde_json::Value>,
+    pub confirmed_at: Option<String>,
+    pub created_at: String,
+}
