@@ -3,6 +3,7 @@
 mod agent_tools;
 mod communication_tools;
 mod customer_tools;
+mod database_tools;
 mod delivery_tools;
 mod received_tools;
 mod schema;
@@ -19,6 +20,7 @@ use tracing::{debug, error};
 pub use agent_tools::*;
 pub use communication_tools::*;
 pub use customer_tools::*;
+pub use database_tools::*;
 pub use delivery_tools::*;
 pub use received_tools::*;
 pub use transaction_tools::*;
@@ -130,7 +132,17 @@ impl ToolRegistry {
         );
         tools.insert(
             "tap_view_raw_received".to_string(),
-            Box::new(ViewRawReceivedTool::new(tap_integration)),
+            Box::new(ViewRawReceivedTool::new(tap_integration.clone())),
+        );
+
+        // Database tools
+        tools.insert(
+            "tap_query_database".to_string(),
+            Box::new(QueryDatabaseTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_get_database_schema".to_string(),
+            Box::new(GetDatabaseSchemaTool::new(tap_integration)),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

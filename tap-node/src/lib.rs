@@ -444,32 +444,7 @@ impl TapNode {
 
         // Store the raw message in the received table
         #[cfg(feature = "storage")]
-        let received_id = if let Some(ref _storage_manager) = self.agent_storage_manager {
-            // For now, store in centralized storage if available
-            if let Some(ref storage) = self.storage {
-                match storage
-                    .create_received(
-                        raw_message.as_ref().unwrap_or(&"{}".to_string()),
-                        source_type.clone(),
-                        source_identifier,
-                    )
-                    .await
-                {
-                    Ok(id) => {
-                        log::debug!("Created received record {} for incoming message", id);
-                        Some(id)
-                    }
-                    Err(e) => {
-                        log::warn!("Failed to create received record: {}", e);
-                        None
-                    }
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        };
+        let mut received_ids: Vec<(String, i64)> = Vec::new();
 
         use tap_agent::{verify_jws, Jwe, Jws};
 
@@ -477,6 +452,46 @@ impl TapNode {
         let is_encrypted =
             message.get("protected").is_some() && message.get("recipients").is_some();
         let is_signed = message.get("payload").is_some() && message.get("signatures").is_some();
+
+        // Helper function to store received message in agent storage
+        #[cfg(feature = "storage")]
+        async fn store_received_for_agent(
+            storage_manager: &storage::AgentStorageManager,
+            agent_did: &str,
+            raw_message: &str,
+            source_type: &storage::SourceType,
+            source_identifier: Option<&str>,
+        ) -> Option<i64> {
+            match storage_manager.get_agent_storage(agent_did).await {
+                Ok(agent_storage) => {
+                    match agent_storage
+                        .create_received(raw_message, source_type.clone(), source_identifier)
+                        .await
+                    {
+                        Ok(id) => {
+                            log::debug!(
+                                "Created received record {} for agent {} for incoming message",
+                                id,
+                                agent_did
+                            );
+                            Some(id)
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to create received record for agent {}: {}",
+                                agent_did,
+                                e
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to get storage for agent {}: {}", agent_did, e);
+                    None
+                }
+            }
+        }
 
         if is_signed {
             // Verify signature once using resolver
@@ -1281,8 +1296,25 @@ impl TapNode {
                     None
                 };
 
-                // Process the message internally
-                match self.process_plain_message(processed_message.clone()).await {
+                // Process the message internally through receive_message_from_source
+                // to ensure it gets recorded in the received table
+                // Pass the packed (signed) message just like external messages
+                let message_value = match serde_json::from_str::<serde_json::Value>(&packed) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        log::error!("Failed to parse packed message as JSON: {}", e);
+                        continue;
+                    }
+                };
+
+                match self
+                    .receive_message_from_source(
+                        message_value,
+                        storage::SourceType::Internal,
+                        Some(&sender_did),
+                    )
+                    .await
+                {
                     Ok(_) => {
                         log::debug!(
                             "Successfully delivered message internally to: {}",

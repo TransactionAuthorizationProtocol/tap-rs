@@ -1,6 +1,6 @@
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
 use std::env;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tap_msg::didcomm::PlainMessage;
 use tracing::{debug, info};
 
@@ -50,6 +50,7 @@ use super::models::{
 #[derive(Clone, Debug)]
 pub struct Storage {
     pool: SqlitePool,
+    db_path: PathBuf,
 }
 
 impl Storage {
@@ -141,7 +142,12 @@ impl Storage {
             .await
             .map_err(|e| StorageError::Migration(e.to_string()))?;
 
-        Ok(Storage { pool })
+        Ok(Storage { pool, db_path })
+    }
+
+    /// Get the database path
+    pub fn db_path(&self) -> &Path {
+        &self.db_path
     }
 
     /// Get the default logs directory
