@@ -1,0 +1,22 @@
+[package]
+name = "tap-ivms101"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "IVMS 101.2023 data model implementation for the Travel Asset Protocol"
+repository.workspace = true
+license.workspace = true
+keywords = ["ivms101", "travel-rule", "compliance", "tap", "vasp"]
+categories = ["data-structures", "encoding"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+iso_currency = "0.4"
+regex = "1.5"
+
+[dev-dependencies]
+tokio = { version = "1.39", features = ["full"] }
+pretty_assertions = "1.0"
