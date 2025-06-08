@@ -239,9 +239,22 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
 
         // Validate timestamp
         if let Some(created_time) = message.created_time {
-            let now = chrono::Utc::now().timestamp() as u64;
-            // Check if the timestamp is more than 5 minutes in the future
-            if created_time > now + 300 {
+            // Detect if timestamp is in seconds or milliseconds
+            // Timestamps in seconds since 1970 are much smaller than timestamps in milliseconds
+            // A reasonable cutoff is 10^10 (around year 2286 in seconds, or year 1970 + 4 months in milliseconds)
+            let (normalized_created_time, now) = if created_time < 10_000_000_000 {
+                // Timestamp is likely in seconds, convert to milliseconds
+                (
+                    created_time * 1000,
+                    chrono::Utc::now().timestamp_millis() as u64,
+                )
+            } else {
+                // Timestamp is likely in milliseconds
+                (created_time, chrono::Utc::now().timestamp_millis() as u64)
+            };
+
+            // Check if the timestamp is more than 5 minutes in the future (300,000 milliseconds)
+            if normalized_created_time > now + 300_000 {
                 info!("PlainMessage has future timestamp, rejecting");
                 return Ok(None);
             }
@@ -281,7 +294,23 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         // Validate DIDComm messages
         else if message_type.starts_with("https://didcomm.org/") {
             // DIDComm-specific validations
-            // Add more specific DIDComm validations here
+            // Check for common DIDComm message types
+            if !message_type.contains("trust-ping")
+                && !message_type.contains("basicmessage")
+                && !message_type.contains("routing")
+                && !message_type.contains("discover-features")
+                && !message_type.contains("problem-report")
+                && !message_type.contains("ack")
+                && !message_type.contains("notification")
+                && !message_type.contains("ping")
+                && !message_type.contains("coordinate-mediation")
+                && !message_type.contains("keylist")
+                && !message_type.contains("out-of-band")
+            {
+                info!("Unknown DIDComm message type: {}", message_type);
+                // For now, allow unknown DIDComm message types to pass through
+                // In a production system, you might want stricter validation
+            }
         }
         // Unknown message type protocol
         else if !message_type.starts_with("https://tap.rsvp/schema/")
@@ -352,9 +381,22 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
 
         // Validate timestamp
         if let Some(created_time) = message.created_time {
-            let now = chrono::Utc::now().timestamp() as u64;
-            // Check if the timestamp is more than 5 minutes in the future
-            if created_time > now + 300 {
+            // Detect if timestamp is in seconds or milliseconds
+            // Timestamps in seconds since 1970 are much smaller than timestamps in milliseconds
+            // A reasonable cutoff is 10^10 (around year 2286 in seconds, or year 1970 + 4 months in milliseconds)
+            let (normalized_created_time, now) = if created_time < 10_000_000_000 {
+                // Timestamp is likely in seconds, convert to milliseconds
+                (
+                    created_time * 1000,
+                    chrono::Utc::now().timestamp_millis() as u64,
+                )
+            } else {
+                // Timestamp is likely in milliseconds
+                (created_time, chrono::Utc::now().timestamp_millis() as u64)
+            };
+
+            // Check if the timestamp is more than 5 minutes in the future (300,000 milliseconds)
+            if normalized_created_time > now + 300_000 {
                 info!("Outgoing message has future timestamp, rejecting");
                 return Ok(None);
             }
@@ -397,7 +439,26 @@ impl PlainMessageProcessor for ValidationPlainMessageProcessor {
         // Validate DIDComm messages
         else if message_type.starts_with("https://didcomm.org/") {
             // DIDComm-specific validations
-            // Add more specific DIDComm validations here
+            // Check for common DIDComm message types
+            if !message_type.contains("trust-ping")
+                && !message_type.contains("basicmessage")
+                && !message_type.contains("routing")
+                && !message_type.contains("discover-features")
+                && !message_type.contains("problem-report")
+                && !message_type.contains("ack")
+                && !message_type.contains("notification")
+                && !message_type.contains("ping")
+                && !message_type.contains("coordinate-mediation")
+                && !message_type.contains("keylist")
+                && !message_type.contains("out-of-band")
+            {
+                info!(
+                    "Unknown DIDComm message type in outgoing message: {}",
+                    message_type
+                );
+                // For now, allow unknown DIDComm message types to pass through
+                // In a production system, you might want stricter validation
+            }
         }
         // Unknown message type protocol
         else if !message_type.starts_with("https://tap.rsvp/schema/")
@@ -483,6 +544,9 @@ impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
             crate::message::PlainMessageProcessorType::Composite(p) => {
                 p.process_incoming(message).await
             }
+            crate::message::PlainMessageProcessorType::TrustPing(p) => {
+                p.process_incoming(message).await
+            }
         }
     }
 
@@ -501,6 +565,9 @@ impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
                 p.process_outgoing(message).await
             }
             crate::message::PlainMessageProcessorType::Composite(p) => {
+                p.process_outgoing(message).await
+            }
+            crate::message::PlainMessageProcessorType::TrustPing(p) => {
                 p.process_outgoing(message).await
             }
         }

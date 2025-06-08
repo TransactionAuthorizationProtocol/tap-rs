@@ -21,6 +21,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
+use tracing::{debug, warn};
 
 use crate::error::{Error, Result};
 
@@ -247,13 +248,13 @@ impl KeyResolver {
         }
 
         // Add debugging
-        println!("Ed25519 pubkey: {:?}", ed25519_pubkey);
+        debug!("Ed25519 pubkey: {:?}", ed25519_pubkey);
 
         // Try to create a CompressedEdwardsY from the bytes
         let edwards_y = match CompressedEdwardsY::try_from(ed25519_pubkey) {
             Ok(point) => point,
             Err(e) => {
-                println!("Error converting to CompressedEdwardsY: {:?}", e);
+                debug!("Error converting to CompressedEdwardsY: {:?}", e);
                 return None;
             }
         };
@@ -262,7 +263,7 @@ impl KeyResolver {
         let edwards_point = match edwards_y.decompress() {
             Some(point) => point,
             None => {
-                println!("Failed to decompress Edwards point");
+                debug!("Failed to decompress Edwards point");
                 return None;
             }
         };
@@ -418,7 +419,7 @@ impl DIDMethodResolver for KeyResolver {
         let mut key_agreement = Vec::new();
 
         if let Some(x25519_key) = Self::ed25519_to_x25519(ed25519_public_key) {
-            println!("Successfully converted Ed25519 to X25519!");
+            debug!("Successfully converted Ed25519 to X25519!");
             // Encode the X25519 public key in multibase format
             let mut x25519_bytes = vec![0xEC, 0x01]; // Prefix for X25519
             x25519_bytes.extend_from_slice(&x25519_key);
@@ -441,7 +442,7 @@ impl DIDMethodResolver for KeyResolver {
             verification_methods.push(x25519_verification_method);
             key_agreement.push(x25519_vm_id);
         } else {
-            println!("Failed to convert Ed25519 to X25519!");
+            debug!("Failed to convert Ed25519 to X25519!");
         }
 
         // Create the DID document
@@ -650,8 +651,8 @@ impl DIDMethodResolver for WebResolver {
                                                 }
 
                                                 // Try to extract verification methods and other fields
-                                                println!("WARNING: Using partial DID document parsing due to format issues");
-                                                println!("Original parse error: {}", parse_error);
+                                                warn!("Using partial DID document parsing due to format issues");
+                                                warn!("Original parse error: {}", parse_error);
 
                                                 // Extract verification methods if present
                                                 // Create a longer-lived empty vec to handle the None case
@@ -704,7 +705,7 @@ impl DIDMethodResolver for WebResolver {
                                                     .get("service")
                                                     .and_then(|v| v.as_array())
                                                 {
-                                                    println!("\nService endpoints (extracted from JSON):");
+                                                    debug!("\nService endpoints (extracted from JSON):");
                                                     for (i, svc_value) in
                                                         svc_array.iter().enumerate()
                                                     {
@@ -721,12 +722,9 @@ impl DIDMethodResolver for WebResolver {
                                                                 .and_then(|v| v.as_str())
                                                                 .unwrap_or("Unknown");
 
-                                                            println!("  [{}] ID: {}", i + 1, id);
-                                                            println!("      Type: {}", type_value);
-                                                            println!(
-                                                                "      Endpoint: {}",
-                                                                endpoint
-                                                            );
+                                                            debug!("  [{}] ID: {}", i + 1, id);
+                                                            debug!("      Type: {}", type_value);
+                                                            debug!("      Endpoint: {}", endpoint);
                                                         }
                                                     }
                                                 }

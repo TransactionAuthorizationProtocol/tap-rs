@@ -77,7 +77,10 @@ pub use db::Storage;
 #[cfg(feature = "storage")]
 pub use error::StorageError;
 #[cfg(feature = "storage")]
-pub use models::{Message, MessageDirection, Transaction, TransactionStatus, TransactionType};
+pub use models::{
+    Delivery, DeliveryStatus, DeliveryType, Message, MessageDirection, Received, ReceivedStatus,
+    SourceType, Transaction, TransactionStatus, TransactionType,
+};
 
 #[cfg(not(feature = "storage"))]
 pub use mock::*;

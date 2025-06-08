@@ -18,8 +18,7 @@
 //! ```rust,no_run
 //! use tap_agent::{verify_jws, MultiResolver, Jws};
 //!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! async fn verify_message() -> Result<(), Box<dyn std::error::Error>> {
 //!     let resolver = MultiResolver::default();
 //!     // let jws: Jws = serde_json::from_str(jws_string)?;
 //!     // let verified_message = verify_jws(&jws, &resolver).await?;

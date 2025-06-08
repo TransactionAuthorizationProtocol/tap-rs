@@ -11,6 +11,7 @@ use base64::Engine;
 use dirs::home_dir;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -67,6 +68,202 @@ mod key_type_serde {
             "Secp256k1" => Ok(KeyType::Secp256k1),
             _ => Err(serde::de::Error::custom(format!("Unknown key type: {}", s))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serial_test::serial;
+    use std::env;
+    use tempfile::TempDir;
+
+    #[test]
+    #[serial]
+    fn test_tap_home_environment_variable() {
+        // Save current env vars
+        let old_home = env::var("TAP_HOME").ok();
+        let old_test = env::var("TAP_TEST_DIR").ok();
+
+        // Clear env vars
+        env::remove_var("TAP_HOME");
+        env::remove_var("TAP_TEST_DIR");
+
+        // Create a temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path().to_path_buf();
+
+        // Set TAP_HOME
+        env::set_var("TAP_HOME", &temp_path);
+
+        // Get the default key path
+        let key_path = KeyStorage::default_key_path().unwrap();
+
+        // Verify it uses TAP_HOME
+        assert_eq!(key_path, temp_path.join(DEFAULT_KEYS_FILE));
+
+        // Restore env vars
+        env::remove_var("TAP_HOME");
+        if let Some(val) = old_home {
+            env::set_var("TAP_HOME", val);
+        }
+        if let Some(val) = old_test {
+            env::set_var("TAP_TEST_DIR", val);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_tap_test_dir_environment_variable() {
+        // Save current env vars
+        let old_home = env::var("TAP_HOME").ok();
+        let old_test = env::var("TAP_TEST_DIR").ok();
+
+        // Clear env vars
+        env::remove_var("TAP_HOME");
+        env::remove_var("TAP_TEST_DIR");
+
+        // Create a temporary directory and keep it alive
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path().to_path_buf();
+
+        // Set TAP_TEST_DIR
+        env::set_var("TAP_TEST_DIR", &temp_path);
+
+        // Get the default key path
+        let key_path = KeyStorage::default_key_path().unwrap();
+
+        // Verify it uses TAP_TEST_DIR/.tap
+        let expected_path = temp_path.join(DEFAULT_TAP_DIR).join(DEFAULT_KEYS_FILE);
+        assert_eq!(key_path, expected_path);
+
+        // Restore env vars
+        env::remove_var("TAP_TEST_DIR");
+        if let Some(val) = old_home {
+            env::set_var("TAP_HOME", val);
+        }
+        if let Some(val) = old_test {
+            env::set_var("TAP_TEST_DIR", val);
+        }
+
+        // Keep temp_dir alive until the end of the test
+        drop(temp_dir);
+    }
+
+    #[test]
+    #[serial]
+    fn test_environment_variable_priority() {
+        // Save current env vars
+        let old_home = env::var("TAP_HOME").ok();
+        let old_test = env::var("TAP_TEST_DIR").ok();
+
+        // Create temporary directories
+        let home_dir = TempDir::new().unwrap();
+        let test_dir = TempDir::new().unwrap();
+
+        let home_path = home_dir.path().to_path_buf();
+        let test_path = test_dir.path().to_path_buf();
+
+        // Set both TAP_HOME and TAP_TEST_DIR
+        env::set_var("TAP_HOME", &home_path);
+        env::set_var("TAP_TEST_DIR", &test_path);
+
+        // Get the default key path
+        let key_path = KeyStorage::default_key_path().unwrap();
+
+        // Verify TAP_HOME takes priority
+        assert_eq!(key_path, home_path.join(DEFAULT_KEYS_FILE));
+
+        // Restore env vars
+        env::remove_var("TAP_HOME");
+        env::remove_var("TAP_TEST_DIR");
+        if let Some(val) = old_home {
+            env::set_var("TAP_HOME", val);
+        }
+        if let Some(val) = old_test {
+            env::set_var("TAP_TEST_DIR", val);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_agent_directory_with_tap_home() {
+        // Save current env vars
+        let old_home = env::var("TAP_HOME").ok();
+        let old_test = env::var("TAP_TEST_DIR").ok();
+
+        // Clear env vars
+        env::remove_var("TAP_HOME");
+        env::remove_var("TAP_TEST_DIR");
+
+        // Create a temporary directory
+        let temp_dir = TempDir::new().unwrap();
+        let temp_path = temp_dir.path().to_path_buf();
+
+        // Set TAP_HOME
+        env::set_var("TAP_HOME", &temp_path);
+
+        // Create a storage instance
+        let storage = KeyStorage::new();
+
+        // Get agent directory
+        let agent_dir = storage.get_agent_directory("did:key:test123").unwrap();
+
+        // Verify it uses TAP_HOME with sanitized DID
+        assert_eq!(agent_dir, temp_path.join("did:key:test123"));
+
+        // Restore env vars
+        env::remove_var("TAP_HOME");
+        if let Some(val) = old_home {
+            env::set_var("TAP_HOME", val);
+        }
+        if let Some(val) = old_test {
+            env::set_var("TAP_TEST_DIR", val);
+        }
+    }
+
+    #[test]
+    #[serial]
+    fn test_storage_persistence_with_temp_dir() {
+        use crate::test_utils::TestStorage;
+
+        // Use TestStorage for complete isolation - no environment variable manipulation needed
+        let test_storage = TestStorage::new().unwrap();
+
+        // Create and save storage using the isolated test environment
+        let mut storage = KeyStorage::new();
+        storage.add_key(StoredKey {
+            did: "did:key:test".to_string(),
+            label: "test-key".to_string(),
+            key_type: KeyType::Ed25519,
+            private_key: "test-private".to_string(),
+            public_key: "test-public".to_string(),
+            metadata: HashMap::new(),
+        });
+
+        // Save using the test storage's path (isolated from global state)
+        test_storage.save(&storage).unwrap();
+
+        // Verify file was created
+        assert!(
+            test_storage.path().exists(),
+            "Keys file should exist at: {:?}",
+            test_storage.path()
+        );
+
+        // Load it back using the same isolated storage
+        let loaded = test_storage.load().unwrap();
+        assert_eq!(
+            loaded.keys.len(),
+            1,
+            "Should have exactly 1 key in loaded storage"
+        );
+        assert!(
+            loaded.keys.contains_key("did:key:test"),
+            "Should contain the test key"
+        );
+
+        // No environment variable cleanup needed - TestStorage handles isolation automatically
     }
 }
 
@@ -176,6 +373,21 @@ impl KeyStorage {
 
     /// Get the default key path
     pub fn default_key_path() -> Option<PathBuf> {
+        // Check for TAP_HOME environment variable first (useful for tests)
+        if let Ok(tap_home) = env::var("TAP_HOME") {
+            return Some(PathBuf::from(tap_home).join(DEFAULT_KEYS_FILE));
+        }
+
+        // Check for TAP_TEST_DIR environment variable (for tests/examples)
+        if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
+            return Some(
+                PathBuf::from(test_dir)
+                    .join(DEFAULT_TAP_DIR)
+                    .join(DEFAULT_KEYS_FILE),
+            );
+        }
+
+        // Default to home directory
         home_dir().map(|home| home.join(DEFAULT_TAP_DIR).join(DEFAULT_KEYS_FILE))
     }
 
@@ -366,9 +578,18 @@ impl KeyStorage {
         let base_dir = if let Some(ref base) = self.base_directory {
             base.clone()
         } else {
-            let home = home_dir()
-                .ok_or_else(|| Error::Storage("Could not determine home directory".to_string()))?;
-            home.join(DEFAULT_TAP_DIR)
+            // Check for TAP_HOME environment variable first
+            if let Ok(tap_home) = env::var("TAP_HOME") {
+                PathBuf::from(tap_home)
+            } else if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
+                // For tests, use TAP_TEST_DIR/.tap
+                PathBuf::from(test_dir).join(DEFAULT_TAP_DIR)
+            } else {
+                let home = home_dir().ok_or_else(|| {
+                    Error::Storage("Could not determine home directory".to_string())
+                })?;
+                home.join(DEFAULT_TAP_DIR)
+            }
         };
         Ok(base_dir.join(sanitized_did))
     }

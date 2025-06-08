@@ -1,0 +1,188 @@
+# tap-mcp
+
+## Overview
+The `tap-mcp` crate provides Model Context Protocol (MCP) server implementation for TAP functionality. It exposes TAP operations as MCP tools, allowing AI assistants and other MCP clients to interact with TAP nodes, send messages, manage agents, and query transactions.
+
+## Purpose
+- Expose TAP functionality through MCP protocol
+- Enable AI assistants to perform TAP operations
+- Provide tools for agent management and messaging
+- Support transaction queries and monitoring
+- Enable natural language interaction with TAP
+
+## Key Components
+
+### MCP Server
+```rust
+pub struct TapMcpServer {
+    node: Arc<Node>,
+    server: Server,
+}
+
+impl TapMcpServer {
+    pub async fn run() -> Result<()>;
+}
+```
+
+### Available Tools
+
+#### Agent Management Tools
+- `tap_list_agents` - List all agents in the node
+- `tap_get_agent` - Get specific agent details
+- `tap_create_agent` - Create new agent (if supported)
+
+#### Communication Tools
+- `tap_send_transfer` - Send transfer message
+- `tap_send_message` - Send arbitrary TAP message
+- `tap_send_payment_request` - Request payment
+- `tap_send_basic_message` - Send text message
+
+#### Transaction Tools
+- `tap_list_transactions` - List transactions
+- `tap_get_transaction` - Get transaction details
+- `tap_authorize_transaction` - Authorize pending transaction
+- `tap_settle_transaction` - Mark transaction as settled
+- `tap_cancel_transaction` - Cancel transaction
+
+#### Customer Tools
+- `tap_list_customers` - List transaction parties
+- `tap_get_customer` - Get customer details
+
+#### Delivery Tools
+- `tap_list_deliveries` - List message deliveries
+- `tap_get_delivery` - Get delivery status
+
+#### Received Message Tools
+- `tap_list_received` - List received messages
+- `tap_get_received` - Get received message details
+
+### Tool Schema Example
+```rust
+pub struct SendTransferParams {
+    pub from_agent_did: String,
+    pub to_dids: Vec<String>,
+    pub amount: String,
+    pub asset_code: String,
+    pub sender_name: String,
+    pub sender_account: String,
+    pub recipient_name: String,
+    pub recipient_account: String,
+    pub reference_id: Option<String>,
+}
+```
+
+## Usage Examples
+
+### Starting MCP Server
+```bash
+# Via stdio (for Claude Desktop, Cline, etc.)
+tap-mcp
+
+# With specific node database
+tap-mcp --storage-path ./data/node.db
+
+# With agent directory
+tap-mcp --agent-dir ./agents
+```
+
+### MCP Configuration (Claude Desktop)
+```json
+{
+  "mcpServers": {
+    "tap": {
+      "command": "tap-mcp",
+      "args": ["--storage-path", "/path/to/node.db"],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
+```
+
+### Tool Usage Examples
+
+#### Send Transfer
+```typescript
+// Via MCP client
+await client.callTool("tap_send_transfer", {
+  from_agent_did: "did:key:sender",
+  to_dids: ["did:key:recipient"],
+  amount: "100.00",
+  asset_code: "USDC",
+  sender_name: "Alice",
+  sender_account: "0x123...",
+  recipient_name: "Bob",
+  recipient_account: "0x456...",
+  reference_id: "tx-123"
+});
+```
+
+#### List Transactions
+```typescript
+const result = await client.callTool("tap_list_transactions", {
+  agent_did: "did:key:myagent",
+  limit: 10,
+  status: "pending"
+});
+```
+
+#### Query Customer
+```typescript
+const customer = await client.callTool("tap_get_customer", {
+  agent_did: "did:key:myagent",
+  transaction_id: "tx-123",
+  customer_type: "sender"
+});
+```
+
+### Natural Language Examples
+When used with AI assistants:
+- "Send 100 USDC from Alice to Bob"
+- "Show me pending transactions"
+- "Authorize transaction tx-123"
+- "Check delivery status for recent messages"
+
+## Resources
+The MCP server also exposes resources:
+- `tap://agents` - List of available agents
+- `tap://transactions` - Recent transactions
+- `tap://messages` - Message history
+
+## Configuration
+```rust
+pub struct Config {
+    pub storage_path: Option<PathBuf>,
+    pub agent_dir: Option<PathBuf>,
+    pub resolver_type: ResolverType,
+}
+```
+
+## Key Features
+- **Full TAP Access**: All TAP operations via MCP tools
+- **AI-Friendly**: Designed for LLM interaction
+- **Type-Safe**: Strongly typed tool parameters
+- **Error Handling**: Clear error messages for AI
+- **Resource Access**: Browse TAP data as resources
+- **Async Operations**: Non-blocking tool execution
+
+## Testing
+```bash
+cargo test --package tap-mcp
+
+# Test with MCP inspector
+npm install -g @modelcontextprotocol/inspector
+mcp-inspector tap-mcp
+```
+
+## Dependencies
+- `tap-node`: Core TAP functionality
+- `tap-msg`: Message types
+- `tap-agent`: Agent management
+- `mcp-server`: MCP server implementation
+- `tokio`: Async runtime
+
+## Related Crates
+- `tap-node`: Provides core functionality
+- `tap-http`: Alternative HTTP interface
+- `tap-ts`: TypeScript bindings

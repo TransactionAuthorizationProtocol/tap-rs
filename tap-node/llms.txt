@@ -1,0 +1,188 @@
+# tap-node
+
+## Overview
+The `tap-node` crate is the core runtime for TAP protocol nodes. It provides message processing, routing, state management, and persistent storage for Travel Rule compliant cryptocurrency transfers. This is the main engine that coordinates agents, processes messages, and maintains transaction state.
+
+## Purpose
+- Process and route TAP messages between agents
+- Manage transaction state machines
+- Provide persistent storage for messages and transactions
+- Handle message delivery and receipts
+- Support multiple transport protocols (HTTP, WebSocket)
+- Enable event-driven architectures
+
+## Key Components
+
+### Core Node Structure
+```rust
+pub struct Node {
+    agents: AgentManager,              // Manages multiple agents
+    resolver: Arc<dyn Resolver>,       // DID resolution
+    processor: MessageProcessor,       // Message processing pipeline
+    storage: Option<Arc<Storage>>,     // Centralized storage
+    agent_storage_manager: Option<Arc<AgentStorageManager>>, // Per-agent storage
+    event_logger: Option<Arc<EventLogger>>, // Event handling
+}
+```
+
+### Message Processing Flow
+1. **Receive**: Accept messages via HTTP/WebSocket or internal routing
+2. **Validate**: Verify signatures, check message format
+3. **Store**: Record in received table with source info
+4. **Process**: Route to appropriate handler based on message type
+5. **Update State**: Transition transaction state machines
+6. **Deliver**: Send to next hop or internal agents
+7. **Track**: Update delivery status and receipts
+
+### Storage Architecture
+```rust
+// Per-agent isolated storage
+pub struct AgentStorageManager {
+    storage_dir: PathBuf,
+    storages: Arc<RwLock<HashMap<String, Arc<Storage>>>>,
+}
+
+// Storage tables per agent:
+// - messages: All messages sent/received
+// - transactions: Transaction state and history
+// - received: Incoming message log with source tracking
+// - deliveries: Outbound delivery attempts and status
+// - transaction_agents: Multi-party transaction participants
+```
+
+### State Machine
+```rust
+pub enum TransactionStatus {
+    Pending,      // Initial state
+    Authorized,   // Authorization received
+    Settled,      // Settlement confirmed
+    Cancelled,    // Cancelled by party
+    Rejected,     // Rejected by party
+    Reverted,     // Reverted after settlement
+}
+```
+
+### Event System
+```rust
+pub trait EventHandler: Send + Sync {
+    async fn handle_event(&self, event: &Event) -> Result<()>;
+}
+
+pub enum Event {
+    MessageReceived { message: PlainMessage, source: String },
+    MessageSent { message: PlainMessage, destination: String },
+    TransactionUpdated { id: String, old_status: Status, new_status: Status },
+    // ... more events
+}
+```
+
+## Usage Examples
+
+### Creating a Node
+```rust
+use tap_node::{Node, Config};
+use tap_agent::LocalAgent;
+
+let config = Config::default();
+let mut node = Node::new(config).await?;
+
+// Add agents
+let agent = LocalAgent::new()?;
+node.add_agent(Box::new(agent)).await?;
+
+// Enable storage
+node.enable_storage(Some("data/node.db")).await?;
+```
+
+### Processing Messages
+```rust
+// Receive external message
+let jws_message = receive_from_network();
+node.receive_message(jws_message).await?;
+
+// Send message from agent
+let transfer = create_transfer_message();
+node.send_message(
+    agent_did,
+    transfer.to_plain_message(from, to, None)?
+).await?;
+```
+
+### Querying Transactions
+```rust
+// Get agent's storage
+let storage = node.get_agent_storage(&agent_did).await?;
+
+// List transactions
+let transactions = storage.list_transactions(10, 0).await?;
+
+// Get specific transaction
+let tx = storage.get_transaction("tx-123").await?;
+```
+
+### Event Handling
+```rust
+use tap_node::{EventHandler, EventLogger};
+
+struct MyHandler;
+#[async_trait]
+impl EventHandler for MyHandler {
+    async fn handle_event(&self, event: &Event) -> Result<()> {
+        match event {
+            Event::TransactionUpdated { id, new_status, .. } => {
+                println!("Transaction {} updated to {:?}", id, new_status);
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+let logger = EventLogger::new();
+logger.add_handler(Box::new(MyHandler)).await;
+node.set_event_logger(logger);
+```
+
+### HTTP Server Integration
+```rust
+use tap_http::server::TapServer;
+
+let server = TapServer::new(node);
+server.start("0.0.0.0:8080").await?;
+```
+
+## Key Features
+- **Multi-Agent**: Support multiple agents in one node
+- **Message Routing**: Intelligent routing based on DIDs
+- **State Management**: Transaction state machines with persistence
+- **Storage Isolation**: Per-agent database isolation
+- **Event-Driven**: Pluggable event handlers
+- **Transport Agnostic**: HTTP, WebSocket, internal routing
+- **High Performance**: Async/await, connection pooling
+- **Resilient**: Retry logic, delivery tracking
+
+## Storage Schema
+Each agent has isolated storage with these tables:
+- `messages`: Message history and content
+- `transactions`: Transaction records and state
+- `received`: Inbound message log with source tracking
+- `deliveries`: Outbound delivery attempts
+- `transaction_agents`: Multi-party transaction participants
+
+## Testing
+```bash
+cargo test --package tap-node
+```
+
+## Dependencies
+- `tap-msg`: Message types
+- `tap-agent`: Cryptographic operations
+- `sqlx`: Async SQL database
+- `tokio`: Async runtime
+- `tracing`: Structured logging
+
+## Related Crates
+- `tap-http`: HTTP/WebSocket server
+- `tap-mcp`: MCP protocol integration
+- `tap-msg`: Message definitions
+- `tap-agent`: Agent implementation

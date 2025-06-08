@@ -5,6 +5,7 @@
 use tap_msg::didcomm::PlainMessage;
 use tokio::sync::mpsc::{channel, Sender};
 use tokio::time::Duration;
+use tracing::error;
 
 use crate::error::{Error, Result};
 use crate::message::processor::PlainMessageProcessor;
@@ -70,11 +71,11 @@ impl ProcessorPool {
                         {
                             Ok(result) => {
                                 if let Err(e) = result {
-                                    eprintln!("Error processing message: {}", e);
+                                    error!("Error processing message: {}", e);
                                 }
                             }
                             Err(_) => {
-                                eprintln!(
+                                error!(
                                     "PlainMessage processing timed out after {:?}",
                                     worker_timeout
                                 );

@@ -98,7 +98,13 @@ pub use error::{Error, Result};
 pub use event::logger::{EventLogger, EventLoggerConfig, LogDestination};
 pub use event::{EventSubscriber, NodeEvent};
 pub use message::sender::{
-    HttpPlainMessageSender, NodePlainMessageSender, PlainMessageSender, WebSocketPlainMessageSender,
+    HttpPlainMessageSender, HttpPlainMessageSenderWithTracking, NodePlainMessageSender,
+    PlainMessageSender, WebSocketPlainMessageSender,
+};
+#[cfg(feature = "storage")]
+pub use storage::{
+    models::{DeliveryStatus, DeliveryType},
+    Storage,
 };
 
 use std::sync::Arc;
@@ -138,17 +144,12 @@ pub trait TapAgentExt {
     ///
     /// # Returns
     /// The packed message as a string, ready for transmission
-    async fn send_serialized_message(&self, message: &PlainMessage, to_did: &str)
-        -> Result<String>;
+    async fn send_serialized_message(&self, message: &PlainMessage) -> Result<String>;
 }
 
 #[async_trait]
 impl TapAgentExt for TapAgent {
-    async fn send_serialized_message(
-        &self,
-        message: &PlainMessage,
-        _to_did: &str,
-    ) -> Result<String> {
+    async fn send_serialized_message(&self, message: &PlainMessage) -> Result<String> {
         // Serialize the PlainMessage to JSON first to work around the TapMessageBody trait constraint
         let json_value =
             serde_json::to_value(message).map_err(|e| Error::Serialization(e.to_string()))?;
@@ -261,17 +262,22 @@ impl TapNode {
         let logging_processor = PlainMessageProcessorType::Logging(LoggingPlainMessageProcessor);
         let validation_processor =
             PlainMessageProcessorType::Validation(ValidationPlainMessageProcessor);
+        let trust_ping_processor = PlainMessageProcessorType::TrustPing(
+            TrustPingProcessor::with_event_bus(event_bus.clone()),
+        );
         let default_processor = PlainMessageProcessorType::Default(DefaultPlainMessageProcessor);
 
         let incoming_processor = CompositePlainMessageProcessor::new(vec![
             logging_processor.clone(),
             validation_processor.clone(),
+            trust_ping_processor.clone(),
             default_processor.clone(),
         ]);
 
         let outgoing_processor = CompositePlainMessageProcessor::new(vec![
             logging_processor,
             validation_processor,
+            trust_ping_processor,
             default_processor,
         ]);
 
@@ -407,14 +413,85 @@ impl TapNode {
     /// * `Ok(())` if the message was successfully processed
     /// * `Err(Error)` if there was an error during processing
     pub async fn receive_message(&self, message: serde_json::Value) -> Result<()> {
+        // Default to internal source when no source is specified
+        self.receive_message_from_source(message, storage::SourceType::Internal, None)
+            .await
+    }
+
+    /// Receive and process an incoming message with source information
+    ///
+    /// This method handles the complete lifecycle of an incoming message with
+    /// tracking of where the message came from.
+    ///
+    /// # Parameters
+    ///
+    /// * `message` - The message as a JSON Value (can be plain, JWS, or JWE)
+    /// * `source_type` - The type of source (https, internal, websocket, etc.)
+    /// * `source_identifier` - Optional identifier for the source (URL, agent DID, etc.)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` if the message was successfully processed
+    /// * `Err(Error)` if there was an error during processing
+    pub async fn receive_message_from_source(
+        &self,
+        message: serde_json::Value,
+        source_type: storage::SourceType,
+        source_identifier: Option<&str>,
+    ) -> Result<()> {
         // Store the raw message for logging
         let raw_message = serde_json::to_string(&message).ok();
+
+        // Store the raw message in the received table
+        #[cfg(feature = "storage")]
+        let mut received_ids: Vec<(String, i64)> = Vec::new();
+
         use tap_agent::{verify_jws, Jwe, Jws};
 
         // Determine message type
         let is_encrypted =
             message.get("protected").is_some() && message.get("recipients").is_some();
         let is_signed = message.get("payload").is_some() && message.get("signatures").is_some();
+
+        // Helper function to store received message in agent storage
+        #[cfg(feature = "storage")]
+        async fn store_received_for_agent(
+            storage_manager: &storage::AgentStorageManager,
+            agent_did: &str,
+            raw_message: &str,
+            source_type: &storage::SourceType,
+            source_identifier: Option<&str>,
+        ) -> Option<i64> {
+            match storage_manager.get_agent_storage(agent_did).await {
+                Ok(agent_storage) => {
+                    match agent_storage
+                        .create_received(raw_message, source_type.clone(), source_identifier)
+                        .await
+                    {
+                        Ok(id) => {
+                            log::debug!(
+                                "Created received record {} for agent {} for incoming message",
+                                id,
+                                agent_did
+                            );
+                            Some(id)
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to create received record for agent {}: {}",
+                                agent_did,
+                                e
+                            );
+                            None
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to get storage for agent {}: {}", agent_did, e);
+                    None
+                }
+            }
+        }
 
         if is_signed {
             // Verify signature once using resolver
@@ -425,13 +502,111 @@ impl TapNode {
                 .await
                 .map_err(|e| Error::Verification(format!("JWS verification failed: {}", e)))?;
 
+            // Store in recipient agents' storage
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let empty_msg = "{}".to_string();
+                    let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
+
+                    // Store for each recipient agent
+                    for recipient_did in &plain_message.to {
+                        if self.agents.has_agent(recipient_did) {
+                            if let Some(id) = store_received_for_agent(
+                                storage_manager,
+                                recipient_did,
+                                raw_msg,
+                                &source_type,
+                                source_identifier,
+                            )
+                            .await
+                            {
+                                received_ids.push((recipient_did.clone(), id));
+                            }
+                        }
+                    }
+
+                    // If no recipients are registered agents, store for sender if they're an agent
+                    if received_ids.is_empty() && self.agents.has_agent(&plain_message.from) {
+                        if let Some(id) = store_received_for_agent(
+                            storage_manager,
+                            &plain_message.from,
+                            raw_msg,
+                            &source_type,
+                            source_identifier,
+                        )
+                        .await
+                        {
+                            received_ids.push((plain_message.from.clone(), id));
+                        }
+                    }
+                }
+            }
+
             // Process the verified plain message
-            self.process_plain_message(plain_message, raw_message.as_deref())
-                .await
+            let result = self.process_plain_message(plain_message).await;
+
+            // Update the received records
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let status = if result.is_ok() {
+                        storage::ReceivedStatus::Processed
+                    } else {
+                        storage::ReceivedStatus::Failed
+                    };
+                    let error_msg = result.as_ref().err().map(|e| e.to_string());
+
+                    for (agent_did, received_id) in &received_ids {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(agent_did).await
+                        {
+                            let _ = agent_storage
+                                .update_received_status(
+                                    *received_id,
+                                    status.clone(),
+                                    None, // We'll set this after processing
+                                    error_msg.as_deref(),
+                                )
+                                .await;
+                        }
+                    }
+                }
+            }
+
+            result
         } else if is_encrypted {
             // Route encrypted message to each matching agent
             let jwe: Jwe = serde_json::from_value(message.clone())
                 .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
+
+            // Store in recipient agents' storage
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let empty_msg = "{}".to_string();
+                    let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
+
+                    // Store for each recipient agent based on JWE recipients
+                    for recipient in &jwe.recipients {
+                        if let Some(did) = recipient.header.kid.split('#').next() {
+                            if self.agents.has_agent(did) {
+                                if let Some(id) = store_received_for_agent(
+                                    storage_manager,
+                                    did,
+                                    raw_msg,
+                                    &source_type,
+                                    source_identifier,
+                                )
+                                .await
+                                {
+                                    received_ids.push((did.to_string(), id));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Find agents that match recipients
             let mut processed = false;
@@ -459,29 +634,126 @@ impl TapNode {
                 }
             }
 
-            if !processed {
-                return Err(Error::Processing(
+            let result = if !processed {
+                Err(Error::Processing(
                     "No agent could process the encrypted message".to_string(),
-                ));
+                ))
+            } else {
+                Ok(())
+            };
+
+            // Update the received records for encrypted messages
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let status = if result.is_ok() {
+                        storage::ReceivedStatus::Processed
+                    } else {
+                        storage::ReceivedStatus::Failed
+                    };
+                    let error_msg = result.as_ref().err().map(|e| e.to_string());
+
+                    for (agent_did, received_id) in &received_ids {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(agent_did).await
+                        {
+                            let _ = agent_storage
+                                .update_received_status(
+                                    *received_id,
+                                    status.clone(),
+                                    None, // We don't have access to the decrypted message ID
+                                    error_msg.as_deref(),
+                                )
+                                .await;
+                        }
+                    }
+                }
             }
-            Ok(())
+
+            result
         } else {
             // Plain message - parse and process
             let plain_message: PlainMessage = serde_json::from_value(message).map_err(|e| {
                 Error::Serialization(format!("Failed to parse PlainMessage: {}", e))
             })?;
 
-            self.process_plain_message(plain_message, raw_message.as_deref())
-                .await
+            // Store in recipient agents' storage
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let empty_msg = "{}".to_string();
+                    let raw_msg = raw_message.as_ref().unwrap_or(&empty_msg);
+
+                    // Store for each recipient agent
+                    for recipient_did in &plain_message.to {
+                        if self.agents.has_agent(recipient_did) {
+                            if let Some(id) = store_received_for_agent(
+                                storage_manager,
+                                recipient_did,
+                                raw_msg,
+                                &source_type,
+                                source_identifier,
+                            )
+                            .await
+                            {
+                                received_ids.push((recipient_did.clone(), id));
+                            }
+                        }
+                    }
+
+                    // If no recipients are registered agents, store for sender if they're an agent
+                    if received_ids.is_empty() && self.agents.has_agent(&plain_message.from) {
+                        if let Some(id) = store_received_for_agent(
+                            storage_manager,
+                            &plain_message.from,
+                            raw_msg,
+                            &source_type,
+                            source_identifier,
+                        )
+                        .await
+                        {
+                            received_ids.push((plain_message.from.clone(), id));
+                        }
+                    }
+                }
+            }
+
+            let result = self.process_plain_message(plain_message).await;
+
+            // Update the received records
+            #[cfg(feature = "storage")]
+            {
+                if let Some(ref storage_manager) = self.agent_storage_manager {
+                    let status = if result.is_ok() {
+                        storage::ReceivedStatus::Processed
+                    } else {
+                        storage::ReceivedStatus::Failed
+                    };
+                    let error_msg = result.as_ref().err().map(|e| e.to_string());
+
+                    for (agent_did, received_id) in &received_ids {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(agent_did).await
+                        {
+                            let _ = agent_storage
+                                .update_received_status(
+                                    *received_id,
+                                    status.clone(),
+                                    None, // We'll set this after processing
+                                    error_msg.as_deref(),
+                                )
+                                .await;
+                        }
+                    }
+                }
+            }
+
+            result
         }
     }
 
     /// Process a plain message through the pipeline
-    async fn process_plain_message(
-        &self,
-        message: PlainMessage,
-        raw_message: Option<&str>,
-    ) -> Result<()> {
+    async fn process_plain_message(&self, message: PlainMessage) -> Result<()> {
         // Validate the message if storage/validation is available
         #[cfg(feature = "storage")]
         {
@@ -570,11 +842,7 @@ impl TapNode {
                             {
                                 // Log the message
                                 match agent_storage
-                                    .log_message(
-                                        &message,
-                                        storage::MessageDirection::Incoming,
-                                        raw_message,
-                                    )
+                                    .log_message(&message, storage::MessageDirection::Incoming)
                                     .await
                                 {
                                     Ok(_) => log::debug!(
@@ -619,11 +887,7 @@ impl TapNode {
                             {
                                 // Log the message to this recipient's storage
                                 match agent_storage
-                                    .log_message(
-                                        &message,
-                                        storage::MessageDirection::Incoming,
-                                        raw_message,
-                                    )
+                                    .log_message(&message, storage::MessageDirection::Incoming)
                                     .await
                                 {
                                     Ok(_) => {
@@ -661,7 +925,6 @@ impl TapNode {
                                         .log_message(
                                             &message,
                                             storage::MessageDirection::Incoming,
-                                            raw_message,
                                         )
                                         .await
                                     {
@@ -691,11 +954,7 @@ impl TapNode {
                                 // Fall back to centralized storage if available
                                 if let Some(ref storage) = self.storage {
                                     let _ = storage
-                                        .log_message(
-                                            &message,
-                                            storage::MessageDirection::Incoming,
-                                            raw_message,
-                                        )
+                                        .log_message(&message, storage::MessageDirection::Incoming)
                                         .await;
                                 }
                             }
@@ -718,6 +977,48 @@ impl TapNode {
             // Check if we have a registered agent for this recipient
             match self.agents.get_agent(recipient_did).await {
                 Ok(agent) => {
+                    // Create delivery record for internal delivery tracking
+                    #[cfg(feature = "storage")]
+                    let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager
+                    {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(recipient_did).await
+                        {
+                            // Serialize message for storage
+                            let message_text = serde_json::to_string(&processed_message)
+                                .unwrap_or_else(|_| "Failed to serialize message".to_string());
+
+                            match agent_storage
+                                .create_delivery(
+                                    &processed_message.id,
+                                    &message_text,
+                                    recipient_did,
+                                    None, // No URL for internal delivery
+                                    storage::models::DeliveryType::Internal,
+                                )
+                                .await
+                            {
+                                Ok(id) => {
+                                    log::debug!(
+                                        "Created internal delivery record {} for message {} to {}",
+                                        id,
+                                        processed_message.id,
+                                        recipient_did
+                                    );
+                                    Some(id)
+                                }
+                                Err(e) => {
+                                    log::warn!("Failed to create internal delivery record: {}", e);
+                                    None
+                                }
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
                     // Let the agent process the plain message
                     match agent.receive_plain_message(processed_message.clone()).await {
                         Ok(_) => {
@@ -726,9 +1027,53 @@ impl TapNode {
                                 recipient_did
                             );
                             delivery_success = true;
+
+                            // Update delivery record to success
+                            #[cfg(feature = "storage")]
+                            if let (Some(delivery_id), Some(ref storage_manager)) =
+                                (delivery_id, &self.agent_storage_manager)
+                            {
+                                if let Ok(agent_storage) =
+                                    storage_manager.get_agent_storage(recipient_did).await
+                                {
+                                    if let Err(e) = agent_storage
+                                        .update_delivery_status(
+                                            delivery_id,
+                                            storage::models::DeliveryStatus::Success,
+                                            None, // No HTTP status for internal delivery
+                                            None, // No error message
+                                        )
+                                        .await
+                                    {
+                                        log::warn!("Failed to update internal delivery record to success: {}", e);
+                                    }
+                                }
+                            }
                         }
                         Err(e) => {
                             log::warn!("Agent {} failed to process message: {}", recipient_did, e);
+
+                            // Update delivery record to failed
+                            #[cfg(feature = "storage")]
+                            if let (Some(delivery_id), Some(ref storage_manager)) =
+                                (delivery_id, &self.agent_storage_manager)
+                            {
+                                if let Ok(agent_storage) =
+                                    storage_manager.get_agent_storage(recipient_did).await
+                                {
+                                    if let Err(e2) = agent_storage
+                                        .update_delivery_status(
+                                            delivery_id,
+                                            storage::models::DeliveryStatus::Failed,
+                                            None, // No HTTP status for internal delivery
+                                            Some(&e.to_string()), // Include error message
+                                        )
+                                        .await
+                                    {
+                                        log::warn!("Failed to update internal delivery record to failed: {}", e2);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -762,13 +1107,105 @@ impl TapNode {
                 }
             };
 
+            // Create delivery record for internal delivery tracking
+            #[cfg(feature = "storage")]
+            let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager {
+                if let Ok(agent_storage) = storage_manager.get_agent_storage(&target_did).await {
+                    // Serialize message for storage
+                    let message_text = serde_json::to_string(&processed_message)
+                        .unwrap_or_else(|_| "Failed to serialize message".to_string());
+
+                    match agent_storage
+                        .create_delivery(
+                            &processed_message.id,
+                            &message_text,
+                            &target_did,
+                            None, // No URL for internal delivery
+                            storage::models::DeliveryType::Internal,
+                        )
+                        .await
+                    {
+                        Ok(id) => {
+                            log::debug!(
+                                "Created internal delivery record {} for routed message {} to {}",
+                                id,
+                                processed_message.id,
+                                target_did
+                            );
+                            Some(id)
+                        }
+                        Err(e) => {
+                            log::warn!(
+                                "Failed to create internal delivery record for routing: {}",
+                                e
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
             // Let the agent process the plain message
             match agent.receive_plain_message(processed_message).await {
                 Ok(_) => {
                     log::debug!("Successfully routed message to agent: {}", target_did);
+
+                    // Update delivery record to success
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(&target_did).await
+                        {
+                            if let Err(e) = agent_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Success,
+                                    None, // No HTTP status for internal delivery
+                                    None, // No error message
+                                )
+                                .await
+                            {
+                                log::warn!(
+                                    "Failed to update routed delivery record to success: {}",
+                                    e
+                                );
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     log::warn!("Agent failed to process message: {}", e);
+
+                    // Update delivery record to failed
+                    #[cfg(feature = "storage")]
+                    if let (Some(delivery_id), Some(ref storage_manager)) =
+                        (delivery_id, &self.agent_storage_manager)
+                    {
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(&target_did).await
+                        {
+                            if let Err(e2) = agent_storage
+                                .update_delivery_status(
+                                    delivery_id,
+                                    storage::models::DeliveryStatus::Failed,
+                                    None,                 // No HTTP status for internal delivery
+                                    Some(&e.to_string()), // Include error message
+                                )
+                                .await
+                            {
+                                log::warn!(
+                                    "Failed to update routed delivery record to failed: {}",
+                                    e2
+                                );
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -781,7 +1218,7 @@ impl TapNode {
         let agent = self.agents.get_agent(&target_did).await?;
 
         // Convert the message to a packed format for transport
-        let packed = agent.send_serialized_message(&message, &target_did).await?;
+        let packed = agent.send_serialized_message(&message).await?;
 
         // Publish an event for the dispatched message
         self.event_bus
@@ -792,12 +1229,11 @@ impl TapNode {
     }
 
     /// Send a message to an agent
-    pub async fn send_message(
-        &self,
-        sender_did: String,
-        to_did: String,
-        message: PlainMessage,
-    ) -> Result<String> {
+    ///
+    /// This method now includes comprehensive delivery tracking and actual message delivery.
+    /// For internal recipients (registered agents), messages are delivered directly.
+    /// For external recipients, messages are delivered via HTTP with tracking.
+    pub async fn send_message(&self, sender_did: String, message: PlainMessage) -> Result<String> {
         // Log outgoing messages to agent-specific storage
         #[cfg(feature = "storage")]
         {
@@ -835,11 +1271,7 @@ impl TapNode {
                             {
                                 // Log the message
                                 match agent_storage
-                                    .log_message(
-                                        &message,
-                                        storage::MessageDirection::Outgoing,
-                                        None,
-                                    )
+                                    .log_message(&message, storage::MessageDirection::Outgoing)
                                     .await
                                 {
                                     Ok(_) => log::debug!(
@@ -878,7 +1310,7 @@ impl TapNode {
                     {
                         // Log the message to the sender's storage
                         match sender_storage
-                            .log_message(&message, storage::MessageDirection::Outgoing, None)
+                            .log_message(&message, storage::MessageDirection::Outgoing)
                             .await
                         {
                             Ok(_) => log::debug!(
@@ -897,7 +1329,7 @@ impl TapNode {
                         // Fall back to centralized storage if available
                         if let Some(ref storage) = self.storage {
                             let _ = storage
-                                .log_message(&message, storage::MessageDirection::Outgoing, None)
+                                .log_message(&message, storage::MessageDirection::Outgoing)
                                 .await;
                         }
                     }
@@ -915,13 +1347,384 @@ impl TapNode {
             }
         };
 
-        // Get the sender agent
+        // Get the sender agent and its key manager
         let agent = self.agents.get_agent(&sender_did).await?;
+        let key_manager = agent.key_manager();
 
-        // Pack the message
-        let packed = agent
-            .send_serialized_message(&processed_message, to_did.as_str())
-            .await?;
+        // Determine security mode based on message type
+        use tap_agent::message::SecurityMode;
+        let security_mode = if processed_message.type_.contains("credential")
+            || processed_message.type_.contains("transfer")
+            || processed_message.type_.contains("payment")
+        {
+            SecurityMode::AuthCrypt
+        } else {
+            SecurityMode::Signed
+        };
+
+        // Get sender key ID
+        let sender_kid = agent.get_signing_kid().await?;
+
+        // For single recipient auth-crypt, get recipient key
+        let recipient_kid =
+            if processed_message.to.len() == 1 && security_mode == SecurityMode::AuthCrypt {
+                Some(agent.get_encryption_kid(&processed_message.to[0]).await?)
+            } else {
+                None
+            };
+
+        // Create pack options
+        use tap_agent::message_packing::{PackOptions, Packable};
+        let pack_options = PackOptions {
+            security_mode,
+            sender_kid: Some(sender_kid),
+            recipient_kid,
+        };
+
+        // Pack/sign the message properly
+        let packed = processed_message.pack(&**key_manager, pack_options).await?;
+
+        // Deliver to all recipients in the message
+        let mut delivery_errors = Vec::new();
+
+        for recipient_did in &processed_message.to {
+            log::debug!("Processing delivery to recipient: {}", recipient_did);
+
+            // Check if recipient is a local agent (internal delivery) or external
+            let is_internal_recipient = self.agents.get_agent(recipient_did).await.is_ok();
+
+            if is_internal_recipient {
+                // Internal delivery - deliver to registered agent with tracking
+                log::debug!("Delivering message internally to agent: {}", recipient_did);
+
+                #[cfg(feature = "storage")]
+                let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager {
+                    if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await
+                    {
+                        // Create delivery record for internal delivery
+                        match sender_storage
+                            .create_delivery(
+                                &processed_message.id,
+                                &packed, // Store the signed/packed message
+                                recipient_did,
+                                None, // No URL for internal delivery
+                                storage::models::DeliveryType::Internal,
+                            )
+                            .await
+                        {
+                            Ok(id) => {
+                                log::debug!(
+                                    "Created internal delivery record {} for message {} to {}",
+                                    id,
+                                    processed_message.id,
+                                    recipient_did
+                                );
+                                Some(id)
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to create internal delivery record: {}", e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Process the message internally through receive_message_from_source
+                // to ensure it gets recorded in the received table
+                // Pass the packed (signed) message just like external messages
+                let message_value = match serde_json::from_str::<serde_json::Value>(&packed) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        log::error!("Failed to parse packed message as JSON: {}", e);
+                        continue;
+                    }
+                };
+
+                match self
+                    .receive_message_from_source(
+                        message_value,
+                        storage::SourceType::Internal,
+                        Some(&sender_did),
+                    )
+                    .await
+                {
+                    Ok(_) => {
+                        log::debug!(
+                            "Successfully delivered message internally to: {}",
+                            recipient_did
+                        );
+
+                        // Update delivery record to success
+                        #[cfg(feature = "storage")]
+                        if let (Some(delivery_id), Some(ref storage_manager)) =
+                            (delivery_id, &self.agent_storage_manager)
+                        {
+                            if let Ok(sender_storage) =
+                                storage_manager.get_agent_storage(&sender_did).await
+                            {
+                                if let Err(e) = sender_storage
+                                    .update_delivery_status(
+                                        delivery_id,
+                                        storage::models::DeliveryStatus::Success,
+                                        None, // No HTTP status for internal delivery
+                                        None, // No error message
+                                    )
+                                    .await
+                                {
+                                    log::warn!("Failed to update internal delivery status: {}", e);
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to deliver message internally to {}: {}",
+                            recipient_did,
+                            e
+                        );
+
+                        // Update delivery record to failed
+                        #[cfg(feature = "storage")]
+                        if let (Some(delivery_id), Some(ref storage_manager)) =
+                            (delivery_id, &self.agent_storage_manager)
+                        {
+                            if let Ok(sender_storage) =
+                                storage_manager.get_agent_storage(&sender_did).await
+                            {
+                                if let Err(e2) = sender_storage
+                                    .update_delivery_status(
+                                        delivery_id,
+                                        storage::models::DeliveryStatus::Failed,
+                                        None, // No HTTP status for internal delivery
+                                        Some(&format!("Internal delivery failed: {}", e)),
+                                    )
+                                    .await
+                                {
+                                    log::warn!("Failed to update internal delivery status: {}", e2);
+                                }
+                            }
+                        }
+
+                        delivery_errors.push((recipient_did.clone(), e));
+                        continue; // Continue to next recipient
+                    }
+                }
+            } else {
+                // External delivery - use TapAgent's built-in HTTP delivery with tracking
+                log::debug!("Attempting external delivery to: {}", recipient_did);
+
+                // Get the sender agent for HTTP delivery
+                let sender_agent = self.agents.get_agent(&sender_did).await?;
+
+                // Resolve the service endpoint for the recipient
+                let endpoint = match sender_agent.get_service_endpoint(recipient_did).await? {
+                    Some(ep) => ep,
+                    None => {
+                        log::warn!(
+                            "No service endpoint found for {}, delivery failed",
+                            recipient_did
+                        );
+
+                        // Create failed delivery record
+                        #[cfg(feature = "storage")]
+                        if let Some(ref storage_manager) = self.agent_storage_manager {
+                            if let Ok(sender_storage) =
+                                storage_manager.get_agent_storage(&sender_did).await
+                            {
+                                if let Ok(delivery_id) = sender_storage
+                                    .create_delivery(
+                                        &processed_message.id,
+                                        &packed,
+                                        recipient_did,
+                                        None,
+                                        storage::models::DeliveryType::Https,
+                                    )
+                                    .await
+                                {
+                                    let _ = sender_storage
+                                        .update_delivery_status(
+                                            delivery_id,
+                                            storage::models::DeliveryStatus::Failed,
+                                            None,
+                                            Some("No service endpoint found for recipient"),
+                                        )
+                                        .await;
+                                }
+                            }
+                        }
+
+                        delivery_errors.push((
+                            recipient_did.clone(),
+                            Error::Dispatch(format!(
+                                "No service endpoint found for recipient: {}",
+                                recipient_did
+                            )),
+                        ));
+                        continue; // Continue to next recipient
+                    }
+                };
+
+                // Create delivery record before attempting delivery
+                #[cfg(feature = "storage")]
+                let delivery_id = if let Some(ref storage_manager) = self.agent_storage_manager {
+                    if let Ok(sender_storage) = storage_manager.get_agent_storage(&sender_did).await
+                    {
+                        match sender_storage
+                            .create_delivery(
+                                &processed_message.id,
+                                &packed, // Store the signed/packed message
+                                recipient_did,
+                                Some(&endpoint),
+                                storage::models::DeliveryType::Https,
+                            )
+                            .await
+                        {
+                            Ok(id) => {
+                                log::debug!(
+                                    "Created external delivery record {} for message {} to {} at {}",
+                                    id,
+                                    processed_message.id,
+                                    recipient_did,
+                                    endpoint
+                                );
+                                Some(id)
+                            }
+                            Err(e) => {
+                                log::warn!("Failed to create external delivery record: {}", e);
+                                None
+                            }
+                        }
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+
+                // Attempt HTTP delivery using TapAgent's built-in functionality
+                match sender_agent.send_to_endpoint(&packed, &endpoint).await {
+                    Ok(status_code) => {
+                        log::debug!(
+                            "Successfully delivered message {} to {} at {} (HTTP {})",
+                            processed_message.id,
+                            recipient_did,
+                            endpoint,
+                            status_code
+                        );
+
+                        // Update delivery record to success
+                        #[cfg(feature = "storage")]
+                        if let (Some(delivery_id), Some(ref storage_manager)) =
+                            (delivery_id, &self.agent_storage_manager)
+                        {
+                            if let Ok(sender_storage) =
+                                storage_manager.get_agent_storage(&sender_did).await
+                            {
+                                if let Err(e) = sender_storage
+                                    .update_delivery_status(
+                                        delivery_id,
+                                        storage::models::DeliveryStatus::Success,
+                                        Some(status_code as i32),
+                                        None,
+                                    )
+                                    .await
+                                {
+                                    log::warn!(
+                                        "Failed to update external delivery status to success: {}",
+                                        e
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!(
+                            "Failed to deliver message {} to {} at {}: {}",
+                            processed_message.id,
+                            recipient_did,
+                            endpoint,
+                            e
+                        );
+
+                        // Update delivery record to failed
+                        #[cfg(feature = "storage")]
+                        if let (Some(delivery_id), Some(ref storage_manager)) =
+                            (delivery_id, &self.agent_storage_manager)
+                        {
+                            if let Ok(sender_storage) =
+                                storage_manager.get_agent_storage(&sender_did).await
+                            {
+                                // Extract HTTP status code from error if possible
+                                let error_msg = e.to_string();
+                                let http_status_code = if error_msg.contains("status:") {
+                                    error_msg
+                                        .split("status:")
+                                        .nth(1)
+                                        .and_then(|s| s.trim().split_whitespace().next())
+                                        .and_then(|s| s.parse::<i32>().ok())
+                                } else {
+                                    None
+                                };
+
+                                if let Err(e2) = sender_storage
+                                    .update_delivery_status(
+                                        delivery_id,
+                                        storage::models::DeliveryStatus::Failed,
+                                        http_status_code,
+                                        Some(&error_msg),
+                                    )
+                                    .await
+                                {
+                                    log::warn!(
+                                        "Failed to update external delivery status to failed: {}",
+                                        e2
+                                    );
+                                }
+
+                                // Increment retry count for future retry processing
+                                if let Err(e2) = sender_storage
+                                    .increment_delivery_retry_count(delivery_id)
+                                    .await
+                                {
+                                    log::warn!("Failed to increment retry count: {}", e2);
+                                }
+                            }
+                        }
+
+                        delivery_errors.push((
+                            recipient_did.clone(),
+                            Error::Dispatch(format!(
+                                "HTTP delivery failed for {}: {}",
+                                recipient_did, e
+                            )),
+                        ));
+                        continue; // Continue to next recipient
+                    }
+                }
+            }
+        }
+
+        // Check if all deliveries failed
+        if !delivery_errors.is_empty() && delivery_errors.len() == processed_message.to.len() {
+            return Err(Error::Dispatch(format!(
+                "Failed to deliver message to all recipients: {:?}",
+                delivery_errors
+            )));
+        }
+
+        // Log partial failures
+        if !delivery_errors.is_empty() {
+            log::warn!(
+                "Message delivered to {}/{} recipients. Failures: {:?}",
+                processed_message.to.len() - delivery_errors.len(),
+                processed_message.to.len(),
+                delivery_errors
+            );
+        }
 
         // Publish an event for the message
         self.event_bus
@@ -1037,6 +1840,38 @@ impl TapNode {
     #[cfg(feature = "storage")]
     pub fn agent_storage_manager(&self) -> Option<&Arc<storage::AgentStorageManager>> {
         self.agent_storage_manager.as_ref()
+    }
+
+    /// Set storage for testing purposes
+    /// This allows injecting in-memory databases for complete test isolation
+    #[cfg(feature = "storage")]
+    pub async fn set_storage(&mut self, storage: storage::Storage) -> Result<()> {
+        let storage_arc = Arc::new(storage);
+
+        // Subscribe event handlers
+        let message_status_handler = Arc::new(event::handlers::MessageStatusHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(message_status_handler).await;
+
+        let transaction_state_handler = Arc::new(event::handlers::TransactionStateHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(transaction_state_handler).await;
+
+        let transaction_audit_handler = Arc::new(event::handlers::TransactionAuditHandler::new());
+        self.event_bus.subscribe(transaction_audit_handler).await;
+
+        // Create state processor
+        let state_processor = Arc::new(state_machine::StandardTransactionProcessor::new(
+            storage_arc.clone(),
+            self.event_bus.clone(),
+            self.agents.clone(),
+        ));
+
+        self.storage = Some(storage_arc);
+        self.state_processor = Some(state_processor);
+        Ok(())
     }
 
     /// Determine which agent's storage should be used for a message
@@ -1171,4 +2006,5 @@ use message::processor::LoggingPlainMessageProcessor;
 use message::processor::ValidationPlainMessageProcessor;
 use message::processor_pool::{ProcessorPool, ProcessorPoolConfig};
 use message::router::DefaultPlainMessageRouter;
+use message::trust_ping_processor::TrustPingProcessor;
 use message::RouterAsyncExt;

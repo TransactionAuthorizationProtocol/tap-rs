@@ -60,7 +60,7 @@ tokio-tungstenite = { version = "0.20", features = [
 ], optional = true }
 
 # Storage dependencies (native only)
-sqlx = { version = "0.7", features = [
+sqlx = { version = "0.8.2", features = [
     "runtime-tokio-native-tls",
     "sqlite",
     "migrate",

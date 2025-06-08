@@ -27,6 +27,7 @@ use rand::{rngs::OsRng, RngCore};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::sync::Arc;
+use tracing::warn;
 use uuid::Uuid;
 
 /// A local implementation of the AgentKey that stores the key material directly
@@ -150,7 +151,7 @@ impl LocalAgentKey {
                         // For did:key, we can't easily reconstruct the proper fragment here
                         // without the full key material, so we'll use a placeholder
                         // The proper kid should be set in the JWK
-                        eprintln!("Warning: did:key JWK missing kid field, using fallback");
+                        warn!("did:key JWK missing kid field, using fallback");
                         format!("{}#keys-1", did)
                     } else if did.starts_with("did:web:") {
                         format!("{}#keys-1", did)
