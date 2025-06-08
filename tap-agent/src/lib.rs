@@ -42,8 +42,7 @@
 //! ```rust,no_run
 //! use tap_agent::{TapAgent, AgentConfig};
 //!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! async fn create_agent() -> Result<(), Box<dyn std::error::Error>> {
 //!     // Create agent with ephemeral key
 //!     let (agent, did) = TapAgent::from_ephemeral_key().await?;
 //!     println!("Created agent with DID: {}", did);
@@ -58,8 +57,7 @@
 //! ```rust,no_run
 //! use tap_agent::{verify_jws, MultiResolver};
 //!
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//! async fn verify_message() -> Result<(), Box<dyn std::error::Error>> {
 //!     let resolver = MultiResolver::default();
 //!     // let jws = ...; // Get JWS from somewhere
 //!     // let plain_message = verify_jws(&jws, &resolver).await?;

@@ -1,4 +1,14 @@
 //! Test delivery tracking integration with message sending
+//!
+//! These tests use in-memory SQLite databases for complete test isolation.
+//! Each test creates its own in-memory database using `Storage::new_in_memory()`,
+//! which eliminates:
+//! - File system conflicts between tests
+//! - Migration issues from previous branches
+//! - Need for cleanup scripts
+//! - Database locking issues when running tests in parallel
+//!
+//! The in-memory approach ensures tests are faster, more reliable, and completely isolated.
 
 use std::sync::Arc;
 use tap_agent::TapAgent;
@@ -9,17 +19,14 @@ use tap_node::{NodeConfig, TapNode};
 
 #[tokio::test]
 async fn test_delivery_tracking_with_send_message() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a temporary directory for test storage
-    let temp_dir = tempfile::tempdir()?;
-    let tap_root = temp_dir.path().to_path_buf();
-
-    // Create node with custom tap root
-    let config = NodeConfig {
-        tap_root: Some(tap_root.clone()),
-        ..Default::default()
-    };
+    // Create node with in-memory storage for testing
+    let config = NodeConfig::default();
     let mut node = TapNode::new(config);
-    node.init_storage().await?;
+
+    // Initialize in-memory storage for complete test isolation
+    // This creates a fresh SQLite database in memory that is automatically cleaned up
+    let storage = tap_node::storage::Storage::new_in_memory().await?;
+    node.set_storage(storage).await?;
 
     // Create two agents for internal delivery test
     let (sender_agent, sender_did) = TapAgent::from_ephemeral_key().await?;
@@ -94,17 +101,14 @@ async fn test_delivery_tracking_with_send_message() -> Result<(), Box<dyn std::e
 
 #[tokio::test]
 async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Error>> {
-    // Create a temporary directory for test storage
-    let temp_dir = tempfile::tempdir()?;
-    let tap_root = temp_dir.path().to_path_buf();
-
-    // Create node with custom tap root
-    let config = NodeConfig {
-        tap_root: Some(tap_root.clone()),
-        ..Default::default()
-    };
+    // Create node with in-memory storage for testing
+    let config = NodeConfig::default();
     let mut node = TapNode::new(config);
-    node.init_storage().await?;
+
+    // Initialize in-memory storage for complete test isolation
+    // This creates a fresh SQLite database in memory that is automatically cleaned up
+    let storage = tap_node::storage::Storage::new_in_memory().await?;
+    node.set_storage(storage).await?;
 
     // Create one agent for external delivery test
     let (sender_agent, sender_did) = TapAgent::from_ephemeral_key().await?;

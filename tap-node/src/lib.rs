@@ -1842,6 +1842,38 @@ impl TapNode {
         self.agent_storage_manager.as_ref()
     }
 
+    /// Set storage for testing purposes
+    /// This allows injecting in-memory databases for complete test isolation
+    #[cfg(feature = "storage")]
+    pub async fn set_storage(&mut self, storage: storage::Storage) -> Result<()> {
+        let storage_arc = Arc::new(storage);
+
+        // Subscribe event handlers
+        let message_status_handler = Arc::new(event::handlers::MessageStatusHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(message_status_handler).await;
+
+        let transaction_state_handler = Arc::new(event::handlers::TransactionStateHandler::new(
+            storage_arc.clone(),
+        ));
+        self.event_bus.subscribe(transaction_state_handler).await;
+
+        let transaction_audit_handler = Arc::new(event::handlers::TransactionAuditHandler::new());
+        self.event_bus.subscribe(transaction_audit_handler).await;
+
+        // Create state processor
+        let state_processor = Arc::new(state_machine::StandardTransactionProcessor::new(
+            storage_arc.clone(),
+            self.event_bus.clone(),
+            self.agents.clone(),
+        ));
+
+        self.storage = Some(storage_arc);
+        self.state_processor = Some(state_processor);
+        Ok(())
+    }
+
     /// Determine which agent's storage should be used for a message
     ///
     /// This method uses the following strategy:

@@ -225,22 +225,12 @@ mod tests {
     #[test]
     #[serial]
     fn test_storage_persistence_with_temp_dir() {
-        // Save current env vars
-        let old_home = env::var("TAP_HOME").ok();
-        let old_test = env::var("TAP_TEST_DIR").ok();
+        use crate::test_utils::TestStorage;
 
-        // Clear env vars
-        env::remove_var("TAP_HOME");
-        env::remove_var("TAP_TEST_DIR");
+        // Use TestStorage for complete isolation - no environment variable manipulation needed
+        let test_storage = TestStorage::new().unwrap();
 
-        // Create a temporary directory
-        let temp_dir = TempDir::new().unwrap();
-        let temp_path = temp_dir.path().to_path_buf();
-
-        // Set TAP_HOME
-        env::set_var("TAP_HOME", &temp_path);
-
-        // Create and save storage
+        // Create and save storage using the isolated test environment
         let mut storage = KeyStorage::new();
         storage.add_key(StoredKey {
             did: "did:key:test".to_string(),
@@ -251,26 +241,29 @@ mod tests {
             metadata: HashMap::new(),
         });
 
-        // Save to default location
-        storage.save_default().unwrap();
+        // Save using the test storage's path (isolated from global state)
+        test_storage.save(&storage).unwrap();
 
-        // Verify file was created in temp directory
-        let expected_path = temp_path.join(DEFAULT_KEYS_FILE);
-        assert!(expected_path.exists());
+        // Verify file was created
+        assert!(
+            test_storage.path().exists(),
+            "Keys file should exist at: {:?}",
+            test_storage.path()
+        );
 
-        // Load it back
-        let loaded = KeyStorage::load_default().unwrap();
-        assert_eq!(loaded.keys.len(), 1);
-        assert!(loaded.keys.contains_key("did:key:test"));
+        // Load it back using the same isolated storage
+        let loaded = test_storage.load().unwrap();
+        assert_eq!(
+            loaded.keys.len(),
+            1,
+            "Should have exactly 1 key in loaded storage"
+        );
+        assert!(
+            loaded.keys.contains_key("did:key:test"),
+            "Should contain the test key"
+        );
 
-        // Restore env vars
-        env::remove_var("TAP_HOME");
-        if let Some(val) = old_home {
-            env::set_var("TAP_HOME", val);
-        }
-        if let Some(val) = old_test {
-            env::set_var("TAP_TEST_DIR", val);
-        }
+        // No environment variable cleanup needed - TestStorage handles isolation automatically
     }
 }
 

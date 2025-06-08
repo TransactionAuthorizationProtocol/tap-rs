@@ -117,8 +117,10 @@ mod tests {
     use super::*;
     use crate::did::KeyType;
     use crate::storage::{KeyStorage, StoredKey};
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_storage_can_be_created() {
         setup_test_environment();
         let test_storage = TestStorage::new().unwrap();
@@ -127,6 +129,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_storage_save_and_load() {
         setup_test_environment();
         let test_storage = TestStorage::new().unwrap();
@@ -153,6 +156,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_temp_storage_path() {
         setup_test_environment();
         let path = temp_storage_path();
@@ -161,6 +165,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_temp_tap_directory() {
         setup_test_environment();
         let dir = temp_tap_directory();

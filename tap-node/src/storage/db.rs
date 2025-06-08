@@ -97,6 +97,32 @@ impl Storage {
         Self::new(Some(db_path)).await
     }
 
+    /// Create a new in-memory storage instance for testing
+    /// This provides complete isolation between tests with no file system dependencies
+    pub async fn new_in_memory() -> Result<Self, StorageError> {
+        info!("Initializing in-memory storage for testing");
+
+        // Use SQLite in-memory database
+        let db_url = "sqlite://:memory:";
+
+        // Create connection pool
+        let pool = SqlitePoolOptions::new()
+            .max_connections(1) // In-memory databases don't benefit from multiple connections
+            .connect(db_url)
+            .await?;
+
+        // Run migrations
+        sqlx::migrate!("./migrations")
+            .run(&pool)
+            .await
+            .map_err(|e| StorageError::Migration(e.to_string()))?;
+
+        Ok(Storage {
+            pool,
+            db_path: PathBuf::from(":memory:"),
+        })
+    }
+
     /// Create a new Storage instance
     ///
     /// This will initialize a SQLite database at the specified path (or default location),
