@@ -15,6 +15,10 @@ The TAP Node defines the following event categories and types:
 - **Data**: 
   - `message`: The received message as a JSON Value
 - **Note**: Use `MessageReceived` instead for new implementations
+- **Use Cases**:
+  - Monitoring and logging received messages
+  - Triggering follow-up actions based on message content
+  - Auditing message flow through the system
 
 #### `PlainMessageSent`
 - **Description**: Triggered when a message is sent from one agent to another
@@ -171,6 +175,8 @@ The TAP Node defines the following event categories and types:
   - KYC/AML monitoring
   - Data synchronization
 
+=======
+>>>>>>> origin/main
 ## Event Handlers
 
 ### 1. EventLogger
@@ -297,6 +303,8 @@ The CustomerEventHandler is now automatically registered for each agent during t
 - Customer data is properly isolated in agent-specific databases
 - No manual configuration is needed for customer data extraction
 
+=======
+>>>>>>> origin/main
 ## Event Processing Workflows
 
 ### Trust Ping Workflow
@@ -308,6 +316,7 @@ The CustomerEventHandler is now automatically registered for each agent during t
 4. Response sent via configured sender
 ```
 
+<<<<<<< HEAD
 ### Customer Data Extraction Workflow
 
 ```
@@ -319,6 +328,8 @@ The CustomerEventHandler is now automatically registered for each agent during t
 6. Relationships established between parties
 ```
 
+=======
+>>>>>>> origin/main
 ### Message Validation Workflow
 
 ```
@@ -429,9 +440,12 @@ let config = NodeConfig {
 // Create node - event handlers are automatically set up
 let mut node = TapNode::new(config);
 node.init_storage().await?;
+<<<<<<< HEAD
 
 // Note: CustomerEventHandler is now automatically registered for each agent
 // when the agent is registered with the node, so manual registration is no longer needed
+=======
+>>>>>>> origin/main
 ```
 
 ## Extending the Event System
@@ -442,7 +456,10 @@ To add new event types:
 2. Add publishing method to `EventBus`
 3. Update existing handlers if needed
 4. Document the new event type
+<<<<<<< HEAD
 5. Consider backward compatibility with legacy events
+=======
+>>>>>>> origin/main
 
 To add new handlers:
 
@@ -450,6 +467,7 @@ To add new handlers:
 2. Subscribe to the event bus
 3. Handle relevant events
 4. Add error handling and logging
+<<<<<<< HEAD
 5. Test with various event scenarios
 6. Consider performance impact for high-frequency events
 
@@ -461,3 +479,6 @@ The TAP Node event system has evolved to provide more specific and feature-rich 
 - `PlainMessageSent` → `MessageSent` (includes destination information)
 
 Legacy events are maintained for backward compatibility but new implementations should use the enhanced event types for better tracking and monitoring capabilities.
+=======
+5. Test with various event scenarios
+>>>>>>> origin/main
