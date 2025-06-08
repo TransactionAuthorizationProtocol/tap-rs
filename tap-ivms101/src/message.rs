@@ -7,6 +7,7 @@ use crate::error::{Error, Result};
 use crate::person::{LegalPerson, NaturalPerson};
 use crate::types::*;
 use serde::{Deserialize, Serialize};
+use tap_msg::utils::NameHashable;
 
 /// Person type enumeration
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -36,7 +37,18 @@ impl Person {
     pub fn is_legal_person(&self) -> bool {
         matches!(self, Person::LegalPerson(_))
     }
+
+    /// Get the full name for TAIP-12 hashing
+    pub fn get_full_name(&self) -> Option<String> {
+        match self {
+            Person::NaturalPerson(person) => person.name.get_full_name(),
+            Person::LegalPerson(person) => person.name.get_full_name(),
+        }
+    }
 }
+
+// Implement NameHashable for Person
+impl NameHashable for Person {}
 
 /// Originator information
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

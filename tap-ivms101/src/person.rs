@@ -6,6 +6,7 @@
 use crate::error::{Error, Result};
 use crate::types::*;
 use serde::{Deserialize, Serialize};
+use tap_msg::utils::NameHashable;
 
 /// Name identifier for natural person
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,7 +115,24 @@ impl NaturalPersonName {
         }
         Ok(())
     }
+
+    /// Get the full name as a single string for TAIP-12 hashing
+    /// Concatenates secondary identifier (given names) and primary identifier (family name)
+    pub fn get_full_name(&self) -> Option<String> {
+        self.name_identifiers.first().map(|name| {
+            format!(
+                "{} {}",
+                name.secondary_identifier.trim(),
+                name.primary_identifier.trim()
+            )
+            .trim()
+            .to_string()
+        })
+    }
 }
+
+// Implement NameHashable for NaturalPersonName
+impl NameHashable for NaturalPersonName {}
 
 /// National identification for natural person
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -316,7 +334,17 @@ impl LegalPersonName {
         }
         Ok(())
     }
+
+    /// Get the full legal name as a single string for TAIP-12 hashing
+    pub fn get_full_name(&self) -> Option<String> {
+        self.name_identifiers
+            .first()
+            .map(|name| name.legal_person_name.trim().to_string())
+    }
 }
+
+// Implement NameHashable for LegalPersonName
+impl NameHashable for LegalPersonName {}
 
 /// Registration authority
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

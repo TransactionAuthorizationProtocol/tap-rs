@@ -20,6 +20,7 @@ use tap_ivms101::{
     types::AddressType,
 };
 use tap_msg::message::Party;
+use tap_msg::utils::NameHashable;
 use uuid::Uuid;
 
 /// Customer manager handles all customer-related operations
@@ -28,6 +29,13 @@ pub struct CustomerManager {
 }
 
 impl CustomerManager {
+    /// Generate name hash from IVMS101 Person data using TAIP-12 standard
+    pub fn generate_name_hash_from_ivms101(&self, person: &Person) -> Option<String> {
+        person
+            .get_full_name()
+            .map(|name| Customer::hash_name(&name))
+    }
+
     /// Create a new customer manager
     pub fn new(storage: Arc<Storage>) -> Self {
         Self { storage }
@@ -77,6 +85,10 @@ impl CustomerManager {
                 "addressCountry" | "https://schema.org/addressCountry" => {
                     profile["addressCountry"] = value.clone();
                 }
+                "nameHash" => {
+                    // Preserve existing name hash from party metadata
+                    profile["nameHash"] = value.clone();
+                }
                 _ => {
                     // Add other metadata as-is
                     profile[key] = value.clone();
@@ -90,7 +102,7 @@ impl CustomerManager {
 
         let now = Utc::now().to_rfc3339();
 
-        let customer = Customer {
+        let mut customer = Customer {
             id: customer_id.clone(),
             agent_did: agent_did.to_string(),
             schema_type: SchemaType::Person, // Default to Person, can be updated later
@@ -119,6 +131,11 @@ impl CustomerManager {
                 .unwrap_or_else(|| now.clone()),
             updated_at: now,
         };
+
+        // Generate and add name hash if not already present
+        if customer.get_name_hash().is_none() {
+            customer.add_name_hash_to_profile();
+        }
 
         // Upsert customer
         self.storage
@@ -179,6 +196,9 @@ impl CustomerManager {
         customer.display_name = display_name.or(customer.display_name);
         customer.address_country = address_country.or(customer.address_country);
         customer.updated_at = Utc::now().to_rfc3339();
+
+        // Regenerate name hash if names have changed
+        customer.add_name_hash_to_profile();
 
         self.storage
             .upsert_customer(&customer)
@@ -325,6 +345,9 @@ impl CustomerManager {
         // Store the IVMS101 data
         customer.ivms101_data = Some(ivms101_data.clone());
         customer.updated_at = Utc::now().to_rfc3339();
+
+        // Regenerate name hash if names have changed
+        customer.add_name_hash_to_profile();
 
         self.storage
             .upsert_customer(&customer)

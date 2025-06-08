@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::message::agent::TapParticipant;
+use crate::utils::NameHashable;
 
 /// Party in a transaction (TAIP-6).
 ///
@@ -105,7 +106,31 @@ impl Party {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
     }
+
+    /// Add name hash metadata according to TAIP-12.
+    pub fn with_name_hash(mut self, name: &str) -> Self {
+        let hash = Self::hash_name(name);
+        self.metadata
+            .insert("nameHash".to_string(), serde_json::Value::String(hash));
+        self
+    }
+
+    /// Get name hash if present.
+    pub fn name_hash(&self) -> Option<String> {
+        self.get_metadata("nameHash")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+    }
+
+    /// Set name hash directly.
+    pub fn set_name_hash(&mut self, hash: String) {
+        self.metadata
+            .insert("nameHash".to_string(), serde_json::Value::String(hash));
+    }
 }
+
+// Implement NameHashable for Party
+impl NameHashable for Party {}
 
 #[cfg(test)]
 mod tests {
@@ -174,5 +199,29 @@ mod tests {
 
         assert_eq!(json["@id"], "did:example:alice");
         assert_eq!(json["https://schema.org/addressCountry"], "de");
+    }
+
+    #[test]
+    fn test_party_with_name_hash() {
+        let party = Party::new("did:example:alice").with_name_hash("Alice Lee");
+        assert_eq!(
+            party.name_hash().unwrap(),
+            "b117f44426c9670da91b563db728cd0bc8bafa7d1a6bb5e764d1aad2ca25032e"
+        );
+    }
+
+    #[test]
+    fn test_party_name_hash_serialization() {
+        let party = Party::new("did:example:alice")
+            .with_name_hash("Alice Lee")
+            .with_country("US");
+
+        let json = serde_json::to_value(&party).unwrap();
+        assert_eq!(json["@id"], "did:example:alice");
+        assert_eq!(
+            json["nameHash"],
+            "b117f44426c9670da91b563db728cd0bc8bafa7d1a6bb5e764d1aad2ca25032e"
+        );
+        assert_eq!(json["https://schema.org/addressCountry"], "US");
     }
 }

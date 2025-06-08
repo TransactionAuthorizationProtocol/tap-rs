@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use tap_msg::utils::NameHashable;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -470,4 +471,50 @@ pub struct CustomerRelationship {
     pub proof: Option<serde_json::Value>,
     pub confirmed_at: Option<String>,
     pub created_at: String,
+}
+
+// Implement NameHashable for Customer
+impl NameHashable for Customer {}
+
+impl Customer {
+    /// Generate a name hash based on the customer's name
+    pub fn generate_name_hash(&self) -> Option<String> {
+        match self.schema_type {
+            SchemaType::Person => {
+                // For persons, combine given name and family name
+                if let (Some(given), Some(family)) = (&self.given_name, &self.family_name) {
+                    Some(Self::hash_name(&format!("{} {}", given, family)))
+                } else if let Some(display) = &self.display_name {
+                    Some(Self::hash_name(display))
+                } else {
+                    None
+                }
+            }
+            SchemaType::Organization => {
+                // For organizations, use legal name
+                self.legal_name.as_ref().map(|name| Self::hash_name(name))
+            }
+            _ => None,
+        }
+    }
+
+    /// Add name hash to the profile metadata
+    pub fn add_name_hash_to_profile(&mut self) {
+        if let Some(hash) = self.generate_name_hash() {
+            if let serde_json::Value::Object(ref mut map) = self.profile {
+                map.insert("nameHash".to_string(), serde_json::Value::String(hash));
+            }
+        }
+    }
+
+    /// Get name hash from profile if present
+    pub fn get_name_hash(&self) -> Option<String> {
+        if let serde_json::Value::Object(map) = &self.profile {
+            map.get("nameHash")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        } else {
+            None
+        }
+    }
 }

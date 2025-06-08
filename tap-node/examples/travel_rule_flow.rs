@@ -8,12 +8,14 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use tap_agent::{Agent, LocalAgentKey};
+use tap_agent::TapAgent;
 use tap_ivms101::builder::*;
 use tap_ivms101::types::*;
+use tap_ivms101::message::Person;
 use tap_msg::message::{
-    authorize::Authorize, payment::Payment, settle::Settle, transfer::Transfer,
-    update_policies::UpdatePolicies, Party, Policy, TapMessage,
+    authorize::Authorize, settle::Settle, transfer::Transfer,
+    update_policies::UpdatePolicies, Party, Policy, RequirePresentation,
+    Agent as MessageAgent,
 };
 use tap_node::{NodeConfig, TapNode};
 use tempfile::tempdir;
@@ -31,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 1: Create node with Travel Rule support
     println!("1. Setting up TAP Node with Travel Rule processor...");
     let config = NodeConfig {
-        database_path: Some(db_path),
+        storage_path: Some(db_path),
         ..Default::default()
     };
     let mut node = TapNode::new(config);
@@ -41,16 +43,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n2. Creating VASP agents...");
 
     // VASP A (Originating VASP)
-    let vasp_a_key = LocalAgentKey::generate();
-    let vasp_a_did = vasp_a_key.did();
-    let vasp_a = Agent::new(vasp_a_did.clone(), Arc::new(vasp_a_key));
+    let (vasp_a, vasp_a_did) = TapAgent::from_ephemeral_key().await?;
+    let vasp_a = Arc::new(vasp_a);
     node.register_agent(vasp_a).await?;
     println!("   - VASP A: {}", vasp_a_did);
 
     // VASP B (Beneficiary VASP)
-    let vasp_b_key = LocalAgentKey::generate();
-    let vasp_b_did = vasp_b_key.did();
-    let vasp_b = Agent::new(vasp_b_did.clone(), Arc::new(vasp_b_key));
+    let (vasp_b, vasp_b_did) = TapAgent::from_ephemeral_key().await?;
+    let vasp_b = Arc::new(vasp_b);
     node.register_agent(vasp_b).await?;
     println!("   - VASP B: {}", vasp_b_did);
 
@@ -85,26 +85,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Step 4: VASP B requests IVMS101 data via policy
     println!("\n4. VASP B requests Travel Rule compliance data...");
 
-    let ivms_policy = Policy::RequirePresentation {
-        context: vec!["https://intervasp.org/ivms101".to_string()],
-        credential_types: vec!["TravelRuleCredential".to_string()],
+    let mut credentials = HashMap::new();
+    credentials.insert("type".to_string(), vec!["TravelRuleCredential".to_string()]);
+    
+    let ivms_policy = Policy::RequirePresentation(RequirePresentation {
+        context: Some(vec!["https://intervasp.org/ivms101".to_string()]),
+        credentials: Some(credentials),
         purpose: Some("Travel Rule Compliance - FATF R.16".to_string()),
-    };
+        from: None,
+        from_role: None,
+        from_agent: None,
+        about_party: None,
+        about_agent: None,
+        presentation_definition: None,
+    });
 
     let update_policies = UpdatePolicies {
-        thread_id: "transfer-001".to_string(),
+        transaction_id: "transfer-001".to_string(),
         policies: vec![ivms_policy],
     };
 
     // Send policy update
+    use tap_msg::message::TapMessageBody;
+    let update_policies_message = update_policies.to_didcomm(&vasp_b_did)?;
     node.send_message(
-        &vasp_b_did,
-        &vasp_a_did,
-        update_policies.into_plain_message(
-            &vasp_b_did,
-            &vasp_a_did,
-            Some("transfer-001".to_string()),
-        )?,
+        vasp_b_did.clone(),
+        update_policies_message,
     )
     .await?;
     println!("   - Policy sent: RequirePresentation for IVMS101");
@@ -131,17 +137,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create Transfer - Travel Rule processor will automatically attach IVMS101
     let transfer = Transfer {
+        asset: "eip155:1/slip44:60".parse()?, // USD on Ethereum
         originator: alice_with_address.clone(),
-        beneficiary: bob.clone(),
-        originating_vasp: Some(Party::from(&vasp_a_did)),
-        beneficiary_vasp: Some(Party::from(&vasp_b_did)),
+        beneficiary: Some(bob.clone()),
         amount: "5000.00".to_string(), // Above typical Travel Rule threshold
-        currency: "USD".to_string(),
+        agents: vec![
+            MessageAgent::new(&vasp_a_did, "originating_vasp", &alice.id),
+            MessageAgent::new(&vasp_b_did, "beneficiary_vasp", &bob.id),
+        ],
+        memo: None,
+        settlement_id: None,
+        transaction_id: "transfer-001".to_string(),
+        connection_id: None,
+        metadata: HashMap::new(),
     };
 
     println!(
-        "   - Transfer amount: {} {}",
-        transfer.amount, transfer.currency
+        "   - Transfer amount: {} USD",
+        transfer.amount
     );
     println!(
         "   - From: {} ({})",
@@ -155,20 +168,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Send Transfer - IVMS101 data will be automatically attached
-    let sent_message = node
+    let transfer_message = transfer.to_didcomm(&vasp_a_did)?;
+    
+    let _sent_message_id = node
         .send_message(
-            &vasp_a_did,
-            &vasp_b_did,
-            transfer.into_plain_message(
-                &vasp_a_did,
-                &vasp_b_did,
-                Some("transfer-001".to_string()),
-            )?,
+            vasp_a_did.clone(),
+            transfer_message.clone(),
         )
         .await?;
 
     // Check if IVMS101 was attached
-    if let Some(attachments) = &sent_message.attachments {
+    if let Some(attachments) = &transfer_message.attachments {
         println!("\n   - IVMS101 data automatically attached:");
         for attachment in attachments {
             if attachment.id == Some("ivms101-vp".to_string()) {
@@ -187,8 +197,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // - Updates customer records
 
     // Retrieve extracted customer data (for demonstration)
-    let storage_manager = node.get_agent_storage_manager(&vasp_b_did)?;
-    let customer_manager = storage_manager.get_customer_manager();
+    if let Some(storage_manager) = node.agent_storage_manager() {
+        if let Ok(_agent_storage) = storage_manager.get_agent_storage(&vasp_b_did).await {
+            // Customer data would be automatically created from the IVMS101 data
+            // In a real scenario, we would query for the customer record here
+        }
+    }
 
     // In a real scenario, the customer would be automatically created from the IVMS101 data
     println!("   - Customer data extracted and stored");
@@ -198,33 +212,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n7. Continuing transaction flow...");
 
     // VASP B authorizes
-    let authorize = Authorize::builder()
-        .transaction_id("transfer-001")
-        .party(bob.clone())
-        .amount("5000.00")
-        .currency("USD")
-        .build()?;
+    let authorize = Authorize::with_settlement_address("transfer-001", "eip155:1:0x1234567890123456789012345678901234567890");
 
     node.send_message(
-        &vasp_b_did,
-        &vasp_a_did,
-        authorize.into_plain_message(&vasp_b_did, &vasp_a_did, Some("transfer-001".to_string()))?,
+        vasp_b_did.clone(),
+        authorize.to_didcomm(&vasp_b_did)?,
     )
     .await?;
     println!("   - VASP B authorized transaction");
 
     // VASP A settles
-    let settle = Settle::builder()
-        .transaction_id("transfer-001")
-        .amount("5000.00")
-        .currency("USD")
-        .settlement_id("blockchain-tx-123")
-        .build()?;
+    let settle = Settle::with_amount("transfer-001", "blockchain-tx-123", "5000.00");
 
     node.send_message(
-        &vasp_a_did,
-        &vasp_b_did,
-        settle.into_plain_message(&vasp_a_did, &vasp_b_did, Some("transfer-001".to_string()))?,
+        vasp_a_did.clone(),
+        settle.to_didcomm(&vasp_a_did)?,
     )
     .await?;
     println!("   - Transaction settled");
@@ -255,10 +257,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             NationalIdentifierType::NationalIdentityNumber,
             "US",
         )
-        .date_of_birth("1985-06-15")
+        .birth_info("1985-06-15", "New York", "US")
         .build()?;
 
-    let ivms_message = IvmsMessageBuilder::new()
+    let _ivms_message = IvmsMessageBuilder::new()
         .originator(vec![Person::NaturalPerson(natural_person)])
         .originating_vasp(Person::LegalPerson(
             LegalPersonBuilder::new()
