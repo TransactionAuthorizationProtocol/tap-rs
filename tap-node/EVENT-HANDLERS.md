@@ -10,14 +10,11 @@ The TAP Node defines the following event categories and types:
 
 ### 1. Message Events
 
-#### `PlainMessageReceived`
-- **Description**: Triggered when a message is received by the node
+#### `PlainMessageReceived` (Deprecated)
+- **Description**: Legacy event for backward compatibility
 - **Data**: 
   - `message`: The received message as a JSON Value
-- **Use Cases**:
-  - Monitoring and logging received messages
-  - Triggering follow-up actions based on message content
-  - Auditing message flow through the system
+- **Note**: Use `MessageReceived` instead for new implementations
 
 #### `PlainMessageSent`
 - **Description**: Triggered when a message is sent from one agent to another
@@ -127,6 +124,53 @@ The TAP Node defines the following event categories and types:
   - Triggering state-specific actions
   - Auditing state transitions
 
+### 8. Enhanced Message Events
+
+#### `MessageReceived`
+- **Description**: Triggered when a message is received from a specific source
+- **Data**:
+  - `message`: The received PlainMessage object
+  - `source`: The source identifier (e.g., "https", "internal", "websocket")
+- **Use Cases**:
+  - Source-aware message processing
+  - Transport-specific handling
+  - Security auditing by source
+
+#### `MessageSent`
+- **Description**: Triggered when a message is sent to a specific destination
+- **Data**:
+  - `message`: The sent PlainMessage object
+  - `destination`: The destination identifier
+- **Use Cases**:
+  - Destination-aware delivery tracking
+  - Transport selection
+  - Delivery confirmation
+
+### 9. Transaction Management Events
+
+#### `TransactionCreated`
+- **Description**: Triggered when a new transaction is created in the system
+- **Data**:
+  - `transaction`: The complete transaction data from storage
+  - `agent_did`: The DID of the agent that created the transaction
+- **Use Cases**:
+  - Customer data extraction
+  - Compliance reporting
+  - Transaction monitoring
+
+### 10. Customer Management Events
+
+#### `CustomerUpdated`
+- **Description**: Triggered when customer information is created or updated
+- **Data**:
+  - `customer_id`: The unique customer identifier
+  - `agent_did`: The DID of the agent that owns the customer
+  - `update_type`: The type of update ("created", "updated", "verified")
+- **Use Cases**:
+  - Customer lifecycle tracking
+  - KYC/AML monitoring
+  - Data synchronization
+
 ## Event Handlers
 
 ### 1. EventLogger
@@ -216,6 +260,43 @@ EventLoggerConfig {
 - Works with `TrustPingProcessor` for automatic responses
 - Supports various message senders (HTTP, WebSocket)
 
+### 6. CustomerEventHandler
+
+**Purpose**: Automatically extracts and manages customer data from TAP messages.
+
+**Features**:
+- Extracts party information from Transfer messages
+- Updates customer records from UpdateParty messages
+- Manages relationships from ConfirmRelationship messages
+- Generates IVMS101-compatible data structures
+- **Automatically registered for each agent** when the agent is registered with the node
+
+**Subscribed Events**:
+- `MessageReceived` → Processes incoming Transfer, UpdateParty, and ConfirmRelationship messages
+- `MessageSent` → Processes outgoing messages for customer data
+- `TransactionCreated` → Extracts customer data from new transactions
+
+**Database Integration**:
+- Creates/updates customer records
+- Manages customer relationships
+- Stores IVMS101 compliance data
+- Maintains customer metadata
+- Uses agent-specific storage for data isolation
+
+**Operation**:
+1. Automatically created when an agent is registered with `node.register_agent()`
+2. Monitors message events for relevant TAP message types
+3. Extracts party information (originator, beneficiary, agents)
+4. Creates or updates customer records with extracted data
+5. Establishes relationships between customers and agents
+6. Stores compliance-relevant information for reporting in agent-specific database
+
+**Automatic Registration**:
+The CustomerEventHandler is now automatically registered for each agent during the agent registration process. This ensures that:
+- Each agent has its own customer data handler
+- Customer data is properly isolated in agent-specific databases
+- No manual configuration is needed for customer data extraction
+
 ## Event Processing Workflows
 
 ### Trust Ping Workflow
@@ -225,6 +306,17 @@ EventLoggerConfig {
 2. Generate response → Publish PlainMessageSent event
 3. TrustPingResponseHandler catches event
 4. Response sent via configured sender
+```
+
+### Customer Data Extraction Workflow
+
+```
+1. Transfer/Payment message received → MessageReceived event
+2. CustomerEventHandler processes message
+3. Extract party information (originator, beneficiary)
+4. Create/update customer records
+5. CustomerUpdated event published
+6. Relationships established between parties
 ```
 
 ### Message Validation Workflow
@@ -241,10 +333,12 @@ EventLoggerConfig {
 
 ```
 1. Transfer/Payment received → Create transaction
-2. Authorize received → TransactionStateChanged event
-3. All agents authorized → Generate Settle message
-4. TransactionStateHandler updates database
-5. TransactionAuditHandler logs transition
+2. TransactionCreated event published
+3. CustomerEventHandler extracts customer data
+4. Authorize received → TransactionStateChanged event
+5. All agents authorized → Generate Settle message
+6. TransactionStateHandler updates database
+7. TransactionAuditHandler logs transition
 ```
 
 ## Subscription Models
@@ -291,12 +385,14 @@ tokio::spawn(async move {
 - Spawn separate tasks for long-running operations
 - Handle errors gracefully without panicking
 - Use appropriate logging levels
+- Consider data privacy when logging customer information
 
 ### 2. Event Publishing
 - Use the provided convenience methods on EventBus
 - Include all relevant data in events
 - Consider event ordering implications
 - Avoid publishing events from within handlers (prevent loops)
+- Use specific event types (MessageReceived vs PlainMessageReceived) for clarity
 
 ### 3. Performance Considerations
 - The event bus uses a broadcast channel with capacity 100
@@ -333,6 +429,9 @@ let config = NodeConfig {
 // Create node - event handlers are automatically set up
 let mut node = TapNode::new(config);
 node.init_storage().await?;
+
+// Note: CustomerEventHandler is now automatically registered for each agent
+// when the agent is registered with the node, so manual registration is no longer needed
 ```
 
 ## Extending the Event System
@@ -343,6 +442,7 @@ To add new event types:
 2. Add publishing method to `EventBus`
 3. Update existing handlers if needed
 4. Document the new event type
+5. Consider backward compatibility with legacy events
 
 To add new handlers:
 
@@ -351,3 +451,13 @@ To add new handlers:
 3. Handle relevant events
 4. Add error handling and logging
 5. Test with various event scenarios
+6. Consider performance impact for high-frequency events
+
+## Event Type Migration Guide
+
+The TAP Node event system has evolved to provide more specific and feature-rich events:
+
+- `PlainMessageReceived` → `MessageReceived` (includes source information)
+- `PlainMessageSent` → `MessageSent` (includes destination information)
+
+Legacy events are maintained for backward compatibility but new implementations should use the enhanced event types for better tracking and monitoring capabilities.
