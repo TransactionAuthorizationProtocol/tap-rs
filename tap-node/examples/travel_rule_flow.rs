@@ -10,12 +10,11 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tap_agent::TapAgent;
 use tap_ivms101::builder::*;
-use tap_ivms101::types::*;
 use tap_ivms101::message::Person;
+use tap_ivms101::types::*;
 use tap_msg::message::{
-    authorize::Authorize, settle::Settle, transfer::Transfer,
-    update_policies::UpdatePolicies, Party, Policy, RequirePresentation,
-    Agent as MessageAgent,
+    authorize::Authorize, settle::Settle, transfer::Transfer, update_policies::UpdatePolicies,
+    Agent as MessageAgent, Party, Policy, RequirePresentation,
 };
 use tap_node::{NodeConfig, TapNode};
 use tempfile::tempdir;
@@ -87,7 +86,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut credentials = HashMap::new();
     credentials.insert("type".to_string(), vec!["TravelRuleCredential".to_string()]);
-    
+
     let ivms_policy = Policy::RequirePresentation(RequirePresentation {
         context: Some(vec!["https://intervasp.org/ivms101".to_string()]),
         credentials: Some(credentials),
@@ -108,11 +107,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Send policy update
     use tap_msg::message::TapMessageBody;
     let update_policies_message = update_policies.to_didcomm(&vasp_b_did)?;
-    node.send_message(
-        vasp_b_did.clone(),
-        update_policies_message,
-    )
-    .await?;
+    node.send_message(vasp_b_did.clone(), update_policies_message)
+        .await?;
     println!("   - Policy sent: RequirePresentation for IVMS101");
 
     // Step 5: Create Transfer with automatic IVMS101 attachment
@@ -152,10 +148,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         metadata: HashMap::new(),
     };
 
-    println!(
-        "   - Transfer amount: {} USD",
-        transfer.amount
-    );
+    println!("   - Transfer amount: {} USD", transfer.amount);
     println!(
         "   - From: {} ({})",
         alice.id,
@@ -169,12 +162,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Send Transfer - IVMS101 data will be automatically attached
     let transfer_message = transfer.to_didcomm(&vasp_a_did)?;
-    
+
     let _sent_message_id = node
-        .send_message(
-            vasp_a_did.clone(),
-            transfer_message.clone(),
-        )
+        .send_message(vasp_a_did.clone(), transfer_message.clone())
         .await?;
 
     // Check if IVMS101 was attached
@@ -212,23 +202,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\n7. Continuing transaction flow...");
 
     // VASP B authorizes
-    let authorize = Authorize::with_settlement_address("transfer-001", "eip155:1:0x1234567890123456789012345678901234567890");
+    let authorize = Authorize::with_settlement_address(
+        "transfer-001",
+        "eip155:1:0x1234567890123456789012345678901234567890",
+    );
 
-    node.send_message(
-        vasp_b_did.clone(),
-        authorize.to_didcomm(&vasp_b_did)?,
-    )
-    .await?;
+    node.send_message(vasp_b_did.clone(), authorize.to_didcomm(&vasp_b_did)?)
+        .await?;
     println!("   - VASP B authorized transaction");
 
     // VASP A settles
     let settle = Settle::with_amount("transfer-001", "blockchain-tx-123", "5000.00");
 
-    node.send_message(
-        vasp_a_did.clone(),
-        settle.to_didcomm(&vasp_a_did)?,
-    )
-    .await?;
+    node.send_message(vasp_a_did.clone(), settle.to_didcomm(&vasp_a_did)?)
+        .await?;
     println!("   - Transaction settled");
 
     // Step 8: Demonstrate direct IVMS101 generation

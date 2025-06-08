@@ -484,10 +484,10 @@ impl Customer {
                 // For persons, combine given name and family name
                 if let (Some(given), Some(family)) = (&self.given_name, &self.family_name) {
                     Some(Self::hash_name(&format!("{} {}", given, family)))
-                } else if let Some(display) = &self.display_name {
-                    Some(Self::hash_name(display))
                 } else {
-                    None
+                    self.display_name
+                        .as_ref()
+                        .map(|display| Self::hash_name(display))
                 }
             }
             SchemaType::Organization => {

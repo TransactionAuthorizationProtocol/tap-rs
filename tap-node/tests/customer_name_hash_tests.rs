@@ -65,10 +65,6 @@ async fn test_customer_preserve_existing_name_hash() {
 
 #[tokio::test]
 async fn test_customer_organization_name_hash() {
-    let dir = tempdir().unwrap();
-    let db_path = dir.path().join("test.db");
-    let storage = Arc::new(Storage::new(Some(db_path)).await.unwrap());
-
     // Create an organization customer manually
     let mut customer = Customer {
         id: "did:web:example.com".to_string(),

@@ -41,7 +41,7 @@ pub struct TrustPing {
 ///
 /// Response to a Trust Ping message, confirming that the communication
 /// channel is working and the recipient is reachable.
-#[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TapMessage)]
 #[tap(
     message_type = "https://didcomm.org/trust-ping/2.0/ping-response",
     custom_validation
@@ -52,10 +52,11 @@ pub struct TrustPingResponse {
     pub comment: Option<String>,
 
     /// Thread ID referencing the original ping message
+    #[serde(default)]
     pub thread_id: String,
 
     /// Additional metadata
-    #[serde(flatten)]
+    #[serde(flatten, default)]
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -68,16 +69,6 @@ impl Default for TrustPing {
         Self {
             response_requested: true,
             comment: None,
-            metadata: HashMap::new(),
-        }
-    }
-}
-
-impl Default for TrustPingResponse {
-    fn default() -> Self {
-        Self {
-            comment: None,
-            thread_id: String::new(),
             metadata: HashMap::new(),
         }
     }
@@ -180,7 +171,7 @@ mod tests {
     #[test]
     fn test_trust_ping_creation() {
         let ping = TrustPing::new();
-        assert_eq!(ping.response_requested, true);
+        assert!(ping.response_requested);
         assert!(ping.comment.is_none());
         assert!(ping.metadata.is_empty());
     }
@@ -189,13 +180,13 @@ mod tests {
     fn test_trust_ping_with_comment() {
         let ping = TrustPing::with_comment("Testing connectivity".to_string());
         assert_eq!(ping.comment, Some("Testing connectivity".to_string()));
-        assert_eq!(ping.response_requested, true);
+        assert!(ping.response_requested);
     }
 
     #[test]
     fn test_trust_ping_no_response() {
         let ping = TrustPing::new().response_requested(false);
-        assert_eq!(ping.response_requested, false);
+        assert!(!ping.response_requested);
     }
 
     #[test]
