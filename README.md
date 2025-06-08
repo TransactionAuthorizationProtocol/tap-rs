@@ -2,6 +2,8 @@
 
 This repository contains a Rust implementation of the Transaction Authorization Protocol (TAP), a decentralized protocol for securely authorizing blockchain transactions before they are submitted on-chain. TAP-RS targets payment-related use cases, Travel Rule compliance, and secure transaction coordination.
 
+**New in this release**: Full Travel Rule support with IVMS101 data model implementation, automatic customer data extraction, and compliance workflow automation.
+
 ## Project Structure
 
 TAP-RS is organized as a Rust workspace with multiple crates:
@@ -10,7 +12,8 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 - **[tap-msg-derive](./tap-msg-derive/README.md)**: Procedural derive macro for automatic TAP message trait implementation
 - **[tap-agent](./tap-agent/README.md)**: TAP agent functionality and identity management
 - **[tap-caip](./tap-caip/README.md)**: Implementation of Chain Agnostic Identifier Standards
-- **[tap-node](./tap-node/README.md)**: TAP node orchestration with per-agent storage isolation and multi-recipient message delivery
+- **[tap-ivms101](./tap-ivms101/README.md)**: Complete IVMS 101.2023 implementation for Travel Rule compliance
+- **[tap-node](./tap-node/README.md)**: TAP node orchestration with per-agent storage isolation, multi-recipient message delivery, and Travel Rule processor
 - **[tap-http](./tap-http/README.md)**: HTTP DIDComm server implementation
 - **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
 - **[tap-ts](./tap-ts/README.md)**: TypeScript/WASM wrapper for browser and Node.js environments
@@ -31,9 +34,10 @@ TAP-RS implements this protocol with a focus on:
 - **Security**: End-to-end encrypted messaging via DIDComm v2
 - **Interoperability**: Support for multiple blockchains through CAIP standards  
 - **Scalability**: Per-agent storage isolation with multi-recipient message delivery
-- **Compliance**: Full DIDComm specification adherence for multi-party transactions
+- **Compliance**: Full DIDComm specification adherence for multi-party transactions with IVMS101 Travel Rule support
 - **Extensibility**: Modular design allowing custom integrations
 - **Cross-Platform**: Native support and WebAssembly for browser environments
+- **Travel Rule**: Automatic IVMS101 data generation and attachment for regulatory compliance
 
 ## Development Status
 
@@ -116,6 +120,8 @@ See individual tool READMEs for detailed usage instructions.
 - **DIDComm v2 Integration**: Secure, encrypted messaging with authenticated signatures
 - **Chain Agnostic Identifiers**: Implementation of CAIP-2 (ChainID), CAIP-10 (AccountID), and CAIP-19 (AssetID)
 - **Multiple DID Methods**: Support for did:key, did:web, did:pkh, and more
+- **Travel Rule Compliance**: Full IVMS 101.2023 implementation with automatic data attachment
+- **Customer Data Management**: Automatic extraction and storage of party information from TAP messages
 - **Command-line Tools**: Utilities for DID generation, resolution, and key management
 - **Modular Agent Architecture**: Flexible identity and cryptography primitives
 - **High-Performance Message Routing**: Efficient node implementation for high-throughput environments
@@ -129,6 +135,7 @@ See individual tool READMEs for detailed usage instructions.
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all messages for compliance and debugging
   - **Message delivery tracking** with status monitoring, retry counts, and error logging
+  - **Customer profiles** with Schema.org JSON-LD format and IVMS101 caching
 
 ## Getting Started with tap-msg
 
@@ -298,11 +305,13 @@ For TypeScript and WebAssembly bindings, see the [tap-ts README](./tap-ts/README
 
 ## Common Use Cases
 
-- **VASP-to-VASP Transfers**: Exchanges and custodians can coordinate transfers with Travel Rule compliance
+- **VASP-to-VASP Transfers**: Exchanges and custodians can coordinate transfers with automatic Travel Rule compliance
+- **Travel Rule Compliance**: Automatic IVMS101 data generation and exchange for regulatory requirements
 - **Self-Custody Verification**: Wallets can verify transaction details before settlement
 - **Multi-Party Authorization**: Complex transfers requiring approval from multiple entities
 - **Cross-Chain Coordination**: Consistent messaging across different blockchain networks
-- **Compliance Automation**: Streamline compliance workflows with secure messaging
+- **Compliance Automation**: Streamline compliance workflows with secure messaging and automatic data extraction
+- **Customer Data Management**: Automatic extraction and storage of party information for KYC/AML
 
 ## Documentation
 
@@ -314,8 +323,14 @@ Comprehensive documentation for TAP-RS is available in the [docs](./docs) direct
 - [Security Best Practices](./docs/tutorials/security_best_practices.md) - Guidelines for securing your implementation
 - [WASM Integration](./docs/tutorials/wasm_integration.md) - Using TAP-RS in browser and Node.js environments
 
+### Travel Rule Documentation
+- [Travel Rule Implementation](./tap-node/TRAVEL-RULE.md) - Complete guide to Travel Rule compliance in TAP Node
+- [Customer Management](./tap-node/CUSTOMER-MANAGEMENT.md) - Automatic customer data extraction and management
+- [IVMS101 Data Model](./tap-ivms101/README.md) - Full IVMS 101.2023 implementation
+
 ### Examples
 - [Complete Transfer Flow](./docs/examples/complete_transfer_flow.md) - End-to-end example integrating multiple TAP-RS components
+- [Travel Rule Flow](./tap-node/examples/travel_rule_flow.rs) - Complete example of Travel Rule compliance with IVMS101
 
 ## Build Commands
 
