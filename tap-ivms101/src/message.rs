@@ -6,38 +6,35 @@
 use crate::error::{Error, Result};
 use crate::person::{LegalPerson, NaturalPerson};
 use crate::types::*;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Person type enumeration
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(rename_all = "camelCase")]
 pub enum Person {
     /// Natural person
-    #[serde(rename = "naturalPerson")]
-    Natural(NaturalPerson),
+    NaturalPerson(NaturalPerson),
     /// Legal person
-    #[serde(rename = "legalPerson")]
-    Legal(LegalPerson),
+    LegalPerson(LegalPerson),
 }
 
 impl Person {
     /// Validate the person data
     pub fn validate(&self) -> Result<()> {
         match self {
-            Person::Natural(person) => person.validate(),
-            Person::Legal(person) => person.validate(),
+            Person::NaturalPerson(person) => person.validate(),
+            Person::LegalPerson(person) => person.validate(),
         }
     }
 
     /// Check if this is a natural person
     pub fn is_natural_person(&self) -> bool {
-        matches!(self, Person::Natural(_))
+        matches!(self, Person::NaturalPerson(_))
     }
 
     /// Check if this is a legal person
     pub fn is_legal_person(&self) -> bool {
-        matches!(self, Person::Legal(_))
+        matches!(self, Person::LegalPerson(_))
     }
 }
 

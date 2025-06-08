@@ -16,6 +16,12 @@ pub struct NaturalPersonNameBuilder {
     phonetic_name_identifiers: Option<Vec<PhoneticNameIdentifier>>,
 }
 
+impl Default for NaturalPersonNameBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NaturalPersonNameBuilder {
     /// Create a new builder
     pub fn new() -> Self {
@@ -33,11 +39,8 @@ impl NaturalPersonNameBuilder {
         secondary: impl Into<String>,
         name_type: NameIdentifierType,
     ) -> Self {
-        self.name_identifiers.push(NameIdentifier::new(
-            primary,
-            secondary,
-            name_type,
-        ));
+        self.name_identifiers
+            .push(NameIdentifier::new(primary, secondary, name_type));
         self
     }
 
@@ -66,6 +69,12 @@ pub struct NaturalPersonBuilder {
     customer_identification: Option<CustomerIdentification>,
     date_and_place_of_birth: Option<DateAndPlaceOfBirth>,
     country_of_residence: Option<CountryCode>,
+}
+
+impl Default for NaturalPersonBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl NaturalPersonBuilder {
@@ -172,6 +181,12 @@ pub struct LegalPersonNameBuilder {
     phonetic_name_identifiers: Option<Vec<LegalPersonNameIdentifier>>,
 }
 
+impl Default for LegalPersonNameBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LegalPersonNameBuilder {
     /// Create a new builder
     pub fn new() -> Self {
@@ -188,10 +203,8 @@ impl LegalPersonNameBuilder {
         name: impl Into<String>,
         name_type: LegalPersonNameIdentifierType,
     ) -> Self {
-        self.name_identifiers.push(LegalPersonNameIdentifier::new(
-            name,
-            name_type,
-        ));
+        self.name_identifiers
+            .push(LegalPersonNameIdentifier::new(name, name_type));
         self
     }
 
@@ -226,6 +239,12 @@ pub struct LegalPersonBuilder {
     country_of_registration: Option<CountryCode>,
 }
 
+impl Default for LegalPersonBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LegalPersonBuilder {
     /// Create a new builder
     pub fn new() -> Self {
@@ -253,15 +272,17 @@ impl LegalPersonBuilder {
     }
 
     /// Set national identification with LEI
-    pub fn lei(mut self, lei_code: impl Into<String>) -> Self {
+    pub fn lei(mut self, lei_code: impl Into<String>) -> Result<Self> {
+        let lei = lei_code.into();
+        validate_lei(&lei)?;
         self.national_identification = Some(LegalPersonNationalIdentification {
-            national_identifier: lei_code.clone().into(),
+            national_identifier: lei.clone(),
             national_identifier_type: Some("LEI".to_string()),
             country_of_issue: None,
             registration_authority: None,
-            lei_code: Some(lei_code.into()),
+            lei_code: Some(lei),
         });
-        self
+        Ok(self)
     }
 
     /// Set customer identification
@@ -305,12 +326,27 @@ impl LegalPersonBuilder {
 /// Builder for geographic addresses
 pub struct GeographicAddressBuilder {
     address_type: Option<AddressType>,
+    department: Option<String>,
+    sub_department: Option<String>,
     street_name: Option<String>,
     building_number: Option<String>,
+    building_name: Option<String>,
+    floor: Option<String>,
+    post_box: Option<String>,
+    room: Option<String>,
     post_code: Option<String>,
     town_name: Option<String>,
+    town_location_name: Option<String>,
+    district_name: Option<String>,
+    country_sub_division: Option<String>,
+    address_line: Option<Vec<String>>,
     country: Option<CountryCode>,
-    // Other optional fields...
+}
+
+impl Default for GeographicAddressBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GeographicAddressBuilder {
@@ -318,10 +354,20 @@ impl GeographicAddressBuilder {
     pub fn new() -> Self {
         Self {
             address_type: None,
+            department: None,
+            sub_department: None,
             street_name: None,
             building_number: None,
+            building_name: None,
+            floor: None,
+            post_box: None,
+            room: None,
             post_code: None,
             town_name: None,
+            town_location_name: None,
+            district_name: None,
+            country_sub_division: None,
+            address_line: None,
             country: None,
         }
     }
@@ -356,6 +402,24 @@ impl GeographicAddressBuilder {
         self
     }
 
+    /// Set the building name
+    pub fn building_name(mut self, name: impl Into<String>) -> Self {
+        self.building_name = Some(name.into());
+        self
+    }
+
+    /// Set the floor
+    pub fn floor(mut self, floor: impl Into<String>) -> Self {
+        self.floor = Some(floor.into());
+        self
+    }
+
+    /// Set the country subdivision
+    pub fn country_sub_division(mut self, subdivision: impl Into<String>) -> Self {
+        self.country_sub_division = Some(subdivision.into());
+        self
+    }
+
     /// Set the country
     pub fn country(mut self, country: impl Into<String>) -> Self {
         self.country = Some(country.into());
@@ -364,40 +428,40 @@ impl GeographicAddressBuilder {
 
     /// Build the geographic address
     pub fn build(self) -> Result<GeographicAddress> {
-        let street_name = self.street_name.ok_or_else(|| {
-            Error::MissingRequiredField("Street name is required".to_string())
-        })?;
+        let street_name = self
+            .street_name
+            .ok_or_else(|| Error::MissingRequiredField("Street name is required".to_string()))?;
 
-        let post_code = self.post_code.ok_or_else(|| {
-            Error::MissingRequiredField("Post code is required".to_string())
-        })?;
+        let post_code = self
+            .post_code
+            .ok_or_else(|| Error::MissingRequiredField("Post code is required".to_string()))?;
 
-        let town_name = self.town_name.ok_or_else(|| {
-            Error::MissingRequiredField("Town name is required".to_string())
-        })?;
+        let town_name = self
+            .town_name
+            .ok_or_else(|| Error::MissingRequiredField("Town name is required".to_string()))?;
 
-        let country = self.country.ok_or_else(|| {
-            Error::MissingRequiredField("Country is required".to_string())
-        })?;
+        let country = self
+            .country
+            .ok_or_else(|| Error::MissingRequiredField("Country is required".to_string()))?;
 
         validate_country_code(&country)?;
 
         Ok(GeographicAddress {
             address_type: self.address_type,
-            department: None,
-            sub_department: None,
+            department: self.department,
+            sub_department: self.sub_department,
             street_name,
             building_number: self.building_number,
-            building_name: None,
-            floor: None,
-            post_box: None,
-            room: None,
+            building_name: self.building_name,
+            floor: self.floor,
+            post_box: self.post_box,
+            room: self.room,
             post_code,
             town_name,
-            town_location_name: None,
-            district_name: None,
-            country_sub_division: None,
-            address_line: None,
+            town_location_name: self.town_location_name,
+            district_name: self.district_name,
+            country_sub_division: self.country_sub_division,
+            address_line: self.address_line,
             country,
         })
     }
@@ -410,6 +474,12 @@ pub struct IvmsMessageBuilder {
     originating_vasp: Option<OriginatingVasp>,
     beneficiary_vasp: Option<BeneficiaryVasp>,
     transaction: Option<TransactionData>,
+}
+
+impl Default for IvmsMessageBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl IvmsMessageBuilder {
@@ -475,13 +545,13 @@ impl IvmsMessageBuilder {
 
     /// Build the IVMS message
     pub fn build(self) -> Result<IvmsMessage> {
-        let originator = self.originator.ok_or_else(|| {
-            Error::MissingRequiredField("Originator is required".to_string())
-        })?;
+        let originator = self
+            .originator
+            .ok_or_else(|| Error::MissingRequiredField("Originator is required".to_string()))?;
 
-        let beneficiary = self.beneficiary.ok_or_else(|| {
-            Error::MissingRequiredField("Beneficiary is required".to_string())
-        })?;
+        let beneficiary = self
+            .beneficiary
+            .ok_or_else(|| Error::MissingRequiredField("Beneficiary is required".to_string()))?;
 
         let originating_vasp = self.originating_vasp.ok_or_else(|| {
             Error::MissingRequiredField("Originating VASP is required".to_string())

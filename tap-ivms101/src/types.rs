@@ -3,7 +3,6 @@
 //! This module implements the data types defined in the IVMS 101.2023 specification
 //! for the interVASP Messaging Standard.
 
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 

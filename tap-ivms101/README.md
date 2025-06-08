@@ -64,15 +64,15 @@ let vasp_name = LegalPersonNameBuilder::new()
 
 let vasp = LegalPersonBuilder::new()
     .name(vasp_name)
-    .lei("529900HNOAA1KXQJUQ27")
+    .lei("529900HNOAA1KXQJUQ27")?
     .country_of_registration("US")
     .build()?;
 
 // Create an IVMS message
 let message = IvmsMessageBuilder::new()
-    .originator(vec![Person::Natural(person)])
-    .beneficiary(vec![Person::Natural(person.clone())])
-    .originating_vasp(Person::Legal(vasp))
+    .originator(vec![Person::NaturalPerson(person)])
+    .beneficiary(vec![Person::NaturalPerson(person.clone())])
+    .originating_vasp(Person::LegalPerson(vasp))
     .transaction(
         "1000.00",
         "USD",

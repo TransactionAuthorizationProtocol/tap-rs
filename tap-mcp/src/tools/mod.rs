@@ -120,6 +120,22 @@ impl ToolRegistry {
             "tap_list_connections".to_string(),
             Box::new(ListConnectionsTool::new(tap_integration.clone())),
         );
+        tools.insert(
+            "tap_get_customer_details".to_string(),
+            Box::new(GetCustomerDetailsTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_generate_ivms101".to_string(),
+            Box::new(GenerateIvms101Tool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_update_customer_profile".to_string(),
+            Box::new(UpdateCustomerProfileTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_update_customer_from_ivms101".to_string(),
+            Box::new(UpdateCustomerFromIvms101Tool::new(tap_integration.clone())),
+        );
 
         // Received message tools
         tools.insert(

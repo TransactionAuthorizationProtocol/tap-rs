@@ -38,15 +38,15 @@
 //!
 //! let legal_person = LegalPersonBuilder::new()
 //!     .name(legal_person_name)
-//!     .lei("529900HNOAA1KXQJUQ27")
+//!     .lei("529900HNOAA1KXQJUQ27")?
 //!     .country_of_registration("US")
 //!     .build()?;
 //!
 //! // Create an IVMS message
 //! let ivms_message = IvmsMessageBuilder::new()
-//!     .originator(vec![Person::Natural(natural_person)])
-//!     .beneficiary(vec![Person::Natural(natural_person.clone())])
-//!     .originating_vasp(Person::Legal(legal_person))
+//!     .originator(vec![Person::NaturalPerson(natural_person.clone())])
+//!     .beneficiary(vec![Person::NaturalPerson(natural_person)])
+//!     .originating_vasp(Person::LegalPerson(legal_person))
 //!     .transaction(
 //!         "100.00",
 //!         "USD",
@@ -106,6 +106,7 @@ mod tests {
         let person = LegalPersonBuilder::new()
             .name(name)
             .lei("529900HNOAA1KXQJUQ27")
+            .unwrap()
             .country_of_registration("GB")
             .build()
             .unwrap();
@@ -143,16 +144,13 @@ mod tests {
             .build()
             .unwrap();
 
-        let vasp = LegalPersonBuilder::new()
-            .name(vasp_name)
-            .build()
-            .unwrap();
+        let vasp = LegalPersonBuilder::new().name(vasp_name).build().unwrap();
 
         // Create message
         let message = IvmsMessageBuilder::new()
-            .originator(vec![Person::Natural(originator_person)])
-            .beneficiary(vec![Person::Natural(beneficiary_person)])
-            .originating_vasp(Person::Legal(vasp))
+            .originator(vec![Person::NaturalPerson(originator_person)])
+            .beneficiary(vec![Person::NaturalPerson(beneficiary_person)])
+            .originating_vasp(Person::LegalPerson(vasp))
             .transaction(
                 "1000.50",
                 "USD",

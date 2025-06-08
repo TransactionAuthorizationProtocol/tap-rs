@@ -14,6 +14,11 @@ use crate::storage::{
 use chrono::Utc;
 use serde_json::{json, Value};
 use std::sync::Arc;
+use tap_ivms101::{
+    builder::{GeographicAddressBuilder, NaturalPersonBuilder, NaturalPersonNameBuilder},
+    message::Person,
+    types::AddressType,
+};
 use tap_msg::message::Party;
 use uuid::Uuid;
 
@@ -191,60 +196,141 @@ impl CustomerManager {
             .map_err(|e| Error::Storage(e.to_string()))?
             .ok_or_else(|| Error::Storage("Customer not found".to_string()))?;
 
-        let ivms101 = match customer.schema_type {
+        let person = match customer.schema_type {
             SchemaType::Person => {
-                json!({
-                    "naturalPerson": {
-                        "name": {
-                            "nameIdentifiers": [{
-                                "primaryIdentifier": customer.family_name.as_deref().unwrap_or(""),
-                                "secondaryIdentifier": customer.given_name.as_deref().unwrap_or(""),
-                                "nameIdentifierType": "LegalName"
-                            }]
-                        },
-                        "geographicAddress": [{
-                            "streetName": customer.street_address.as_deref().unwrap_or(""),
-                            "postCode": customer.postal_code.as_deref().unwrap_or(""),
-                            "townName": customer.address_locality.as_deref().unwrap_or(""),
-                            "country": customer.address_country.as_deref().unwrap_or("")
-                        }]
+                // Build natural person
+                let mut person_builder = NaturalPersonBuilder::new();
+
+                // Add name
+                if customer.family_name.is_some() || customer.given_name.is_some() {
+                    let name = NaturalPersonNameBuilder::new()
+                        .legal_name(
+                            customer.family_name.as_deref().unwrap_or("Unknown"),
+                            customer.given_name.as_deref().unwrap_or(""),
+                        )
+                        .build()
+                        .map_err(|e| Error::Storage(format!("Failed to build name: {}", e)))?;
+                    person_builder = person_builder.name(name);
+                }
+
+                // Add address only if we have street address (required field)
+                if customer.address_country.is_some() && customer.street_address.is_some() {
+                    let mut address_builder = GeographicAddressBuilder::new()
+                        .address_type(AddressType::Home)
+                        .country(customer.address_country.as_deref().unwrap_or(""))
+                        .street_name(customer.street_address.as_deref().unwrap_or(""));
+
+                    if let Some(postal) = &customer.postal_code {
+                        address_builder = address_builder.post_code(postal);
                     }
-                })
+                    if let Some(town) = &customer.address_locality {
+                        address_builder = address_builder.town_name(town);
+                    }
+
+                    let address = address_builder
+                        .build()
+                        .map_err(|e| Error::Storage(format!("Failed to build address: {}", e)))?;
+                    person_builder = person_builder.add_address(address);
+                }
+
+                let natural_person = person_builder.build().map_err(|e| {
+                    Error::Storage(format!("Failed to build natural person: {}", e))
+                })?;
+
+                Person::NaturalPerson(natural_person)
             }
             SchemaType::Organization => {
-                json!({
-                    "legalPerson": {
-                        "name": {
-                            "nameIdentifiers": [{
-                                "legalPersonName": customer.legal_name.as_deref().unwrap_or(""),
-                                "legalPersonNameIdentifierType": "LegalName"
-                            }]
-                        },
-                        "geographicAddress": [{
-                            "streetName": customer.street_address.as_deref().unwrap_or(""),
-                            "postCode": customer.postal_code.as_deref().unwrap_or(""),
-                            "townName": customer.address_locality.as_deref().unwrap_or(""),
-                            "country": customer.address_country.as_deref().unwrap_or("")
-                        }],
-                        "nationalIdentification": {
-                            "leiCode": customer.lei_code.as_deref().unwrap_or("")
-                        }
-                    }
-                })
+                // For organizations, we'll use LegalPerson (not implemented in tap-ivms101 yet)
+                // For now, return empty JSON
+                return Ok(json!({}));
             }
-            _ => json!({}),
+            _ => return Ok(json!({})),
         };
+
+        // Serialize the person to JSON
+        let ivms101_json = serde_json::to_value(&person)
+            .map_err(|e| Error::Storage(format!("Failed to serialize IVMS101: {}", e)))?;
 
         // Cache the generated IVMS101 data
         let mut customer = customer;
-        customer.ivms101_data = Some(ivms101.clone());
+        customer.ivms101_data = Some(ivms101_json.clone());
         customer.updated_at = Utc::now().to_rfc3339();
         self.storage
             .upsert_customer(&customer)
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        Ok(ivms101)
+        Ok(ivms101_json)
+    }
+
+    /// Update customer data from IVMS101 data
+    pub async fn update_customer_from_ivms101(
+        &self,
+        customer_id: &str,
+        ivms101_data: &Value,
+    ) -> Result<()> {
+        let mut customer = self
+            .storage
+            .get_customer(customer_id)
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?
+            .ok_or_else(|| Error::Storage("Customer not found".to_string()))?;
+
+        // Parse IVMS101 data and update customer fields
+        if let Some(natural_person) = ivms101_data.get("naturalPerson") {
+            // Update from natural person data
+            if let Some(name) = natural_person.get("name") {
+                if let Some(name_identifiers) =
+                    name.get("nameIdentifiers").and_then(|v| v.as_array())
+                {
+                    if let Some(first_name_id) = name_identifiers.first() {
+                        if let Some(primary) = first_name_id
+                            .get("primaryIdentifier")
+                            .and_then(|v| v.as_str())
+                        {
+                            customer.family_name = Some(primary.to_string());
+                        }
+                        if let Some(secondary) = first_name_id
+                            .get("secondaryIdentifier")
+                            .and_then(|v| v.as_str())
+                        {
+                            customer.given_name = Some(secondary.to_string());
+                        }
+                    }
+                }
+            }
+
+            // Update address from IVMS101
+            if let Some(addresses) = natural_person
+                .get("geographicAddress")
+                .and_then(|v| v.as_array())
+            {
+                if let Some(first_addr) = addresses.first() {
+                    if let Some(street) = first_addr.get("streetName").and_then(|v| v.as_str()) {
+                        customer.street_address = Some(street.to_string());
+                    }
+                    if let Some(postal) = first_addr.get("postCode").and_then(|v| v.as_str()) {
+                        customer.postal_code = Some(postal.to_string());
+                    }
+                    if let Some(town) = first_addr.get("townName").and_then(|v| v.as_str()) {
+                        customer.address_locality = Some(town.to_string());
+                    }
+                    if let Some(country) = first_addr.get("country").and_then(|v| v.as_str()) {
+                        customer.address_country = Some(country.to_string());
+                    }
+                }
+            }
+        }
+
+        // Store the IVMS101 data
+        customer.ivms101_data = Some(ivms101_data.clone());
+        customer.updated_at = Utc::now().to_rfc3339();
+
+        self.storage
+            .upsert_customer(&customer)
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+        Ok(())
     }
 
     /// Add a verified relationship

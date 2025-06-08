@@ -356,3 +356,87 @@ pub fn list_connections_schema() -> Value {
         "additionalProperties": false
     })
 }
+
+/// Schema for get_customer_details tool
+pub fn get_customer_details_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent managing the customer"
+            },
+            "customer_id": {
+                "type": "string",
+                "description": "The ID of the customer to retrieve"
+            }
+        },
+        "required": ["agent_did", "customer_id"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for generate_ivms101 tool
+pub fn generate_ivms101_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent managing the customer"
+            },
+            "customer_id": {
+                "type": "string",
+                "description": "The ID of the customer to generate IVMS101 data for"
+            }
+        },
+        "required": ["agent_did", "customer_id"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for update_customer_profile tool
+pub fn update_customer_profile_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent managing the customer"
+            },
+            "customer_id": {
+                "type": "string",
+                "description": "The ID of the customer to update"
+            },
+            "profile_data": {
+                "type": "object",
+                "description": "Schema.org profile data to update/add (e.g., givenName, familyName, addressCountry)"
+            }
+        },
+        "required": ["agent_did", "customer_id", "profile_data"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for update_customer_from_ivms101 tool
+pub fn update_customer_from_ivms101_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent managing the customer"
+            },
+            "customer_id": {
+                "type": "string",
+                "description": "The ID of the customer to update"
+            },
+            "ivms101_data": {
+                "type": "object",
+                "description": "IVMS101 data containing naturalPerson or legalPerson information"
+            }
+        },
+        "required": ["agent_did", "customer_id", "ivms101_data"],
+        "additionalProperties": false
+    })
+}

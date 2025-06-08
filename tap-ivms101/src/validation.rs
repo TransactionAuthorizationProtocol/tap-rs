@@ -81,10 +81,7 @@ pub fn validate_lei(lei: &str) -> Result<()> {
 /// Validate a Business Identifier Code (BIC)
 pub fn validate_bic(bic: &str) -> Result<()> {
     if !bic_regex().is_match(bic) {
-        return Err(Error::InvalidBic(format!(
-            "Invalid BIC format: {}",
-            bic
-        )));
+        return Err(Error::InvalidBic(format!("Invalid BIC format: {}", bic)));
     }
 
     Ok(())
@@ -93,7 +90,9 @@ pub fn validate_bic(bic: &str) -> Result<()> {
 /// Validate an amount string
 pub fn validate_amount(amount: &str) -> Result<()> {
     if amount.is_empty() {
-        return Err(Error::MissingRequiredField("Amount cannot be empty".to_string()));
+        return Err(Error::MissingRequiredField(
+            "Amount cannot be empty".to_string(),
+        ));
     }
 
     // Check if it's a valid number
@@ -127,7 +126,7 @@ mod tests {
         assert!(validate_country_code("US").is_ok());
         assert!(validate_country_code("GB").is_ok());
         assert!(validate_country_code("JP").is_ok());
-        
+
         assert!(validate_country_code("usa").is_err());
         assert!(validate_country_code("U").is_err());
         assert!(validate_country_code("12").is_err());
@@ -138,17 +137,17 @@ mod tests {
         assert!(validate_currency_code("USD").is_ok());
         assert!(validate_currency_code("EUR").is_ok());
         assert!(validate_currency_code("JPY").is_ok());
-        
+
         assert!(validate_currency_code("US").is_err());
         assert!(validate_currency_code("USDT").is_err());
-        assert!(validate_currency_code("XXX").is_err()); // Not a real currency
+        assert!(validate_currency_code("XYZ").is_err()); // Not a real currency
     }
 
     #[test]
     fn test_validate_lei() {
         assert!(validate_lei("529900HNOAA1KXQJUQ27").is_ok());
         assert!(validate_lei("ABCDEFGHIJ1234567890").is_ok());
-        
+
         assert!(validate_lei("529900HNOAA1KXQJUQ2").is_err()); // Too short
         assert!(validate_lei("529900HNOAA1KXQJUQ277").is_err()); // Too long
         assert!(validate_lei("529900hnoaa1kxqjuq27").is_err()); // Lowercase
@@ -158,7 +157,7 @@ mod tests {
     fn test_validate_bic() {
         assert!(validate_bic("DEUTDEFF").is_ok()); // 8 chars
         assert!(validate_bic("DEUTDEFFXXX").is_ok()); // 11 chars
-        
+
         assert!(validate_bic("DEUT").is_err()); // Too short
         assert!(validate_bic("DEUTDEFFXX").is_err()); // Wrong length
         assert!(validate_bic("deutdeff").is_err()); // Lowercase
@@ -169,7 +168,7 @@ mod tests {
         assert!(validate_amount("100").is_ok());
         assert!(validate_amount("100.50").is_ok());
         assert!(validate_amount("0.000001").is_ok());
-        
+
         assert!(validate_amount("").is_err());
         assert!(validate_amount("abc").is_err());
         assert!(validate_amount("100.50.25").is_err());
@@ -179,7 +178,7 @@ mod tests {
     fn test_validate_datetime() {
         assert!(validate_datetime("2024-01-15T10:30:00Z").is_ok());
         assert!(validate_datetime("2024-01-15T10:30:00+02:00").is_ok());
-        
+
         assert!(validate_datetime("2024-01-15").is_err());
         assert!(validate_datetime("2024-01-15 10:30:00").is_err());
         assert!(validate_datetime("invalid").is_err());

@@ -10,6 +10,7 @@ use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tap_msg::message::TapMessage;
+use tap_node::customer::CustomerManager;
 use tracing::{debug, error};
 
 /// Tool for listing customers (parties that an agent acts for)
@@ -442,6 +443,390 @@ impl ToolHandler for ListConnectionsTool {
             name: "tap_list_connections".to_string(),
             description: "Lists all counterparties (connections) of a specific party. Includes metadata about each counterparty and transaction history.".to_string(),
             input_schema: schema::list_connections_schema(),
+        }
+    }
+}
+
+/// Tool for getting customer details including IVMS101 data
+pub struct GetCustomerDetailsTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for getting customer details
+#[derive(Debug, Deserialize)]
+struct GetCustomerDetailsParams {
+    agent_did: String,
+    customer_id: String,
+}
+
+/// Response for getting customer details
+#[derive(Debug, Serialize)]
+struct GetCustomerDetailsResponse {
+    customer: Option<serde_json::Value>,
+    ivms101_data: Option<serde_json::Value>,
+}
+
+impl GetCustomerDetailsTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for GetCustomerDetailsTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: GetCustomerDetailsParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Getting customer details for customer {} via agent {}",
+            params.customer_id, params.agent_did
+        );
+
+        // Get storage for the agent
+        let storage = match self
+            .tap_integration()
+            .storage_for_agent(&params.agent_did)
+            .await
+        {
+            Ok(storage) => storage,
+            Err(e) => {
+                error!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                );
+                return Ok(error_text_response(format!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                )));
+            }
+        };
+
+        // Get customer data
+        let customer = match storage.get_customer(&params.customer_id).await {
+            Ok(customer) => customer,
+            Err(e) => {
+                debug!("Failed to get customer {}: {}", params.customer_id, e);
+                None
+            }
+        };
+
+        let response = if let Some(customer) = customer {
+            // Convert customer to JSON value
+            let customer_json = serde_json::to_value(&customer).map_err(|e| {
+                Error::tool_execution(format!("Failed to serialize customer: {}", e))
+            })?;
+
+            let profile = customer_json.get("profile").cloned();
+            let ivms101 = customer_json.get("ivms101_data").cloned();
+
+            GetCustomerDetailsResponse {
+                customer: Some(profile.unwrap_or(customer_json)),
+                ivms101_data: ivms101,
+            }
+        } else {
+            GetCustomerDetailsResponse {
+                customer: None,
+                ivms101_data: None,
+            }
+        };
+
+        let response_json = serde_json::to_string_pretty(&response)
+            .map_err(|e| Error::tool_execution(format!("Failed to serialize response: {}", e)))?;
+
+        Ok(success_text_response(response_json))
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_get_customer_details".to_string(),
+            description: "Gets detailed information about a specific customer including their profile and IVMS101 data if available.".to_string(),
+            input_schema: schema::get_customer_details_schema(),
+        }
+    }
+}
+
+/// Tool for generating IVMS101 data for a customer
+pub struct GenerateIvms101Tool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for generating IVMS101
+#[derive(Debug, Deserialize)]
+struct GenerateIvms101Params {
+    agent_did: String,
+    customer_id: String,
+}
+
+impl GenerateIvms101Tool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for GenerateIvms101Tool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: GenerateIvms101Params = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Generating IVMS101 data for customer {} via agent {}",
+            params.customer_id, params.agent_did
+        );
+
+        // Get storage for the agent
+        let storage = match self
+            .tap_integration()
+            .storage_for_agent(&params.agent_did)
+            .await
+        {
+            Ok(storage) => storage,
+            Err(e) => {
+                error!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                );
+                return Ok(error_text_response(format!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                )));
+            }
+        };
+
+        // Create customer manager
+        let customer_manager = CustomerManager::new(storage);
+
+        // Generate IVMS101 data
+        match customer_manager
+            .generate_ivms101_data(&params.customer_id)
+            .await
+        {
+            Ok(ivms_data) => {
+                let response_json = serde_json::to_string_pretty(&ivms_data).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize IVMS101 data: {}", e))
+                })?;
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to generate IVMS101 data: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to generate IVMS101 data: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_generate_ivms101".to_string(),
+            description: "Generates IVMS101 compliant data for a customer based on their stored profile information.".to_string(),
+            input_schema: schema::generate_ivms101_schema(),
+        }
+    }
+}
+
+/// Tool for updating customer profile
+pub struct UpdateCustomerProfileTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for updating customer profile
+#[derive(Debug, Deserialize)]
+struct UpdateCustomerProfileParams {
+    agent_did: String,
+    customer_id: String,
+    profile_data: Value,
+}
+
+impl UpdateCustomerProfileTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for UpdateCustomerProfileTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: UpdateCustomerProfileParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Updating profile for customer {} via agent {}",
+            params.customer_id, params.agent_did
+        );
+
+        // Get storage for the agent
+        let storage = match self
+            .tap_integration()
+            .storage_for_agent(&params.agent_did)
+            .await
+        {
+            Ok(storage) => storage,
+            Err(e) => {
+                error!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                );
+                return Ok(error_text_response(format!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                )));
+            }
+        };
+
+        // Create customer manager
+        let customer_manager = CustomerManager::new(storage);
+
+        // Update customer profile
+        match customer_manager
+            .update_customer_profile(&params.customer_id, params.profile_data)
+            .await
+        {
+            Ok(_) => Ok(success_text_response(format!(
+                "Successfully updated profile for customer {}",
+                params.customer_id
+            ))),
+            Err(e) => {
+                error!("Failed to update customer profile: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to update customer profile: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_update_customer_profile".to_string(),
+            description: "Updates the schema.org profile data for a customer. The profile_data should be a JSON object with schema.org fields.".to_string(),
+            input_schema: schema::update_customer_profile_schema(),
+        }
+    }
+}
+
+/// Tool for updating customer from IVMS101 data
+pub struct UpdateCustomerFromIvms101Tool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for updating customer from IVMS101
+#[derive(Debug, Deserialize)]
+struct UpdateCustomerFromIvms101Params {
+    agent_did: String,
+    customer_id: String,
+    ivms101_data: Value,
+}
+
+impl UpdateCustomerFromIvms101Tool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for UpdateCustomerFromIvms101Tool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: UpdateCustomerFromIvms101Params = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Updating customer {} from IVMS101 data via agent {}",
+            params.customer_id, params.agent_did
+        );
+
+        // Get storage for the agent
+        let storage = match self
+            .tap_integration()
+            .storage_for_agent(&params.agent_did)
+            .await
+        {
+            Ok(storage) => storage,
+            Err(e) => {
+                error!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                );
+                return Ok(error_text_response(format!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                )));
+            }
+        };
+
+        // Create customer manager
+        let customer_manager = CustomerManager::new(storage);
+
+        // Update customer from IVMS101 data
+        match customer_manager
+            .update_customer_from_ivms101(&params.customer_id, &params.ivms101_data)
+            .await
+        {
+            Ok(_) => Ok(success_text_response(format!(
+                "Successfully updated customer {} from IVMS101 data",
+                params.customer_id
+            ))),
+            Err(e) => {
+                error!("Failed to update customer from IVMS101: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to update customer from IVMS101: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_update_customer_from_ivms101".to_string(),
+            description: "Updates a customer's profile using IVMS101 data. This extracts name, address and other fields from IVMS101 format.".to_string(),
+            input_schema: schema::update_customer_from_ivms101_schema(),
         }
     }
 }

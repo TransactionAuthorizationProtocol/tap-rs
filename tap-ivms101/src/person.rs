@@ -5,7 +5,6 @@
 
 use crate::error::{Error, Result};
 use crate::types::*;
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 /// Name identifier for natural person
@@ -221,15 +220,15 @@ impl NaturalPerson {
     /// Validate the natural person data
     pub fn validate(&self) -> Result<()> {
         self.name.validate()?;
-        
+
         if let Some(ref id) = self.national_identification {
             id.validate()?;
         }
-        
+
         if let Some(ref cust_id) = self.customer_identification {
             cust_id.validate()?;
         }
-        
+
         if let Some(ref country) = self.country_of_residence {
             if country.len() != 2 {
                 return Err(Error::InvalidCountryCode(format!(
@@ -238,7 +237,7 @@ impl NaturalPerson {
                 )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -357,7 +356,7 @@ impl LegalPersonNationalIdentification {
                 "National identifier cannot be empty".to_string(),
             ));
         }
-        
+
         if let Some(ref lei) = self.lei_code {
             if lei.len() != 20 {
                 return Err(Error::InvalidLei(format!(
@@ -366,7 +365,7 @@ impl LegalPersonNationalIdentification {
                 )));
             }
         }
-        
+
         Ok(())
     }
 }
@@ -406,15 +405,15 @@ impl LegalPerson {
     /// Validate the legal person data
     pub fn validate(&self) -> Result<()> {
         self.name.validate()?;
-        
+
         if let Some(ref id) = self.national_identification {
             id.validate()?;
         }
-        
+
         if let Some(ref cust_id) = self.customer_identification {
             cust_id.validate()?;
         }
-        
+
         if let Some(ref country) = self.country_of_registration {
             if country.len() != 2 {
                 return Err(Error::InvalidCountryCode(format!(
@@ -423,7 +422,7 @@ impl LegalPerson {
                 )));
             }
         }
-        
+
         Ok(())
     }
 }
