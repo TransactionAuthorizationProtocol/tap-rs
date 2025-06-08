@@ -84,13 +84,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 4: VASP B requests IVMS101 data via policy
     println!("\n4. VASP B requests Travel Rule compliance data...");
-    
+
     let ivms_policy = Policy::RequirePresentation {
         context: vec!["https://intervasp.org/ivms101".to_string()],
         credential_types: vec!["TravelRuleCredential".to_string()],
         purpose: Some("Travel Rule Compliance - FATF R.16".to_string()),
     };
-    
+
     let update_policies = UpdatePolicies {
         thread_id: "transfer-001".to_string(),
         policies: vec![ivms_policy],
@@ -111,7 +111,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 5: Create Transfer with automatic IVMS101 attachment
     println!("\n5. Creating Transfer with automatic IVMS101 data...");
-    
+
     // First, enhance Alice's profile with full address for IVMS101
     let alice_with_address = {
         let mut metadata = alice.metadata.clone();
@@ -139,9 +139,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         currency: "USD".to_string(),
     };
 
-    println!("   - Transfer amount: {} {}", transfer.amount, transfer.currency);
-    println!("   - From: {} ({})", alice.id, alice.metadata.get("addressCountry").unwrap());
-    println!("   - To: {} ({})", bob.id, bob.metadata.get("addressCountry").unwrap());
+    println!(
+        "   - Transfer amount: {} {}",
+        transfer.amount, transfer.currency
+    );
+    println!(
+        "   - From: {} ({})",
+        alice.id,
+        alice.metadata.get("addressCountry").unwrap()
+    );
+    println!(
+        "   - To: {} ({})",
+        bob.id,
+        bob.metadata.get("addressCountry").unwrap()
+    );
 
     // Send Transfer - IVMS101 data will be automatically attached
     let sent_message = node
@@ -168,7 +179,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Step 6: Process the received Transfer at VASP B
     println!("\n6. VASP B processes Transfer with IVMS101 data...");
-    
+
     // The Travel Rule processor automatically:
     // - Detects IVMS101 attachments
     // - Validates the presentation
@@ -178,7 +189,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Retrieve extracted customer data (for demonstration)
     let storage_manager = node.get_agent_storage_manager(&vasp_b_did)?;
     let customer_manager = storage_manager.get_customer_manager();
-    
+
     // In a real scenario, the customer would be automatically created from the IVMS101 data
     println!("   - Customer data extracted and stored");
     println!("   - Compliance requirements satisfied");
@@ -197,11 +208,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node.send_message(
         &vasp_b_did,
         &vasp_a_did,
-        authorize.into_plain_message(
-            &vasp_b_did,
-            &vasp_a_did,
-            Some("transfer-001".to_string()),
-        )?,
+        authorize.into_plain_message(&vasp_b_did, &vasp_a_did, Some("transfer-001".to_string()))?,
     )
     .await?;
     println!("   - VASP B authorized transaction");
@@ -217,11 +224,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     node.send_message(
         &vasp_a_did,
         &vasp_b_did,
-        settle.into_plain_message(
-            &vasp_a_did,
-            &vasp_b_did,
-            Some("transfer-001".to_string()),
-        )?,
+        settle.into_plain_message(&vasp_a_did, &vasp_b_did, Some("transfer-001".to_string()))?,
     )
     .await?;
     println!("   - Transaction settled");
@@ -247,7 +250,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .build()?,
         )
         .country_of_residence("US")
-        .national_id("123-45-6789", NationalIdentifierType::NationalIdentityNumber, "US")
+        .national_id(
+            "123-45-6789",
+            NationalIdentifierType::NationalIdentityNumber,
+            "US",
+        )
         .date_of_birth("1985-06-15")
         .build()?;
 
@@ -255,7 +262,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .originator(vec![Person::NaturalPerson(natural_person)])
         .originating_vasp(Person::LegalPerson(
             LegalPersonBuilder::new()
-                .name(LegalPersonNameBuilder::new().legal_name("VASP A Inc.").build()?)
+                .name(
+                    LegalPersonNameBuilder::new()
+                        .legal_name("VASP A Inc.")
+                        .build()?,
+                )
                 .lei("529900HNOAA1KXQJUQ27")?
                 .country_of_registration("US")
                 .build()?,
