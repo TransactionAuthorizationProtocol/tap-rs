@@ -1,10 +1,12 @@
 //! TAP MCP tools implementation
 
+mod agent_management_tools;
 mod agent_tools;
 mod communication_tools;
 mod customer_tools;
 mod database_tools;
 mod delivery_tools;
+mod policy_tools;
 mod received_tools;
 mod schema;
 mod transaction_tools;
@@ -17,11 +19,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, error};
 
+pub use agent_management_tools::*;
 pub use agent_tools::*;
 pub use communication_tools::*;
 pub use customer_tools::*;
 pub use database_tools::*;
 pub use delivery_tools::*;
+pub use policy_tools::*;
 pub use received_tools::*;
 pub use transaction_tools::*;
 
@@ -85,6 +89,10 @@ impl ToolRegistry {
         tools.insert(
             "tap_list_transactions".to_string(),
             Box::new(ListTransactionsTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_revert".to_string(),
+            Box::new(RevertTool::new(tap_integration.clone())),
         );
 
         // Communication tools
@@ -158,7 +166,27 @@ impl ToolRegistry {
         );
         tools.insert(
             "tap_get_database_schema".to_string(),
-            Box::new(GetDatabaseSchemaTool::new(tap_integration)),
+            Box::new(GetDatabaseSchemaTool::new(tap_integration.clone())),
+        );
+
+        // Agent management tools
+        tools.insert(
+            "tap_add_agents".to_string(),
+            Box::new(AddAgentsTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_remove_agent".to_string(),
+            Box::new(RemoveAgentTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_replace_agent".to_string(),
+            Box::new(ReplaceAgentTool::new(tap_integration.clone())),
+        );
+
+        // Policy tools
+        tools.insert(
+            "tap_update_policies".to_string(),
+            Box::new(UpdatePoliciesTool::new(tap_integration.clone())),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

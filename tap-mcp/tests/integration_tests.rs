@@ -174,7 +174,7 @@ async fn test_list_tools() -> Result<()> {
 
     if let Some(result) = response.result {
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 24); // All 24 tools should be available (including communication, delivery, customer, received message tools, and database tools)
+        assert_eq!(tools.len(), 29); // All 29 tools should be available (including revert, communication, delivery, customer, received message tools, database tools, agent management tools, and policy tools)
 
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
@@ -198,6 +198,11 @@ async fn test_list_tools() -> Result<()> {
         assert!(tool_names.contains(&"tap_view_raw_received"));
         assert!(tool_names.contains(&"tap_query_database"));
         assert!(tool_names.contains(&"tap_get_database_schema"));
+        assert!(tool_names.contains(&"tap_revert"));
+        assert!(tool_names.contains(&"tap_add_agents"));
+        assert!(tool_names.contains(&"tap_remove_agent"));
+        assert!(tool_names.contains(&"tap_replace_agent"));
+        assert!(tool_names.contains(&"tap_update_policies"));
     }
 
     Ok(())

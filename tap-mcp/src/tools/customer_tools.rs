@@ -374,13 +374,15 @@ impl ToolHandler for ListConnectionsTool {
                                     .push(transaction.reference_id.clone());
 
                                 // Determine role of counterparty
-                                if counterparty_id == transfer.originator.id && !connection.roles.contains(&"originator".to_string()) {
+                                if counterparty_id == transfer.originator.id
+                                    && !connection.roles.contains(&"originator".to_string())
+                                {
                                     connection.roles.push("originator".to_string());
                                 }
                                 if let Some(ref beneficiary) = transfer.beneficiary {
-                                    if counterparty_id == beneficiary.id && !connection
-                                            .roles
-                                            .contains(&"beneficiary".to_string()) {
+                                    if counterparty_id == beneficiary.id
+                                        && !connection.roles.contains(&"beneficiary".to_string())
+                                    {
                                         connection.roles.push("beneficiary".to_string());
                                     }
                                 }
@@ -394,9 +396,7 @@ impl ToolHandler for ListConnectionsTool {
                                 if let Some(ref beneficiary) = transfer.beneficiary {
                                     if counterparty_id == beneficiary.id {
                                         for (key, value) in &beneficiary.metadata {
-                                            connection
-                                                .metadata
-                                                .insert(key.clone(), value.clone());
+                                            connection.metadata.insert(key.clone(), value.clone());
                                         }
                                     }
                                 }
