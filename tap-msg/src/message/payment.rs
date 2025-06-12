@@ -36,11 +36,11 @@ pub struct Payment {
     pub amount: String,
 
     /// Currency code for fiat amounts (e.g., USD).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "currency", skip_serializing_if = "Option::is_none")]
     pub currency_code: Option<String>,
 
     /// Supported assets for this payment (when currency_code is specified)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "supportedAssets", skip_serializing_if = "Option::is_none")]
     pub supported_assets: Option<Vec<AssetId>>,
 
     /// Customer (payer) details.

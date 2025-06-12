@@ -17,6 +17,7 @@ pub struct Revert {
     pub transaction_id: String,
 
     /// Settlement address in CAIP-10 format to return the funds to.
+    #[serde(rename = "settlementAddress")]
     pub settlement_address: String,
 
     /// Reason for the reversal request.

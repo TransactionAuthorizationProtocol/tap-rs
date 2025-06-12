@@ -16,6 +16,7 @@ pub struct Settle {
     pub transaction_id: String,
 
     /// Settlement ID (CAIP-220 identifier of the underlying settlement transaction).
+    #[serde(rename = "settlementId")]
     pub settlement_id: String,
 
     /// Optional amount settled. If specified, must be less than or equal to the original amount.

@@ -1,7 +1,7 @@
 use crate::error::Error;
 use once_cell::sync::Lazy;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::str::FromStr;
 
 /// Regular expression pattern for CAIP-2 chain ID validation
@@ -19,7 +19,7 @@ static CHAIN_ID_REGEX: Lazy<Regex> = Lazy::new(|| {
 /// - `reference`: Chain-specific identifier (e.g., 1 for Ethereum mainnet)
 ///
 /// Example: "eip155:1" for Ethereum mainnet
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChainId {
     namespace: String,
     reference: String,
@@ -133,6 +133,25 @@ impl std::fmt::Display for ChainId {
     }
 }
 
+impl Serialize for ChainId {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for ChainId {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        ChainId::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,7 +214,7 @@ mod tests {
     fn test_serialization() {
         let chain_id = ChainId::from_str("eip155:1").unwrap();
         let serialized = serde_json::to_string(&chain_id).unwrap();
-        assert_eq!(serialized, r#"{"namespace":"eip155","reference":"1"}"#);
+        assert_eq!(serialized, r#""eip155:1""#);
 
         let deserialized: ChainId = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized, chain_id);
