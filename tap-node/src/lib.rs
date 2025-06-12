@@ -870,17 +870,15 @@ impl TapNode {
 
                                         // Publish TransactionCreated event
                                         // Use the message.id as the reference_id to fetch the transaction
-                                        if let Ok(transaction) =
+                                        if let Ok(Some(tx)) =
                                             agent_storage.get_transaction_by_id(&message.id).await
                                         {
-                                            if let Some(tx) = transaction {
-                                                self.event_bus
-                                                    .publish_event(NodeEvent::TransactionCreated {
-                                                        transaction: tx,
-                                                        agent_did: agent_did.clone(),
-                                                    })
-                                                    .await;
-                                            }
+                                            self.event_bus
+                                                .publish_event(NodeEvent::TransactionCreated {
+                                                    transaction: tx,
+                                                    agent_did: agent_did.clone(),
+                                                })
+                                                .await;
                                         }
                                     }
                                     Err(e) => log::warn!(
@@ -1316,17 +1314,15 @@ impl TapNode {
 
                                         // Publish TransactionCreated event
                                         // Use the message.id as the reference_id to fetch the transaction
-                                        if let Ok(transaction) =
+                                        if let Ok(Some(tx)) =
                                             agent_storage.get_transaction_by_id(&message.id).await
                                         {
-                                            if let Some(tx) = transaction {
-                                                self.event_bus
-                                                    .publish_event(NodeEvent::TransactionCreated {
-                                                        transaction: tx,
-                                                        agent_did: agent_did.clone(),
-                                                    })
-                                                    .await;
-                                            }
+                                            self.event_bus
+                                                .publish_event(NodeEvent::TransactionCreated {
+                                                    transaction: tx,
+                                                    agent_did: agent_did.clone(),
+                                                })
+                                                .await;
                                         }
                                     }
                                     Err(e) => log::warn!(
@@ -1700,7 +1696,7 @@ impl TapNode {
                                     error_msg
                                         .split("status:")
                                         .nth(1)
-                                        .and_then(|s| s.trim().split_whitespace().next())
+                                        .and_then(|s| s.split_whitespace().next())
                                         .and_then(|s| s.parse::<i32>().ok())
                                 } else {
                                     None

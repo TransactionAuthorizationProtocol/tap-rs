@@ -376,7 +376,7 @@ pub enum NodeEvent {
         /// The reply message
         reply_message: PlainMessage,
         /// The original message being replied to
-        original_message: PlainMessage,
+        original_message: Box<PlainMessage>,
     },
 
     /// A transaction's state has changed
@@ -675,7 +675,7 @@ impl EventBus {
         let event = NodeEvent::ReplyReceived {
             original_message_id,
             reply_message,
-            original_message,
+            original_message: Box::new(original_message),
         };
         self.publish_event(event).await;
     }

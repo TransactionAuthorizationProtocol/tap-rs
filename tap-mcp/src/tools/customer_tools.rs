@@ -314,90 +314,88 @@ impl ToolHandler for ListConnectionsTool {
 
             // Process each transaction
             for transaction in transactions {
-                if let Ok(tap_message) =
+                if let Ok(TapMessage::Transfer(ref transfer)) =
                     serde_json::from_value::<TapMessage>(transaction.message_json.clone())
                 {
-                    if let TapMessage::Transfer(ref transfer) = tap_message {
-                        let mut party_is_involved = false;
-                        let mut counterparties = HashSet::new();
+                    let mut party_is_involved = false;
+                    let mut counterparties = HashSet::new();
 
-                        // Check if our party is the originator
-                        if transfer.originator.id == params.party_id {
-                            party_is_involved = true;
-                            // Add beneficiary as counterparty
-                            if let Some(ref beneficiary) = transfer.beneficiary {
-                                counterparties.insert(beneficiary.id.clone());
-                            }
-                        }
-
-                        // Check if our party is the beneficiary
+                    // Check if our party is the originator
+                    if transfer.originator.id == params.party_id {
+                        party_is_involved = true;
+                        // Add beneficiary as counterparty
                         if let Some(ref beneficiary) = transfer.beneficiary {
-                            if beneficiary.id == params.party_id {
-                                party_is_involved = true;
-                                // Add originator as counterparty
-                                counterparties.insert(transfer.originator.id.clone());
-                            }
+                            counterparties.insert(beneficiary.id.clone());
                         }
+                    }
 
-                        // Check if our party is represented by any agent
-                        for agent in &transfer.agents {
-                            if agent.for_parties().contains(&params.party_id) {
-                                party_is_involved = true;
-                                // Add other parties represented by other agents as counterparties
-                                for other_agent in &transfer.agents {
-                                    if other_agent.id != agent.id {
-                                        for other_party in other_agent.for_parties() {
-                                            if other_party != &params.party_id {
-                                                counterparties.insert(other_party.clone());
-                                            }
+                    // Check if our party is the beneficiary
+                    if let Some(ref beneficiary) = transfer.beneficiary {
+                        if beneficiary.id == params.party_id {
+                            party_is_involved = true;
+                            // Add originator as counterparty
+                            counterparties.insert(transfer.originator.id.clone());
+                        }
+                    }
+
+                    // Check if our party is represented by any agent
+                    for agent in &transfer.agents {
+                        if agent.for_parties().contains(&params.party_id) {
+                            party_is_involved = true;
+                            // Add other parties represented by other agents as counterparties
+                            for other_agent in &transfer.agents {
+                                if other_agent.id != agent.id {
+                                    for other_party in other_agent.for_parties() {
+                                        if other_party != &params.party_id {
+                                            counterparties.insert(other_party.clone());
                                         }
                                     }
                                 }
                             }
                         }
+                    }
 
-                        // If this party is involved, record the counterparties
-                        if party_is_involved {
-                            for counterparty_id in counterparties {
-                                let connection = connections
-                                    .entry(counterparty_id.clone())
-                                    .or_insert_with(|| ConnectionInfo {
-                                        id: counterparty_id.clone(),
-                                        metadata: HashMap::new(),
-                                        transaction_count: 0,
-                                        transaction_ids: Vec::new(),
-                                        roles: Vec::new(),
-                                    });
-                                connection.transaction_count += 1;
-                                connection
-                                    .transaction_ids
-                                    .push(transaction.reference_id.clone());
+                    // If this party is involved, record the counterparties
+                    if party_is_involved {
+                        for counterparty_id in counterparties {
+                            let connection = connections
+                                .entry(counterparty_id.clone())
+                                .or_insert_with(|| ConnectionInfo {
+                                    id: counterparty_id.clone(),
+                                    metadata: HashMap::new(),
+                                    transaction_count: 0,
+                                    transaction_ids: Vec::new(),
+                                    roles: Vec::new(),
+                                });
+                            connection.transaction_count += 1;
+                            connection
+                                .transaction_ids
+                                .push(transaction.reference_id.clone());
 
-                                // Determine role of counterparty
-                                if counterparty_id == transfer.originator.id
-                                    && !connection.roles.contains(&"originator".to_string())
+                            // Determine role of counterparty
+                            if counterparty_id == transfer.originator.id
+                                && !connection.roles.contains(&"originator".to_string())
+                            {
+                                connection.roles.push("originator".to_string());
+                            }
+                            if let Some(ref beneficiary) = transfer.beneficiary {
+                                if counterparty_id == beneficiary.id
+                                    && !connection.roles.contains(&"beneficiary".to_string())
                                 {
-                                    connection.roles.push("originator".to_string());
+                                    connection.roles.push("beneficiary".to_string());
                                 }
-                                if let Some(ref beneficiary) = transfer.beneficiary {
-                                    if counterparty_id == beneficiary.id
-                                        && !connection.roles.contains(&"beneficiary".to_string())
-                                    {
-                                        connection.roles.push("beneficiary".to_string());
-                                    }
-                                }
+                            }
 
-                                // Add metadata from party objects
-                                if counterparty_id == transfer.originator.id {
-                                    for (key, value) in &transfer.originator.metadata {
-                                        connection.metadata.insert(key.clone(), value.clone());
-                                    }
+                            // Add metadata from party objects
+                            if counterparty_id == transfer.originator.id {
+                                for (key, value) in &transfer.originator.metadata {
+                                    connection.metadata.insert(key.clone(), value.clone());
                                 }
-                                if let Some(ref beneficiary) = transfer.beneficiary {
-                                    if counterparty_id == beneficiary.id {
-                                        for (key, value) in &beneficiary.metadata {
-                                            connection.metadata.insert(key.clone(), value.clone());
-                                        }
+                            }
+                            if let Some(ref beneficiary) = transfer.beneficiary {
+                                if counterparty_id == beneficiary.id {
+                                    for (key, value) in &beneficiary.metadata {
+                                        connection.metadata.insert(key.clone(), value.clone());
                                     }
                                 }
                             }

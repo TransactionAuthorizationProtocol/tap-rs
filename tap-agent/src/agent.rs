@@ -1064,7 +1064,10 @@ impl TapAgent {
 
             // Convert the generated key to a stored key
             let mut stored_key = KeyStorage::from_generated_key(&custom_generated_key);
-            stored_key.label = format!("agent-{}", agent_id.split(':').last().unwrap_or("agent"));
+            stored_key.label = format!(
+                "agent-{}",
+                agent_id.split(':').next_back().unwrap_or("agent")
+            );
 
             key_storage.add_key(stored_key);
 

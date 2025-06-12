@@ -469,6 +469,7 @@ pub fn revert_schema() -> Value {
 }
 
 /// Schema for payment tool
+#[allow(dead_code)]
 pub fn payment_schema() -> Value {
     json!({
         "type": "object",
@@ -522,6 +523,7 @@ pub fn payment_schema() -> Value {
 }
 
 /// Schema for connect tool
+#[allow(dead_code)]
 pub fn connect_schema() -> Value {
     json!({
         "type": "object",
@@ -583,6 +585,7 @@ pub fn connect_schema() -> Value {
 }
 
 /// Schema for authorization_required tool
+#[allow(dead_code)]
 pub fn authorization_required_schema() -> Value {
     json!({
         "type": "object",
@@ -610,6 +613,7 @@ pub fn authorization_required_schema() -> Value {
 }
 
 /// Schema for out_of_band tool
+#[allow(dead_code)]
 pub fn out_of_band_schema() -> Value {
     json!({
         "type": "object",
@@ -640,6 +644,7 @@ pub fn out_of_band_schema() -> Value {
 }
 
 /// Schema for update_party tool
+#[allow(dead_code)]
 pub fn update_party_schema() -> Value {
     json!({
         "type": "object",
@@ -667,6 +672,7 @@ pub fn update_party_schema() -> Value {
 }
 
 /// Schema for confirm_relationship tool
+#[allow(dead_code)]
 pub fn confirm_relationship_schema() -> Value {
     json!({
         "type": "object",
@@ -839,6 +845,7 @@ pub fn replace_agent_schema() -> Value {
 }
 
 /// Schema for request_presentation tool
+#[allow(dead_code)]
 pub fn request_presentation_schema() -> Value {
     json!({
         "type": "object",
@@ -873,6 +880,7 @@ pub fn request_presentation_schema() -> Value {
 }
 
 /// Schema for presentation tool
+#[allow(dead_code)]
 pub fn presentation_schema() -> Value {
     json!({
         "type": "object",

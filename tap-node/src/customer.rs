@@ -398,7 +398,9 @@ impl CustomerManager {
                 .trim_start_matches("http://");
             let did_web = format!("did:web:{}", domain.replace('/', ":"));
             (did_web.clone(), did_web)
-        } else if account.starts_with('+') || account.chars().all(|c| c.is_digit(10) || c == '-') {
+        } else if account.starts_with('+')
+            || account.chars().all(|c| c.is_ascii_digit() || c == '-')
+        {
             // Phone number
             let id = format!("customer:{}", Uuid::new_v4());
             (id, format!("tel:{}", account))
