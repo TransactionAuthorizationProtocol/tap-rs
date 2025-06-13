@@ -48,7 +48,7 @@ async fn test_transfer_stored_in_all_agent_databases() {
             .parse()
             .unwrap(),
         amount: "1000.00".to_string(),
-        originator: tap_msg::message::Party::new(&originator_did),
+        originator: Some(tap_msg::message::Party::new(&originator_did)),
         beneficiary: Some(tap_msg::message::Party::new(&beneficiary_did)),
         agents: vec![tap_msg::message::Agent::new(
             &custodian_did,
@@ -322,7 +322,7 @@ async fn test_outgoing_transaction_multi_storage() {
             .parse()
             .unwrap(),
         amount: "500.00".to_string(),
-        originator: tap_msg::message::Party::new(&sender_did),
+        originator: Some(tap_msg::message::Party::new(&sender_did)),
         beneficiary: Some(tap_msg::message::Party::new(&recipient_did)),
         agents: vec![tap_msg::message::Agent::new(
             &escrow_did,
@@ -477,7 +477,7 @@ async fn test_transaction_delivered_to_all_recipients() {
             .parse()
             .unwrap(),
         amount: "500.00".to_string(),
-        originator: tap_msg::message::Party::new(&originator_did),
+        originator: Some(tap_msg::message::Party::new(&originator_did)),
         beneficiary: Some(tap_msg::message::Party::new(&beneficiary_did)),
         agents: vec![tap_msg::message::Agent::new(
             &custodian_did,

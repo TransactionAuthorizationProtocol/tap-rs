@@ -180,7 +180,7 @@ fn create_test_transfer() -> Transfer {
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
         agents,

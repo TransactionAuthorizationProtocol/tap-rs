@@ -70,7 +70,7 @@ async fn test_complete_state_machine_integration() {
 
     let transfer = Transfer {
         asset: test_asset(),
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
         agents: vec![compliance_agent],
@@ -210,7 +210,7 @@ async fn test_processing_pipeline_order() {
     // Create a valid Transfer message
     let transfer = Transfer {
         asset: test_asset(),
-        originator: test_party("alice"),
+        originator: Some(test_party("alice")),
         beneficiary: Some(test_party("bob")),
         amount: "100.0".to_string(),
         agents: vec![test_agent("compliance1", "compliance", "alice")],

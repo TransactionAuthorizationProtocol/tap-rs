@@ -380,7 +380,7 @@ mod tests {
         match tap_msg {
             TapMessage::Transfer(transfer) => {
                 assert_eq!(transfer.amount, "100");
-                assert_eq!(transfer.originator.id, "did:example:alice");
+                assert_eq!(transfer.originator.as_ref().unwrap().id, "did:example:alice");
             }
             _ => panic!("Expected Transfer message"),
         }
@@ -390,7 +390,7 @@ mod tests {
     fn test_message_type() {
         let transfer = Transfer {
             asset: "eip155:1/slip44:60".parse().unwrap(),
-            originator: crate::message::Party::new("did:example:alice"),
+            originator: Some(crate::message::Party::new("did:example:alice")),
             beneficiary: None,
             amount: "100".to_string(),
             agents: vec![],

@@ -25,10 +25,10 @@ pub struct Transfer {
     /// Network asset identifier (CAIP-19 format).
     pub asset: AssetId,
 
-    /// Originator information.
-    #[serde(rename = "originator")]
+    /// Originator information (optional).
+    #[serde(rename = "originator", skip_serializing_if = "Option::is_none")]
     #[tap(participant)]
-    pub originator: Party,
+    pub originator: Option<Party>,
 
     /// Beneficiary information (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -183,11 +183,11 @@ impl TransferBuilder {
     ///
     /// # Panics
     ///
-    /// Panics if required fields (asset, originator, amount) are not set
+    /// Panics if required fields (asset, amount) are not set
     pub fn build(self) -> Transfer {
         Transfer {
             asset: self.asset.expect("Asset is required"),
-            originator: self.originator.expect("Originator is required"),
+            originator: self.originator,
             amount: self.amount.expect("Amount is required"),
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
@@ -206,9 +206,6 @@ impl TransferBuilder {
         let asset = self
             .asset
             .ok_or_else(|| Error::Validation("Asset is required".to_string()))?;
-        let originator = self
-            .originator
-            .ok_or_else(|| Error::Validation("Originator is required".to_string()))?;
         let amount = self
             .amount
             .ok_or_else(|| Error::Validation("Amount is required".to_string()))?;
@@ -218,7 +215,7 @@ impl TransferBuilder {
                 .transaction_id
                 .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
             asset,
-            originator,
+            originator: self.originator,
             amount,
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
@@ -243,9 +240,11 @@ impl Transfer {
             return Err(Error::Validation("Asset ID is invalid".to_string()));
         }
 
-        // Validate originator
-        if self.originator.id().is_empty() {
-            return Err(Error::Validation("Originator ID is required".to_string()));
+        // Validate originator if present
+        if let Some(originator) = &self.originator {
+            if originator.id().is_empty() {
+                return Err(Error::Validation("Originator ID cannot be empty".to_string()));
+            }
         }
 
         // Validate amount

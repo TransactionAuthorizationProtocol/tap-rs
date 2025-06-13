@@ -26,7 +26,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: asset.clone(),
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![
@@ -59,7 +59,7 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
 
     // Verify the body matches the original
     assert_eq!(unpacked_body.asset.to_string(), asset.to_string());
-    assert_eq!(unpacked_body.originator.id, from_did);
+    assert_eq!(unpacked_body.originator.unwrap().id, from_did);
     assert_eq!(unpacked_body.beneficiary.as_ref().unwrap().id, to_did);
     assert_eq!(unpacked_body.amount, "100.00");
 

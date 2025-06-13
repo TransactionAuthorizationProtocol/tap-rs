@@ -110,7 +110,7 @@ fn main() -> Result<()> {
         let transfer = Transfer {
             transaction_id: uuid::Uuid::new_v4().to_string(),
             asset,
-            originator: Party::new(originator_party),
+            originator: Some(Party::new(originator_party)),
             beneficiary: Some(Party::new(beneficiary_party)),
             amount: "100.0".to_string(),
             agents: vec![
@@ -134,7 +134,7 @@ fn main() -> Result<()> {
         println!("Transfer details:");
         println!("  Asset: {}", transfer.asset);
         println!("  Amount: {}", transfer.amount);
-        println!("  From: {} (party)", transfer.originator.id);
+        println!("  From: {} (party)", transfer.originator.as_ref().map(|o| o.id.as_str()).unwrap_or("unknown"));
         println!(
             "  To: {} (party)",
             transfer.beneficiary.as_ref().unwrap().id
@@ -221,9 +221,9 @@ fn main() -> Result<()> {
         println!(
             "  Added agents: {} ({}), {} ({})\n",
             received_add_agents.agents[0].id,
-            received_add_agents.agents[0].role,
+            received_add_agents.agents[0].role.as_ref().map(|r| r.as_str()).unwrap_or("unknown"),
             received_add_agents.agents[1].id,
-            received_add_agents.agents[1].role
+            received_add_agents.agents[1].role.as_ref().map(|r| r.as_str()).unwrap_or("unknown")
         );
 
         // Step 7: Initial rejection by beneficiary VASP for compliance

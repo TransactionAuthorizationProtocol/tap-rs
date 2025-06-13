@@ -23,7 +23,7 @@ fn test_create_message() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100000000".to_string(),
         agents: vec![

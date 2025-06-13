@@ -181,7 +181,7 @@ fn test_fuzz_tap_message_body_validation() {
 
     // Test with missing originator
     let mut transfer = create_test_transfer();
-    transfer.originator = Party::new("");
+    transfer.originator = Some(Party::new(""));
     assert!(
         transfer.validate().is_err(),
         "Transfer with empty originator ID should fail validation"
@@ -242,7 +242,7 @@ fn create_test_transfer() -> Transfer {
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
         agents,

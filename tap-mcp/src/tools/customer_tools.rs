@@ -136,9 +136,11 @@ impl ToolHandler for ListCustomersTool {
 
                     // Also check for party metadata in the message
                     // Check originator
-                    if let Some(customer) = customers.get_mut(&transfer.originator.id) {
-                        for (key, value) in &transfer.originator.metadata {
-                            customer.metadata.insert(key.clone(), value.clone());
+                    if let Some(originator) = &transfer.originator {
+                        if let Some(customer) = customers.get_mut(&originator.id) {
+                            for (key, value) in &originator.metadata {
+                                customer.metadata.insert(key.clone(), value.clone());
+                            }
                         }
                     }
                     // Check beneficiary
@@ -321,11 +323,13 @@ impl ToolHandler for ListConnectionsTool {
                     let mut counterparties = HashSet::new();
 
                     // Check if our party is the originator
-                    if transfer.originator.id == params.party_id {
-                        party_is_involved = true;
-                        // Add beneficiary as counterparty
-                        if let Some(ref beneficiary) = transfer.beneficiary {
-                            counterparties.insert(beneficiary.id.clone());
+                    if let Some(originator) = &transfer.originator {
+                        if originator.id == params.party_id {
+                            party_is_involved = true;
+                            // Add beneficiary as counterparty
+                            if let Some(ref beneficiary) = transfer.beneficiary {
+                                counterparties.insert(beneficiary.id.clone());
+                            }
                         }
                     }
 
@@ -334,7 +338,9 @@ impl ToolHandler for ListConnectionsTool {
                         if beneficiary.id == params.party_id {
                             party_is_involved = true;
                             // Add originator as counterparty
-                            counterparties.insert(transfer.originator.id.clone());
+                            if let Some(originator) = &transfer.originator {
+                                counterparties.insert(originator.id.clone());
+                            }
                         }
                     }
 
@@ -373,10 +379,12 @@ impl ToolHandler for ListConnectionsTool {
                                 .push(transaction.reference_id.clone());
 
                             // Determine role of counterparty
-                            if counterparty_id == transfer.originator.id
-                                && !connection.roles.contains(&"originator".to_string())
-                            {
-                                connection.roles.push("originator".to_string());
+                            if let Some(originator) = &transfer.originator {
+                                if counterparty_id == originator.id
+                                    && !connection.roles.contains(&"originator".to_string())
+                                {
+                                    connection.roles.push("originator".to_string());
+                                }
                             }
                             if let Some(ref beneficiary) = transfer.beneficiary {
                                 if counterparty_id == beneficiary.id
@@ -387,9 +395,11 @@ impl ToolHandler for ListConnectionsTool {
                             }
 
                             // Add metadata from party objects
-                            if counterparty_id == transfer.originator.id {
-                                for (key, value) in &transfer.originator.metadata {
-                                    connection.metadata.insert(key.clone(), value.clone());
+                            if let Some(originator) = &transfer.originator {
+                                if counterparty_id == originator.id {
+                                    for (key, value) in &originator.metadata {
+                                        connection.metadata.insert(key.clone(), value.clone());
+                                    }
                                 }
                             }
                             if let Some(ref beneficiary) = transfer.beneficiary {

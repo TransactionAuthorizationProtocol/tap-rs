@@ -43,7 +43,7 @@ async fn test_automatic_customer_extraction_from_transfer() {
 
     let transfer = Transfer {
         asset: "eip155:1/slip44:60".parse().unwrap(),
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100".to_string(),
         agents: vec![],

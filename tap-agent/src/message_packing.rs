@@ -1091,7 +1091,7 @@ mod tests {
         match unpacked.tap_message.unwrap() {
             TapMessage::Transfer(transfer) => {
                 assert_eq!(transfer.amount, "100");
-                assert_eq!(transfer.originator.id(), key.did);
+                assert_eq!(transfer.originator.as_ref().unwrap().id(), key.did);
             }
             _ => panic!("Expected Transfer message"),
         }

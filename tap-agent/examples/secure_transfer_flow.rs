@@ -81,7 +81,7 @@ fn main() -> Result<()> {
         println!("Transfer message created and validated successfully");
         println!("  Asset: {}", transfer.asset);
         println!("  Amount: {}", transfer.amount);
-        println!("  From: {}", transfer.originator.id);
+        println!("  From: {}", transfer.originator.as_ref().map(|o| o.id.as_str()).unwrap_or("unknown"));
         println!("  To: {}\n", transfer.beneficiary.as_ref().unwrap().id);
 
         // Step 3: Send the transfer request with proper security
@@ -359,7 +359,7 @@ fn create_transfer_message(
     let transfer = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
         agents: vec![settlement_agent],

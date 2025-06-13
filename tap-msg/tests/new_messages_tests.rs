@@ -158,7 +158,7 @@ fn test_connect_message() {
 
     // Test validation fails with empty for_
     let mut invalid_body = body.clone();
-    invalid_body.for_ = "".to_string();
+    invalid_body.for_ = Some("".to_string());
     assert!(invalid_body.validate().is_err());
 
     // Test minimal validation

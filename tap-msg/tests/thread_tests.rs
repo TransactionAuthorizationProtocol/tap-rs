@@ -23,7 +23,7 @@ fn test_create_reply() -> Result<()> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Party::new(_alice_did),
+        originator: Some(Party::new(_alice_did)),
         beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -238,7 +238,7 @@ fn test_confirm_relationship() -> Result<()> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Party::new(_alice_did),
+        originator: Some(Party::new(_alice_did)),
         beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],

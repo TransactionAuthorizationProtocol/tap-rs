@@ -17,7 +17,7 @@ async fn test_pack_tap_body() -> Result<()> {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: asset.clone(),
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![
@@ -62,7 +62,7 @@ async fn test_pack_tap_body() -> Result<()> {
     // Verify the extracted body matches the original
     assert_eq!(extracted_body.asset, asset);
     assert_eq!(extracted_body.amount, body.amount);
-    assert_eq!(extracted_body.originator.id, body.originator.id);
+    assert_eq!(extracted_body.originator.unwrap().id, body.originator.unwrap().id);
     assert_eq!(
         extracted_body.beneficiary.as_ref().unwrap().id,
         body.beneficiary.as_ref().unwrap().id
@@ -84,7 +84,7 @@ async fn test_extract_tap_body() -> Result<()> {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: asset.clone(),
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "1.00".to_string(),
         agents: vec![

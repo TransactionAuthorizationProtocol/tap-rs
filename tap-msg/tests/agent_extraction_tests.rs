@@ -25,7 +25,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![agent3.clone()],
@@ -75,7 +75,7 @@ fn test_to_didcomm_filters_sender_when_specified() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![agent3.clone()],
@@ -121,7 +121,7 @@ fn test_to_didcomm_with_route() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![agent3.clone()],
@@ -163,7 +163,7 @@ fn test_create_tap_message() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![],
@@ -207,7 +207,7 @@ fn test_get_all_participants() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![],

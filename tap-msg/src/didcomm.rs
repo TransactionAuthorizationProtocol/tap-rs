@@ -31,6 +31,7 @@ pub struct PlainMessage<T = Value> {
     /// Identifier(s) for recipients. MUST be an array of strings where each element
     /// is a valid DID or DID URL (without the fragment component) that identifies a member
     /// of the message’s intended audience.
+    #[serde(default)]
     pub to: Vec<String>,
 
     /// Uniquely identifies the thread that the message belongs to.

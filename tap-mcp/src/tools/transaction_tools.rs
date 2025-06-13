@@ -111,7 +111,7 @@ impl ToolHandler for CreateTransferTool {
         let transfer = Transfer {
             transaction_id: transaction_id.clone(),
             asset: asset_id,
-            originator,
+            originator: Some(originator),
             beneficiary: Some(beneficiary),
             amount: params.amount,
             agents,

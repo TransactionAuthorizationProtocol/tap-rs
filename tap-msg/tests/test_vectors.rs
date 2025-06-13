@@ -705,7 +705,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                     let transfer = Transfer {
                         transaction_id: uuid::Uuid::new_v4().to_string(),
                         asset: asset_id,
-                        originator,
+                        originator: Some(originator),
                         beneficiary,
                         amount: transfer_body.amount.clone(),
                         agents,

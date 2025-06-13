@@ -245,7 +245,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             .parse()
             .unwrap(),
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: amount.to_string(),
         agents: vec![sender_agent, recipient_agent, settlement_agent], // Include both agents plus settlement agent
