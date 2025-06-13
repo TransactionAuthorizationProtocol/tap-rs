@@ -118,7 +118,7 @@ fn main() -> Result<()> {
                 if let Error::Validation(_) = e {
                     let reject = Reject {
                     transaction_id: transfer_id.clone(),
-                    reason: format!("validation.failed: Transfer validation failed: {}. Please correct the validation issues and try again", e),
+                    reason: Some(format!("validation.failed: Transfer validation failed: {}. Please correct the validation issues and try again", e)),
                 };
 
                     let _ = beneficiary_agent
@@ -154,7 +154,7 @@ fn main() -> Result<()> {
 
             let reject = Reject {
             transaction_id: transfer_id.clone(),
-            reason: format!("risk.threshold.exceeded: Risk score ({}) exceeds threshold ({}). Please contact support for further assistance", risk_score, risk_threshold),
+            reason: Some(format!("risk.threshold.exceeded: Risk score ({}) exceeds threshold ({}). Please contact support for further assistance", risk_score, risk_threshold)),
         };
 
             let (packed_reject, _delivery_results) = match beneficiary_agent
@@ -246,7 +246,7 @@ fn main() -> Result<()> {
 
         let settle = Settle {
             transaction_id: transfer_id.clone(),
-            settlement_id: settlement_id.to_string(),
+            settlement_id: Some(settlement_id.to_string()),
             amount: Some(transfer.amount.clone()),
         };
 
@@ -279,7 +279,7 @@ fn main() -> Result<()> {
 
         println!("Settlement received and validated successfully");
         println!("  Transfer ID: {}", received_settle.transaction_id);
-        println!("  Settlement ID: {}", received_settle.settlement_id);
+        println!("  Settlement ID: {:?}", received_settle.settlement_id);
         if let Some(amount) = &received_settle.amount {
             println!("  Amount: {}", amount);
         }

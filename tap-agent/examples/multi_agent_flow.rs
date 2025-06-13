@@ -233,7 +233,7 @@ fn main() -> Result<()> {
 
         let reject = Reject {
         transaction_id: transfer_id.to_string(),
-        reason: "compliance.policy: Additional beneficiary information required. Please provide additional beneficiary information to comply with regulations".to_string(),
+        reason: Some("compliance.policy: Additional beneficiary information required. Please provide additional beneficiary information to comply with regulations".to_string()),
     };
 
         let (packed_reject, _delivery_results) = beneficiary_vasp
@@ -245,7 +245,7 @@ fn main() -> Result<()> {
         let received_reject: Reject = serde_json::from_value(plain_message.body)?;
         println!("Originator VASP received rejection:");
         println!("  Transfer ID: {}", received_reject.transaction_id);
-        println!("  Reason: {}", received_reject.reason);
+        println!("  Reason: {:?}", received_reject.reason);
         println!();
 
         // Step 8: After resolving the compliance concerns, the beneficiary VASP authorizes
@@ -335,7 +335,7 @@ fn main() -> Result<()> {
 
         let settle = Settle {
             transaction_id: transfer_id.to_string(),
-            settlement_id: settlement_id.to_string(),
+            settlement_id: Some(settlement_id.to_string()),
             amount: Some(transfer.amount.clone()),
         };
 
@@ -358,7 +358,7 @@ fn main() -> Result<()> {
             "eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33";
         let api_settle = Settle {
             transaction_id: transfer_id.to_string(),
-            settlement_id: api_settlement_id.to_string(),
+            settlement_id: Some(api_settlement_id.to_string()),
             amount: Some(transfer.amount.clone()),
         };
 
@@ -373,7 +373,7 @@ fn main() -> Result<()> {
         let received_api_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary wallet API received settlement confirmation:");
         println!("  Transfer ID: {}", received_api_settle.transaction_id);
-        println!("  Settlement ID: {}", received_api_settle.settlement_id);
+        println!("  Settlement ID: {:?}", received_api_settle.settlement_id);
         if let Some(amount) = &received_api_settle.amount {
             println!("  Amount: {}\n", amount);
         }
@@ -393,7 +393,7 @@ fn main() -> Result<()> {
 
         println!("Settlement received by beneficiary VASP and wallet:");
         println!("  Transfer ID: {}", received_settle_vasp.transaction_id);
-        println!("  Settlement ID: {}", received_settle_vasp.settlement_id);
+        println!("  Settlement ID: {:?}", received_settle_vasp.settlement_id);
         if let Some(amount) = &received_settle_vasp.amount {
             println!("  Amount: {}", amount);
         }
