@@ -29,12 +29,12 @@ impl InvoiceReference {
     pub fn is_url(&self) -> bool {
         matches!(self, InvoiceReference::Url(_))
     }
-    
+
     /// Check if this is an object reference
     pub fn is_object(&self) -> bool {
         matches!(self, InvoiceReference::Object(_))
     }
-    
+
     /// Get the URL if this is a URL reference
     pub fn as_url(&self) -> Option<&str> {
         match self {
@@ -42,7 +42,7 @@ impl InvoiceReference {
             _ => None,
         }
     }
-    
+
     /// Get the invoice object if this is an object reference
     pub fn as_object(&self) -> Option<&crate::message::Invoice> {
         match self {
@@ -50,7 +50,7 @@ impl InvoiceReference {
             _ => None,
         }
     }
-    
+
     /// Validate the invoice reference
     pub fn validate(&self) -> Result<()> {
         match self {
@@ -226,7 +226,7 @@ impl PaymentBuilder {
         self.invoice = Some(InvoiceReference::Object(invoice));
         self
     }
-    
+
     /// Set the invoice URL for this payment
     pub fn invoice_url(mut self, url: String) -> Self {
         self.invoice = Some(InvoiceReference::Url(url));

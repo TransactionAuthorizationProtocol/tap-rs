@@ -288,14 +288,8 @@ fn test_confirm_relationship() -> Result<()> {
     assert_eq!(confirm_message.thid, Some(transfer_id.to_string()));
 
     // Check body content (for_entity and role)
-    assert_eq!(
-        confirm_message.body["for"].as_str().unwrap(),
-        _org_did
-    );
-    assert_eq!(
-        confirm_message.body["role"].as_str().unwrap(),
-        "custodian"
-    );
+    assert_eq!(confirm_message.body["for"].as_str().unwrap(), _org_did);
+    assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian");
 
     Ok(())
 }

@@ -187,24 +187,27 @@ mod tests {
     fn test_serialization_format() {
         let asset_str = "eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
         let asset_id = AssetId::from_str(asset_str).unwrap();
-        
+
         // Check current serialization
         let json = serde_json::to_string(&asset_id).unwrap();
         assert_eq!(json, format!("\"{}\"", asset_str));
-        
+
         // Try to deserialize from string
         let json_string = format!("\"{}\"", asset_str);
         let result = serde_json::from_str::<AssetId>(&json_string);
         assert!(result.is_ok());
-        
+
         // Test array serialization (like in test vectors)
         let assets = vec![
             AssetId::from_str("eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48").unwrap(),
             AssetId::from_str("eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F").unwrap(),
         ];
         let json_array = serde_json::to_string(&assets).unwrap();
-        assert_eq!(json_array, r#"["eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48","eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F"]"#);
-        
+        assert_eq!(
+            json_array,
+            r#"["eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48","eip155:1/erc20:0x6B175474E89094C44Da98b954EedeAC495271d0F"]"#
+        );
+
         // Test deserializing from array
         let test_vector_json = r#"["eip155:1/erc20:0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"]"#;
         let result: Result<Vec<AssetId>, _> = serde_json::from_str(test_vector_json);
@@ -277,7 +280,10 @@ mod tests {
         let serialized = serde_json::to_string(&asset_id).unwrap();
 
         // The JSON representation should be a string
-        assert_eq!(serialized, r#""eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48""#);
+        assert_eq!(
+            serialized,
+            r#""eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48""#
+        );
 
         let deserialized: AssetId = serde_json::from_str(&serialized).unwrap();
         assert_eq!(deserialized, asset_id);

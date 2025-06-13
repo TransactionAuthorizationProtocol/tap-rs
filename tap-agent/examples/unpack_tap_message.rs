@@ -86,7 +86,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Message Type: Transfer");
                 println!("Asset: {}", transfer.asset);
                 println!("Amount: {}", transfer.amount);
-                println!("Originator: {}", transfer.originator.as_ref().map(|o| o.id.as_str()).unwrap_or("unknown"));
+                println!(
+                    "Originator: {}",
+                    transfer
+                        .originator
+                        .as_ref()
+                        .map(|o| o.id.as_str())
+                        .unwrap_or("unknown")
+                );
                 if let Some(beneficiary) = &transfer.beneficiary {
                     println!("Beneficiary: {}", beneficiary.id);
                 }

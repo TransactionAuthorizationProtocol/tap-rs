@@ -17,9 +17,9 @@ use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
+use tap_msg::message::payment::InvoiceReference;
 use tap_msg::message::{Authorize, Settle};
 use tap_msg::{Invoice, LineItem, Party, Payment, TaxCategory, TaxSubtotal, TaxTotal};
-use tap_msg::message::payment::InvoiceReference;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio_test::block_on(async {
@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             invoice.currency_code
                         );
                     }
-                },
+                }
                 InvoiceReference::Url(url) => {
                     println!("  Invoice URL: {}", url);
                 }
@@ -147,7 +147,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             invoice.currency_code
                         );
                     }
-                },
+                }
                 InvoiceReference::Url(url) => {
                     println!("  Invoice URL: {}", url);
                 }

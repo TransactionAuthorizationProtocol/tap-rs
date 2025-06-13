@@ -243,7 +243,9 @@ impl Transfer {
         // Validate originator if present
         if let Some(originator) = &self.originator {
             if originator.id().is_empty() {
-                return Err(Error::Validation("Originator ID cannot be empty".to_string()));
+                return Err(Error::Validation(
+                    "Originator ID cannot be empty".to_string(),
+                ));
             }
         }
 

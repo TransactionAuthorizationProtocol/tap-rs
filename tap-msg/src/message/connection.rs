@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
+use crate::message::agent::TapParticipant;
 use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
 use crate::message::{Agent, Party};
-use crate::message::agent::TapParticipant;
 use crate::TapMessage;
 
 /// Agent structure specific to Connect messages.
@@ -59,23 +59,31 @@ impl ConnectAgent {
     /// Convert to a regular Agent by adding a for_party.
     pub fn to_agent(&self, for_party: &str) -> Agent {
         let mut agent = Agent::new_without_role(&self.id, for_party);
-        
+
         // Copy metadata fields
         if let Some(name) = &self.name {
-            agent.metadata.insert("name".to_string(), serde_json::Value::String(name.clone()));
+            agent
+                .metadata
+                .insert("name".to_string(), serde_json::Value::String(name.clone()));
         }
         if let Some(agent_type) = &self.agent_type {
-            agent.metadata.insert("type".to_string(), serde_json::Value::String(agent_type.clone()));
+            agent.metadata.insert(
+                "type".to_string(),
+                serde_json::Value::String(agent_type.clone()),
+            );
         }
         if let Some(service_url) = &self.service_url {
-            agent.metadata.insert("serviceUrl".to_string(), serde_json::Value::String(service_url.clone()));
+            agent.metadata.insert(
+                "serviceUrl".to_string(),
+                serde_json::Value::String(service_url.clone()),
+            );
         }
-        
+
         // Copy any additional metadata
         for (k, v) in &self.metadata {
             agent.metadata.insert(k.clone(), v.clone());
         }
-        
+
         agent
     }
 }
@@ -164,9 +172,13 @@ impl Connect {
             constraints: None,
         }
     }
-    
+
     /// Create a new Connect message with Agent and Principal.
-    pub fn new_with_agent_and_principal(transaction_id: &str, agent: ConnectAgent, principal: Party) -> Self {
+    pub fn new_with_agent_and_principal(
+        transaction_id: &str,
+        agent: ConnectAgent,
+        principal: Party,
+    ) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
             agent_id: None,
@@ -191,22 +203,28 @@ impl Connect {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation("transaction_id is required".to_string()));
         }
-        
+
         // Either agent_id or agent must be present
         if self.agent_id.is_none() && self.agent.is_none() {
-            return Err(Error::Validation("either agent_id or agent is required".to_string()));
+            return Err(Error::Validation(
+                "either agent_id or agent is required".to_string(),
+            ));
         }
-        
+
         // Either for_ or principal must be present
         if self.for_.is_none() && self.principal.is_none() {
-            return Err(Error::Validation("either for or principal is required".to_string()));
+            return Err(Error::Validation(
+                "either for or principal is required".to_string(),
+            ));
         }
-        
+
         // Constraints are required for Connect messages
         if self.constraints.is_none() {
-            return Err(Error::Validation("Connection request must include constraints".to_string()));
+            return Err(Error::Validation(
+                "Connection request must include constraints".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
 
@@ -263,11 +281,11 @@ pub struct AuthorizationRequired {
     /// Authorization URL.
     #[serde(rename = "authorization_url")]
     pub url: String,
-    
+
     /// Agent ID.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_id: Option<String>,
-    
+
     /// Expiry date/time.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires: Option<String>,
@@ -280,11 +298,11 @@ pub struct AuthorizationRequired {
 impl AuthorizationRequired {
     /// Create a new AuthorizationRequired message.
     pub fn new(url: String, expires: String) -> Self {
-        Self { 
-            url, 
+        Self {
+            url,
             agent_id: None,
             expires: Some(expires),
-            metadata: HashMap::new()
+            metadata: HashMap::new(),
         }
     }
 

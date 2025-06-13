@@ -81,7 +81,14 @@ fn main() -> Result<()> {
         println!("Transfer message created and validated successfully");
         println!("  Asset: {}", transfer.asset);
         println!("  Amount: {}", transfer.amount);
-        println!("  From: {}", transfer.originator.as_ref().map(|o| o.id.as_str()).unwrap_or("unknown"));
+        println!(
+            "  From: {}",
+            transfer
+                .originator
+                .as_ref()
+                .map(|o| o.id.as_str())
+                .unwrap_or("unknown")
+        );
         println!("  To: {}\n", transfer.beneficiary.as_ref().unwrap().id);
 
         // Step 3: Send the transfer request with proper security

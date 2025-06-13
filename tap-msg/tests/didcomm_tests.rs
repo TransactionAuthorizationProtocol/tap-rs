@@ -62,7 +62,10 @@ async fn test_pack_tap_body() -> Result<()> {
     // Verify the extracted body matches the original
     assert_eq!(extracted_body.asset, asset);
     assert_eq!(extracted_body.amount, body.amount);
-    assert_eq!(extracted_body.originator.unwrap().id, body.originator.unwrap().id);
+    assert_eq!(
+        extracted_body.originator.unwrap().id,
+        body.originator.unwrap().id
+    );
     assert_eq!(
         extracted_body.beneficiary.as_ref().unwrap().id,
         body.beneficiary.as_ref().unwrap().id

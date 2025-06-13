@@ -135,7 +135,7 @@ impl Agent {
             metadata: HashMap::new(),
         }
     }
-    
+
     /// Create a new agent without a role.
     pub fn new_without_role(id: &str, for_party: &str) -> Self {
         Self {

@@ -9,7 +9,7 @@ use crate::error::{Error, Result};
 use crate::TapMessage;
 
 /// Complete message body (TAIP-14).
-/// 
+///
 /// Used to indicate completion of a payment transaction.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#Complete")]

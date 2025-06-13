@@ -16,7 +16,11 @@ pub struct Settle {
     pub transaction_id: String,
 
     /// Settlement ID (CAIP-220 identifier of the underlying settlement transaction).
-    #[serde(rename = "settlementId", skip_serializing_if = "Option::is_none", default)]
+    #[serde(
+        rename = "settlementId",
+        skip_serializing_if = "Option::is_none",
+        default
+    )]
     pub settlement_id: Option<String>,
 
     /// Optional amount settled. If specified, must be less than or equal to the original amount.
@@ -42,7 +46,7 @@ impl Settle {
             amount: Some(amount.to_string()),
         }
     }
-    
+
     /// Create a minimal Settle message (for testing/special cases)
     pub fn minimal(transaction_id: &str) -> Self {
         Self {
@@ -70,29 +74,32 @@ impl Settle {
                     "Settlement ID cannot be empty when provided".to_string(),
                 ));
             }
-            
+
             // Validate CAIP-220 format: namespace:chain_id:tx_type/tx_hash
             // Example: eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33
-            
+
             // First check if it starts with 0x (common mistake - raw hex without CAIP format)
             if settlement_id.starts_with("0x") && !settlement_id.contains(':') {
                 return Err(Error::Validation(
-                    "Invalid format for 'settlementId', CAIP-220 block address expected".to_string(),
+                    "Invalid format for 'settlementId', CAIP-220 block address expected"
+                        .to_string(),
                 ));
             }
-            
+
             let parts: Vec<&str> = settlement_id.split(':').collect();
             if parts.len() < 3 {
                 return Err(Error::Validation(
-                    "Invalid format for 'settlementId', CAIP-220 block address expected".to_string(),
+                    "Invalid format for 'settlementId', CAIP-220 block address expected"
+                        .to_string(),
                 ));
             }
-            
+
             // Check if the third part contains tx_type/tx_hash
             if let Some(tx_part) = parts.get(2) {
                 if !tx_part.contains('/') {
                     return Err(Error::Validation(
-                        "Invalid format for 'settlementId', CAIP-220 block address expected".to_string(),
+                        "Invalid format for 'settlementId', CAIP-220 block address expected"
+                            .to_string(),
                     ));
                 }
             }

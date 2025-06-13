@@ -70,11 +70,14 @@ impl EventSubscriber for CustomerEventHandler {
                                     "originator",
                                 )
                                 .await
-                        {
-                            Ok(customer_id) => {
-                                log::debug!("Created/updated originator customer: {}", customer_id)
-                            }
-                            Err(e) => log::error!("Failed to extract originator: {}", e),
+                            {
+                                Ok(customer_id) => {
+                                    log::debug!(
+                                        "Created/updated originator customer: {}",
+                                        customer_id
+                                    )
+                                }
+                                Err(e) => log::error!("Failed to extract originator: {}", e),
                             }
                         }
 

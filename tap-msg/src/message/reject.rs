@@ -29,7 +29,7 @@ impl Reject {
             reason: Some(reason.to_string()),
         }
     }
-    
+
     /// Create a minimal Reject message (for testing/special cases)
     pub fn minimal(transaction_id: &str) -> Self {
         Self {
