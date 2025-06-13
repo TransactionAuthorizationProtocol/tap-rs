@@ -97,6 +97,7 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
         "https://tap.rsvp/schema/1.0#Settle",
         "https://tap.rsvp/schema/1.0#Cancel",
         "https://tap.rsvp/schema/1.0#Revert",
+        "https://tap.rsvp/schema/1.0#AddAgents",
         "https://tap.rsvp/schema/1.0#RemoveAgent",
         "https://tap.rsvp/schema/1.0#UpdateParty",
         "https://tap.rsvp/schema/1.0#UpdatePolicies",
@@ -114,7 +115,8 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
     if thread_id_messages.contains(&message.type_.as_str()) {
         if let Some(thid) = &message.thid {
             if let Some(obj) = body_with_thread_id.as_object_mut() {
-                // Add transaction_id for most messages
+                // Add transaction_id for all thread-based messages
+                // ConfirmRelationship uses "transfer_id" as the JSON field name
                 if message.type_ == "https://tap.rsvp/schema/1.0#ConfirmRelationship" {
                     obj.insert("transfer_id".to_string(), serde_json::Value::String(thid.clone()));
                 } else {

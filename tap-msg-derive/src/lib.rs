@@ -917,7 +917,7 @@ fn impl_authorizable_trait(
             fn reject(&self, creator_did: &str, reason: &str) -> #crate_path::didcomm::PlainMessage<#crate_path::message::Reject> {
                 let reject = #crate_path::message::Reject {
                     transaction_id: (#tx_id_access).to_string(),
-                    reason: reason.to_string(),
+                    reason: Some(reason.to_string()),
                 };
                 let original_message = self
                     .to_didcomm(creator_did)
@@ -964,7 +964,7 @@ fn impl_transaction_trait(
             ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::Settle> {
                 let settle = #crate_path::message::Settle {
                     transaction_id: (#tx_id_access).to_string(),
-                    settlement_id: settlement_id.to_string(),
+                    settlement_id: Some(settlement_id.to_string()),
                     amount: amount.map(|s| s.to_string()),
                 };
                 let original_message = self
@@ -1087,12 +1087,13 @@ fn impl_transaction_trait(
                 &self,
                 creator_did: &str,
                 agent_did: &str,
-                relationship_type: &str,
+                for_entity: &str,
             ) -> #crate_path::didcomm::PlainMessage<#crate_path::message::ConfirmRelationship> {
                 let confirm_relationship = #crate_path::message::ConfirmRelationship {
                     transaction_id: (#tx_id_access).to_string(),
                     agent_id: agent_did.to_string(),
-                    relationship_type: relationship_type.to_string(),
+                    for_entity: for_entity.to_string(),
+                    role: None,
                 };
                 let original_message = self
                     .to_didcomm(creator_did)

@@ -419,13 +419,15 @@ fn create_test_connect() -> Connect {
     let mut connect = Connect::new(&transaction_id, &agent_id, &for_id, Some("agent"));
 
     let transaction_limits = TransactionLimits {
-        max_amount: Some("1000.0".to_string()),
-        max_total_amount: Some("5000.0".to_string()),
-        max_transactions: Some(10),
+        per_transaction: Some("1000.0".to_string()),
+        daily: Some("5000.0".to_string()),
+        currency: Some("USD".to_string()),
     };
 
     let constraints = ConnectionConstraints {
-        transaction_limits: Some(transaction_limits),
+        purposes: Some(vec!["trading".to_string()]),
+        category_purposes: None,
+        limits: Some(transaction_limits),
     };
 
     connect.constraints = Some(constraints);

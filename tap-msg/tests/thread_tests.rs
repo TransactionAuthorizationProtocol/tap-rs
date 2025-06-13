@@ -203,7 +203,8 @@ fn test_confirm_relationship() -> Result<()> {
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        relationship_type: "custodian".to_string(),
+        for_entity: _org_did.to_string(),
+        role: Some("custodian".to_string()),
     };
 
     // Validate the message using the trait method (auto-generated)
@@ -231,7 +232,8 @@ fn test_confirm_relationship() -> Result<()> {
     let extracted_confirm = ConfirmRelationship::from_didcomm(&message_with_thread)?;
     assert_eq!(extracted_confirm.transaction_id, transfer_id);
     assert_eq!(extracted_confirm.agent_id, _bob_did);
-    assert_eq!(extracted_confirm.relationship_type, "custodian");
+    assert_eq!(extracted_confirm.for_entity, _org_did);
+    assert_eq!(extracted_confirm.role, Some("custodian".to_string()));
 
     // Test using the Authorizable trait
     let transfer = Transfer {
@@ -271,7 +273,8 @@ fn test_confirm_relationship() -> Result<()> {
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        relationship_type: "custodian".to_string(),
+        for_entity: _org_did.to_string(),
+        role: Some("custodian".to_string()),
     };
 
     // Create a DIDComm message from the confirm_relationship
@@ -284,9 +287,13 @@ fn test_confirm_relationship() -> Result<()> {
     // The thid should be set to the transaction_id
     assert_eq!(confirm_message.thid, Some(transfer_id.to_string()));
 
-    // Check body content (relationship_type)
+    // Check body content (for_entity and role)
     assert_eq!(
-        confirm_message.body["relationship_type"].as_str().unwrap(),
+        confirm_message.body["for"].as_str().unwrap(),
+        _org_did
+    );
+    assert_eq!(
+        confirm_message.body["role"].as_str().unwrap(),
         "custodian"
     );
 
