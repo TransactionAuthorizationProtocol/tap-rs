@@ -239,7 +239,7 @@ fn test_backward_compatibility() -> Result<()> {
     assert_eq!(loaded_storage.keys.len(), 2);
 
     // Check that all keys have labels
-    for (_, key) in &loaded_storage.keys {
+    for key in loaded_storage.keys.values() {
         assert!(!key.label.is_empty());
         assert!(key.label.starts_with("agent-"));
     }

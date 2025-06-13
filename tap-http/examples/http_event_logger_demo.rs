@@ -37,18 +37,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let node = TapNode::new(NodeConfig::default());
 
     // Configure the HTTP server with event logging to ./logs directory
-    let mut config = TapHttpConfig::default();
-
-    // Configure event logger to log to ./logs directory
-    config.event_logger = Some(EventLoggerConfig {
-        destination: LogDestination::File {
-            path: "./logs/tap-http.log".to_string(),
-            max_size: Some(10 * 1024 * 1024), // 10 MB
-            rotate: true,
-        },
-        structured: true, // Use JSON format
-        log_level: Level::INFO,
-    });
+    let config = TapHttpConfig {
+        event_logger: Some(EventLoggerConfig {
+            destination: LogDestination::File {
+                path: "./logs/tap-http.log".to_string(),
+                max_size: Some(10 * 1024 * 1024), // 10 MB
+                rotate: true,
+            },
+            structured: true, // Use JSON format
+            log_level: Level::INFO,
+        }),
+        ..Default::default()
+    };
 
     // Create the HTTP server
     let mut server = TapHttpServer::new(config, node);

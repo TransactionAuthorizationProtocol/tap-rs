@@ -19,10 +19,12 @@ async fn test_internal_message_delivery_all_tables() -> Result<(), Box<dyn std::
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node with storage enabled
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
-    config.log_message_content = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        log_message_content: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -193,9 +195,11 @@ async fn test_internal_delivery_non_transaction_message() -> Result<(), Box<dyn 
     let temp_dir = TempDir::new()?;
     let tap_root = temp_dir.path().to_path_buf();
 
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -266,9 +270,11 @@ async fn test_concurrent_internal_deliveries() -> Result<(), Box<dyn std::error:
     let temp_dir = TempDir::new()?;
     let tap_root = temp_dir.path().to_path_buf();
 
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -281,7 +287,7 @@ async fn test_concurrent_internal_deliveries() -> Result<(), Box<dyn std::error:
     node.register_agent(Arc::new(agent2)).await?;
     node.register_agent(Arc::new(agent3)).await?;
 
-    let agents = vec![did1.clone(), did2.clone(), did3.clone()];
+    let agents = [did1.clone(), did2.clone(), did3.clone()];
 
     // Each agent sends a message to every other agent
     let mut handles = vec![];

@@ -343,8 +343,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread")]
     async fn test_handle_invalid_didcomm() {
         // Create a TAP Node for testing without storage
-        let mut config = NodeConfig::default();
-        config.storage_path = None; // Disable storage for tests
+        let config = NodeConfig {
+            storage_path: None, // Disable storage for tests
+            ..Default::default()
+        };
         let node = Arc::new(TapNode::new(config));
 
         // Create a dummy event bus

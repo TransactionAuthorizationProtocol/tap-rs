@@ -10,8 +10,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tap_agent::TapAgent;
 use tap_ivms101::builder::*;
-use tap_ivms101::message::Person;
 use tap_ivms101::types::*;
+use tap_ivms101::Person;
 use tap_msg::message::{
     authorize::Authorize, settle::Settle, transfer::Transfer, update_policies::UpdatePolicies,
     Agent as MessageAgent, Party, Policy, RequirePresentation,
@@ -186,13 +186,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // - Extracts customer data
     // - Updates customer records
 
-    // Retrieve extracted customer data (for demonstration)
-    if let Some(storage_manager) = node.agent_storage_manager() {
-        if let Ok(_agent_storage) = storage_manager.get_agent_storage(&vasp_b_did).await {
-            // Customer data would be automatically created from the IVMS101 data
-            // In a real scenario, we would query for the customer record here
-        }
-    }
+    // In a real scenario, the customer would be automatically created from the IVMS101 data
 
     // In a real scenario, the customer would be automatically created from the IVMS101 data
     println!("   - Customer data extracted and stored");
@@ -247,8 +241,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .birth_info("1985-06-15", "New York", "US")
         .build()?;
 
+    let beneficiary_person = NaturalPersonBuilder::new()
+        .name(
+            NaturalPersonNameBuilder::new()
+                .legal_name("Jones", "Bob")
+                .build()?,
+        )
+        .country_of_residence("GB")
+        .build()?;
+
     let _ivms_message = IvmsMessageBuilder::new()
         .originator(vec![Person::NaturalPerson(natural_person)])
+        .beneficiary(vec![Person::NaturalPerson(beneficiary_person)])
         .originating_vasp(Person::LegalPerson(
             LegalPersonBuilder::new()
                 .name(

@@ -12,10 +12,12 @@ async fn test_transfer_stored_in_all_agent_databases() {
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node with agent storage manager
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
-    config.log_message_content = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        log_message_content: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -145,9 +147,11 @@ async fn test_payment_stored_in_all_agent_databases() {
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -224,9 +228,11 @@ async fn test_non_transaction_message_single_storage() {
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -290,9 +296,11 @@ async fn test_outgoing_transaction_multi_storage() {
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -376,9 +384,11 @@ async fn test_message_delivered_to_all_recipients() {
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 
@@ -437,9 +447,11 @@ async fn test_transaction_delivered_to_all_recipients() {
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node
-    let mut config = NodeConfig::default();
-    config.tap_root = Some(tap_root.clone());
-    config.enable_message_logging = true;
+    let config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        ..Default::default()
+    };
 
     let node = Arc::new(TapNode::new(config));
 

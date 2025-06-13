@@ -13,9 +13,11 @@ async fn test_automatic_customer_extraction_from_transfer() {
     let temp_dir = tempdir().unwrap();
 
     // Create a TAP node with storage
-    let mut config = NodeConfig::default();
-    config.storage_path = Some(temp_dir.path().join("node.db"));
-    config.tap_root = Some(temp_dir.path().to_path_buf());
+    let config = NodeConfig {
+        storage_path: Some(temp_dir.path().join("node.db")),
+        tap_root: Some(temp_dir.path().to_path_buf()),
+        ..Default::default()
+    };
 
     let mut node = TapNode::new(config);
     node.init_storage().await.unwrap();

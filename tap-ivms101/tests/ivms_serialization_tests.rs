@@ -272,27 +272,27 @@ fn test_address_serialization() {
 fn test_enum_serialization() {
     // Test that enums serialize to correct string values
     assert_eq!(
-        serde_json::to_value(&NameIdentifierType::LegalName).unwrap(),
+        serde_json::to_value(NameIdentifierType::LegalName).unwrap(),
         json!("LEGAL_NAME")
     );
     assert_eq!(
-        serde_json::to_value(&NameIdentifierType::TradingName).unwrap(),
+        serde_json::to_value(NameIdentifierType::TradingName).unwrap(),
         json!("TRADING_NAME")
     );
     assert_eq!(
-        serde_json::to_value(&AddressType::Home).unwrap(),
+        serde_json::to_value(AddressType::Home).unwrap(),
         json!("HOME")
     );
     assert_eq!(
-        serde_json::to_value(&NationalIdentifierType::PassportNumber).unwrap(),
+        serde_json::to_value(NationalIdentifierType::PassportNumber).unwrap(),
         json!("PASSPORT_NUMBER")
     );
     assert_eq!(
-        serde_json::to_value(&PaymentType::SalaryAndWages).unwrap(),
+        serde_json::to_value(PaymentType::SalaryAndWages).unwrap(),
         json!("SALARY_AND_WAGES")
     );
     assert_eq!(
-        serde_json::to_value(&TransactionDirection::Outgoing).unwrap(),
+        serde_json::to_value(TransactionDirection::Outgoing).unwrap(),
         json!("outgoing")
     );
 }

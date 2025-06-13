@@ -15,10 +15,12 @@ async fn test_tap_http_with_per_agent_storage() {
     println!("Testing TAP-HTTP with per-agent storage at: {:?}", tap_root);
 
     // Create TAP Node with custom TAP root
-    let mut node_config = NodeConfig::default();
-    node_config.tap_root = Some(tap_root.clone());
-    node_config.enable_message_logging = true;
-    node_config.log_message_content = true;
+    let node_config = NodeConfig {
+        tap_root: Some(tap_root.clone()),
+        enable_message_logging: true,
+        log_message_content: true,
+        ..Default::default()
+    };
 
     let node = TapNode::new(node_config);
 
@@ -49,8 +51,10 @@ async fn test_tap_http_with_per_agent_storage() {
     println!("Verified per-agent storage isolation");
 
     // Create HTTP server configuration
-    let mut http_config = TapHttpConfig::default();
-    http_config.port = 0; // Let the OS choose an available port
+    let http_config = TapHttpConfig {
+        port: 0, // Let the OS choose an available port
+        ..Default::default()
+    };
 
     // Create TAP-HTTP server
     let _server = TapHttpServer::new(http_config, (*node_arc).clone());
@@ -113,8 +117,10 @@ async fn test_tap_http_agent_storage_manager_delegation() {
     let tap_root = temp_dir.path().to_path_buf();
 
     // Create TAP Node with per-agent storage
-    let mut node_config = NodeConfig::default();
-    node_config.tap_root = Some(tap_root);
+    let node_config = NodeConfig {
+        tap_root: Some(tap_root),
+        ..Default::default()
+    };
 
     let node = TapNode::new(node_config);
     let node_arc = Arc::new(node);

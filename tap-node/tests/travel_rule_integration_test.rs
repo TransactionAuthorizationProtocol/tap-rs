@@ -68,12 +68,12 @@ async fn test_travel_rule_flow_with_ivms101() {
 
     // Extract customers from parties
     customer_manager
-        .extract_customer_from_party(&originator_party, &originator_agent.did(), "originator")
+        .extract_customer_from_party(&originator_party, originator_agent.did(), "originator")
         .await
         .unwrap();
 
     customer_manager
-        .extract_customer_from_party(&beneficiary_party, &beneficiary_agent.did(), "beneficiary")
+        .extract_customer_from_party(&beneficiary_party, beneficiary_agent.did(), "beneficiary")
         .await
         .unwrap();
 
@@ -98,12 +98,12 @@ async fn test_travel_rule_flow_with_ivms101() {
 
     // Add agents
     transfer.agents.push(TapAgent::new(
-        &originator_agent.did(),
+        originator_agent.did(),
         "originator",
         &originator_party.id,
     ));
     transfer.agents.push(TapAgent::new(
-        &beneficiary_agent.did(),
+        beneficiary_agent.did(),
         "beneficiary",
         &beneficiary_party.id,
     ));
@@ -191,15 +191,12 @@ async fn test_ivms101_generation_and_parsing() {
     assert!(natural_person.get("name").is_some());
     // Address will be present after adding street address
     if natural_person.get("geographicAddresses").is_some() {
-        assert!(
-            natural_person
-                .get("geographicAddresses")
-                .unwrap()
-                .as_array()
-                .unwrap()
-                .len()
-                > 0
-        );
+        assert!(!natural_person
+            .get("geographicAddresses")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .is_empty());
     }
 
     // Update customer from IVMS101 data

@@ -238,13 +238,10 @@ async fn test_create_agent_tool() -> Result<()> {
     );
 
     if let Some(result) = response.result {
-        assert_eq!(
-            result["content"][0]["text"]
-                .as_str()
-                .unwrap()
-                .contains("created"),
-            true
-        );
+        assert!(result["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("created"));
     }
 
     Ok(())
