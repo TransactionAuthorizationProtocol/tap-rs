@@ -635,7 +635,7 @@ mod tests {
             payload: base64::engine::general_purpose::STANDARD
                 .encode(r#"{"id":"test","type":"test"}"#),
             signatures: vec![JwsSignature {
-                protected: base64::engine::general_purpose::STANDARD.encode(&format!(
+                protected: base64::engine::general_purpose::STANDARD.encode(format!(
                     r#"{{"typ":"application/didcomm-signed+json","alg":"UNSUPPORTED","kid":"{}"}}"#,
                     kid
                 )),

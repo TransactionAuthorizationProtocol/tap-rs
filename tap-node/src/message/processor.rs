@@ -544,6 +544,9 @@ impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
             crate::message::PlainMessageProcessorType::Composite(p) => {
                 p.process_incoming(message).await
             }
+            crate::message::PlainMessageProcessorType::TravelRule(p) => {
+                p.process_incoming(message).await
+            }
             crate::message::PlainMessageProcessorType::TrustPing(p) => {
                 p.process_incoming(message).await
             }
@@ -565,6 +568,9 @@ impl PlainMessageProcessor for DefaultPlainMessageProcessorImpl {
                 p.process_outgoing(message).await
             }
             crate::message::PlainMessageProcessorType::Composite(p) => {
+                p.process_outgoing(message).await
+            }
+            crate::message::PlainMessageProcessorType::TravelRule(p) => {
                 p.process_outgoing(message).await
             }
             crate::message::PlainMessageProcessorType::TrustPing(p) => {

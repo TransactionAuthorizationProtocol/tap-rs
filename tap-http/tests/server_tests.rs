@@ -7,8 +7,10 @@ use tokio::time::sleep;
 
 // Helper function to create a mock TapNode for testing
 fn create_mock_node() -> TapNode {
-    let mut node_config = NodeConfig::default();
-    node_config.storage_path = None; // Disable storage for tests
+    let node_config = NodeConfig {
+        storage_path: None, // Disable storage for tests
+        ..Default::default()
+    };
     TapNode::new(node_config)
 }
 

@@ -122,6 +122,8 @@
 //! by appropriate synchronization primitives. The `EventBus` can be safely shared
 //! across threads using `Arc<EventBus>`.
 
+#[cfg(feature = "storage")]
+pub mod customer_handler;
 pub mod handlers;
 pub mod logger;
 pub mod trust_ping_handler;
@@ -374,7 +376,7 @@ pub enum NodeEvent {
         /// The reply message
         reply_message: PlainMessage,
         /// The original message being replied to
-        original_message: PlainMessage,
+        original_message: Box<PlainMessage>,
     },
 
     /// A transaction's state has changed
@@ -404,6 +406,42 @@ pub enum NodeEvent {
         new_state: String,
         /// The DID of the agent that triggered the change
         agent_did: Option<String>,
+    },
+
+    /// New events for customer extraction and compliance
+
+    /// A message was received from a source
+    MessageReceived {
+        /// The received message
+        message: PlainMessage,
+        /// The source of the message
+        source: String,
+    },
+
+    /// A message was sent to a destination
+    MessageSent {
+        /// The sent message
+        message: PlainMessage,
+        /// The destination of the message
+        destination: String,
+    },
+
+    /// A new transaction was created
+    TransactionCreated {
+        /// The transaction data
+        transaction: crate::storage::Transaction,
+        /// The agent that created the transaction
+        agent_did: String,
+    },
+
+    /// A customer record was created or updated
+    CustomerUpdated {
+        /// The customer ID
+        customer_id: String,
+        /// The agent that owns the customer
+        agent_did: String,
+        /// The type of update (created, updated, verified)
+        update_type: String,
     },
 }
 
@@ -637,7 +675,7 @@ impl EventBus {
         let event = NodeEvent::ReplyReceived {
             original_message_id,
             reply_message,
-            original_message,
+            original_message: Box::new(original_message),
         };
         self.publish_event(event).await;
     }
@@ -660,7 +698,7 @@ impl EventBus {
     }
 
     /// Publish an event to all subscribers
-    async fn publish_event(&self, event: NodeEvent) {
+    pub async fn publish_event(&self, event: NodeEvent) {
         // Send to channel
         let _ = self.sender.send(event.clone());
 

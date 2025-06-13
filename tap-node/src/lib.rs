@@ -85,6 +85,8 @@
 //! ```
 
 pub mod agent;
+#[cfg(feature = "storage")]
+pub mod customer;
 pub mod error;
 pub mod event;
 pub mod message;
@@ -859,11 +861,26 @@ impl TapNode {
 
                                 // Store as transaction
                                 match agent_storage.insert_transaction(&message).await {
-                                    Ok(_) => log::debug!(
-                                        "Stored transaction for agent {}: {}",
-                                        agent_did,
-                                        message.id
-                                    ),
+                                    Ok(()) => {
+                                        log::debug!(
+                                            "Stored transaction for agent {}: {}",
+                                            agent_did,
+                                            message.id
+                                        );
+
+                                        // Publish TransactionCreated event
+                                        // Use the message.id as the reference_id to fetch the transaction
+                                        if let Ok(Some(tx)) =
+                                            agent_storage.get_transaction_by_id(&message.id).await
+                                        {
+                                            self.event_bus
+                                                .publish_event(NodeEvent::TransactionCreated {
+                                                    transaction: tx,
+                                                    agent_did: agent_did.clone(),
+                                                })
+                                                .await;
+                                        }
+                                    }
                                     Err(e) => log::warn!(
                                         "Failed to store transaction for agent {}: {}",
                                         agent_did,
@@ -1288,11 +1305,26 @@ impl TapNode {
 
                                 // Store as transaction
                                 match agent_storage.insert_transaction(&message).await {
-                                    Ok(_) => log::debug!(
-                                        "Stored outgoing transaction for agent {}: {}",
-                                        agent_did,
-                                        message.id
-                                    ),
+                                    Ok(()) => {
+                                        log::debug!(
+                                            "Stored outgoing transaction for agent {}: {}",
+                                            agent_did,
+                                            message.id
+                                        );
+
+                                        // Publish TransactionCreated event
+                                        // Use the message.id as the reference_id to fetch the transaction
+                                        if let Ok(Some(tx)) =
+                                            agent_storage.get_transaction_by_id(&message.id).await
+                                        {
+                                            self.event_bus
+                                                .publish_event(NodeEvent::TransactionCreated {
+                                                    transaction: tx,
+                                                    agent_did: agent_did.clone(),
+                                                })
+                                                .await;
+                                        }
+                                    }
                                     Err(e) => log::warn!(
                                         "Failed to store outgoing transaction for agent {}: {}",
                                         agent_did,
@@ -1664,7 +1696,7 @@ impl TapNode {
                                     error_msg
                                         .split("status:")
                                         .nth(1)
-                                        .and_then(|s| s.trim().split_whitespace().next())
+                                        .and_then(|s| s.split_whitespace().next())
                                         .and_then(|s| s.parse::<i32>().ok())
                                 } else {
                                     None
@@ -1766,6 +1798,22 @@ impl TapNode {
                 match storage_manager.ensure_agent_storage(&agent_did).await {
                     Ok(_) => {
                         log::info!("Initialized storage for agent: {}", agent_did);
+
+                        // Get the agent storage and register customer event handler
+                        if let Ok(agent_storage) =
+                            storage_manager.get_agent_storage(&agent_did).await
+                        {
+                            let customer_handler =
+                                Arc::new(event::customer_handler::CustomerEventHandler::new(
+                                    agent_storage,
+                                    agent_did.clone(),
+                                ));
+                            self.event_bus.subscribe(customer_handler).await;
+                            log::debug!(
+                                "Registered customer event handler for agent: {}",
+                                agent_did
+                            );
+                        }
                     }
                     Err(e) => {
                         log::warn!(

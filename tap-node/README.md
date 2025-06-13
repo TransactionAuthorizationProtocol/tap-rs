@@ -10,6 +10,8 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
 
 - **Multi-Agent Management**: Register and manage multiple TAP agents with different roles and capabilities
 - **Message Processing Pipeline**: Process messages through configurable middleware chains
+- **Travel Rule Compliance**: Automatic IVMS101 data generation and attachment for regulatory compliance
+- **Customer Data Management**: Automatic extraction and storage of party information from TAP messages
 - **Message Routing**: Intelligently route messages to the appropriate agent based on DID addressing
 - **Concurrent Processing**: Scale to high throughput with worker pools for message processing
 - **Event Publishing**: Comprehensive event system for monitoring and reacting to node activities
@@ -23,6 +25,8 @@ The TAP Node acts as a central hub for TAP communications, managing multiple age
   - Transaction tracking for Transfer and Payment messages
   - Complete audit trail of all incoming/outgoing messages
   - **Message delivery tracking** with status monitoring, retry counts, and error logging
+  - **Customer profiles** with Schema.org JSON-LD format and IVMS101 caching
+  - **Relationship tracking** for TAIP-9 compliance
 
 ## Installation
 
@@ -55,6 +59,9 @@ The TAP Node is built with a modular architecture:
 ├───────────────┼───────────────┼─────────────────┼───────────────────┤
 │ Message       │ Processor Pool│  DID Resolver   │ Per-Agent Storage │
 │ Processors    │               │                 │    Isolation      │
+├───────────────┼───────────────┼─────────────────┼───────────────────┤
+│ Travel Rule   │ Customer      │ Event Handlers  │ IVMS101 Data      │
+│ Processor     │ Manager       │                 │ Generation        │
 └───────────────┴───────────────┴─────────────────┴───────────────────┘
         │               │               │                       │
         ▼               ▼               ▼                       ▼
@@ -593,7 +600,7 @@ if let Some(storage) = node.storage() {
 
 ### Database Schema
 
-The storage system maintains three tables:
+The storage system maintains six tables:
 
 #### `transactions` Table
 Business logic for Transfer and Payment messages:
@@ -624,6 +631,34 @@ Message delivery tracking and monitoring:
 - HTTP status code and error message for debugging
 - Timestamps for creation, updates, and delivery completion
 
+#### `customers` Table
+Customer profiles with Schema.org JSON-LD data:
+- Customer ID (UUID or DID)
+- Agent DID (owner of the customer record)
+- Schema type (Person/Organization)
+- Name fields (given, family, display, legal)
+- Address fields (country, locality, postal, street)
+- Profile data (full Schema.org JSON-LD)
+- IVMS101 data (cached compliance data)
+- Verification and timestamps
+
+#### `customer_identifiers` Table
+Multiple identifiers per customer:
+- Identifier (DID, email, phone, URL, etc.)
+- Customer ID reference
+- Identifier type classification
+- Verification status and method
+- Creation timestamp
+
+#### `customer_relationships` Table
+TAIP-9 compliant relationship tracking:
+- Relationship ID
+- Customer ID reference
+- Relationship type (controls, owns, manages)
+- Related identifier
+- Proof of relationship (JSON)
+- Confirmation timestamp
+
 ### Disabling Storage
 
 To disable storage (for example, in memory-only deployments):
@@ -653,6 +688,31 @@ The TAP Node is designed for high performance:
 - Use appropriate channel capacities for your workload
 - Profile your specific use case for optimal settings
 
+## Travel Rule Support
+
+The TAP Node includes comprehensive Travel Rule support through the Travel Rule Processor and Customer Manager:
+
+### Automatic IVMS101 Attachment
+
+When sending Transfer messages, the node automatically:
+- Checks if IVMS101 data should be attached based on policies
+- Generates IVMS101 data from customer profiles
+- Attaches data as Verifiable Presentations
+- Handles policy-based presentation requests
+
+See [TRAVEL-RULE.md](./TRAVEL-RULE.md) for detailed documentation.
+
+### Customer Data Management
+
+The Customer Manager automatically:
+- Extracts party information from TAP messages
+- Creates/updates customer profiles
+- Manages multiple identifiers per customer
+- Tracks relationships between parties
+- Generates IVMS101-compliant data
+
+See [CUSTOMER-MANAGEMENT.md](./CUSTOMER-MANAGEMENT.md) for detailed documentation.
+
 ## Examples
 
 The package includes several examples:
@@ -660,6 +720,7 @@ The package includes several examples:
 - `benches/stress_test.rs` - Benchmark of node performance with different message loads
 - `examples/http_message_flow.rs` - Example of using HTTP for message delivery
 - `examples/websocket_message_flow.rs` - Example of using WebSockets for real-time communication
+- `examples/travel_rule_flow.rs` - Complete Travel Rule compliance example with IVMS101
 
 Run examples with:
 
@@ -669,6 +730,9 @@ cargo run --example http_message_flow --features native
 
 # Run with WebSocket support
 cargo run --example websocket_message_flow --features websocket
+
+# Run Travel Rule example
+cargo run --example travel_rule_flow --features native
 ```
 
 ## License

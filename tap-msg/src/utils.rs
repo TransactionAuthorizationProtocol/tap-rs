@@ -2,9 +2,13 @@
 //!
 //! This module provides utility functions used throughout the TAP core library.
 
+pub mod name_hash;
+
 use crate::error::Error;
 use crate::Result;
 use std::time::SystemTime;
+
+pub use name_hash::{hash_name, NameHashable};
 
 /// Gets the current time as a unix timestamp (seconds since the epoch)
 ///

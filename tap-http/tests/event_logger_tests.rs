@@ -19,20 +19,24 @@ async fn test_event_logging_config() {
     let log_path_str = log_path.to_str().unwrap().to_string();
 
     // Create configuration with event logging
-    let mut config = TapHttpConfig::default();
-    config.event_logger = Some(EventLoggerConfig {
-        destination: LogDestination::File {
-            path: log_path_str.clone(),
-            max_size: None,
-            rotate: false,
-        },
-        structured: true,
-        log_level: tracing::Level::INFO,
-    });
+    let config = TapHttpConfig {
+        event_logger: Some(EventLoggerConfig {
+            destination: LogDestination::File {
+                path: log_path_str.clone(),
+                max_size: None,
+                rotate: false,
+            },
+            structured: true,
+            log_level: tracing::Level::INFO,
+        }),
+        ..Default::default()
+    };
 
     // Create a TapNode without storage for tests
-    let mut node_config = NodeConfig::default();
-    node_config.storage_path = None;
+    let node_config = NodeConfig {
+        storage_path: None,
+        ..Default::default()
+    };
     let node = TapNode::new(node_config);
 
     // Create the HTTP server
@@ -58,8 +62,10 @@ async fn test_server_events() {
     }
 
     // Create a TapNode without storage for tests
-    let mut node_config = NodeConfig::default();
-    node_config.storage_path = None;
+    let node_config = NodeConfig {
+        storage_path: None,
+        ..Default::default()
+    };
     let node = TapNode::new(node_config);
 
     // Create configuration (without file logging)
@@ -116,22 +122,26 @@ async fn test_json_event_logging() {
     let log_path_str = log_path.to_str().unwrap().to_string();
 
     // Create configuration with JSON event logging and custom port
-    let mut config = TapHttpConfig::default();
-    // Use a different port to avoid conflicts
-    config.port = 8001;
-    config.event_logger = Some(EventLoggerConfig {
-        destination: LogDestination::File {
-            path: log_path_str.clone(),
-            max_size: None,
-            rotate: false,
-        },
-        structured: true,
-        log_level: tracing::Level::INFO,
-    });
+    let config = TapHttpConfig {
+        // Use a different port to avoid conflicts
+        port: 8001,
+        event_logger: Some(EventLoggerConfig {
+            destination: LogDestination::File {
+                path: log_path_str.clone(),
+                max_size: None,
+                rotate: false,
+            },
+            structured: true,
+            log_level: tracing::Level::INFO,
+        }),
+        ..Default::default()
+    };
 
     // Create a TapNode without storage for tests
-    let mut node_config = NodeConfig::default();
-    node_config.storage_path = None;
+    let node_config = NodeConfig {
+        storage_path: None,
+        ..Default::default()
+    };
     let node = TapNode::new(node_config);
 
     // Create the HTTP server

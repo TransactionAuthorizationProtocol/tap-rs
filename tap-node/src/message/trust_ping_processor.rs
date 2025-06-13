@@ -37,6 +37,12 @@ impl Clone for TrustPingProcessor {
     }
 }
 
+impl Default for TrustPingProcessor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl TrustPingProcessor {
     /// Create a new Trust Ping processor
     pub fn new() -> Self {

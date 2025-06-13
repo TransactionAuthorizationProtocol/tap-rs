@@ -67,7 +67,7 @@ impl TapIntegration {
 
                 for stored_did in &stored_dids {
                     // Skip the primary agent if it's already registered
-                    if agent_did.map_or(false, |did| stored_did == did) {
+                    if agent_did.is_some_and(|did| stored_did == did) {
                         continue;
                     }
 
@@ -124,11 +124,7 @@ impl TapIntegration {
         );
 
         // For testing, use the keys.json file in the TAP root
-        let storage_path = if let Some(root) = tap_root {
-            Some(PathBuf::from(root).join("keys.json"))
-        } else {
-            None
-        };
+        let storage_path = tap_root.map(|root| PathBuf::from(root).join("keys.json"));
 
         // Create a test agent for testing
         let (test_agent, _) = TapAgent::from_ephemeral_key()

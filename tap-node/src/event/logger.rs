@@ -291,6 +291,40 @@ impl EventLogger {
                     timestamp, transaction_id, old_state, new_state
                 ),
             },
+            NodeEvent::MessageReceived { message, source } => {
+                format!(
+                    "[{}] MESSAGE RECEIVED: source={}, type={}, id={}",
+                    timestamp, source, message.type_, message.id
+                )
+            }
+            NodeEvent::MessageSent {
+                message,
+                destination,
+            } => {
+                format!(
+                    "[{}] MESSAGE SENT: destination={}, type={}, id={}",
+                    timestamp, destination, message.type_, message.id
+                )
+            }
+            NodeEvent::TransactionCreated {
+                transaction,
+                agent_did,
+            } => {
+                format!(
+                    "[{}] TRANSACTION CREATED: id={}, agent={}",
+                    timestamp, transaction.id, agent_did
+                )
+            }
+            NodeEvent::CustomerUpdated {
+                customer_id,
+                agent_did,
+                update_type,
+            } => {
+                format!(
+                    "[{}] CUSTOMER UPDATED: id={}, agent={}, type={}",
+                    timestamp, customer_id, agent_did, update_type
+                )
+            }
         }
     }
 
@@ -393,6 +427,45 @@ impl EventLogger {
                     "old_state": old_state,
                     "new_state": new_state,
                     "agent_did": agent_did,
+                }),
+            ),
+            NodeEvent::MessageReceived { message, source } => (
+                "message_received_new",
+                json!({
+                    "message": serde_json::to_value(message).unwrap_or(json!(null)),
+                    "source": source,
+                }),
+            ),
+            NodeEvent::MessageSent {
+                message,
+                destination,
+            } => (
+                "message_sent_new",
+                json!({
+                    "message": serde_json::to_value(message).unwrap_or(json!(null)),
+                    "destination": destination,
+                }),
+            ),
+            NodeEvent::TransactionCreated {
+                transaction,
+                agent_did,
+            } => (
+                "transaction_created",
+                json!({
+                    "transaction_id": transaction.id,
+                    "agent_did": agent_did,
+                }),
+            ),
+            NodeEvent::CustomerUpdated {
+                customer_id,
+                agent_did,
+                update_type,
+            } => (
+                "customer_updated",
+                json!({
+                    "customer_id": customer_id,
+                    "agent_did": agent_did,
+                    "update_type": update_type,
                 }),
             ),
         };

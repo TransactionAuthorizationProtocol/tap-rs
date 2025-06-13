@@ -15,6 +15,7 @@ Core message processing for the Transaction Authorization Protocol (TAP) providi
 - **Agent Policies**: TAIP-7 compliant policy implementation for defining agent requirements
 - **Invoice Support**: TAIP-16 compliant structured invoice implementation with tax and line item support
 - **Payment Requests**: TAIP-14 compliant payment requests with currency and asset options
+- **Name Hashing**: TAIP-12 compliant name hashing for privacy-preserving Travel Rule compliance
 - **Extensibility**: Easy addition of new message types
 
 ## Usage
@@ -649,6 +650,48 @@ println!("All participants: {:?}", transfer.get_all_participants());
 let participants = transfer.participants();  // Vec of &Participant
 let tx_context = transfer.transaction_context();  // TransactionContext
 ```
+
+## Name Hashing (TAIP-12)
+
+TAP supports privacy-preserving name sharing through TAIP-12 compliant hashing:
+
+```rust
+use tap_msg::utils::{hash_name, NameHashable};
+use tap_msg::message::Party;
+
+// Hash a name directly
+let hash = hash_name("Alice Lee");
+assert_eq!(hash, "b117f44426c9670da91b563db728cd0bc8bafa7d1a6bb5e764d1aad2ca25032e");
+
+// Use with Party objects
+let party = Party::new("did:example:alice")
+    .with_name_hash("Alice Lee");
+
+// The party now includes the nameHash metadata
+assert_eq!(
+    party.name_hash().unwrap(),
+    "b117f44426c9670da91b563db728cd0bc8bafa7d1a6bb5e764d1aad2ca25032e"
+);
+
+// Implement NameHashable for your own types
+struct Customer {
+    name: String,
+}
+
+impl NameHashable for Customer {}
+
+// Now you can use the trait method
+let hash = Customer::hash_name("Bob Smith");
+assert_eq!(hash, "5432e86b4d4a3a2b4be57b713b12c5c576c88459fe1cfdd760fd6c99a0e06686");
+```
+
+The name hashing follows TAIP-12 normalization:
+1. Remove all whitespace characters
+2. Convert to uppercase
+3. Apply SHA-256 hash
+4. Return as lowercase hex string
+
+This enables compliance with Travel Rule requirements while preserving privacy by sharing only hashed names that can be matched against sanctions lists without revealing personal information.
 
 ## Adding New Message Types
 

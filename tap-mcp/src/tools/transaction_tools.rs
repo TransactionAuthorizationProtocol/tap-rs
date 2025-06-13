@@ -10,7 +10,7 @@ use serde_json::Value;
 use std::sync::Arc;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Agent, Authorize, Cancel, Party, Reject, Settle, Transfer};
+use tap_msg::message::{Agent, Authorize, Cancel, Party, Reject, Revert, Settle, Transfer};
 use tracing::{debug, error};
 use uuid::Uuid;
 
@@ -764,6 +764,148 @@ impl ToolHandler for SettleTool {
             name: "tap_settle".to_string(),
             description: "Settles a TAP transaction using the Settle message (TAIP-6)".to_string(),
             input_schema: schema::settle_schema(),
+        }
+    }
+}
+
+/// Tool for reverting transactions
+pub struct RevertTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for reverting a transaction
+#[derive(Debug, Deserialize)]
+struct RevertParams {
+    agent_did: String, // The DID of the agent that will sign and send this message
+    transaction_id: String,
+    settlement_address: String,
+    reason: String,
+}
+
+/// Response for reverting a transaction
+#[derive(Debug, Serialize)]
+struct RevertResponse {
+    transaction_id: String,
+    message_id: String,
+    status: String,
+    reason: String,
+    settlement_address: String,
+    reverted_at: String,
+}
+
+impl RevertTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for RevertTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: RevertParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Reverting transaction: {} with reason: {}",
+            params.transaction_id, params.reason
+        );
+
+        // Create revert message
+        let revert = Revert {
+            transaction_id: params.transaction_id.clone(),
+            settlement_address: params.settlement_address.clone(),
+            reason: params.reason.clone(),
+        };
+
+        // Validate the revert message
+        if let Err(e) = revert.validate() {
+            return Ok(error_text_response(format!(
+                "Revert validation failed: {}",
+                e
+            )));
+        }
+
+        // Create DIDComm message using the specified agent DID
+        let didcomm_message = match revert.to_didcomm(&params.agent_did) {
+            Ok(msg) => msg,
+            Err(e) => {
+                return Ok(error_text_response(format!(
+                    "Failed to create DIDComm message: {}",
+                    e
+                )));
+            }
+        };
+
+        // Determine recipient from the message
+        let recipient_did = if !didcomm_message.to.is_empty() {
+            didcomm_message.to[0].clone()
+        } else {
+            return Ok(error_text_response(
+                "No recipient found for revert message".to_string(),
+            ));
+        };
+
+        debug!(
+            "Sending revert from {} to {} for transaction: {}",
+            params.agent_did, recipient_did, params.transaction_id
+        );
+
+        // Send the message through the TAP node
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(packed_message) => {
+                debug!(
+                    "Revert message sent successfully to {}, packed message length: {}",
+                    recipient_did,
+                    packed_message.len()
+                );
+
+                let response = RevertResponse {
+                    transaction_id: params.transaction_id,
+                    message_id: didcomm_message.id,
+                    status: "sent".to_string(),
+                    reason: params.reason,
+                    settlement_address: params.settlement_address,
+                    reverted_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize response: {}", e))
+                })?;
+
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to send revert message: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to send revert message: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_revert".to_string(),
+            description: "Reverts a settled TAP transaction using the Revert message (TAIP-12)"
+                .to_string(),
+            input_schema: schema::revert_schema(),
         }
     }
 }

@@ -93,7 +93,7 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
-TAP-MCP provides 18 comprehensive tools covering the complete TAP transaction lifecycle:
+TAP-MCP provides 29 comprehensive tools covering the complete TAP transaction lifecycle:
 
 ### Agent Management
 
@@ -125,6 +125,57 @@ List all configured agents from ~/.tap/keys.json.
   },
   "limit": 50,
   "offset": 0
+}
+```
+
+### Agent Management for Transactions
+
+#### `tap_add_agents`
+Add agents to an existing TAP transaction (TAIP-5). Allows adding settlement addresses, compliance officers, or other agents to handle the transaction.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "transaction_id": "tx-12345",
+  "agents": [
+    {
+      "@id": "did:example:new-settlement-agent",
+      "role": "SettlementAddress",
+      "for": "did:example:alice"
+    },
+    {
+      "@id": "did:example:compliance-officer",
+      "role": "ComplianceOfficer",
+      "for": "did:example:bob"
+    }
+  ]
+}
+```
+
+#### `tap_remove_agent`
+Remove an agent from a TAP transaction (TAIP-5). Removes an agent's authorization to act on behalf of a party in the transaction.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "transaction_id": "tx-12345",
+  "agent_to_remove": "did:example:old-settlement-agent"
+}
+```
+
+#### `tap_replace_agent`
+Replace an agent in a TAP transaction (TAIP-5). Atomically replaces one agent with another while maintaining continuity.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "transaction_id": "tx-12345",
+  "original_agent": "did:example:old-agent",
+  "new_agent": {
+    "@id": "did:example:new-agent",
+    "role": "SettlementAddress",
+    "for": "did:example:alice"
+  }
 }
 ```
 
@@ -229,6 +280,36 @@ List transactions with filtering and pagination support. Shows only transactions
 }
 ```
 
+### Policy Management
+
+#### `tap_update_policies`
+Update policies for a TAP transaction (TAIP-7). Allows agents to update transaction policies such as authorization requirements, compliance rules, or operational constraints.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "transaction_id": "tx-12345",
+  "policies": [
+    {
+      "@type": "RequireAuthorization",
+      "authorizer": "did:example:compliance-officer",
+      "threshold": "100.00",
+      "currency": "USD"
+    },
+    {
+      "@type": "RequirePresentation",
+      "requested_attributes": ["name", "address", "dateOfBirth"],
+      "purpose": "KYC compliance"
+    },
+    {
+      "@type": "TransactionLimit",
+      "max_amount": "10000.00",
+      "period": "daily"
+    }
+  ]
+}
+```
+
 ### Customer and Connection Management
 
 #### `tap_list_customers`
@@ -287,6 +368,177 @@ Returns:
     }
   ],
   "total": 1
+}
+```
+
+#### `tap_get_customer_details`
+Get detailed information about a specific customer, including all their profile data and transaction history.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "customer_id": "did:example:alice"
+}
+```
+
+#### `tap_generate_ivms101`
+Generate IVMS101 travel rule data from a customer's profile. Converts stored customer information into the IVMS101 format required for FATF travel rule compliance.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "customer_id": "did:example:alice"
+}
+```
+
+Returns IVMS101-formatted data for the customer's natural or legal person information.
+
+#### `tap_update_customer_profile`
+Update customer profile data using Schema.org vocabulary. Stores structured customer information in the agent's database.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "customer_id": "did:example:alice",
+  "profile_data": {
+    "givenName": "Alice",
+    "familyName": "Smith",
+    "addressCountry": "US",
+    "addressRegion": "CA",
+    "addressLocality": "San Francisco",
+    "postalCode": "94105",
+    "streetAddress": "123 Main St"
+  }
+}
+```
+
+#### `tap_update_customer_from_ivms101`
+Update customer profile from IVMS101 data. Converts IVMS101 travel rule data into Schema.org format and stores it in the customer profile.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "customer_id": "did:example:alice",
+  "ivms101_data": {
+    "naturalPerson": {
+      "name": {
+        "nameIdentifier": [
+          {
+            "primaryIdentifier": "Smith",
+            "secondaryIdentifier": "Alice",
+            "nameIdentifierType": "LEGL"
+          }
+        ]
+      },
+      "geographicAddress": [
+        {
+          "addressType": "HOME",
+          "townLocationName": "San Francisco",
+          "countrySubDivision": "CA",
+          "country": "US",
+          "postCode": "94105"
+        }
+      ]
+    }
+  }
+}
+```
+
+### Communication Tools
+
+#### `tap_trust_ping`
+Send a trust ping message (DIDComm standard) to verify connectivity and agent availability.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "recipient_did": "did:example:bob",
+  "comment": "Testing connection"
+}
+```
+
+#### `tap_basic_message`
+Send a basic text message (DIDComm standard) for human-readable communication between agents.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "recipient_did": "did:example:bob",
+  "content": "Please review the pending transaction"
+}
+```
+
+### Transaction Reversal
+
+#### `tap_revert`
+Request reversal of a settled transaction (TAIP-14). Used for compliance reversals or dispute resolutions.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "transaction_id": "tx-12345",
+  "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87",
+  "reason": "Compliance investigation required"
+}
+```
+
+### Message Delivery Tracking
+
+#### `tap_list_deliveries_by_recipient`
+List message deliveries to a specific recipient, showing delivery status and retry information.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "recipient_did": "did:example:bob",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `tap_list_deliveries_by_message`
+List all delivery attempts for a specific message ID.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "message_id": "msg-12345",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+#### `tap_list_deliveries_by_thread`
+List all message deliveries for a transaction thread.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "thread_id": "tx-12345",
+  "limit": 50,
+  "offset": 0
+}
+```
+
+### Database Tools
+
+#### `tap_query_database`
+Execute direct SQL queries on the agent's database for advanced analysis. Read-only access.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "query": "SELECT COUNT(*) as total, message_type FROM messages WHERE created_time > datetime('now', '-7 days') GROUP BY message_type",
+  "params": []
+}
+```
+
+#### `tap_get_database_schema`
+Get the complete database schema for understanding the data structure.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"
 }
 ```
 

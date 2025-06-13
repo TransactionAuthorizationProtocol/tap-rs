@@ -10,7 +10,7 @@
 
 use base64::{engine::general_purpose, Engine as _};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tap_agent::{
     did::{DIDGenerationOptions, DIDKeyGenerator, KeyType},
     error::Result,
@@ -97,7 +97,7 @@ fn generate_new_key(storage_path: &PathBuf) -> Result<()> {
 }
 
 /// Load and display existing keys
-fn load_and_display_keys(storage_path: &PathBuf) -> Result<()> {
+fn load_and_display_keys(storage_path: &Path) -> Result<()> {
     println!("=== Loading Existing Keys ===");
 
     match KeyStorage::load_from_path(storage_path) {
@@ -185,7 +185,7 @@ fn generate_multiple_key_types(storage_path: &PathBuf) -> Result<()> {
 }
 
 /// Demonstrate key rotation
-fn demonstrate_key_rotation(storage_path: &PathBuf) -> Result<()> {
+fn demonstrate_key_rotation(storage_path: &Path) -> Result<()> {
     println!("=== Key Rotation Example ===");
 
     let mut storage =

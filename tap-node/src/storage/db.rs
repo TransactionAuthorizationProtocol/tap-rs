@@ -1,4 +1,5 @@
 use sqlx::sqlite::{SqlitePool, SqlitePoolOptions};
+use sqlx::Row;
 use std::env;
 use std::path::{Path, PathBuf};
 use tap_msg::didcomm::PlainMessage;
@@ -6,8 +7,9 @@ use tracing::{debug, info};
 
 use super::error::StorageError;
 use super::models::{
-    Delivery, DeliveryStatus, DeliveryType, Message, MessageDirection, Received, ReceivedStatus,
-    SourceType, Transaction, TransactionStatus, TransactionType,
+    Customer, CustomerIdentifier, CustomerRelationship, Delivery, DeliveryStatus, DeliveryType,
+    IdentifierType, Message, MessageDirection, Received, ReceivedStatus, SchemaType, SourceType,
+    Transaction, TransactionStatus, TransactionType,
 };
 
 /// Storage backend for TAP transactions and message audit trail
@@ -2026,6 +2028,426 @@ impl Storage {
         }
 
         Ok(received_messages)
+    }
+
+    // Customer Management Methods
+
+    /// Create or update a customer record
+    pub async fn upsert_customer(&self, customer: &Customer) -> Result<(), StorageError> {
+        sqlx::query(
+            r#"
+            INSERT INTO customers (
+                id, agent_did, schema_type, given_name, family_name, display_name,
+                legal_name, lei_code, mcc_code, address_country, address_locality,
+                postal_code, street_address, profile, ivms101_data, verified_at,
+                created_at, updated_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18
+            ) ON CONFLICT(id) DO UPDATE SET
+                agent_did = excluded.agent_did,
+                schema_type = excluded.schema_type,
+                given_name = excluded.given_name,
+                family_name = excluded.family_name,
+                display_name = excluded.display_name,
+                legal_name = excluded.legal_name,
+                lei_code = excluded.lei_code,
+                mcc_code = excluded.mcc_code,
+                address_country = excluded.address_country,
+                address_locality = excluded.address_locality,
+                postal_code = excluded.postal_code,
+                street_address = excluded.street_address,
+                profile = excluded.profile,
+                ivms101_data = excluded.ivms101_data,
+                verified_at = excluded.verified_at,
+                updated_at = excluded.updated_at
+            "#,
+        )
+        .bind(&customer.id)
+        .bind(&customer.agent_did)
+        .bind(customer.schema_type.to_string())
+        .bind(&customer.given_name)
+        .bind(&customer.family_name)
+        .bind(&customer.display_name)
+        .bind(&customer.legal_name)
+        .bind(&customer.lei_code)
+        .bind(&customer.mcc_code)
+        .bind(&customer.address_country)
+        .bind(&customer.address_locality)
+        .bind(&customer.postal_code)
+        .bind(&customer.street_address)
+        .bind(serde_json::to_string(&customer.profile).unwrap())
+        .bind(
+            customer
+                .ivms101_data
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap()),
+        )
+        .bind(&customer.verified_at)
+        .bind(&customer.created_at)
+        .bind(&customer.updated_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get a customer by ID
+    pub async fn get_customer(&self, customer_id: &str) -> Result<Option<Customer>, StorageError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, agent_did, schema_type, given_name, family_name, display_name,
+                   legal_name, lei_code, mcc_code, address_country, address_locality,
+                   postal_code, street_address, profile, ivms101_data, verified_at,
+                   created_at, updated_at
+            FROM customers
+            WHERE id = ?1
+            "#,
+        )
+        .bind(customer_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => Ok(Some(Customer {
+                id: row.get("id"),
+                agent_did: row.get("agent_did"),
+                schema_type: SchemaType::try_from(row.get::<String, _>("schema_type").as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                given_name: row.get("given_name"),
+                family_name: row.get("family_name"),
+                display_name: row.get("display_name"),
+                legal_name: row.get("legal_name"),
+                lei_code: row.get("lei_code"),
+                mcc_code: row.get("mcc_code"),
+                address_country: row.get("address_country"),
+                address_locality: row.get("address_locality"),
+                postal_code: row.get("postal_code"),
+                street_address: row.get("street_address"),
+                profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
+                ivms101_data: row
+                    .get::<Option<String>, _>("ivms101_data")
+                    .map(|v| serde_json::from_str(&v).unwrap()),
+                verified_at: row.get("verified_at"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            })),
+            None => Ok(None),
+        }
+    }
+
+    /// Get a customer by identifier
+    pub async fn get_customer_by_identifier(
+        &self,
+        identifier: &str,
+    ) -> Result<Option<Customer>, StorageError> {
+        let row = sqlx::query_as::<_, (String,)>(
+            r#"
+            SELECT customer_id
+            FROM customer_identifiers
+            WHERE id = ?1
+            "#,
+        )
+        .bind(identifier)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some((customer_id,)) => self.get_customer(&customer_id).await,
+            None => Ok(None),
+        }
+    }
+
+    /// List customers for an agent
+    pub async fn list_customers(
+        &self,
+        agent_did: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Customer>, StorageError> {
+        let rows = sqlx::query(
+            r#"
+            SELECT id, agent_did, schema_type, given_name, family_name, display_name,
+                   legal_name, lei_code, mcc_code, address_country, address_locality,
+                   postal_code, street_address, profile, ivms101_data, verified_at,
+                   created_at, updated_at
+            FROM customers
+            WHERE agent_did = ?1
+            ORDER BY updated_at DESC
+            LIMIT ?2 OFFSET ?3
+            "#,
+        )
+        .bind(agent_did)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut customers = Vec::new();
+        for row in rows {
+            customers.push(Customer {
+                id: row.get("id"),
+                agent_did: row.get("agent_did"),
+                schema_type: SchemaType::try_from(row.get::<String, _>("schema_type").as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                given_name: row.get("given_name"),
+                family_name: row.get("family_name"),
+                display_name: row.get("display_name"),
+                legal_name: row.get("legal_name"),
+                lei_code: row.get("lei_code"),
+                mcc_code: row.get("mcc_code"),
+                address_country: row.get("address_country"),
+                address_locality: row.get("address_locality"),
+                postal_code: row.get("postal_code"),
+                street_address: row.get("street_address"),
+                profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
+                ivms101_data: row
+                    .get::<Option<String>, _>("ivms101_data")
+                    .map(|v| serde_json::from_str(&v).unwrap()),
+                verified_at: row.get("verified_at"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(customers)
+    }
+
+    /// Add an identifier to a customer
+    pub async fn add_customer_identifier(
+        &self,
+        identifier: &CustomerIdentifier,
+    ) -> Result<(), StorageError> {
+        sqlx::query(
+            r#"
+            INSERT INTO customer_identifiers (
+                id, customer_id, identifier_type, verified, verification_method,
+                verified_at, created_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7
+            ) ON CONFLICT(id, customer_id) DO UPDATE SET
+                verified = excluded.verified,
+                verification_method = excluded.verification_method,
+                verified_at = excluded.verified_at
+            "#,
+        )
+        .bind(&identifier.id)
+        .bind(&identifier.customer_id)
+        .bind(identifier.identifier_type.to_string())
+        .bind(identifier.verified)
+        .bind(&identifier.verification_method)
+        .bind(&identifier.verified_at)
+        .bind(&identifier.created_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get identifiers for a customer
+    pub async fn get_customer_identifiers(
+        &self,
+        customer_id: &str,
+    ) -> Result<Vec<CustomerIdentifier>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                bool,
+                Option<String>,
+                Option<String>,
+                String,
+            ),
+        >(
+            r#"
+            SELECT id, customer_id, identifier_type, verified, verification_method,
+                   verified_at, created_at
+            FROM customer_identifiers
+            WHERE customer_id = ?1
+            "#,
+        )
+        .bind(customer_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut identifiers = Vec::new();
+        for (
+            id,
+            customer_id,
+            identifier_type,
+            verified,
+            verification_method,
+            verified_at,
+            created_at,
+        ) in rows
+        {
+            identifiers.push(CustomerIdentifier {
+                id,
+                customer_id,
+                identifier_type: IdentifierType::try_from(identifier_type.as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                verified,
+                verification_method,
+                verified_at,
+                created_at,
+            });
+        }
+
+        Ok(identifiers)
+    }
+
+    /// Add a customer relationship
+    pub async fn add_customer_relationship(
+        &self,
+        relationship: &CustomerRelationship,
+    ) -> Result<(), StorageError> {
+        sqlx::query(
+            r#"
+            INSERT INTO customer_relationships (
+                id, customer_id, relationship_type, related_identifier,
+                proof, confirmed_at, created_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7
+            ) ON CONFLICT(customer_id, relationship_type, related_identifier) DO UPDATE SET
+                proof = excluded.proof,
+                confirmed_at = excluded.confirmed_at
+            "#,
+        )
+        .bind(&relationship.id)
+        .bind(&relationship.customer_id)
+        .bind(&relationship.relationship_type)
+        .bind(&relationship.related_identifier)
+        .bind(
+            relationship
+                .proof
+                .as_ref()
+                .map(|v| serde_json::to_string(v).unwrap()),
+        )
+        .bind(&relationship.confirmed_at)
+        .bind(&relationship.created_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Get relationships for a customer
+    pub async fn get_customer_relationships(
+        &self,
+        customer_id: &str,
+    ) -> Result<Vec<CustomerRelationship>, StorageError> {
+        let rows = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                String,
+            ),
+        >(
+            r#"
+            SELECT id, customer_id, relationship_type, related_identifier,
+                   proof, confirmed_at, created_at
+            FROM customer_relationships
+            WHERE customer_id = ?1
+            "#,
+        )
+        .bind(customer_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut relationships = Vec::new();
+        for (
+            id,
+            customer_id,
+            relationship_type,
+            related_identifier,
+            proof,
+            confirmed_at,
+            created_at,
+        ) in rows
+        {
+            relationships.push(CustomerRelationship {
+                id,
+                customer_id,
+                relationship_type,
+                related_identifier,
+                proof: proof.map(|v| serde_json::from_str(&v).unwrap()),
+                confirmed_at,
+                created_at,
+            });
+        }
+
+        Ok(relationships)
+    }
+
+    /// Search customers by name or identifier
+    pub async fn search_customers(
+        &self,
+        agent_did: &str,
+        query: &str,
+        limit: u32,
+    ) -> Result<Vec<Customer>, StorageError> {
+        let search_pattern = format!("%{}%", query);
+
+        let rows = sqlx::query(
+            r#"
+            SELECT DISTINCT c.id, c.agent_did, c.schema_type, c.given_name, c.family_name, c.display_name,
+                   c.legal_name, c.lei_code, c.mcc_code, c.address_country, c.address_locality,
+                   c.postal_code, c.street_address, c.profile, c.ivms101_data, c.verified_at,
+                   c.created_at, c.updated_at
+            FROM customers c
+            LEFT JOIN customer_identifiers ci ON c.id = ci.customer_id
+            WHERE c.agent_did = ?1
+            AND (
+                c.given_name LIKE ?2
+                OR c.family_name LIKE ?2
+                OR c.display_name LIKE ?2
+                OR c.legal_name LIKE ?2
+                OR ci.id LIKE ?2
+            )
+            ORDER BY c.updated_at DESC
+            LIMIT ?3
+            "#,
+        )
+        .bind(agent_did)
+        .bind(&search_pattern)
+        .bind(limit)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let mut customers = Vec::new();
+        for row in rows {
+            customers.push(Customer {
+                id: row.get("id"),
+                agent_did: row.get("agent_did"),
+                schema_type: SchemaType::try_from(row.get::<String, _>("schema_type").as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                given_name: row.get("given_name"),
+                family_name: row.get("family_name"),
+                display_name: row.get("display_name"),
+                legal_name: row.get("legal_name"),
+                lei_code: row.get("lei_code"),
+                mcc_code: row.get("mcc_code"),
+                address_country: row.get("address_country"),
+                address_locality: row.get("address_locality"),
+                postal_code: row.get("postal_code"),
+                street_address: row.get("street_address"),
+                profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
+                ivms101_data: row
+                    .get::<Option<String>, _>("ivms101_data")
+                    .map(|v| serde_json::from_str(&v).unwrap()),
+                verified_at: row.get("verified_at"),
+                created_at: row.get("created_at"),
+                updated_at: row.get("updated_at"),
+            });
+        }
+
+        Ok(customers)
     }
 }
 

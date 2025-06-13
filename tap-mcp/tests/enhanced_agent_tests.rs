@@ -145,7 +145,7 @@ async fn test_enhanced_agent_listing() -> Result<()> {
         let agent = enhanced_agents
             .iter()
             .find(|(did, _, _)| did == id)
-            .expect(&format!("Agent {} not found", id));
+            .unwrap_or_else(|| panic!("Agent {} not found", id));
 
         assert_eq!(agent.1, vec!["POLICY1".to_string()]);
         assert_eq!(agent.2.get("name"), Some(&name.to_string()));

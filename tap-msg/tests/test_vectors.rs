@@ -697,11 +697,7 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                             },
                         )
                         .map(|a| {
-                            Agent::new(
-                                &a.id,
-                                &a.role.as_deref().unwrap_or("agent"),
-                                &originator.id(),
-                            )
+                            Agent::new(&a.id, a.role.as_deref().unwrap_or("agent"), originator.id())
                         })
                         .collect();
 
@@ -1219,7 +1215,7 @@ fn validate_confirm_relationship_body(
     let has_participants = body.contains_key("participants");
 
     // Make sure at least one of the formats is present
-    if !has_participants && !(has_id && has_for) {
+    if !(has_participants || has_id && has_for) {
         if !has_participants {
             // If using direct format, ensure required fields are present
             if !has_id {

@@ -22,6 +22,10 @@ chrono = { workspace = true }
 # Random numbers for nonces
 rand = "0.8.5"
 
+# Cryptography
+sha2 = "0.10"
+hex = "0.4"
+
 # Error handling
 thiserror = { workspace = true }
 
