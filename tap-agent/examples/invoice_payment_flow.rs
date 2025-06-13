@@ -204,7 +204,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let received_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Merchant received settlement confirmation:");
         println!("  Payment ID: {}", received_settle.transaction_id);
-        println!("  Settlement ID: {}", received_settle.settlement_id);
+        println!("  Settlement ID: {:?}", received_settle.settlement_id);
         if let Some(amount) = &received_settle.amount {
             println!("  Amount: {}\n", amount);
         }
@@ -352,7 +352,7 @@ fn create_payment_message_with_invoice(
         currency_code: None,
         amount: "115.0".to_string(), // Total amount including tax
         supported_assets: None,
-        invoice: Some(InvoiceReference::Object(invoice)),
+        invoice: Some(InvoiceReference::Object(Box::new(invoice))),
         expiry: None,
         merchant,
         customer: Some(customer),

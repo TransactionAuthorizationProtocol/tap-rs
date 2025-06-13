@@ -196,7 +196,7 @@ impl Agent {
 
     /// Check if this agent has a specific role.
     pub fn has_role(&self, role: &str) -> bool {
-        self.role.as_ref().map_or(false, |r| r == role)
+        self.role.as_ref().is_some_and(|r| r == role)
     }
 
     /// Check if this agent acts for a specific party.

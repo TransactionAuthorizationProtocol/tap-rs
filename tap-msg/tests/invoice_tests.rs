@@ -172,7 +172,7 @@ fn test_payment_request_with_invoice() {
 
     // Add invoice directly to payment
     payment_request.invoice = Some(tap_msg::message::payment::InvoiceReference::Object(
-        invoice.clone(),
+        Box::new(invoice.clone()),
     ));
 
     // This should validate correctly

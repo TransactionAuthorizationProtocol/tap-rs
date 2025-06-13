@@ -230,14 +230,12 @@ fn main() -> Result<()> {
             received_add_agents.agents[0].id,
             received_add_agents.agents[0]
                 .role
-                .as_ref()
-                .map(|r| r.as_str())
+                .as_deref()
                 .unwrap_or("unknown"),
             received_add_agents.agents[1].id,
             received_add_agents.agents[1]
                 .role
-                .as_ref()
-                .map(|r| r.as_str())
+                .as_deref()
                 .unwrap_or("unknown")
         );
 

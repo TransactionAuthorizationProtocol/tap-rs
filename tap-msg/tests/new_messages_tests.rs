@@ -163,13 +163,18 @@ fn test_connect_message() {
     invalid_body.for_ = Some("".to_string());
     assert!(invalid_body.validate().is_err());
 
-    // Test minimal validation
+    // Test minimal validation with constraints
     let minimal_body = Connect::new(
         "test-transaction-id",
         "did:example:b2b-service",
         "did:example:business-customer",
         None,
-    );
+    )
+    .with_constraints(ConnectionConstraints {
+        purposes: None,
+        category_purposes: None,
+        limits: None,
+    });
     assert!(minimal_body.validate().is_ok());
 }
 

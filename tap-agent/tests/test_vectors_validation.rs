@@ -44,6 +44,7 @@ use tap_msg::{
 // Helper type to handle misformatted test vectors
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
+#[allow(dead_code, clippy::large_enum_variant)]
 enum TestVectorWrapper {
     Valid(TestVector),
     Invalid(Value), // For test vectors that can't be parsed

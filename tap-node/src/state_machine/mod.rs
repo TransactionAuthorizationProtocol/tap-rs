@@ -57,7 +57,7 @@ impl StandardTransactionProcessor {
             TapMessage::Transfer(transfer) => {
                 // Only add agents from the agents field, not the primary parties
                 for agent in &transfer.agents {
-                    let role_str = match agent.role.as_ref().map(|r| r.as_str()) {
+                    let role_str = match agent.role.as_deref() {
                         Some("compliance") => "compliance",
                         _ => "other",
                     };
@@ -67,7 +67,7 @@ impl StandardTransactionProcessor {
             TapMessage::Payment(payment) => {
                 // Only add agents from the agents field, not the primary parties
                 for agent in &payment.agents {
-                    let role_str = match agent.role.as_ref().map(|r| r.as_str()) {
+                    let role_str = match agent.role.as_deref() {
                         Some("compliance") => "compliance",
                         _ => "other",
                     };
@@ -499,7 +499,7 @@ impl TransactionStateProcessor for StandardTransactionProcessor {
                 let transaction_id = &add.transaction_id;
 
                 for agent in &add.agents {
-                    let role_str = match agent.role.as_ref().map(|r| r.as_str()) {
+                    let role_str = match agent.role.as_deref() {
                         Some("compliance") => "compliance",
                         _ => "other",
                     };

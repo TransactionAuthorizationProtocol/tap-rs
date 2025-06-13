@@ -21,7 +21,7 @@ pub enum InvoiceReference {
     /// URL to an invoice
     Url(String),
     /// Structured invoice object
-    Object(crate::message::Invoice),
+    Object(Box<crate::message::Invoice>),
 }
 
 impl InvoiceReference {
@@ -46,7 +46,7 @@ impl InvoiceReference {
     /// Get the invoice object if this is an object reference
     pub fn as_object(&self) -> Option<&crate::message::Invoice> {
         match self {
-            InvoiceReference::Object(invoice) => Some(invoice),
+            InvoiceReference::Object(invoice) => Some(invoice.as_ref()),
             _ => None,
         }
     }
@@ -223,7 +223,7 @@ impl PaymentBuilder {
 
     /// Set the invoice for this payment with an Invoice object
     pub fn invoice(mut self, invoice: crate::message::Invoice) -> Self {
-        self.invoice = Some(InvoiceReference::Object(invoice));
+        self.invoice = Some(InvoiceReference::Object(Box::new(invoice)));
         self
     }
 

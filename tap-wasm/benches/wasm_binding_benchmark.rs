@@ -82,9 +82,10 @@ fn bench_message_conversion(c: &mut Criterion) {
 
     let reject_body = Reject {
         transaction_id: "test-transfer-id".to_string(),
-        reason:
+        reason: Some(
             "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Rejected for testing."
                 .to_string(),
+        ),
     };
     let reject_message = reject_body.to_didcomm("did:example:alice").unwrap();
 

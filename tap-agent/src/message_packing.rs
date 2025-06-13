@@ -1042,21 +1042,16 @@ mod tests {
             body: serde_json::json!({
                 "@type": "https://tap.rsvp/schema/1.0#Transfer",
                 "transaction_id": "test-tx-123",
-                "asset": {
-                    "chain_id": {
-                        "namespace": "eip155",
-                        "reference": "1"
-                    },
-                    "namespace": "slip44",
-                    "reference": "60"
-                },
+                "asset": "eip155:1/slip44:60",
                 "originator": {
                     "@id": key.did.clone()
                 },
                 "amount": "100",
                 "agents": [],
                 "memo": null,
-                "beneficiary": null,
+                "beneficiary": {
+                    "@id": "did:example:bob"
+                },
                 "settlement_id": null,
                 "connection_id": null,
                 "metadata": {}
@@ -1087,6 +1082,12 @@ mod tests {
         assert_eq!(unpacked.plain_message.type_, message.type_);
 
         // Verify TAP message was parsed
+        if unpacked.tap_message.is_none() {
+            println!(
+                "TAP message parsing failed for body: {}",
+                serde_json::to_string_pretty(&unpacked.plain_message.body).unwrap()
+            );
+        }
         assert!(unpacked.tap_message.is_some());
         match unpacked.tap_message.unwrap() {
             TapMessage::Transfer(transfer) => {

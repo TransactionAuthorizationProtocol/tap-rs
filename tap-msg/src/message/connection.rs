@@ -211,8 +211,9 @@ impl Connect {
             ));
         }
 
-        // Either for_ or principal must be present
-        if self.for_.is_none() && self.principal.is_none() {
+        // Either for_ or principal must be present and non-empty
+        let for_empty = self.for_.as_ref().map_or(true, |s| s.is_empty());
+        if for_empty && self.principal.is_none() {
             return Err(Error::Validation(
                 "either for or principal is required".to_string(),
             ));

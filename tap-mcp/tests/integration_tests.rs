@@ -701,7 +701,7 @@ async fn test_complete_transaction_flow() -> Result<()> {
             json!({
                 "agent_did": alice_agent_id,
                 "transaction_id": transaction_id,
-                "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
+                "settlement_id": "eip155:1:tx/0xabcd1234567890abcdef1234567890abcdef1234",
                 "amount": "250.00"
             }),
         ))

@@ -193,7 +193,7 @@ fn main() -> Result<()> {
 
             println!("Originator received rejection:");
             println!("  Transfer ID: {}", received_reject.transaction_id);
-            println!("  Reason: {}", received_reject.reason);
+            println!("  Reason: {:?}", received_reject.reason);
             println!("Transfer flow ended with rejection");
 
             return Ok(());

@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let settle = Settle {
             transaction_id: transfer_id.clone(),
-            settlement_id: settlement_id.to_string(),
+            settlement_id: Some(settlement_id.to_string()),
             amount: Some(transfer.amount.clone()),
         };
 
@@ -128,7 +128,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let received_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Beneficiary received settlement confirmation:");
         println!("  Transfer ID: {}", received_settle.transaction_id);
-        println!("  Settlement ID: {}", received_settle.settlement_id);
+        println!("  Settlement ID: {:?}", received_settle.settlement_id);
         if let Some(amount) = &received_settle.amount {
             println!("  Amount: {}\n", amount);
         }
