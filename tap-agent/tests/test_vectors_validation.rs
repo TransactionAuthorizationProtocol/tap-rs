@@ -39,7 +39,8 @@ use tap_msg::{
 };
 use tap_msg::message::{
     RemoveAgent, ReplaceAgent, ConfirmRelationship, Cancel, UpdateParty,
-    UpdatePolicies, Revert, DIDCommPresentation, Payment, Connect, AuthorizationRequired
+    UpdatePolicies, Revert, DIDCommPresentation, Payment, Connect, AuthorizationRequired,
+    Complete
 };
 
 // Helper type to handle misformatted test vectors
@@ -95,6 +96,7 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
         "https://tap.rsvp/schema/1.0#Authorize",
         "https://tap.rsvp/schema/1.0#Reject", 
         "https://tap.rsvp/schema/1.0#Settle",
+        "https://tap.rsvp/schema/1.0#Complete",
         "https://tap.rsvp/schema/1.0#Cancel",
         "https://tap.rsvp/schema/1.0#Revert",
         "https://tap.rsvp/schema/1.0#AddAgents",
@@ -147,7 +149,9 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
             presentation.validate().map_err(|e| e.to_string())
         }
         "https://didcomm.org/present-proof/3.0/presentation" => {
-            let didcomm_presentation: DIDCommPresentation = serde_json::from_value(body_with_thread_id.clone())
+            // For DIDCommPresentation, we need to use the from_didcomm method
+            // because attachments are at the message level, not in the body
+            let didcomm_presentation = DIDCommPresentation::from_didcomm(message)
                 .map_err(|e| format!("Failed to parse DIDCommPresentation: {}", e))?;
             didcomm_presentation.validate().map_err(|e| e.to_string())
         }
@@ -225,6 +229,11 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
             let auth_required: AuthorizationRequired = serde_json::from_value(body_with_thread_id.clone())
                 .map_err(|e| format!("Failed to parse AuthorizationRequired: {}", e))?;
             auth_required.validate().map_err(|e| e.to_string())
+        }
+        "https://tap.rsvp/schema/1.0#Complete" => {
+            let complete: Complete = serde_json::from_value(body_with_thread_id.clone())
+                .map_err(|e| format!("Failed to parse Complete: {}", e))?;
+            complete.validate().map_err(|e| e.to_string())
         }
         "https://didcomm.org/out-of-band/2.0/invitation" => {
             // Out-of-band messages must have a goal_code starting with "tap."

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 /// Settle message body (TAIP-4).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
-#[tap(message_type = "https://tap.rsvp/schema/1.0#Settle")]
+#[tap(message_type = "https://tap.rsvp/schema/1.0#Settle", custom_validation)]
 pub struct Settle {
     /// ID of the transaction being settled.
     #[tap(thread_id)]
@@ -69,6 +69,32 @@ impl Settle {
                 return Err(Error::Validation(
                     "Settlement ID cannot be empty when provided".to_string(),
                 ));
+            }
+            
+            // Validate CAIP-220 format: namespace:chain_id:tx_type/tx_hash
+            // Example: eip155:1:tx/0x3edb98c24d46d148eb926c714f4fbaa117c47b0c0821f38bfce9763604457c33
+            
+            // First check if it starts with 0x (common mistake - raw hex without CAIP format)
+            if settlement_id.starts_with("0x") && !settlement_id.contains(':') {
+                return Err(Error::Validation(
+                    "Invalid format for 'settlementId', CAIP-220 block address expected".to_string(),
+                ));
+            }
+            
+            let parts: Vec<&str> = settlement_id.split(':').collect();
+            if parts.len() < 3 {
+                return Err(Error::Validation(
+                    "Invalid format for 'settlementId', CAIP-220 block address expected".to_string(),
+                ));
+            }
+            
+            // Check if the third part contains tx_type/tx_hash
+            if let Some(tx_part) = parts.get(2) {
+                if !tx_part.contains('/') {
+                    return Err(Error::Validation(
+                        "Invalid format for 'settlementId', CAIP-220 block address expected".to_string(),
+                    ));
+                }
             }
         }
 

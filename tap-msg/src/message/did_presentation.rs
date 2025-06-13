@@ -21,6 +21,7 @@ pub struct DIDCommPresentation {
     pub id: String,
 
     /// The format of the presentation (simplified from AttachmentFormat).
+    #[serde(default)]
     pub formats: Vec<String>,
 
     /// Attachments containing the presentation data.

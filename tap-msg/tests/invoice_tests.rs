@@ -171,7 +171,7 @@ fn test_payment_request_with_invoice() {
     )];
 
     // Add invoice directly to payment
-    payment_request.invoice = Some(invoice.clone());
+    payment_request.invoice = Some(tap_msg::message::payment::InvoiceReference::Object(invoice.clone()));
 
     // This should validate correctly
     assert!(payment_request.validate().is_ok());
@@ -206,8 +206,12 @@ fn test_payment_request_with_invoice() {
     assert!(extracted_invoice.is_some());
 
     // Check the invoice details
-    let invoice_unwrapped = extracted_invoice.unwrap();
-    assert_eq!(invoice_unwrapped.id, "INV001");
-    assert_eq!(invoice_unwrapped.currency_code, "USD");
-    assert_eq!(invoice_unwrapped.total, 100.0);
+    let invoice_ref = extracted_invoice.unwrap();
+    if let tap_msg::message::payment::InvoiceReference::Object(invoice_unwrapped) = invoice_ref {
+        assert_eq!(invoice_unwrapped.id, "INV001");
+        assert_eq!(invoice_unwrapped.currency_code, "USD");
+        assert_eq!(invoice_unwrapped.total, 100.0);
+    } else {
+        panic!("Expected InvoiceReference::Object, got URL");
+    }
 }

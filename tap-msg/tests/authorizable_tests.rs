@@ -29,21 +29,21 @@ fn test_transfer_authorizable() {
     let reject_reason = "Rejected due to compliance issues".to_string();
     let reject = Reject {
         transaction_id: transfer_message.id.clone(),
-        reason: format!("{}: {}", reject_code, reject_reason),
+        reason: Some(format!("{}: {}", reject_code, reject_reason)),
     };
     assert_eq!(
         reject.reason,
-        "REJECT-001: Rejected due to compliance issues"
+        Some("REJECT-001: Rejected due to compliance issues".to_string())
     );
 
     // Create Settle struct directly
     let settle = Settle {
         transaction_id: "tx-123".to_string(),
-        settlement_id: "settle-123".to_string(),
+        settlement_id: Some("settle-123".to_string()),
         amount: Some("50.00".to_string()),
     };
 
-    assert_eq!(settle.settlement_id, "settle-123".to_string());
+    assert_eq!(settle.settlement_id, Some("settle-123".to_string()));
     assert_eq!(settle.amount, Some("50.00".to_string()));
 }
 
@@ -66,21 +66,21 @@ fn test_didcomm_message_authorizable() {
     let reject_reason = "Rejected due to compliance issues".to_string();
     let reject = Reject {
         transaction_id: transfer_message.id.clone(),
-        reason: format!("{}: {}", reject_code, reject_reason),
+        reason: Some(format!("{}: {}", reject_code, reject_reason)),
     };
     assert_eq!(
         reject.reason,
-        "REJECT-001: Rejected due to compliance issues"
+        Some("REJECT-001: Rejected due to compliance issues".to_string())
     );
 
     // Create Settle struct directly
     let settle = Settle {
         transaction_id: transfer.transaction_id.clone(),
-        settlement_id: "tx-12345".to_string(),
+        settlement_id: Some("tx-12345".to_string()),
         amount: Some("100".to_string()),
     };
 
-    assert_eq!(settle.settlement_id, "tx-12345".to_string());
+    assert_eq!(settle.settlement_id, Some("tx-12345".to_string()));
     assert_eq!(settle.amount, Some("100".to_string()));
 }
 
@@ -95,7 +95,7 @@ fn test_full_flow() {
     // Create Settle struct directly
     let settle = Settle {
         transaction_id: transfer.transaction_id.clone(),
-        settlement_id: "tx-12345".to_string(),
+        settlement_id: Some("tx-12345".to_string()),
         amount: Some("100".to_string()),
     };
 

@@ -401,7 +401,7 @@ impl ToolHandler for RejectTool {
         // Create reject message
         let reject = Reject {
             transaction_id: params.transaction_id.clone(),
-            reason: params.reason.clone(),
+            reason: Some(params.reason.clone()),
         };
 
         // Validate the reject message
@@ -683,7 +683,7 @@ impl ToolHandler for SettleTool {
         // Create settle message
         let settle = Settle {
             transaction_id: params.transaction_id.clone(),
-            settlement_id: params.settlement_id.clone(),
+            settlement_id: Some(params.settlement_id.clone()),
             amount: params.amount.clone(),
         };
 
