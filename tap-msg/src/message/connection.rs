@@ -212,7 +212,7 @@ impl Connect {
         }
 
         // Either for_ or principal must be present and non-empty
-        let for_empty = self.for_.as_ref().map_or(true, |s| s.is_empty());
+        let for_empty = self.for_.as_ref().is_none_or(|s| s.is_empty());
         if for_empty && self.principal.is_none() {
             return Err(Error::Validation(
                 "either for or principal is required".to_string(),
