@@ -168,8 +168,10 @@ fn test_multiple_connections() {
 fn create_test_connect() -> Connect {
     Connect {
         transaction_id: uuid::Uuid::new_v4().to_string(),
-        agent_id: "did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string(),
-        for_: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string(),
+        agent_id: Some("did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string()),
+        agent: None,
+        principal: None,
+        for_: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
         role: None,
         constraints: None,
     }
@@ -192,7 +194,7 @@ fn create_test_transfer() -> Transfer {
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
         agents,

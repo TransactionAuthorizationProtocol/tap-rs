@@ -174,7 +174,7 @@ async fn test_list_tools() -> Result<()> {
 
     if let Some(result) = response.result {
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 29); // All 29 tools should be available (including revert, communication, delivery, customer, received message tools, database tools, agent management tools, and policy tools)
+        assert_eq!(tools.len(), 30); // All 30 tools should be available (including complete, revert, communication, delivery, customer, received message tools, database tools, agent management tools, and policy tools)
 
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
@@ -701,7 +701,7 @@ async fn test_complete_transaction_flow() -> Result<()> {
             json!({
                 "agent_did": alice_agent_id,
                 "transaction_id": transaction_id,
-                "settlement_id": "eip155:1:0xabcd1234567890abcdef1234567890abcdef1234",
+                "settlement_id": "eip155:1:tx/0xabcd1234567890abcdef1234567890abcdef1234",
                 "amount": "250.00"
             }),
         ))

@@ -81,7 +81,14 @@ fn main() -> Result<()> {
         println!("Transfer message created and validated successfully");
         println!("  Asset: {}", transfer.asset);
         println!("  Amount: {}", transfer.amount);
-        println!("  From: {}", transfer.originator.id);
+        println!(
+            "  From: {}",
+            transfer
+                .originator
+                .as_ref()
+                .map(|o| o.id.as_str())
+                .unwrap_or("unknown")
+        );
         println!("  To: {}\n", transfer.beneficiary.as_ref().unwrap().id);
 
         // Step 3: Send the transfer request with proper security
@@ -118,7 +125,7 @@ fn main() -> Result<()> {
                 if let Error::Validation(_) = e {
                     let reject = Reject {
                     transaction_id: transfer_id.clone(),
-                    reason: format!("validation.failed: Transfer validation failed: {}. Please correct the validation issues and try again", e),
+                    reason: Some(format!("validation.failed: Transfer validation failed: {}. Please correct the validation issues and try again", e)),
                 };
 
                     let _ = beneficiary_agent
@@ -154,7 +161,7 @@ fn main() -> Result<()> {
 
             let reject = Reject {
             transaction_id: transfer_id.clone(),
-            reason: format!("risk.threshold.exceeded: Risk score ({}) exceeds threshold ({}). Please contact support for further assistance", risk_score, risk_threshold),
+            reason: Some(format!("risk.threshold.exceeded: Risk score ({}) exceeds threshold ({}). Please contact support for further assistance", risk_score, risk_threshold)),
         };
 
             let (packed_reject, _delivery_results) = match beneficiary_agent
@@ -186,7 +193,7 @@ fn main() -> Result<()> {
 
             println!("Originator received rejection:");
             println!("  Transfer ID: {}", received_reject.transaction_id);
-            println!("  Reason: {}", received_reject.reason);
+            println!("  Reason: {:?}", received_reject.reason);
             println!("Transfer flow ended with rejection");
 
             return Ok(());
@@ -246,7 +253,7 @@ fn main() -> Result<()> {
 
         let settle = Settle {
             transaction_id: transfer_id.clone(),
-            settlement_id: settlement_id.to_string(),
+            settlement_id: Some(settlement_id.to_string()),
             amount: Some(transfer.amount.clone()),
         };
 
@@ -279,7 +286,7 @@ fn main() -> Result<()> {
 
         println!("Settlement received and validated successfully");
         println!("  Transfer ID: {}", received_settle.transaction_id);
-        println!("  Settlement ID: {}", received_settle.settlement_id);
+        println!("  Settlement ID: {:?}", received_settle.settlement_id);
         if let Some(amount) = &received_settle.amount {
             println!("  Amount: {}", amount);
         }
@@ -359,7 +366,7 @@ fn create_transfer_message(
     let transfer = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
         agents: vec![settlement_agent],

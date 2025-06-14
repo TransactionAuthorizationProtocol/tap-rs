@@ -23,7 +23,7 @@ fn test_create_message() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100000000".to_string(),
         agents: vec![
@@ -190,17 +190,17 @@ mod payment_tests {
         let reject_reason = "Insufficient funds".to_string();
         let reject = tap_msg::message::Reject {
             transaction_id: payment.transaction_id.clone(),
-            reason: format!("{}: {}", reject_code, reject_reason),
+            reason: Some(format!("{}: {}", reject_code, reject_reason)),
         };
-        assert_eq!(reject.reason, "E001: Insufficient funds");
+        assert_eq!(reject.reason, Some("E001: Insufficient funds".to_string()));
 
         // Create a Settle directly since settle() method is removed
         let settle = tap_msg::message::Settle {
             transaction_id: payment.transaction_id.clone(),
-            settlement_id: "tx-abc".to_string(),
+            settlement_id: Some("tx-abc".to_string()),
             amount: Some("100.0".to_string()),
         };
-        assert_eq!(settle.settlement_id, "tx-abc".to_string());
+        assert_eq!(settle.settlement_id, Some("tx-abc".to_string()));
         assert_eq!(settle.amount, Some("100.0".to_string()));
 
         // Test update party

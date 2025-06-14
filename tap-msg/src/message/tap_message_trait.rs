@@ -611,11 +611,11 @@ pub trait Transaction: TapMessage {
     /// # Arguments
     /// * `creator_did` - The DID of the agent creating this confirmation
     /// * `agent_did` - The agent DID confirming their relationship
-    /// * `relationship_type` - The type of relationship being confirmed
+    /// * `for_entity` - The entity this agent is acting for
     fn confirm_relationship(
         &self,
         creator_did: &str,
         agent_did: &str,
-        relationship_type: &str,
+        for_entity: &str,
     ) -> PlainMessage<ConfirmRelationship>;
 }

@@ -2515,7 +2515,7 @@ mod tests {
         // Create a test transfer message
         let transfer_body = Transfer {
             transaction_id: "test_transfer_123".to_string(),
-            originator: Party::new("did:example:originator"),
+            originator: Some(Party::new("did:example:originator")),
             beneficiary: Some(Party::new("did:example:beneficiary")),
             asset: "eip155:1/erc20:0x0000000000000000000000000000000000000000"
                 .parse()

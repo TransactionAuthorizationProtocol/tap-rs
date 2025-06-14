@@ -16,7 +16,7 @@ fn test_valid_transfer_body() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![
@@ -58,7 +58,7 @@ fn test_transfer_with_empty_asset() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "100.00".to_string(),
         agents: vec![
@@ -95,7 +95,7 @@ fn test_transfer_with_empty_amount() {
     let body = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator: originator.clone(),
+        originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
         amount: "".to_string(), // Empty amount
         agents: vec![

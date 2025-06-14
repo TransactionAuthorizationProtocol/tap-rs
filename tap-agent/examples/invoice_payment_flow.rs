@@ -17,6 +17,7 @@ use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
 use tap_agent::config::AgentConfig;
 use tap_agent::key_manager::{Secret, SecretMaterial, SecretType};
 use tap_caip::AssetId;
+use tap_msg::message::payment::InvoiceReference;
 use tap_msg::message::{Authorize, Settle};
 use tap_msg::{Invoice, LineItem, Party, Payment, TaxCategory, TaxSubtotal, TaxTotal};
 
@@ -74,25 +75,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Print invoice details
-        if let Some(invoice) = &payment.invoice {
-            println!("  Invoice ID: {}", invoice.id);
-            println!(
-                "  Invoice Total: {} {}",
-                invoice.total, invoice.currency_code
-            );
-            println!("  Line Items: {}", invoice.line_items.len());
+        if let Some(invoice_ref) = &payment.invoice {
+            match invoice_ref {
+                InvoiceReference::Object(invoice) => {
+                    println!("  Invoice ID: {}", invoice.id);
+                    println!(
+                        "  Invoice Total: {} {}",
+                        invoice.total, invoice.currency_code
+                    );
+                    println!("  Line Items: {}", invoice.line_items.len());
 
-            // Print line items
-            for (i, item) in invoice.line_items.iter().enumerate() {
-                println!(
-                    "    Item {}: {} x {} @ {} = {} {}",
-                    i + 1,
-                    item.quantity,
-                    item.description,
-                    item.unit_price,
-                    item.line_total,
-                    invoice.currency_code
-                );
+                    // Print line items
+                    for (i, item) in invoice.line_items.iter().enumerate() {
+                        println!(
+                            "    Item {}: {} x {} @ {} = {} {}",
+                            i + 1,
+                            item.quantity,
+                            item.description,
+                            item.unit_price,
+                            item.line_total,
+                            invoice.currency_code
+                        );
+                    }
+                }
+                InvoiceReference::Url(url) => {
+                    println!("  Invoice URL: {}", url);
+                }
             }
         }
         println!();
@@ -117,25 +125,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         // Print invoice details
-        if let Some(invoice) = &received_payment.invoice {
-            println!("  Invoice ID: {}", invoice.id);
-            println!(
-                "  Invoice Total: {} {}",
-                invoice.total, invoice.currency_code
-            );
-            println!("  Line Items: {}", invoice.line_items.len());
+        if let Some(invoice_ref) = &received_payment.invoice {
+            match invoice_ref {
+                InvoiceReference::Object(invoice) => {
+                    println!("  Invoice ID: {}", invoice.id);
+                    println!(
+                        "  Invoice Total: {} {}",
+                        invoice.total, invoice.currency_code
+                    );
+                    println!("  Line Items: {}", invoice.line_items.len());
 
-            // Print line items
-            for (i, item) in invoice.line_items.iter().enumerate() {
-                println!(
-                    "    Item {}: {} x {} @ {} = {} {}",
-                    i + 1,
-                    item.quantity,
-                    item.description,
-                    item.unit_price,
-                    item.line_total,
-                    invoice.currency_code
-                );
+                    // Print line items
+                    for (i, item) in invoice.line_items.iter().enumerate() {
+                        println!(
+                            "    Item {}: {} x {} @ {} = {} {}",
+                            i + 1,
+                            item.quantity,
+                            item.description,
+                            item.unit_price,
+                            item.line_total,
+                            invoice.currency_code
+                        );
+                    }
+                }
+                InvoiceReference::Url(url) => {
+                    println!("  Invoice URL: {}", url);
+                }
             }
         }
         println!();
@@ -172,7 +187,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let settle = Settle {
             transaction_id: transaction_id.clone(),
-            settlement_id: settlement_id.to_string(),
+            settlement_id: Some(settlement_id.to_string()),
             amount: Some(payment.amount.clone()),
         };
 
@@ -189,7 +204,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let received_settle: Settle = serde_json::from_value(plain_message.body)?;
         println!("Merchant received settlement confirmation:");
         println!("  Payment ID: {}", received_settle.transaction_id);
-        println!("  Settlement ID: {}", received_settle.settlement_id);
+        println!("  Settlement ID: {:?}", received_settle.settlement_id);
         if let Some(amount) = &received_settle.amount {
             println!("  Amount: {}\n", amount);
         }
@@ -337,7 +352,7 @@ fn create_payment_message_with_invoice(
         currency_code: None,
         amount: "115.0".to_string(), // Total amount including tax
         supported_assets: None,
-        invoice: Some(invoice),
+        invoice: Some(InvoiceReference::Object(Box::new(invoice))),
         expiry: None,
         merchant,
         customer: Some(customer),

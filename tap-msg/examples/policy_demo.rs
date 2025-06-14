@@ -41,7 +41,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Display the participant info
     println!("  Participant: {}", participant.id);
-    println!("  Role: {}", participant.role);
+    println!("  Role: {:?}", participant.role);
 
     if let Some(policies) = &participant.policies {
         println!("  Policies:");

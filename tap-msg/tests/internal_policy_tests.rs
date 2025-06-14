@@ -25,7 +25,7 @@ fn create_test_transfer() -> Result<PlainMessage> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Party::new(originator_did),
+        originator: Some(Party::new(originator_did)),
         beneficiary: Some(Party::new(beneficiary_did)),
         amount: "100.00".to_string(),
         agents: vec![
@@ -124,7 +124,7 @@ fn test_add_agents() -> Result<()> {
     // Validate the created message
     assert_eq!(add_agents.agents.len(), 1);
     assert_eq!(add_agents.agents[0].id, new_agent_did);
-    assert_eq!(add_agents.agents[0].role, "observer".to_string());
+    assert_eq!(add_agents.agents[0].role, Some("observer".to_string()));
 
     // Convert to DIDComm message and check that it can be properly deserialized
     let didcomm_message = add_agents.to_didcomm("did:example:sender_vasp")?;
@@ -171,7 +171,7 @@ fn test_authorizable_trait_methods() -> Result<()> {
     );
     assert_eq!(
         replace_agent_message.body.replacement.role,
-        "replacement_agent".to_string()
+        Some("replacement_agent".to_string())
     );
 
     // Test RemoveAgent
@@ -312,7 +312,7 @@ fn create_test_transfer_struct() -> Result<Transfer> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.00".to_string(),
         agents: vec![

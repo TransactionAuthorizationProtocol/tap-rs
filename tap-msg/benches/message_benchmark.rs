@@ -58,7 +58,7 @@ fn create_authorize_body() -> Authorize {
 fn create_reject_body() -> Reject {
     Reject {
         transaction_id: "test-transfer-id".to_string(),
-        reason: "COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Further documentation needed.".to_string(),
+        reason: Some("COMPLIANCE_FAILURE: Unable to comply with transfer requirements. Further documentation needed.".to_string()),
     }
 }
 
@@ -66,7 +66,7 @@ fn create_reject_body() -> Reject {
 fn create_settle_body() -> Settle {
     Settle {
         transaction_id: "123456789".to_string(),
-        settlement_id: "0xabcdef1234567890".to_string(),
+        settlement_id: Some("0xabcdef1234567890".to_string()),
         amount: Some("100.0".to_string()),
     }
 }

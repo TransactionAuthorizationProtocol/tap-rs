@@ -70,7 +70,7 @@ transfer.validate()?;
 ### Payment Request with Invoice
 
 ```rust
-use tap_msg::message::{Payment, Invoice, LineItem, Participant};
+use tap_msg::message::{Payment, Invoice, InvoiceReference, LineItem, Participant};
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use std::collections::HashMap;
 
@@ -112,7 +112,7 @@ let mut payment_request = Payment::with_currency(
     merchant,
     vec![],  // No additional agents in this simple example
 );
-payment_request.invoice = Some(invoice);
+payment_request.invoice = Some(InvoiceReference::Invoice(invoice));
 
 // Validate the message
 payment_request.validate()?;
@@ -215,7 +215,7 @@ pub struct Authorize {
 // Rejection message
 pub struct Reject {
     pub transaction_id: String,
-    pub reason: String,
+    pub reason: Option<String>,
     pub note: Option<String>,
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -223,7 +223,7 @@ pub struct Reject {
 // Settlement message
 pub struct Settle {
     pub transaction_id: String,
-    pub settlement_id: String,
+    pub settlement_id: Option<String>,
     pub amount: Option<String>,
     pub metadata: HashMap<String, serde_json::Value>,
 }
@@ -268,7 +268,7 @@ This structure enables compatibility with the present-proof protocol and enforce
 TAP supports structured invoices according to TAIP-16, which can be embedded in payment requests (TAIP-14):
 
 ```rust
-use tap_msg::message::{Payment, Invoice, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
+use tap_msg::message::{Payment, Invoice, InvoiceReference, LineItem, TaxCategory, TaxTotal, TaxSubtotal};
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::Participant;
 use std::collections::HashMap;
@@ -328,7 +328,10 @@ let mut payment_request = Payment::with_currency(
 );
 
 // Add the invoice to the payment request
-payment_request.invoice = Some(invoice);
+payment_request.invoice = Some(InvoiceReference::Invoice(invoice));
+
+// Alternatively, you can reference an invoice by URL
+// payment_request.invoice = Some(InvoiceReference::Url("https://example.com/invoice/123".to_string()));
 ```
 
 ## Generic Typed Messages

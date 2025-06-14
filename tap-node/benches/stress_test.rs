@@ -29,7 +29,7 @@ async fn create_test_message(
             "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
         )
         .unwrap(),
-        originator: Party::new(from_did),
+        originator: Some(Party::new(from_did)),
         beneficiary: Some(Party::new(to_did)),
         amount: format!("{}.00", index),
         agents: vec![],

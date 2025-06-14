@@ -134,7 +134,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create Transfer - Travel Rule processor will automatically attach IVMS101
     let transfer = Transfer {
         asset: "eip155:1/slip44:60".parse()?, // USD on Ethereum
-        originator: alice_with_address.clone(),
+        originator: Some(alice_with_address.clone()),
         beneficiary: Some(bob.clone()),
         amount: "5000.00".to_string(), // Above typical Travel Rule threshold
         agents: vec![

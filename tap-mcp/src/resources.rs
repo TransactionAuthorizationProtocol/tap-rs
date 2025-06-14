@@ -741,53 +741,369 @@ impl ResourceRegistry {
         let schemas = json!({
             "schemas": {
                 "Transfer": {
-                    "description": "TAP Transfer message (TAIP-3)",
+                    "description": "TAP Transfer message (TAIP-3) - Initiates a new transfer between parties",
                     "message_type": "https://tap.rsvp/schema/1.0#Transfer",
                     "properties": {
-                        "transaction_id": { "type": "string" },
+                        "transaction_id": { "type": "string", "description": "Unique transaction identifier" },
                         "asset": { "type": "string", "description": "CAIP-19 asset identifier" },
-                        "amount": { "type": "string" },
+                        "amount": { "type": "string", "description": "Transfer amount as decimal string" },
                         "originator": {
                             "type": "object",
+                            "description": "Party initiating the transfer",
                             "properties": {
-                                "@id": { "type": "string" }
+                                "@id": { "type": "string", "description": "DID or identifier of the originator" }
                             }
                         },
                         "beneficiary": {
                             "type": "object",
+                            "description": "Party receiving the transfer",
                             "properties": {
-                                "@id": { "type": "string" }
+                                "@id": { "type": "string", "description": "DID or identifier of the beneficiary" }
                             }
                         },
                         "agents": {
                             "type": "array",
+                            "description": "List of agents involved in the transaction",
                             "items": {
                                 "type": "object",
                                 "properties": {
-                                    "@id": { "type": "string" },
-                                    "role": { "type": "string" },
-                                    "for": { "type": "string" }
+                                    "@id": { "type": "string", "description": "Agent DID" },
+                                    "role": { "type": "string", "description": "Agent role (e.g., SettlementAddress)" },
+                                    "for": { "type": "string", "description": "DID of party agent acts for" }
+                                }
+                            }
+                        },
+                        "memo": { "type": "string", "description": "Optional transaction memo" },
+                        "settlement_id": { "type": "string", "description": "Optional pre-existing settlement ID" },
+                        "connection_id": { "type": "string", "description": "Optional connection ID" }
+                    },
+                    "required": ["transaction_id", "asset", "amount"]
+                },
+                "Authorize": {
+                    "description": "TAP Authorize message (TAIP-8) - Authorizes a transaction to proceed",
+                    "message_type": "https://tap.rsvp/schema/1.0#Authorize",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to authorize" },
+                        "settlement_address": { "type": "string", "description": "Optional CAIP-10 settlement address" },
+                        "expiry": { "type": "string", "description": "Optional ISO 8601 expiry timestamp" }
+                    },
+                    "required": ["transaction_id"]
+                },
+                "Reject": {
+                    "description": "TAP Reject message (TAIP-10) - Rejects a transaction",
+                    "message_type": "https://tap.rsvp/schema/1.0#Reject",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to reject" },
+                        "reason": { "type": "string", "description": "Optional reason for rejection" }
+                    },
+                    "required": ["transaction_id"]
+                },
+                "Settle": {
+                    "description": "TAP Settle message (TAIP-9) - Confirms settlement of a transaction",
+                    "message_type": "https://tap.rsvp/schema/1.0#Settle",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to settle" },
+                        "settlement_id": { "type": "string", "description": "Optional CAIP-220 settlement identifier" },
+                        "amount": { "type": "string", "description": "Optional amount settled" }
+                    },
+                    "required": ["transaction_id"]
+                },
+                "Cancel": {
+                    "description": "TAP Cancel message (TAIP-11) - Cancels a transaction",
+                    "message_type": "https://tap.rsvp/schema/1.0#Cancel",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to cancel" },
+                        "by": { "type": "string", "description": "Party requesting cancellation" },
+                        "reason": { "type": "string", "description": "Optional reason for cancellation" }
+                    },
+                    "required": ["transaction_id", "by"]
+                },
+                "Revert": {
+                    "description": "TAP Revert message (TAIP-12) - Requests reversal of a settled transaction",
+                    "message_type": "https://tap.rsvp/schema/1.0#Revert",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to revert" },
+                        "settlement_address": { "type": "string", "description": "CAIP-10 address to return funds to" },
+                        "reason": { "type": "string", "description": "Reason for reversal request" }
+                    },
+                    "required": ["transaction_id", "settlement_address", "reason"]
+                },
+                "Complete": {
+                    "description": "TAP Complete message (TAIP-13) - Confirms completion of a payment",
+                    "message_type": "https://tap.rsvp/schema/1.0#Complete",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to complete" },
+                        "settlement_address": { "type": "string", "description": "CAIP-10 settlement address" },
+                        "amount": { "type": "string", "description": "Optional amount completed" }
+                    },
+                    "required": ["transaction_id", "settlement_address"]
+                },
+                "Payment": {
+                    "description": "TAP Payment message (TAIP-13) - Initiates a payment request",
+                    "message_type": "https://tap.rsvp/schema/1.0#Payment",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "Unique transaction identifier" },
+                        "invoice": {
+                            "description": "Either an invoice URL or invoice object",
+                            "oneOf": [
+                                { "type": "string", "description": "URL to an invoice" },
+                                {
+                                    "type": "object",
+                                    "description": "Structured invoice object",
+                                    "properties": {
+                                        "amount": { "type": "string" },
+                                        "currency": { "type": "string" },
+                                        "payee": { "type": "object" }
+                                    }
+                                }
+                            ]
+                        },
+                        "payer": {
+                            "type": "object",
+                            "description": "Optional payer party",
+                            "properties": {
+                                "@id": { "type": "string" }
+                            }
+                        },
+                        "payee": {
+                            "type": "object",
+                            "description": "Payee party",
+                            "properties": {
+                                "@id": { "type": "string" }
+                            }
+                        },
+                        "agent_id": { "type": "string", "description": "Optional agent ID" }
+                    },
+                    "required": ["transaction_id", "invoice", "payee"]
+                },
+                "Connect": {
+                    "description": "TAP Connect message (TAIP-2) - Establishes a connection between parties",
+                    "message_type": "https://tap.rsvp/schema/1.0#Connect",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "Unique transaction identifier" },
+                        "agent": {
+                            "type": "object",
+                            "description": "Agent requesting connection",
+                            "properties": {
+                                "@id": { "type": "string", "description": "Agent DID" },
+                                "name": { "type": "string", "description": "Optional agent name" },
+                                "type": { "type": "string", "description": "Optional agent type" },
+                                "serviceUrl": { "type": "string", "description": "Optional service URL" }
+                            }
+                        },
+                        "principal": {
+                            "type": "object",
+                            "description": "Principal party for the connection",
+                            "properties": {
+                                "@id": { "type": "string", "description": "Principal DID" }
+                            }
+                        },
+                        "constraints": {
+                            "type": "object",
+                            "description": "Connection constraints",
+                            "properties": {
+                                "purposes": { "type": "array", "items": { "type": "string" } },
+                                "categoryPurposes": { "type": "array", "items": { "type": "string" } },
+                                "limits": {
+                                    "type": "object",
+                                    "properties": {
+                                        "per_transaction": { "type": "string" },
+                                        "daily": { "type": "string" },
+                                        "currency": { "type": "string" }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["transaction_id", "constraints"]
+                },
+                "AuthorizationRequired": {
+                    "description": "TAP AuthorizationRequired message (TAIP-2) - Indicates authorization is needed",
+                    "message_type": "https://tap.rsvp/schema/1.0#AuthorizationRequired",
+                    "properties": {
+                        "authorization_url": { "type": "string", "description": "URL where authorization can be completed" },
+                        "agent_id": { "type": "string", "description": "Optional agent ID" },
+                        "expires": { "type": "string", "description": "Optional expiry date/time" }
+                    },
+                    "required": ["authorization_url"]
+                },
+                "ConfirmRelationship": {
+                    "description": "TAP ConfirmRelationship message (TAIP-14) - Confirms a relationship between parties",
+                    "message_type": "https://tap.rsvp/schema/1.0#ConfirmRelationship",
+                    "properties": {
+                        "transfer_id": { "type": "string", "description": "Transaction ID (maps to thid)" },
+                        "@id": { "type": "string", "description": "Agent ID" },
+                        "for": { "type": "string", "description": "Entity this relationship is for" },
+                        "role": { "type": "string", "description": "Optional role in relationship" }
+                    },
+                    "required": ["@id", "for"]
+                },
+                "AddAgents": {
+                    "description": "TAP AddAgents message (TAIP-5) - Adds agents to a transaction",
+                    "message_type": "https://tap.rsvp/schema/1.0#AddAgents",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to add agents to" },
+                        "agents": {
+                            "type": "array",
+                            "description": "List of agents to add",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "@id": { "type": "string", "description": "Agent DID" },
+                                    "role": { "type": "string", "description": "Agent role" },
+                                    "for": { "type": "string", "description": "DID of party agent represents" }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["transaction_id", "agents"]
+                },
+                "RemoveAgent": {
+                    "description": "TAP RemoveAgent message (TAIP-5) - Removes an agent from a transaction",
+                    "message_type": "https://tap.rsvp/schema/1.0#RemoveAgent",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to remove agent from" },
+                        "agent": { "type": "string", "description": "DID of agent to remove" }
+                    },
+                    "required": ["transaction_id", "agent"]
+                },
+                "ReplaceAgent": {
+                    "description": "TAP ReplaceAgent message (TAIP-5) - Replaces an agent in a transaction",
+                    "message_type": "https://tap.rsvp/schema/1.0#ReplaceAgent",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to replace agent in" },
+                        "original": { "type": "string", "description": "DID of agent to replace" },
+                        "replacement": {
+                            "type": "object",
+                            "description": "New agent details",
+                            "properties": {
+                                "@id": { "type": "string", "description": "New agent DID" },
+                                "role": { "type": "string", "description": "Agent role" },
+                                "for": { "type": "string", "description": "DID of party agent represents" }
+                            }
+                        }
+                    },
+                    "required": ["transaction_id", "original", "replacement"]
+                },
+                "UpdateParty": {
+                    "description": "TAP UpdateParty message (TAIP-4) - Updates party information",
+                    "message_type": "https://tap.rsvp/schema/1.0#UpdateParty",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to update party in" },
+                        "party": {
+                            "type": "object",
+                            "description": "Updated party information",
+                            "properties": {
+                                "@id": { "type": "string", "description": "Party DID" }
+                            }
+                        },
+                        "role": { "type": "string", "description": "Party role (originator, beneficiary, etc.)" }
+                    },
+                    "required": ["transaction_id", "party", "role"]
+                },
+                "UpdatePolicies": {
+                    "description": "TAP UpdatePolicies message (TAIP-7) - Updates agent policies",
+                    "message_type": "https://tap.rsvp/schema/1.0#UpdatePolicies",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "ID of transaction to update policies for" },
+                        "policies": {
+                            "type": "array",
+                            "description": "List of policies to update",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "@type": { "type": "string", "description": "Policy type" }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["transaction_id", "policies"]
+                },
+                "Presentation": {
+                    "description": "TAP Presentation message (TAIP-6) - Presents verifiable data",
+                    "message_type": "https://tap.rsvp/schema/1.0#Presentation",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "Optional transaction ID" },
+                        "attachments": {
+                            "type": "array",
+                            "description": "List of attachments containing presented data",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "id": { "type": "string" },
+                                    "media_type": { "type": "string" },
+                                    "format": { "type": "string" },
+                                    "data": { "type": "object" }
+                                }
+                            }
+                        }
+                    },
+                    "required": ["attachments"]
+                },
+                "DIDCommPresentation": {
+                    "description": "DIDComm Presentation message - Presents proof data",
+                    "message_type": "https://didcomm.org/present-proof/3.0/presentation",
+                    "properties": {
+                        "transaction_id": { "type": "string", "description": "Optional transaction ID" },
+                        "formats": {
+                            "type": "array",
+                            "description": "List of attachment formats",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "attach_id": { "type": "string" },
+                                    "format": { "type": "string" }
                                 }
                             }
                         }
                     }
                 },
-                "Authorize": {
-                    "description": "TAP Authorize message (TAIP-4)",
-                    "message_type": "https://tap.rsvp/schema/1.0#Authorize",
+                "TrustPing": {
+                    "description": "DIDComm Trust Ping message - Tests connectivity",
+                    "message_type": "https://didcomm.org/trust-ping/2.0/ping",
                     "properties": {
-                        "transaction_id": { "type": "string" },
-                        "settlement_address": { "type": "string", "description": "CAIP-10 address" },
-                        "expiry": { "type": "string", "description": "ISO 8601 timestamp" }
+                        "response_requested": { "type": "boolean", "description": "Whether a response is requested" },
+                        "comment": { "type": "string", "description": "Optional comment" }
                     }
                 },
-                "Reject": {
-                    "description": "TAP Reject message (TAIP-4)",
-                    "message_type": "https://tap.rsvp/schema/1.0#Reject",
+                "TrustPingResponse": {
+                    "description": "DIDComm Trust Ping Response - Responds to trust ping",
+                    "message_type": "https://didcomm.org/trust-ping/2.0/ping-response",
                     "properties": {
-                        "transaction_id": { "type": "string" },
-                        "reason": { "type": "string" }
+                        "comment": { "type": "string", "description": "Optional comment" }
                     }
+                },
+                "BasicMessage": {
+                    "description": "DIDComm Basic Message - Simple text message",
+                    "message_type": "https://didcomm.org/basicmessage/2.0/message",
+                    "properties": {
+                        "content": { "type": "string", "description": "Message content" },
+                        "locale": { "type": "string", "description": "Optional locale (e.g., en, fr)" },
+                        "sent_time": { "type": "string", "description": "Optional ISO 8601 timestamp" }
+                    },
+                    "required": ["content"]
+                },
+                "OutOfBand": {
+                    "description": "TAP Out of Band invitation",
+                    "message_type": "https://tap.rsvp/schema/1.0#OutOfBand",
+                    "properties": {
+                        "goal_code": { "type": "string", "description": "Goal code for invitation" },
+                        "goal": { "type": "string", "description": "Human-readable goal" },
+                        "service": { "type": "string", "description": "DID or endpoint URL" },
+                        "accept": { "type": "array", "items": { "type": "string" }, "description": "Optional accepted media types" },
+                        "handshake_protocols": { "type": "array", "items": { "type": "string" }, "description": "Optional handshake protocols" }
+                    },
+                    "required": ["goal_code", "goal", "service"]
+                },
+                "Error": {
+                    "description": "TAP Error message - Reports an error",
+                    "message_type": "https://tap.rsvp/schema/1.0#Error",
+                    "properties": {
+                        "error_code": { "type": "string", "description": "Error code" },
+                        "error_description": { "type": "string", "description": "Human-readable error description" },
+                        "error_details": { "type": "object", "description": "Optional additional error details" }
+                    },
+                    "required": ["error_code", "error_description"]
                 }
             }
         });

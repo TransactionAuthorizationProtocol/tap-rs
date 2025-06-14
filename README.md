@@ -116,7 +116,7 @@ See individual tool READMEs for detailed usage instructions.
 
 ## Key Features
 
-- **Complete TAP Implementation**: Support for all TAP message types (Transfer, Authorize, Reject, Settle, etc.)
+- **Complete TAP Implementation**: Support for all TAP message types (Transfer, Authorize, Reject, Settle, Complete, etc.)
 - **DIDComm v2 Integration**: Secure, encrypted messaging with authenticated signatures
 - **Chain Agnostic Identifiers**: Implementation of CAIP-2 (ChainID), CAIP-10 (AccountID), and CAIP-19 (AssetID)
 - **Multiple DID Methods**: Support for did:key, did:web, did:pkh, and more

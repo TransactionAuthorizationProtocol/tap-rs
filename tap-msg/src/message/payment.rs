@@ -14,6 +14,62 @@ use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessag
 use crate::message::{Agent, Party};
 use crate::TapMessage;
 
+/// Invoice reference that can be either a URL or an Invoice object
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum InvoiceReference {
+    /// URL to an invoice
+    Url(String),
+    /// Structured invoice object
+    Object(Box<crate::message::Invoice>),
+}
+
+impl InvoiceReference {
+    /// Check if this is a URL reference
+    pub fn is_url(&self) -> bool {
+        matches!(self, InvoiceReference::Url(_))
+    }
+
+    /// Check if this is an object reference
+    pub fn is_object(&self) -> bool {
+        matches!(self, InvoiceReference::Object(_))
+    }
+
+    /// Get the URL if this is a URL reference
+    pub fn as_url(&self) -> Option<&str> {
+        match self {
+            InvoiceReference::Url(url) => Some(url),
+            _ => None,
+        }
+    }
+
+    /// Get the invoice object if this is an object reference
+    pub fn as_object(&self) -> Option<&crate::message::Invoice> {
+        match self {
+            InvoiceReference::Object(invoice) => Some(invoice.as_ref()),
+            _ => None,
+        }
+    }
+
+    /// Validate the invoice reference
+    pub fn validate(&self) -> Result<()> {
+        match self {
+            InvoiceReference::Url(url) => {
+                // Basic URL validation - just check it's not empty
+                if url.is_empty() {
+                    return Err(Error::Validation("Invoice URL cannot be empty".to_string()));
+                }
+                // Could add more URL validation here if needed
+                Ok(())
+            }
+            InvoiceReference::Object(invoice) => {
+                // Validate the invoice object
+                invoice.validate()
+            }
+        }
+    }
+}
+
 /// Payment message body (TAIP-14).
 ///
 /// A Payment is a DIDComm message initiated by the merchant's agent and sent
@@ -36,11 +92,11 @@ pub struct Payment {
     pub amount: String,
 
     /// Currency code for fiat amounts (e.g., USD).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "currency", skip_serializing_if = "Option::is_none")]
     pub currency_code: Option<String>,
 
     /// Supported assets for this payment (when currency_code is specified)
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "supportedAssets", skip_serializing_if = "Option::is_none")]
     pub supported_assets: Option<Vec<AssetId>>,
 
     /// Customer (payer) details.
@@ -64,9 +120,9 @@ pub struct Payment {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
 
-    /// Invoice details (optional) per TAIP-16
+    /// Invoice details (optional) per TAIP-16 - can be either a URL or an Invoice object
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub invoice: Option<crate::message::Invoice>,
+    pub invoice: Option<InvoiceReference>,
 
     /// Other agents involved in the payment.
     #[serde(default)]
@@ -95,7 +151,7 @@ pub struct PaymentBuilder {
     transaction_id: Option<String>,
     memo: Option<String>,
     expiry: Option<String>,
-    invoice: Option<crate::message::Invoice>,
+    invoice: Option<InvoiceReference>,
     agents: Vec<Agent>,
     metadata: HashMap<String, serde_json::Value>,
 }
@@ -165,9 +221,15 @@ impl PaymentBuilder {
         self
     }
 
-    /// Set the invoice for this payment
+    /// Set the invoice for this payment with an Invoice object
     pub fn invoice(mut self, invoice: crate::message::Invoice) -> Self {
-        self.invoice = Some(invoice);
+        self.invoice = Some(InvoiceReference::Object(Box::new(invoice)));
+        self
+    }
+
+    /// Set the invoice URL for this payment
+    pub fn invoice_url(mut self, url: String) -> Self {
+        self.invoice = Some(InvoiceReference::Url(url));
         self
     }
 

@@ -1984,9 +1984,11 @@ impl TapNode {
             if let Ok(transfer) =
                 serde_json::from_value::<tap_msg::message::Transfer>(message.body.clone())
             {
-                // Add originator
-                agent_dids.insert(transfer.originator.id.clone());
-                log::debug!("Added originator: {}", transfer.originator.id);
+                // Add originator if present
+                if let Some(originator) = &transfer.originator {
+                    agent_dids.insert(originator.id.clone());
+                    log::debug!("Added originator: {}", originator.id);
+                }
 
                 // Add beneficiary if present
                 if let Some(beneficiary) = &transfer.beneficiary {

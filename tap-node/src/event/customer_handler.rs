@@ -61,19 +61,24 @@ impl EventSubscriber for CustomerEventHandler {
                     if let Ok(transfer) = serde_json::from_value::<Transfer>(plain_message.body) {
                         let manager = CustomerManager::new(self.storage.clone());
 
-                        // Extract originator
-                        match manager
-                            .extract_customer_from_party(
-                                &transfer.originator,
-                                &self.agent_did,
-                                "originator",
-                            )
-                            .await
-                        {
-                            Ok(customer_id) => {
-                                log::debug!("Created/updated originator customer: {}", customer_id)
+                        // Extract originator if present
+                        if let Some(originator) = &transfer.originator {
+                            match manager
+                                .extract_customer_from_party(
+                                    originator,
+                                    &self.agent_did,
+                                    "originator",
+                                )
+                                .await
+                            {
+                                Ok(customer_id) => {
+                                    log::debug!(
+                                        "Created/updated originator customer: {}",
+                                        customer_id
+                                    )
+                                }
+                                Err(e) => log::error!("Failed to extract originator: {}", e),
                             }
-                            Err(e) => log::error!("Failed to extract originator: {}", e),
                         }
 
                         // Extract beneficiary
@@ -115,12 +120,14 @@ impl CustomerEventHandler {
         if let Ok(transfer) = serde_json::from_value::<Transfer>(message.body.clone()) {
             let manager = CustomerManager::new(self.storage.clone());
 
-            // Extract originator information
-            let customer_id = manager
-                .extract_customer_from_party(&transfer.originator, &self.agent_did, "originator")
-                .await?;
+            // Extract originator information if present
+            if let Some(originator) = &transfer.originator {
+                let customer_id = manager
+                    .extract_customer_from_party(originator, &self.agent_did, "originator")
+                    .await?;
 
-            log::debug!("Extracted originator customer: {}", customer_id);
+                log::debug!("Extracted originator customer: {}", customer_id);
+            }
 
             // Extract beneficiary information
             if let Some(beneficiary) = &transfer.beneficiary {
@@ -271,7 +278,7 @@ mod tests {
 
         let transfer = Transfer {
             asset: "eip155:1/slip44:60".parse().unwrap(),
-            originator,
+            originator: Some(originator),
             beneficiary: Some(beneficiary),
             amount: "100".to_string(),
             agents: vec![],

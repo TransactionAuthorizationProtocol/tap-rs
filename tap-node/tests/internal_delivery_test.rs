@@ -44,7 +44,7 @@ async fn test_internal_message_delivery_all_tables() -> Result<(), Box<dyn std::
         transaction_id: "test-tx-123".to_string(),
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse()?,
         amount: "1000.00".to_string(),
-        originator: Party::new(&agent1_did),
+        originator: Some(Party::new(&agent1_did)),
         beneficiary: Some(Party::new(&agent2_did)),
         agents: vec![],
         memo: Some("Test internal transfer".to_string()),

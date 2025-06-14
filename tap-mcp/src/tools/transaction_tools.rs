@@ -10,7 +10,9 @@ use serde_json::Value;
 use std::sync::Arc;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{Agent, Authorize, Cancel, Party, Reject, Revert, Settle, Transfer};
+use tap_msg::message::{
+    Agent, Authorize, Cancel, Complete, Party, Reject, Revert, Settle, Transfer,
+};
 use tracing::{debug, error};
 use uuid::Uuid;
 
@@ -111,7 +113,7 @@ impl ToolHandler for CreateTransferTool {
         let transfer = Transfer {
             transaction_id: transaction_id.clone(),
             asset: asset_id,
-            originator,
+            originator: Some(originator),
             beneficiary: Some(beneficiary),
             amount: params.amount,
             agents,
@@ -401,7 +403,7 @@ impl ToolHandler for RejectTool {
         // Create reject message
         let reject = Reject {
             transaction_id: params.transaction_id.clone(),
-            reason: params.reason.clone(),
+            reason: Some(params.reason.clone()),
         };
 
         // Validate the reject message
@@ -683,7 +685,7 @@ impl ToolHandler for SettleTool {
         // Create settle message
         let settle = Settle {
             transaction_id: params.transaction_id.clone(),
-            settlement_id: params.settlement_id.clone(),
+            settlement_id: Some(params.settlement_id.clone()),
             amount: params.amount.clone(),
         };
 
@@ -1067,6 +1069,149 @@ impl ToolHandler for ListTransactionsTool {
             name: "tap_list_transactions".to_string(),
             description: "Lists TAP transactions with filtering and pagination support".to_string(),
             input_schema: schema::list_transactions_schema(),
+        }
+    }
+}
+
+/// Tool for completing transactions
+pub struct CompleteTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for completing a transaction
+#[derive(Debug, Deserialize)]
+struct CompleteParams {
+    agent_did: String, // The DID of the agent that will sign and send this message
+    transaction_id: String,
+    settlement_address: String,
+    #[serde(default)]
+    amount: Option<String>,
+}
+
+/// Response for completing a transaction
+#[derive(Debug, Serialize)]
+struct CompleteResponse {
+    transaction_id: String,
+    message_id: String,
+    status: String,
+    settlement_address: String,
+    amount: Option<String>,
+    completed_at: String,
+}
+
+impl CompleteTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for CompleteTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: CompleteParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Completing transaction: {} with settlement_address: {}",
+            params.transaction_id, params.settlement_address
+        );
+
+        // Create complete message
+        let complete = Complete {
+            transaction_id: params.transaction_id.clone(),
+            settlement_address: params.settlement_address.clone(),
+            amount: params.amount.clone(),
+        };
+
+        // Validate the complete message
+        if let Err(e) = complete.validate() {
+            return Ok(error_text_response(format!(
+                "Complete validation failed: {}",
+                e
+            )));
+        }
+
+        // Create DIDComm message using the specified agent DID
+        let didcomm_message = match complete.to_didcomm(&params.agent_did) {
+            Ok(msg) => msg,
+            Err(e) => {
+                return Ok(error_text_response(format!(
+                    "Failed to create DIDComm message: {}",
+                    e
+                )));
+            }
+        };
+
+        // Determine recipient from the message
+        let recipient_did = if !didcomm_message.to.is_empty() {
+            didcomm_message.to[0].clone()
+        } else {
+            return Ok(error_text_response(
+                "No recipient found for complete message".to_string(),
+            ));
+        };
+
+        debug!(
+            "Sending complete from {} to {} for transaction: {}",
+            params.agent_did, recipient_did, params.transaction_id
+        );
+
+        // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(packed_message) => {
+                debug!(
+                    "Complete message sent successfully to {}, packed message length: {}",
+                    recipient_did,
+                    packed_message.len()
+                );
+
+                let response = CompleteResponse {
+                    transaction_id: params.transaction_id,
+                    message_id: didcomm_message.id,
+                    status: "sent".to_string(),
+                    settlement_address: params.settlement_address,
+                    amount: params.amount,
+                    completed_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize response: {}", e))
+                })?;
+
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to send complete message: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to send complete message: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_complete".to_string(),
+            description: "Completes a TAP payment transaction using the Complete message (TAIP-13)"
+                .to_string(),
+            input_schema: schema::complete_schema(),
         }
     }
 }

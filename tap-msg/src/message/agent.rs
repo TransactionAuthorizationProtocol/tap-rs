@@ -86,9 +86,10 @@ pub struct Agent {
     #[serde(rename = "@id")]
     pub id: String,
 
-    /// Role of the agent in this transaction (REQUIRED per TAIP-5).
+    /// Role of the agent in this transaction (optional).
     /// Examples: "SettlementAddress", "SourceAddress", etc.
-    pub role: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub role: Option<String>,
 
     /// DID or IRI of another Agent or Party that this agent acts on behalf of (REQUIRED per TAIP-5).
     /// Can be a single party or multiple parties.
@@ -117,7 +118,7 @@ impl Agent {
     pub fn new(id: &str, role: &str, for_party: &str) -> Self {
         Self {
             id: id.to_string(),
-            role: role.to_string(),
+            role: Some(role.to_string()),
             for_parties: ForParties(vec![for_party.to_string()]),
             policies: None,
             metadata: HashMap::new(),
@@ -128,8 +129,19 @@ impl Agent {
     pub fn new_for_parties(id: &str, role: &str, for_parties: Vec<String>) -> Self {
         Self {
             id: id.to_string(),
-            role: role.to_string(),
+            role: Some(role.to_string()),
             for_parties: ForParties(for_parties),
+            policies: None,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Create a new agent without a role.
+    pub fn new_without_role(id: &str, for_party: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            role: None,
+            for_parties: ForParties(vec![for_party.to_string()]),
             policies: None,
             metadata: HashMap::new(),
         }
@@ -144,7 +156,7 @@ impl Agent {
     ) -> Self {
         Self {
             id: id.to_string(),
-            role: role.to_string(),
+            role: Some(role.to_string()),
             for_parties: ForParties(vec![for_party.to_string()]),
             policies: None,
             metadata,
@@ -184,7 +196,7 @@ impl Agent {
 
     /// Check if this agent has a specific role.
     pub fn has_role(&self, role: &str) -> bool {
-        self.role == role
+        self.role.as_ref().is_some_and(|r| r == role)
     }
 
     /// Check if this agent acts for a specific party.
@@ -249,7 +261,7 @@ mod tests {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice");
 
         assert_eq!(agent.id, "did:web:example.com");
-        assert_eq!(agent.role, "Exchange");
+        assert_eq!(agent.role, Some("Exchange".to_string()));
         assert_eq!(agent.for_parties.0, vec!["did:example:alice"]);
         assert!(agent.policies.is_none());
         assert!(agent.metadata.is_empty());
@@ -311,7 +323,7 @@ mod tests {
         let deserialized: Agent = serde_json::from_str(&json).unwrap();
 
         assert_eq!(agent, deserialized);
-        assert_eq!(deserialized.role, "SettlementAddress");
+        assert_eq!(deserialized.role, Some("SettlementAddress".to_string()));
         assert_eq!(deserialized.for_parties.0, vec!["did:example:alice"]);
     }
 

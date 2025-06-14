@@ -7,27 +7,117 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::error::{Error, Result};
+use crate::message::agent::TapParticipant;
 use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
+use crate::message::{Agent, Party};
 use crate::TapMessage;
+
+/// Agent structure specific to Connect messages.
+/// Unlike regular agents, Connect agents don't require a "for" field
+/// because the principal is specified separately in the Connect message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConnectAgent {
+    /// DID of the agent.
+    #[serde(rename = "@id")]
+    pub id: String,
+
+    /// Name of the agent (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    /// Type of the agent (optional).
+    #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
+    pub agent_type: Option<String>,
+
+    /// Service URL for the agent (optional).
+    #[serde(rename = "serviceUrl", skip_serializing_if = "Option::is_none")]
+    pub service_url: Option<String>,
+
+    /// Additional metadata.
+    #[serde(flatten)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl TapParticipant for ConnectAgent {
+    fn id(&self) -> &str {
+        &self.id
+    }
+}
+
+impl ConnectAgent {
+    /// Create a new ConnectAgent with just an ID.
+    pub fn new(id: &str) -> Self {
+        Self {
+            id: id.to_string(),
+            name: None,
+            agent_type: None,
+            service_url: None,
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Convert to a regular Agent by adding a for_party.
+    pub fn to_agent(&self, for_party: &str) -> Agent {
+        let mut agent = Agent::new_without_role(&self.id, for_party);
+
+        // Copy metadata fields
+        if let Some(name) = &self.name {
+            agent
+                .metadata
+                .insert("name".to_string(), serde_json::Value::String(name.clone()));
+        }
+        if let Some(agent_type) = &self.agent_type {
+            agent.metadata.insert(
+                "type".to_string(),
+                serde_json::Value::String(agent_type.clone()),
+            );
+        }
+        if let Some(service_url) = &self.service_url {
+            agent.metadata.insert(
+                "serviceUrl".to_string(),
+                serde_json::Value::String(service_url.clone()),
+            );
+        }
+
+        // Copy any additional metadata
+        for (k, v) in &self.metadata {
+            agent.metadata.insert(k.clone(), v.clone());
+        }
+
+        agent
+    }
+}
 
 /// Transaction limits for connection constraints.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionLimits {
-    /// Maximum amount for a transaction.
-    pub max_amount: Option<String>,
+    /// Maximum amount per transaction.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_transaction: Option<String>,
 
-    /// Maximum total amount for all transactions.
-    pub max_total_amount: Option<String>,
+    /// Maximum daily amount.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub daily: Option<String>,
 
-    /// Maximum number of transactions allowed.
-    pub max_transactions: Option<u64>,
+    /// Currency for the limits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
 }
 
 /// Connection constraints for the Connect message.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionConstraints {
-    /// Limit on transaction amount.
-    pub transaction_limits: Option<TransactionLimits>,
+    /// Allowed purposes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub purposes: Option<Vec<String>>,
+
+    /// Allowed category purposes.
+    #[serde(rename = "categoryPurposes", skip_serializing_if = "Option::is_none")]
+    pub category_purposes: Option<Vec<String>>,
+
+    /// Transaction limits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub limits: Option<TransactionLimits>,
 }
 
 /// Connect message body (TAIP-2).
@@ -42,12 +132,23 @@ pub struct Connect {
     #[tap(transaction_id)]
     pub transaction_id: String,
 
-    /// Agent DID.
-    pub agent_id: String,
+    /// Agent DID (kept for backward compatibility).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
 
-    /// The entity this connection is for.
-    #[serde(rename = "for")]
-    pub for_: String,
+    /// Agent object containing agent details.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(participant)]
+    pub agent: Option<ConnectAgent>,
+
+    /// Principal party this connection is for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[tap(participant)]
+    pub principal: Option<Party>,
+
+    /// The entity this connection is for (kept for backward compatibility).
+    #[serde(rename = "for", skip_serializing_if = "Option::is_none", default)]
+    pub for_: Option<String>,
 
     /// The role of the agent (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -59,13 +160,32 @@ pub struct Connect {
 }
 
 impl Connect {
-    /// Create a new Connect message.
+    /// Create a new Connect message (backward compatible).
     pub fn new(transaction_id: &str, agent_id: &str, for_id: &str, role: Option<&str>) -> Self {
         Self {
             transaction_id: transaction_id.to_string(),
-            agent_id: agent_id.to_string(),
-            for_: for_id.to_string(),
+            agent_id: Some(agent_id.to_string()),
+            agent: None,
+            principal: None,
+            for_: Some(for_id.to_string()),
             role: role.map(|s| s.to_string()),
+            constraints: None,
+        }
+    }
+
+    /// Create a new Connect message with Agent and Principal.
+    pub fn new_with_agent_and_principal(
+        transaction_id: &str,
+        agent: ConnectAgent,
+        principal: Party,
+    ) -> Self {
+        Self {
+            transaction_id: transaction_id.to_string(),
+            agent_id: None,
+            agent: Some(agent),
+            principal: Some(principal),
+            for_: None,
+            role: None,
             constraints: None,
         }
     }
@@ -83,12 +203,29 @@ impl Connect {
         if self.transaction_id.is_empty() {
             return Err(Error::Validation("transaction_id is required".to_string()));
         }
-        if self.agent_id.is_empty() {
-            return Err(Error::Validation("agent_id is required".to_string()));
+
+        // Either agent_id or agent must be present
+        if self.agent_id.is_none() && self.agent.is_none() {
+            return Err(Error::Validation(
+                "either agent_id or agent is required".to_string(),
+            ));
         }
-        if self.for_.is_empty() {
-            return Err(Error::Validation("for is required".to_string()));
+
+        // Either for_ or principal must be present and non-empty
+        let for_empty = self.for_.as_ref().is_none_or(|s| s.is_empty());
+        if for_empty && self.principal.is_none() {
+            return Err(Error::Validation(
+                "either for or principal is required".to_string(),
+            ));
         }
+
+        // Constraints are required for Connect messages
+        if self.constraints.is_none() {
+            return Err(Error::Validation(
+                "Connection request must include constraints".to_string(),
+            ));
+        }
+
         Ok(())
     }
 
@@ -143,7 +280,16 @@ impl OutOfBand {
 #[tap(message_type = "https://tap.rsvp/schema/1.0#AuthorizationRequired")]
 pub struct AuthorizationRequired {
     /// Authorization URL.
+    #[serde(rename = "authorization_url")]
     pub url: String,
+
+    /// Agent ID.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+
+    /// Expiry date/time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires: Option<String>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -153,10 +299,12 @@ pub struct AuthorizationRequired {
 impl AuthorizationRequired {
     /// Create a new AuthorizationRequired message.
     pub fn new(url: String, expires: String) -> Self {
-        let mut metadata = HashMap::new();
-        metadata.insert("expires".to_string(), serde_json::Value::String(expires));
-
-        Self { url, metadata }
+        Self {
+            url,
+            agent_id: None,
+            expires: Some(expires),
+            metadata: HashMap::new(),
+        }
     }
 
     /// Add metadata to the message.
@@ -196,14 +344,12 @@ impl AuthorizationRequired {
         }
 
         // Validate expiry date if present
-        if let Some(expires) = self.metadata.get("expires") {
-            if let Some(expires_str) = expires.as_str() {
-                // Simple format check
-                if !expires_str.contains('T') || !expires_str.contains(':') {
-                    return Err(Error::Validation(
-                        "Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string(),
-                    ));
-                }
+        if let Some(expires) = &self.expires {
+            // Simple format check
+            if !expires.contains('T') || !expires.contains(':') {
+                return Err(Error::Validation(
+                    "Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string(),
+                ));
             }
         }
 

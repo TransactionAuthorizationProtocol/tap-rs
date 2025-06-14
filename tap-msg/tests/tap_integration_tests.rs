@@ -100,7 +100,7 @@ fn test_full_tap_flow() -> Result<()> {
     // Step 4: Settle the Transfer
     let settle_body = Settle {
         transaction_id: transfer_message.id.clone(),
-        settlement_id: "tx-12345".to_string(),
+        settlement_id: Some("tx-12345".to_string()),
         amount: Some("100".to_string()),
     };
 
@@ -212,7 +212,7 @@ fn test_payment_flow() {
     // Reject the payment
     let reject_body = Reject {
         transaction_id: payment_message2.id.clone(),
-        reason: "REJECT-001: Rejected due to compliance issues".to_string(),
+        reason: Some("REJECT-001: Rejected due to compliance issues".to_string()),
     };
 
     // Convert reject body to DIDComm message
@@ -323,7 +323,7 @@ fn test_complex_message_flow() -> Result<()> {
     let _transfer_body_1: Transfer = serde_json::from_value(transfer_body_json_1.clone())?;
     let reject = Reject {
         transaction_id: transfer_messages[1].id.clone(),
-        reason: "REJECT-002: Rejected due to amount too high".to_string(),
+        reason: Some("REJECT-002: Rejected due to amount too high".to_string()),
     };
 
     // Convert to DIDComm message
@@ -349,7 +349,7 @@ fn test_complex_message_flow() -> Result<()> {
     let _transfer_body_2: Transfer = serde_json::from_value(transfer_body_json_2.clone())?;
     let settle_body = Settle {
         transaction_id: transfer_messages[2].id.clone(),
-        settlement_id: "tx-67890".to_string(),
+        settlement_id: Some("tx-67890".to_string()),
         amount: Some("50".to_string()),
     };
 
@@ -419,13 +419,15 @@ fn create_test_connect() -> Connect {
     let mut connect = Connect::new(&transaction_id, &agent_id, &for_id, Some("agent"));
 
     let transaction_limits = TransactionLimits {
-        max_amount: Some("1000.0".to_string()),
-        max_total_amount: Some("5000.0".to_string()),
-        max_transactions: Some(10),
+        per_transaction: Some("1000.0".to_string()),
+        daily: Some("5000.0".to_string()),
+        currency: Some("USD".to_string()),
     };
 
     let constraints = ConnectionConstraints {
-        transaction_limits: Some(transaction_limits),
+        purposes: Some(vec!["trading".to_string()]),
+        category_purposes: None,
+        limits: Some(transaction_limits),
     };
 
     connect.constraints = Some(constraints);
@@ -449,7 +451,7 @@ fn create_test_transfer() -> Transfer {
     Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset,
-        originator,
+        originator: Some(originator),
         beneficiary: Some(beneficiary),
         amount: "100.0".to_string(),
         agents,

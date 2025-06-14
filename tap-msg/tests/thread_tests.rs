@@ -23,7 +23,7 @@ fn test_create_reply() -> Result<()> {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Party::new(_alice_did),
+        originator: Some(Party::new(_alice_did)),
         beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -203,7 +203,8 @@ fn test_confirm_relationship() -> Result<()> {
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        relationship_type: "custodian".to_string(),
+        for_entity: _org_did.to_string(),
+        role: Some("custodian".to_string()),
     };
 
     // Validate the message using the trait method (auto-generated)
@@ -231,14 +232,15 @@ fn test_confirm_relationship() -> Result<()> {
     let extracted_confirm = ConfirmRelationship::from_didcomm(&message_with_thread)?;
     assert_eq!(extracted_confirm.transaction_id, transfer_id);
     assert_eq!(extracted_confirm.agent_id, _bob_did);
-    assert_eq!(extracted_confirm.relationship_type, "custodian");
+    assert_eq!(extracted_confirm.for_entity, _org_did);
+    assert_eq!(extracted_confirm.role, Some("custodian".to_string()));
 
     // Test using the Authorizable trait
     let transfer = Transfer {
         transaction_id: uuid::Uuid::new_v4().to_string(),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
-        originator: Party::new(_alice_did),
+        originator: Some(Party::new(_alice_did)),
         beneficiary: Some(Party::new(_bob_did)),
         amount: "10.00".to_string(),
         agents: vec![],
@@ -271,7 +273,8 @@ fn test_confirm_relationship() -> Result<()> {
     let confirm_relationship = ConfirmRelationship {
         transaction_id: transfer_id.to_string(),
         agent_id: _bob_did.to_string(),
-        relationship_type: "custodian".to_string(),
+        for_entity: _org_did.to_string(),
+        role: Some("custodian".to_string()),
     };
 
     // Create a DIDComm message from the confirm_relationship
@@ -284,11 +287,9 @@ fn test_confirm_relationship() -> Result<()> {
     // The thid should be set to the transaction_id
     assert_eq!(confirm_message.thid, Some(transfer_id.to_string()));
 
-    // Check body content (relationship_type)
-    assert_eq!(
-        confirm_message.body["relationship_type"].as_str().unwrap(),
-        "custodian"
-    );
+    // Check body content (for_entity and role)
+    assert_eq!(confirm_message.body["for"].as_str().unwrap(), _org_did);
+    assert_eq!(confirm_message.body["role"].as_str().unwrap(), "custodian");
 
     Ok(())
 }

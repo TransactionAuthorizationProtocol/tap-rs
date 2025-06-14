@@ -313,14 +313,7 @@ mod tests {
         let body = json!({
             "@type": "https://tap.rsvp/schema/1.0#Transfer",
             "transaction_id": "test-tx-123",
-            "asset": {
-                "chain_id": {
-                    "namespace": "eip155",
-                    "reference": "1"
-                },
-                "namespace": "slip44",
-                "reference": "60"
-            },
+            "asset": "eip155:1/slip44:60",
             "originator": {
                 "@id": "did:example:alice"
             },
@@ -349,14 +342,7 @@ mod tests {
             body: json!({
                 "@type": "https://tap.rsvp/schema/1.0#Transfer",
                 "transaction_id": "test-tx-456",
-                "asset": {
-                    "chain_id": {
-                        "namespace": "eip155",
-                        "reference": "1"
-                    },
-                    "namespace": "slip44",
-                    "reference": "60"
-                },
+                "asset": "eip155:1/slip44:60",
                 "originator": {
                     "@id": "did:example:alice"
                 },
@@ -380,7 +366,10 @@ mod tests {
         match tap_msg {
             TapMessage::Transfer(transfer) => {
                 assert_eq!(transfer.amount, "100");
-                assert_eq!(transfer.originator.id, "did:example:alice");
+                assert_eq!(
+                    transfer.originator.as_ref().unwrap().id,
+                    "did:example:alice"
+                );
             }
             _ => panic!("Expected Transfer message"),
         }
@@ -390,7 +379,7 @@ mod tests {
     fn test_message_type() {
         let transfer = Transfer {
             asset: "eip155:1/slip44:60".parse().unwrap(),
-            originator: crate::message::Party::new("did:example:alice"),
+            originator: Some(crate::message::Party::new("did:example:alice")),
             beneficiary: None,
             amount: "100".to_string(),
             agents: vec![],

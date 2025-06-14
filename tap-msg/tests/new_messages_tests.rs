@@ -125,13 +125,15 @@ fn test_connect_message() {
 
     // Create transaction limits
     let transaction_limits = TransactionLimits {
-        max_amount: Some("10000.00".to_string()),
-        max_total_amount: Some("50000.00".to_string()),
-        max_transactions: Some(100),
+        per_transaction: Some("10000.00".to_string()),
+        daily: Some("50000.00".to_string()),
+        currency: Some("USD".to_string()),
     };
 
     let constraints = ConnectionConstraints {
-        transaction_limits: Some(transaction_limits),
+        purposes: Some(vec!["trading".to_string()]),
+        category_purposes: None,
+        limits: Some(transaction_limits),
     };
 
     // Create the Connect message
@@ -158,16 +160,21 @@ fn test_connect_message() {
 
     // Test validation fails with empty for_
     let mut invalid_body = body.clone();
-    invalid_body.for_ = "".to_string();
+    invalid_body.for_ = Some("".to_string());
     assert!(invalid_body.validate().is_err());
 
-    // Test minimal validation
+    // Test minimal validation with constraints
     let minimal_body = Connect::new(
         "test-transaction-id",
         "did:example:b2b-service",
         "did:example:business-customer",
         None,
-    );
+    )
+    .with_constraints(ConnectionConstraints {
+        purposes: None,
+        category_purposes: None,
+        limits: None,
+    });
     assert!(minimal_body.validate().is_ok());
 }
 

@@ -84,6 +84,10 @@ impl ToolRegistry {
             "tap_settle".to_string(),
             Box::new(SettleTool::new(tap_integration.clone())),
         );
+        tools.insert(
+            "tap_complete".to_string(),
+            Box::new(CompleteTool::new(tap_integration.clone())),
+        );
 
         // Transaction management tools
         tools.insert(
