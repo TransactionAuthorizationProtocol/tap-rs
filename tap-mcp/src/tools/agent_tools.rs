@@ -58,15 +58,73 @@ impl ToolHandler for CreateAgentTool {
 
         debug!("Creating new agent with auto-generated DID");
 
-        // Create an ephemeral agent for simplicity
+        // Create an ephemeral agent
         use std::sync::Arc;
-        use tap_agent::TapAgent;
+        use tap_agent::storage::KeyStorage;
+        use tap_agent::{
+            did::{DIDGenerationOptions, DIDKeyGenerator, KeyType},
+            TapAgent,
+        };
 
-        let (agent, generated_did) = TapAgent::from_ephemeral_key()
-            .await
-            .map_err(|e| Error::tool_execution(format!("Failed to create agent: {}", e)))?;
+        // Generate a new key
+        let generator = DIDKeyGenerator::new();
+        let generated_key = generator
+            .generate_did(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .map_err(|e| Error::tool_execution(format!("Failed to generate DID: {}", e)))?;
 
-        debug!("Generated new DID for agent: {}", generated_did);
+        debug!("Generated new DID for agent: {}", generated_key.did);
+
+        // Create the agent from the generated key
+        let (agent, generated_did) = TapAgent::from_private_key(
+            &generated_key.private_key,
+            generated_key.key_type,
+            false, // debug mode
+        )
+        .await
+        .map_err(|e| Error::tool_execution(format!("Failed to create agent: {}", e)))?;
+
+        // Save the key to storage with the label
+        let mut key_storage = match KeyStorage::load_default() {
+            Ok(storage) => storage,
+            Err(e) => {
+                debug!("Could not load existing key storage ({}), creating new", e);
+                KeyStorage::new()
+            }
+        };
+
+        // Create a StoredKey with the label
+        let stored_key = if let Some(ref label) = params.label {
+            tap_agent::storage::KeyStorage::from_generated_key_with_label(&generated_key, label)
+        } else {
+            tap_agent::storage::KeyStorage::from_generated_key(&generated_key)
+        };
+
+        // Add the key to storage
+        key_storage.add_key(stored_key);
+
+        debug!("Current keys in storage: {}", key_storage.keys.len());
+        for (did, key) in &key_storage.keys {
+            debug!("  - {}: {}", did, key.label);
+        }
+
+        // Save the storage
+        match key_storage.save_default() {
+            Ok(_) => {
+                info!(
+                    "Successfully saved agent key to storage with label: {:?}",
+                    params.label
+                );
+            }
+            Err(e) => {
+                error!("Failed to save key storage: {}", e);
+                return Err(Error::tool_execution(format!(
+                    "Failed to save key storage: {}",
+                    e
+                )));
+            }
+        }
 
         // Register the agent with the TapNode
         match self

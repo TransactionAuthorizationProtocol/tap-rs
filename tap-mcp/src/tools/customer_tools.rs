@@ -6,11 +6,12 @@ use crate::error::{Error, Result};
 use crate::mcp::protocol::{CallToolResult, Tool};
 use crate::tap_integration::TapIntegration;
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tap_msg::message::TapMessage;
 use tap_node::customer::CustomerManager;
+use tap_node::storage::models::{Customer, SchemaType};
 use tracing::{debug, error};
 
 /// Tool for listing customers (parties that an agent acts for)
@@ -736,6 +737,229 @@ impl ToolHandler for UpdateCustomerProfileTool {
             name: "tap_update_customer_profile".to_string(),
             description: "Updates the schema.org profile data for a customer. The profile_data should be a JSON object with schema.org fields.".to_string(),
             input_schema: schema::update_customer_profile_schema(),
+        }
+    }
+}
+
+/// Tool for creating a new customer
+pub struct CreateCustomerTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for creating a customer
+#[derive(Debug, Deserialize)]
+struct CreateCustomerParams {
+    agent_did: String,
+    customer_id: String,
+    profile_data: Value,
+}
+
+impl CreateCustomerTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for CreateCustomerTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: CreateCustomerParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Creating customer {} via agent {}",
+            params.customer_id, params.agent_did
+        );
+
+        // Get storage for the agent
+        let storage = match self
+            .tap_integration()
+            .storage_for_agent(&params.agent_did)
+            .await
+        {
+            Ok(storage) => storage,
+            Err(e) => {
+                error!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                );
+                return Ok(error_text_response(format!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                )));
+            }
+        };
+
+        // Create customer manager
+        let customer_manager = CustomerManager::new(storage.clone());
+
+        // Check if customer already exists
+        let existing = match storage.get_customer(&params.customer_id).await {
+            Ok(existing) => existing,
+            Err(e) => {
+                error!("Failed to check existing customer: {}", e);
+                return Ok(error_text_response(format!(
+                    "Failed to check existing customer: {}",
+                    e
+                )));
+            }
+        };
+
+        if existing.is_none() {
+            // Create new customer
+            let display_name = params
+                .profile_data
+                .get("givenName")
+                .and_then(|v| v.as_str())
+                .map(|given| {
+                    if let Some(family) = params
+                        .profile_data
+                        .get("familyName")
+                        .and_then(|v| v.as_str())
+                    {
+                        format!("{} {}", given, family)
+                    } else {
+                        given.to_string()
+                    }
+                });
+
+            // Create customer profile from schema.org data
+            let mut profile = json!({
+                "@context": "https://schema.org",
+                "@type": "Person",
+                "identifier": params.customer_id.clone(),
+            });
+
+            // Merge provided profile data
+            if let Value::Object(profile_obj) = &mut profile {
+                if let Value::Object(data_obj) = &params.profile_data {
+                    for (key, value) in data_obj {
+                        profile_obj.insert(key.clone(), value.clone());
+                    }
+                }
+            }
+
+            // Determine schema type based on provided data
+            let schema_type = if params.profile_data.get("@type").and_then(|v| v.as_str())
+                == Some("Organization")
+            {
+                SchemaType::Organization
+            } else {
+                SchemaType::Person
+            };
+
+            // Create Customer struct
+            let customer = Customer {
+                id: params.customer_id.clone(),
+                agent_did: params.agent_did.clone(),
+                schema_type,
+                given_name: params
+                    .profile_data
+                    .get("givenName")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                family_name: params
+                    .profile_data
+                    .get("familyName")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                display_name,
+                legal_name: params
+                    .profile_data
+                    .get("legalName")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                lei_code: params
+                    .profile_data
+                    .get("leiCode")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                mcc_code: params
+                    .profile_data
+                    .get("mccCode")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                address_country: params
+                    .profile_data
+                    .get("addressCountry")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                address_locality: params
+                    .profile_data
+                    .get("addressLocality")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                postal_code: params
+                    .profile_data
+                    .get("postalCode")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                street_address: params
+                    .profile_data
+                    .get("streetAddress")
+                    .and_then(|v| v.as_str())
+                    .map(String::from),
+                profile,
+                ivms101_data: None,
+                verified_at: None,
+                created_at: chrono::Utc::now().to_rfc3339(),
+                updated_at: chrono::Utc::now().to_rfc3339(),
+            };
+
+            // Create the customer
+            match storage.upsert_customer(&customer).await {
+                Ok(_) => {
+                    debug!("Created new customer {}", params.customer_id);
+                    Ok(success_text_response(format!(
+                        "Successfully created customer {}",
+                        params.customer_id
+                    )))
+                }
+                Err(e) => {
+                    error!("Failed to create customer: {}", e);
+                    Ok(error_text_response(format!(
+                        "Failed to create customer: {}",
+                        e
+                    )))
+                }
+            }
+        } else {
+            // Update existing customer
+            match customer_manager
+                .update_customer_profile(&params.customer_id, params.profile_data)
+                .await
+            {
+                Ok(_) => Ok(success_text_response(format!(
+                    "Successfully updated existing customer {}",
+                    params.customer_id
+                ))),
+                Err(e) => {
+                    error!("Failed to update customer: {}", e);
+                    Ok(error_text_response(format!(
+                        "Failed to update customer: {}",
+                        e
+                    )))
+                }
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_create_customer".to_string(),
+            description: "Creates a new customer profile for an agent. The customer_id should be a DID or unique identifier. The profile_data should be a JSON object with schema.org fields (e.g., givenName, familyName, addressCountry). If a customer with the same ID already exists, their profile will be updated.".to_string(),
+            input_schema: schema::create_customer_schema(),
         }
     }
 }

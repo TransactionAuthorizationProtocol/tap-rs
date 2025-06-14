@@ -445,6 +445,29 @@ pub fn update_customer_profile_schema() -> Value {
     })
 }
 
+/// Schema for create_customer tool
+pub fn create_customer_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will manage this customer"
+            },
+            "customer_id": {
+                "type": "string",
+                "description": "The ID of the customer to create (should be a DID or unique identifier)"
+            },
+            "profile_data": {
+                "type": "object",
+                "description": "Schema.org profile data for the customer (e.g., givenName, familyName, email, telephone, addressCountry, addressLocality, postalCode)"
+            }
+        },
+        "required": ["agent_did", "customer_id", "profile_data"],
+        "additionalProperties": false
+    })
+}
+
 /// Schema for update_customer_from_ivms101 tool
 pub fn update_customer_from_ivms101_schema() -> Value {
     json!({
