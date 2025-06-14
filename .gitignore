@@ -41,7 +41,7 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 .windsurfrules
-CLAUDE.md
+CLAUDE.local.md
 
 **/.claude/settings.local.json
 backup/

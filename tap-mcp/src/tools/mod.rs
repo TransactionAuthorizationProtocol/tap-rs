@@ -141,6 +141,10 @@ impl ToolRegistry {
             Box::new(GenerateIvms101Tool::new(tap_integration.clone())),
         );
         tools.insert(
+            "tap_create_customer".to_string(),
+            Box::new(CreateCustomerTool::new(tap_integration.clone())),
+        );
+        tools.insert(
             "tap_update_customer_profile".to_string(),
             Box::new(UpdateCustomerProfileTool::new(tap_integration.clone())),
         );
