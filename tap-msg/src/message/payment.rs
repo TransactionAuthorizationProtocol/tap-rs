@@ -108,9 +108,10 @@ pub struct Payment {
     #[tap(participant)]
     pub merchant: Party,
 
-    /// Transaction identifier.
+    /// Transaction identifier (only available after creation).
+    #[serde(skip)]
     #[tap(transaction_id)]
-    pub transaction_id: String,
+    pub transaction_id: Option<String>,
 
     /// Memo for the payment (optional).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -275,9 +276,7 @@ impl PaymentBuilder {
             supported_assets: self.supported_assets,
             customer: self.customer,
             merchant: self.merchant.expect("Merchant is required"),
-            transaction_id: self
-                .transaction_id
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            transaction_id: self.transaction_id,
             memo: self.memo,
             expiry: self.expiry,
             invoice: self.invoice,
@@ -298,7 +297,7 @@ impl Payment {
             supported_assets: None,
             customer: None,
             merchant,
-            transaction_id: uuid::Uuid::new_v4().to_string(),
+            transaction_id: None,
             memo: None,
             expiry: None,
             invoice: None,
@@ -322,7 +321,7 @@ impl Payment {
             supported_assets: None,
             customer: None,
             merchant,
-            transaction_id: uuid::Uuid::new_v4().to_string(),
+            transaction_id: None,
             memo: None,
             expiry: None,
             invoice: None,
@@ -347,7 +346,7 @@ impl Payment {
             supported_assets: Some(supported_assets),
             customer: None,
             merchant,
-            transaction_id: uuid::Uuid::new_v4().to_string(),
+            transaction_id: None,
             memo: None,
             expiry: None,
             invoice: None,

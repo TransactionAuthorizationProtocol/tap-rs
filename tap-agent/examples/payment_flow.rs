@@ -215,7 +215,7 @@ fn create_payment_message(
         agents: vec![settlement_agent],
         connection_id: None,
         metadata: HashMap::new(),
-        transaction_id: transaction_id.to_string(),
+        transaction_id: Some(transaction_id.to_string()),
         memo: Some("Payment for goods or services".to_string()),
     }
 }

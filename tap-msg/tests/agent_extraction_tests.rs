@@ -23,7 +23,7 @@ fn test_to_didcomm_extracts_all_agents_when_no_sender() {
     );
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -73,7 +73,7 @@ fn test_to_didcomm_filters_sender_when_specified() {
     );
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -119,7 +119,7 @@ fn test_to_didcomm_with_route() {
     );
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -161,7 +161,7 @@ fn test_create_tap_message() {
     let beneficiary = Party::new("did:web:agent2.example");
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -205,7 +205,7 @@ fn test_get_all_participants() {
     let beneficiary = Party::new("did:web:agent2.example");
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),

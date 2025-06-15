@@ -76,7 +76,7 @@ async fn test_complete_state_machine_integration() {
         agents: vec![compliance_agent],
         memo: None,
         settlement_id: None,
-        transaction_id: "test-tx-001".to_string(),
+        transaction_id: Some("test-tx-001".to_string()),
         connection_id: None,
         metadata: std::collections::HashMap::new(),
     };
@@ -140,7 +140,7 @@ async fn test_automatic_authorization() {
         supported_assets: None,
         customer: Some(customer),
         merchant,
-        transaction_id: "test-payment-001".to_string(),
+        transaction_id: Some("test-payment-001".to_string()),
         memo: None,
         expiry: None,
         invoice: None,
@@ -216,7 +216,7 @@ async fn test_processing_pipeline_order() {
         agents: vec![test_agent("compliance1", "compliance", "alice")],
         memo: None,
         settlement_id: None,
-        transaction_id: "test-pipeline-001".to_string(),
+        transaction_id: Some("test-pipeline-001".to_string()),
         connection_id: None,
         metadata: std::collections::HashMap::new(),
     };

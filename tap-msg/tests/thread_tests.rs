@@ -20,7 +20,7 @@ fn test_create_reply() -> Result<()> {
 
     // Create a transfer from Alice to Bob
     let transfer = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Some(Party::new(_alice_did)),
@@ -58,9 +58,9 @@ fn test_create_reply() -> Result<()> {
     assert!(reply_via_message.to.contains(&_alice_did.to_string()));
     assert!(!reply_via_message.to.contains(&_bob_did.to_string()));
 
-    // The reply's thid should be the transfer message's thid (which is the transaction_id)
-    // not the transfer message's id
-    assert_eq!(reply_via_message.thid, transfer_message.thid);
+    // The reply's thid should be the transfer message's id
+    // For initiator messages like Transfer, thid is None and id is the transaction_id
+    assert_eq!(reply_via_message.thid, Some(transfer_message.id.clone()));
 
     Ok(())
 }
@@ -237,7 +237,7 @@ fn test_confirm_relationship() -> Result<()> {
 
     // Test using the Authorizable trait
     let transfer = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Some(Party::new(_alice_did)),

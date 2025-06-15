@@ -51,9 +51,10 @@ pub struct Transfer {
     #[serde(rename = "settlementId", skip_serializing_if = "Option::is_none")]
     pub settlement_id: Option<String>,
 
-    /// Transaction identifier.
+    /// Transaction identifier (only available after creation).
+    #[serde(skip)]
     #[tap(transaction_id)]
-    pub transaction_id: String,
+    pub transaction_id: Option<String>,
 
     /// Connection ID for linking to Connect messages
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -192,9 +193,7 @@ impl TransferBuilder {
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
             memo: self.memo,
-            transaction_id: self
-                .transaction_id
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            transaction_id: self.transaction_id,
             agents: self.agents,
             connection_id: None,
             metadata: self.metadata,
@@ -211,9 +210,7 @@ impl TransferBuilder {
             .ok_or_else(|| Error::Validation("Amount is required".to_string()))?;
 
         let transfer = Transfer {
-            transaction_id: self
-                .transaction_id
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            transaction_id: self.transaction_id,
             asset,
             originator: self.originator,
             amount,

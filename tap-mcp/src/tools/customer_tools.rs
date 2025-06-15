@@ -92,108 +92,125 @@ impl ToolHandler for ListCustomersTool {
             }
         };
 
-        // Get all transactions for this agent
-        let transactions = match storage.list_transactions(1000, 0).await {
-            Ok(transactions) => transactions,
+        // Get all customers for this agent from the database
+        let all_customers = match storage.list_customers(&params.agent_did, 1000, 0).await {
+            Ok(customers) => customers,
             Err(e) => {
-                error!("Failed to get transactions: {}", e);
+                error!("Failed to list customers: {}", e);
                 return Ok(error_text_response(format!(
-                    "Failed to get transactions: {}",
+                    "Failed to list customers: {}",
                     e
                 )));
             }
         };
 
-        // Track customers and their metadata
-        let mut customers: HashMap<String, CustomerInfo> = HashMap::new();
+        // Convert database customers to our response format
+        let mut customers: Vec<CustomerInfo> = Vec::new();
 
-        // Process each transaction to find customers
-        for transaction in transactions {
-            if let Ok(tap_message) =
-                serde_json::from_value::<TapMessage>(transaction.message_json.clone())
-            {
-                // Handle Transfer messages directly
-                if let TapMessage::Transfer(ref transfer) = tap_message {
-                    // Check if any agent acts for our target agent
-                    for agent in &transfer.agents {
-                        if agent.id == params.agent_did {
-                            // Add all parties this agent acts for as customers
-                            for party_id in agent.for_parties() {
-                                let customer = customers
-                                    .entry(party_id.to_string())
-                                    .or_insert_with(|| CustomerInfo {
-                                        id: party_id.to_string(),
-                                        metadata: HashMap::new(),
-                                        transaction_count: 0,
-                                        transaction_ids: Vec::new(),
-                                    });
-                                customer.transaction_count += 1;
-                                customer
-                                    .transaction_ids
-                                    .push(transaction.reference_id.clone());
-                            }
-                        }
-                    }
+        for customer in all_customers {
+            // Convert customer metadata from profile
+            let mut metadata = HashMap::new();
 
-                    // Also check for party metadata in the message
-                    // Check originator
-                    if let Some(originator) = &transfer.originator {
-                        if let Some(customer) = customers.get_mut(&originator.id) {
-                            for (key, value) in &originator.metadata {
-                                customer.metadata.insert(key.clone(), value.clone());
-                            }
-                        }
-                    }
-                    // Check beneficiary
-                    if let Some(ref beneficiary) = transfer.beneficiary {
-                        if let Some(customer) = customers.get_mut(&beneficiary.id) {
-                            for (key, value) in &beneficiary.metadata {
-                                customer.metadata.insert(key.clone(), value.clone());
-                            }
-                        }
+            if let Some(profile) = customer.profile.as_object() {
+                // Copy all profile fields as metadata
+                for (key, value) in profile {
+                    if key != "@context" && key != "@type" && key != "identifier" {
+                        metadata.insert(key.clone(), value.clone());
                     }
                 }
-                // Handle Authorize messages by looking up the original transfer
-                else if let TapMessage::Authorize(ref auth) = tap_message {
-                    if let Ok(Some(original_tx)) =
-                        storage.get_transaction_by_id(&auth.transaction_id).await
+            }
+
+            // Add specific fields if they exist
+            if let Some(given_name) = &customer.given_name {
+                metadata.insert(
+                    "givenName".to_string(),
+                    serde_json::Value::String(given_name.clone()),
+                );
+            }
+            if let Some(family_name) = &customer.family_name {
+                metadata.insert(
+                    "familyName".to_string(),
+                    serde_json::Value::String(family_name.clone()),
+                );
+            }
+            if let Some(display_name) = &customer.display_name {
+                metadata.insert(
+                    "name".to_string(),
+                    serde_json::Value::String(display_name.clone()),
+                );
+            }
+            if let Some(country) = &customer.address_country {
+                metadata.insert(
+                    "addressCountry".to_string(),
+                    serde_json::Value::String(country.clone()),
+                );
+            }
+            if let Some(locality) = &customer.address_locality {
+                metadata.insert(
+                    "addressLocality".to_string(),
+                    serde_json::Value::String(locality.clone()),
+                );
+            }
+            if let Some(postal_code) = &customer.postal_code {
+                metadata.insert(
+                    "postalCode".to_string(),
+                    serde_json::Value::String(postal_code.clone()),
+                );
+            }
+
+            // Get transaction count for this customer
+            // We'll need to search through transactions to find where this customer is involved
+            let mut transaction_ids = Vec::new();
+            if let Ok(transactions) = storage.list_transactions(1000, 0).await {
+                for transaction in transactions {
+                    if let Ok(tap_message) =
+                        serde_json::from_value::<TapMessage>(transaction.message_json.clone())
                     {
-                        if let Ok(TapMessage::Transfer(ref original_transfer)) =
-                            serde_json::from_value::<TapMessage>(original_tx.message_json.clone())
-                        {
-                            // Check if any agent acts for our target agent
-                            for agent in &original_transfer.agents {
-                                if agent.id == params.agent_did {
-                                    // Add all parties this agent acts for as customers
-                                    for party_id in agent.for_parties() {
-                                        let customer = customers
-                                            .entry(party_id.to_string())
-                                            .or_insert_with(|| CustomerInfo {
-                                                id: party_id.to_string(),
-                                                metadata: HashMap::new(),
-                                                transaction_count: 0,
-                                                transaction_ids: Vec::new(),
-                                            });
-                                        customer.transaction_count += 1;
-                                        customer
-                                            .transaction_ids
-                                            .push(transaction.reference_id.clone());
-                                    }
+                        // Check if this customer is involved in the transaction
+                        let mut is_involved = false;
+
+                        if let TapMessage::Transfer(ref transfer) = tap_message {
+                            // Check if customer is originator
+                            if let Some(originator) = &transfer.originator {
+                                if originator.id == customer.id {
+                                    is_involved = true;
                                 }
                             }
+                            // Check if customer is beneficiary
+                            if let Some(ref beneficiary) = transfer.beneficiary {
+                                if beneficiary.id == customer.id {
+                                    is_involved = true;
+                                }
+                            }
+                            // Check if any agent acts for this customer
+                            for agent in &transfer.agents {
+                                if agent.for_parties().contains(&customer.id) {
+                                    is_involved = true;
+                                }
+                            }
+                        }
+
+                        if is_involved {
+                            transaction_ids.push(transaction.reference_id);
                         }
                     }
                 }
             }
+
+            customers.push(CustomerInfo {
+                id: customer.id,
+                metadata,
+                transaction_count: transaction_ids.len(),
+                transaction_ids,
+            });
         }
 
         let total = customers.len();
 
-        // Apply pagination and sort by ID for consistent ordering
-        let mut customer_list: Vec<CustomerInfo> = customers.into_values().collect();
-        customer_list.sort_by(|a, b| a.id.cmp(&b.id));
+        // Apply pagination - customers are already in a Vec
+        customers.sort_by(|a, b| a.id.cmp(&b.id));
 
-        let paginated_customers: Vec<CustomerInfo> = customer_list
+        let paginated_customers: Vec<CustomerInfo> = customers
             .into_iter()
             .skip(params.offset as usize)
             .take(params.limit as usize)

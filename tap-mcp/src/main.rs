@@ -37,9 +37,18 @@ struct Args {
 async fn main() -> Result<()> {
     let mut args = Args::parse();
 
-    // Apply TAP_ROOT environment variable as fallback if not provided via CLI
+    // Apply environment variables as fallback if not provided via CLI
+    // Priority: --tap-root > TAP_ROOT > TAP_HOME > default (~/.tap)
     if args.tap_root.is_none() {
-        args.tap_root = env::var("TAP_ROOT").ok();
+        args.tap_root = env::var("TAP_ROOT")
+            .ok()
+            .or_else(|| env::var("TAP_HOME").ok());
+    }
+
+    // Set TAP_HOME environment variable if tap_root is specified
+    // This ensures that key storage uses the same directory
+    if let Some(ref tap_root) = args.tap_root {
+        env::set_var("TAP_HOME", tap_root);
     }
 
     // Initialize logging to stderr (stdout is reserved for MCP protocol)

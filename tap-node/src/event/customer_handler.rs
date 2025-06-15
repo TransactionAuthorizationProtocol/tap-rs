@@ -285,7 +285,7 @@ mod tests {
             memo: None,
             settlement_id: None,
             connection_id: None,
-            transaction_id: "tx-123".to_string(),
+            transaction_id: Some("tx-123".to_string()),
             metadata: Default::default(),
         };
 

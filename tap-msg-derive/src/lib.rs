@@ -338,7 +338,12 @@ fn analyze_fields(
                     } else if meta.path.is_ident("participant_list") {
                         field_info.participant_list_fields.push(field_name.clone());
                     } else if meta.path.is_ident("transaction_id") {
-                        field_info.transaction_id_field = Some(field_name.clone());
+                        // Check if the field type is Option<String>
+                        if is_optional_type(&field.ty) {
+                            field_info.optional_transaction_id_field = Some(field_name.clone());
+                        } else {
+                            field_info.transaction_id_field = Some(field_name.clone());
+                        }
                     } else if meta.path.is_ident("optional_transaction_id") {
                         field_info.optional_transaction_id_field = Some(field_name.clone());
                     } else if meta.path.is_ident("thread_id") {
@@ -875,6 +880,8 @@ fn impl_authorizable_trait(
     // Get the transaction ID field access
     let tx_id_access = if let Some(ref tx_field) = field_info.transaction_id_field {
         quote! { &self.#tx_field }
+    } else if let Some(ref opt_tx_field) = field_info.optional_transaction_id_field {
+        quote! { self.#opt_tx_field.as_deref().unwrap_or("") }
     } else if let Some(ref thread_field) = field_info.thread_id_field {
         quote! { &self.#thread_field }
     } else {
@@ -948,6 +955,8 @@ fn impl_transaction_trait(
     // Get the transaction ID field access
     let tx_id_access = if let Some(ref tx_field) = field_info.transaction_id_field {
         quote! { &self.#tx_field }
+    } else if let Some(ref opt_tx_field) = field_info.optional_transaction_id_field {
+        quote! { self.#opt_tx_field.as_deref().unwrap_or("") }
     } else if let Some(ref thread_field) = field_info.thread_id_field {
         quote! { &self.#thread_field }
     } else {

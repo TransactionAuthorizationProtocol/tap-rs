@@ -14,7 +14,7 @@ fn test_valid_transfer_body() {
     let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -56,7 +56,7 @@ fn test_transfer_with_empty_asset() {
 
     // Creating a body with valid values
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -93,7 +93,7 @@ fn test_transfer_with_empty_amount() {
     let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),

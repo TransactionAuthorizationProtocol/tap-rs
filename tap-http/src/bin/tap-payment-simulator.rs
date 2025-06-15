@@ -241,7 +241,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     // Create a transfer using the proper struct
     let transfer = Transfer {
-        transaction_id: transaction_id.clone(),
+        transaction_id: Some(transaction_id.clone()),
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
             .parse()
             .unwrap(),

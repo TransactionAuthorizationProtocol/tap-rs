@@ -364,7 +364,7 @@ fn create_transfer_message(
 
     // Create a transfer message
     let transfer = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator),
         beneficiary: Some(beneficiary),

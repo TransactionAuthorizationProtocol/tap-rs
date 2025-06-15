@@ -359,7 +359,7 @@ fn create_payment_message_with_invoice(
         agents: vec![settlement_agent],
         connection_id: None,
         metadata: HashMap::new(),
-        transaction_id: transaction_id.to_string(),
+        transaction_id: Some(transaction_id.to_string()),
         memo: Some("Payment with invoice".to_string()),
     }
 }
