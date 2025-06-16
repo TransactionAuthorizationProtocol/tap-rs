@@ -14,6 +14,7 @@ use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
     Agent, Authorize, Cancel, Complete, Party, Reject, Revert, Settle, Transfer,
 };
+use tap_node::storage::models::SchemaType;
 use tracing::{debug, error};
 
 /// Tool for creating transfer transactions
@@ -123,44 +124,66 @@ impl ToolHandler for CreateTransferTool {
             if let Some(_profile) = customer.profile.as_object() {
                 let mut metadata = HashMap::new();
 
-                // Add name information if available
-                if let Some(given_name) = customer.given_name {
-                    metadata.insert(
-                        "givenName".to_string(),
-                        serde_json::Value::String(given_name),
-                    );
-                }
-                if let Some(family_name) = customer.family_name {
-                    metadata.insert(
-                        "familyName".to_string(),
-                        serde_json::Value::String(family_name),
-                    );
-                }
-                if let Some(display_name) = customer.display_name {
-                    metadata.insert("name".to_string(), serde_json::Value::String(display_name));
+                match customer.schema_type {
+                    SchemaType::Person => {
+                        // For natural persons, use name hash instead of PII
+                        let full_name = match (&customer.given_name, &customer.family_name) {
+                            (Some(given), Some(family)) => format!("{} {}", given, family),
+                            (Some(given), None) => given.clone(),
+                            (None, Some(family)) => family.clone(),
+                            (None, None) => customer.display_name.clone().unwrap_or_default(),
+                        };
+
+                        if !full_name.is_empty() {
+                            // Add name hash according to TAIP-12
+                            originator = originator.with_name_hash(&full_name);
+                        }
+
+                        // Add address information if available (still needed for compliance)
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Organization => {
+                        // For organizations, include LEI code if available
+                        if let Some(lei_code) = customer.lei_code {
+                            originator = originator.with_lei(&lei_code);
+                        }
+
+                        // Add legal name for organizations
+                        if let Some(legal_name) = customer.legal_name {
+                            metadata.insert(
+                                "legalName".to_string(),
+                                serde_json::Value::String(legal_name),
+                            );
+                        }
+
+                        // Add address information if available
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Thing => {
+                        // For other entity types, include minimal metadata
+                        if let Some(display_name) = customer.display_name {
+                            metadata.insert(
+                                "name".to_string(),
+                                serde_json::Value::String(display_name),
+                            );
+                        }
+                    }
                 }
 
-                // Add address information if available
-                if let Some(country) = customer.address_country {
-                    metadata.insert(
-                        "addressCountry".to_string(),
-                        serde_json::Value::String(country),
-                    );
+                // Apply any additional metadata
+                if !metadata.is_empty() {
+                    originator = Party::with_metadata(&originator.id, metadata);
                 }
-                if let Some(locality) = customer.address_locality {
-                    metadata.insert(
-                        "addressLocality".to_string(),
-                        serde_json::Value::String(locality),
-                    );
-                }
-                if let Some(postal_code) = customer.postal_code {
-                    metadata.insert(
-                        "postalCode".to_string(),
-                        serde_json::Value::String(postal_code),
-                    );
-                }
-
-                originator = Party::with_metadata(&originator.id, metadata);
             }
         }
         // Also merge any provided metadata
@@ -180,44 +203,66 @@ impl ToolHandler for CreateTransferTool {
             if let Some(_profile) = customer.profile.as_object() {
                 let mut metadata = HashMap::new();
 
-                // Add name information if available
-                if let Some(given_name) = customer.given_name {
-                    metadata.insert(
-                        "givenName".to_string(),
-                        serde_json::Value::String(given_name),
-                    );
-                }
-                if let Some(family_name) = customer.family_name {
-                    metadata.insert(
-                        "familyName".to_string(),
-                        serde_json::Value::String(family_name),
-                    );
-                }
-                if let Some(display_name) = customer.display_name {
-                    metadata.insert("name".to_string(), serde_json::Value::String(display_name));
+                match customer.schema_type {
+                    SchemaType::Person => {
+                        // For natural persons, use name hash instead of PII
+                        let full_name = match (&customer.given_name, &customer.family_name) {
+                            (Some(given), Some(family)) => format!("{} {}", given, family),
+                            (Some(given), None) => given.clone(),
+                            (None, Some(family)) => family.clone(),
+                            (None, None) => customer.display_name.clone().unwrap_or_default(),
+                        };
+
+                        if !full_name.is_empty() {
+                            // Add name hash according to TAIP-12
+                            beneficiary = beneficiary.with_name_hash(&full_name);
+                        }
+
+                        // Add address information if available (still needed for compliance)
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Organization => {
+                        // For organizations, include LEI code if available
+                        if let Some(lei_code) = customer.lei_code {
+                            beneficiary = beneficiary.with_lei(&lei_code);
+                        }
+
+                        // Add legal name for organizations
+                        if let Some(legal_name) = customer.legal_name {
+                            metadata.insert(
+                                "legalName".to_string(),
+                                serde_json::Value::String(legal_name),
+                            );
+                        }
+
+                        // Add address information if available
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Thing => {
+                        // For other entity types, include minimal metadata
+                        if let Some(display_name) = customer.display_name {
+                            metadata.insert(
+                                "name".to_string(),
+                                serde_json::Value::String(display_name),
+                            );
+                        }
+                    }
                 }
 
-                // Add address information if available
-                if let Some(country) = customer.address_country {
-                    metadata.insert(
-                        "addressCountry".to_string(),
-                        serde_json::Value::String(country),
-                    );
+                // Apply any additional metadata
+                if !metadata.is_empty() {
+                    beneficiary = Party::with_metadata(&beneficiary.id, metadata);
                 }
-                if let Some(locality) = customer.address_locality {
-                    metadata.insert(
-                        "addressLocality".to_string(),
-                        serde_json::Value::String(locality),
-                    );
-                }
-                if let Some(postal_code) = customer.postal_code {
-                    metadata.insert(
-                        "postalCode".to_string(),
-                        serde_json::Value::String(postal_code),
-                    );
-                }
-
-                beneficiary = Party::with_metadata(&beneficiary.id, metadata);
             }
         }
         // Also merge any provided metadata
