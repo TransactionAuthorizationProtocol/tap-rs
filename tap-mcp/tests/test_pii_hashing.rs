@@ -3,8 +3,10 @@
 use serde_json::json;
 use tap_node::storage::models::{Customer, SchemaType};
 
-#[tokio::test]
-async fn test_transfer_with_person_uses_name_hash() {
+#[test]
+fn test_transfer_with_person_uses_name_hash() {
+    use tap_msg::message::Party;
+
     // Create a test setup with a person customer
     let customer = Customer {
         id: "did:example:alice".to_string(),
@@ -34,14 +36,53 @@ async fn test_transfer_with_person_uses_name_hash() {
     // The expected name hash for "Alice Lee" according to TAIP-12
     let expected_name_hash = "b117f44426c9670da91b563db728cd0bc8bafa7d1a6bb5e764d1aad2ca25032e";
 
-    // TODO: Complete test implementation once we have a proper test setup
-    // This would need:
-    // 1. Mock TAP integration
-    // 2. Mock storage that returns our test customer
-    // 3. Call CreateTransferTool with the customer's DID
-    // 4. Verify the resulting transfer has nameHash instead of PII
+    // Simulate what the transfer creation logic does for a person
+    let mut party = Party::new(&customer.id);
+    let mut metadata = std::collections::HashMap::new();
 
-    assert_eq!(expected_name_hash.len(), 64); // SHA-256 produces 64 hex chars
+    // Extract full name just like in the transfer creation logic
+    let full_name = match (&customer.given_name, &customer.family_name) {
+        (Some(given), Some(family)) => format!("{} {}", given, family),
+        (Some(given), None) => given.clone(),
+        (None, Some(family)) => family.clone(),
+        (None, None) => customer.display_name.clone().unwrap_or_default(),
+    };
+
+    // Add name hash according to TAIP-12
+    if !full_name.is_empty() {
+        party = party.with_name_hash(&full_name);
+    }
+
+    // Add address information if available (still needed for compliance)
+    if let Some(country) = customer.address_country {
+        metadata.insert(
+            "addressCountry".to_string(),
+            serde_json::Value::String(country),
+        );
+    }
+
+    // Apply metadata if any
+    if !metadata.is_empty() {
+        for (key, value) in metadata {
+            party.add_metadata(key, value);
+        }
+    }
+
+    // Verify the party has the expected name hash
+    assert_eq!(party.name_hash(), Some(expected_name_hash.to_string()));
+
+    // Verify address country is included
+    assert_eq!(
+        party
+            .get_metadata("addressCountry")
+            .and_then(|v| v.as_str()),
+        Some("US")
+    );
+
+    // Verify no PII is included
+    assert!(party.get_metadata("givenName").is_none());
+    assert!(party.get_metadata("familyName").is_none());
+    assert!(party.get_metadata("name").is_none());
 }
 
 #[tokio::test]

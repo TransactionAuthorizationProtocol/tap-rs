@@ -1,4 +1,3 @@
-use serde_json;
 use std::collections::HashMap;
 use tap_caip::{AssetId, ChainId};
 use tap_msg::message::agent::Agent;

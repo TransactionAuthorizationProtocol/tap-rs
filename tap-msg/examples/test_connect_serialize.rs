@@ -1,4 +1,3 @@
-use serde_json;
 use tap_msg::message::connection::Connect;
 
 fn main() {
