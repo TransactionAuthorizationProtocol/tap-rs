@@ -10,10 +10,10 @@ readme = "README.md"
 
 [dependencies]
 # Internal dependencies
-tap-msg = { version = "0.3.0", path = "../tap-msg" }
-tap-agent = { version = "0.3.0", path = "../tap-agent" }
-tap-caip = { version = "0.3.0", path = "../tap-caip" }
-tap-ivms101 = { version = "0.3.0", path = "../tap-ivms101" }
+tap-msg = { version = "0.4.0", path = "../tap-msg" }
+tap-agent = { version = "0.4.0", path = "../tap-agent" }
+tap-caip = { version = "0.4.0", path = "../tap-caip" }
+tap-ivms101 = { version = "0.4.0", path = "../tap-ivms101" }
 
 # Async runtime
 tokio = { workspace = true }
