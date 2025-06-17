@@ -121,14 +121,14 @@ impl StandardTransactionProcessor {
                     let recipients_list = vec![message.from.as_str()];
 
                     log::info!(
-                        "Auto-authorizing transaction {} from agent {}",
+                        "Auto-authorizing transaction {:?} from agent {}",
                         transaction_id,
                         agent_did
                     );
 
                     if let Err(e) = agent.send_message(&auth_body, recipients_list, true).await {
                         log::warn!(
-                            "Failed to send auto-Authorize for transaction {} from agent {}: {}",
+                            "Failed to send auto-Authorize for transaction {:?} from agent {}: {}",
                             transaction_id,
                             agent_did,
                             e

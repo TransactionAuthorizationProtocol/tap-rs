@@ -22,7 +22,7 @@ fn create_test_transfer() -> Result<PlainMessage> {
     let receiver_vasp_did = "did:example:receiver_vasp";
 
     let transfer = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Some(Party::new(originator_did)),
@@ -162,7 +162,7 @@ fn test_authorizable_trait_methods() -> Result<()> {
     // The replace_agent_message is already a PlainMessage<ReplaceAgent>, so we can access the body directly
     assert_eq!(
         replace_agent_message.body.transaction_id,
-        transfer.transaction_id
+        transfer.transaction_id.clone().unwrap()
     ); // Use transfer's transaction_id
     assert_eq!(replace_agent_message.body.original, original_agent_did);
     assert_eq!(
@@ -185,7 +185,7 @@ fn test_authorizable_trait_methods() -> Result<()> {
     // The remove_agent_message is already a PlainMessage<RemoveAgent>, so we can access the body directly
     assert_eq!(
         remove_agent_message.body.transaction_id,
-        transfer.transaction_id
+        transfer.transaction_id.clone().unwrap()
     ); // Use transfer's transaction_id
     assert_eq!(remove_agent_message.body.agent, agent_to_remove);
 
@@ -309,7 +309,7 @@ fn create_test_transfer_struct() -> Result<Transfer> {
     let originator = Party::new("did:example:originator");
     let beneficiary = Party::new("did:example:beneficiary");
     let transfer = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset: AssetId::from_str("eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48")
             .unwrap(),
         originator: Some(originator),

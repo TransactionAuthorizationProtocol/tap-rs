@@ -167,7 +167,7 @@ fn test_multiple_connections() {
 
 fn create_test_connect() -> Connect {
     Connect {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         agent_id: Some("did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string()),
         agent: None,
         principal: None,
@@ -192,7 +192,7 @@ fn create_test_transfer() -> Transfer {
     )];
 
     Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator),
         beneficiary: Some(beneficiary),
@@ -218,7 +218,7 @@ fn create_test_payment_request() -> Payment {
         amount: "100.0".to_string(),
         currency_code: Some("USD".to_string()),
         supported_assets: None,
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         memo: None,
         expiry: None,
         invoice: None,

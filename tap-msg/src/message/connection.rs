@@ -128,9 +128,10 @@ pub struct ConnectionConstraints {
     authorizable
 )]
 pub struct Connect {
-    /// Transaction ID.
+    /// Transaction ID (only available after creation).
+    #[serde(skip)]
     #[tap(transaction_id)]
-    pub transaction_id: String,
+    pub transaction_id: Option<String>,
 
     /// Agent DID (kept for backward compatibility).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -163,7 +164,7 @@ impl Connect {
     /// Create a new Connect message (backward compatible).
     pub fn new(transaction_id: &str, agent_id: &str, for_id: &str, role: Option<&str>) -> Self {
         Self {
-            transaction_id: transaction_id.to_string(),
+            transaction_id: Some(transaction_id.to_string()),
             agent_id: Some(agent_id.to_string()),
             agent: None,
             principal: None,
@@ -180,7 +181,7 @@ impl Connect {
         principal: Party,
     ) -> Self {
         Self {
-            transaction_id: transaction_id.to_string(),
+            transaction_id: Some(transaction_id.to_string()),
             agent_id: None,
             agent: Some(agent),
             principal: Some(principal),
@@ -200,9 +201,8 @@ impl Connect {
 impl Connect {
     /// Custom validation for Connect messages
     pub fn validate_connect(&self) -> Result<()> {
-        if self.transaction_id.is_empty() {
-            return Err(Error::Validation("transaction_id is required".to_string()));
-        }
+        // transaction_id is optional for initiator messages
+        // It will be set when creating the DIDComm message
 
         // Either agent_id or agent must be present
         if self.agent_id.is_none() && self.agent.is_none() {

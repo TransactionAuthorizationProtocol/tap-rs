@@ -21,7 +21,7 @@ fn test_create_message() {
     let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -110,7 +110,7 @@ mod payment_tests {
     #[test]
     fn test_build_valid_payment() {
         let payment = create_valid_payment();
-        assert_eq!(payment.transaction_id, "pay_123");
+        assert_eq!(payment.transaction_id, Some("pay_123".to_string()));
         assert_eq!(payment.amount.parse::<f64>().unwrap(), 100.50);
     }
 
@@ -120,14 +120,15 @@ mod payment_tests {
         let customer_did = "did:key:z6MkhTBLxt9a7sWX77zn1GnzYam743kc9HvzA9qnKXqpVmXC";
         let asset_id_str = "eip155:1/slip44:60";
 
-        // Missing transaction_id - now PaymentBuilder generates a random ID if not provided
+        // Missing transaction_id - builder should work without it
         let res = PaymentBuilder::default()
             .merchant(Party::new(merchant_did))
             .customer(Party::new(customer_did))
             .asset(AssetId::from_str(asset_id_str).unwrap())
             .amount("100".to_string())
             .build();
-        assert!(!res.transaction_id.is_empty());
+        // Transaction ID is optional and not auto-generated
+        assert!(res.transaction_id.is_none());
 
         // Amount validation - the builder now accepts any amount
         let res = PaymentBuilder::default()
@@ -169,9 +170,10 @@ mod payment_tests {
         assert!(!message_from_merchant.to.contains(merchant_did));
 
         let body: Payment = serde_json::from_value(message_from_merchant.body).unwrap();
-        // Verify key fields instead of equality
-        assert_eq!(body.transaction_id, payment.transaction_id);
+        // Verify key fields (transaction_id is not serialized due to #[serde(skip)])
         assert_eq!(body.amount, payment.amount);
+        assert_eq!(body.asset, payment.asset);
+        assert_eq!(body.merchant.id, payment.merchant.id);
     }
 
     #[test]
@@ -189,14 +191,14 @@ mod payment_tests {
         let reject_code = "E001".to_string();
         let reject_reason = "Insufficient funds".to_string();
         let reject = tap_msg::message::Reject {
-            transaction_id: payment.transaction_id.clone(),
+            transaction_id: payment.transaction_id.clone().unwrap(),
             reason: Some(format!("{}: {}", reject_code, reject_reason)),
         };
         assert_eq!(reject.reason, Some("E001: Insufficient funds".to_string()));
 
         // Create a Settle directly since settle() method is removed
         let settle = tap_msg::message::Settle {
-            transaction_id: payment.transaction_id.clone(),
+            transaction_id: payment.transaction_id.clone().unwrap(),
             settlement_id: Some("tx-abc".to_string()),
             amount: Some("100.0".to_string()),
         };
@@ -208,11 +210,11 @@ mod payment_tests {
             Party::new("did:key:z6MkpTHR8VNsBxYAAWHut2Geadd9jSwuBV8xRoAnwWsdvktH");
 
         let update_party = UpdateParty {
-            transaction_id: transaction_id.clone(),
+            transaction_id: transaction_id.clone().unwrap(),
             party_type: "beneficiary".to_string(),
             party: updated_participant.clone(),
             context: None,
         };
-        assert_eq!(update_party.transaction_id, transaction_id);
+        assert_eq!(update_party.transaction_id, transaction_id.unwrap());
     }
 }

@@ -108,7 +108,7 @@ fn main() -> Result<()> {
 
         // Include both originator and beneficiary agents in the initial transfer
         let transfer = Transfer {
-            transaction_id: uuid::Uuid::new_v4().to_string(),
+            transaction_id: Some(uuid::Uuid::new_v4().to_string()),
             asset,
             originator: Some(Party::new(originator_party)),
             beneficiary: Some(Party::new(beneficiary_party)),

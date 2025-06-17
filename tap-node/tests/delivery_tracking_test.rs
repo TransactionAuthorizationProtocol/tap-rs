@@ -38,7 +38,7 @@ async fn test_delivery_tracking_with_send_message() -> Result<(), Box<dyn std::e
 
     // Create a proper Transfer struct first
     let transfer = Transfer {
-        transaction_id: "tx-123".to_string(),
+        transaction_id: Some("tx-123".to_string()),
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse()?,
         amount: "100.00".to_string(),
         originator: Some(Party::new(&sender_did)),
@@ -119,7 +119,7 @@ async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Err
 
     // Create a proper Transfer struct first
     let transfer = Transfer {
-        transaction_id: "tx-456".to_string(),
+        transaction_id: Some("tx-456".to_string()),
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse()?,
         amount: "200.00".to_string(),
         originator: Some(Party::new(&sender_did)),

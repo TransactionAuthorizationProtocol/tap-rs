@@ -7,14 +7,15 @@ use crate::mcp::protocol::{CallToolResult, Tool};
 use crate::tap_integration::TapIntegration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
     Agent, Authorize, Cancel, Complete, Party, Reject, Revert, Settle, Transfer,
 };
+use tap_node::storage::models::SchemaType;
 use tracing::{debug, error};
-use uuid::Uuid;
 
 /// Tool for creating transfer transactions
 pub struct CreateTransferTool {
@@ -41,6 +42,8 @@ struct CreateTransferParams {
 struct PartyInfo {
     #[serde(rename = "@id")]
     id: String,
+    #[serde(default)]
+    metadata: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,9 +98,183 @@ impl ToolHandler for CreateTransferTool {
             .parse::<AssetId>()
             .map_err(|e| Error::invalid_parameter(format!("Invalid asset ID: {}", e)))?;
 
-        // Create parties
-        let originator = Party::new(&params.originator.id);
-        let beneficiary = Party::new(&params.beneficiary.id);
+        // Get storage for the agent to look up customer metadata
+        let storage = match self
+            .tap_integration()
+            .storage_for_agent(&params.agent_did)
+            .await
+        {
+            Ok(storage) => storage,
+            Err(e) => {
+                error!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                );
+                return Ok(error_text_response(format!(
+                    "Failed to get storage for agent {}: {}",
+                    params.agent_did, e
+                )));
+            }
+        };
+
+        // Create parties with metadata from customer database if available
+        let mut originator = Party::new(&params.originator.id);
+        if let Ok(Some(customer)) = storage.get_customer(&params.originator.id).await {
+            // Extract relevant metadata from customer profile
+            if let Some(_profile) = customer.profile.as_object() {
+                let mut metadata = HashMap::new();
+
+                match customer.schema_type {
+                    SchemaType::Person => {
+                        // For natural persons, use name hash instead of PII
+                        let full_name = match (&customer.given_name, &customer.family_name) {
+                            (Some(given), Some(family)) => format!("{} {}", given, family),
+                            (Some(given), None) => given.clone(),
+                            (None, Some(family)) => family.clone(),
+                            (None, None) => customer.display_name.clone().unwrap_or_default(),
+                        };
+
+                        if !full_name.is_empty() {
+                            // Add name hash according to TAIP-12
+                            originator = originator.with_name_hash(&full_name);
+                        }
+
+                        // Add address information if available (still needed for compliance)
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Organization => {
+                        // For organizations, include LEI code if available
+                        if let Some(lei_code) = customer.lei_code {
+                            originator = originator.with_lei(&lei_code);
+                        }
+
+                        // Add legal name for organizations
+                        if let Some(legal_name) = customer.legal_name {
+                            metadata.insert(
+                                "legalName".to_string(),
+                                serde_json::Value::String(legal_name),
+                            );
+                        }
+
+                        // Add address information if available
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Thing => {
+                        // For other entity types, include minimal metadata
+                        if let Some(display_name) = customer.display_name {
+                            metadata.insert(
+                                "name".to_string(),
+                                serde_json::Value::String(display_name),
+                            );
+                        }
+                    }
+                }
+
+                // Apply any additional metadata
+                if !metadata.is_empty() {
+                    originator = Party::with_metadata(&originator.id, metadata);
+                }
+            }
+        }
+        // Also merge any provided metadata
+        if let Some(provided_metadata) = params.originator.metadata {
+            if let Some(obj) = provided_metadata.as_object() {
+                let mut metadata = originator.metadata.clone();
+                for (k, v) in obj {
+                    metadata.insert(k.clone(), v.clone());
+                }
+                originator = Party::with_metadata(&originator.id, metadata);
+            }
+        }
+
+        let mut beneficiary = Party::new(&params.beneficiary.id);
+        if let Ok(Some(customer)) = storage.get_customer(&params.beneficiary.id).await {
+            // Extract relevant metadata from customer profile
+            if let Some(_profile) = customer.profile.as_object() {
+                let mut metadata = HashMap::new();
+
+                match customer.schema_type {
+                    SchemaType::Person => {
+                        // For natural persons, use name hash instead of PII
+                        let full_name = match (&customer.given_name, &customer.family_name) {
+                            (Some(given), Some(family)) => format!("{} {}", given, family),
+                            (Some(given), None) => given.clone(),
+                            (None, Some(family)) => family.clone(),
+                            (None, None) => customer.display_name.clone().unwrap_or_default(),
+                        };
+
+                        if !full_name.is_empty() {
+                            // Add name hash according to TAIP-12
+                            beneficiary = beneficiary.with_name_hash(&full_name);
+                        }
+
+                        // Add address information if available (still needed for compliance)
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Organization => {
+                        // For organizations, include LEI code if available
+                        if let Some(lei_code) = customer.lei_code {
+                            beneficiary = beneficiary.with_lei(&lei_code);
+                        }
+
+                        // Add legal name for organizations
+                        if let Some(legal_name) = customer.legal_name {
+                            metadata.insert(
+                                "legalName".to_string(),
+                                serde_json::Value::String(legal_name),
+                            );
+                        }
+
+                        // Add address information if available
+                        if let Some(country) = customer.address_country {
+                            metadata.insert(
+                                "addressCountry".to_string(),
+                                serde_json::Value::String(country),
+                            );
+                        }
+                    }
+                    SchemaType::Thing => {
+                        // For other entity types, include minimal metadata
+                        if let Some(display_name) = customer.display_name {
+                            metadata.insert(
+                                "name".to_string(),
+                                serde_json::Value::String(display_name),
+                            );
+                        }
+                    }
+                }
+
+                // Apply any additional metadata
+                if !metadata.is_empty() {
+                    beneficiary = Party::with_metadata(&beneficiary.id, metadata);
+                }
+            }
+        }
+        // Also merge any provided metadata
+        if let Some(provided_metadata) = params.beneficiary.metadata {
+            if let Some(obj) = provided_metadata.as_object() {
+                let mut metadata = beneficiary.metadata.clone();
+                for (k, v) in obj {
+                    metadata.insert(k.clone(), v.clone());
+                }
+                beneficiary = Party::with_metadata(&beneficiary.id, metadata);
+            }
+        }
 
         // Create agents
         let agents: Vec<Agent> = params
@@ -106,12 +283,9 @@ impl ToolHandler for CreateTransferTool {
             .map(|agent_info| Agent::new(&agent_info.id, &agent_info.role, &agent_info.for_party))
             .collect();
 
-        // Generate transaction ID
-        let transaction_id = Uuid::new_v4().to_string();
-
-        // Create transfer message
+        // Create transfer message (transaction_id will be generated when creating DIDComm message)
         let transfer = Transfer {
-            transaction_id: transaction_id.clone(),
+            transaction_id: None,
             asset: asset_id,
             originator: Some(originator),
             beneficiary: Some(beneficiary),
@@ -160,8 +334,8 @@ impl ToolHandler for CreateTransferTool {
         };
 
         debug!(
-            "Sending transfer from {} to {} with transaction ID: {}",
-            params.agent_did, recipient_did, transaction_id
+            "Sending transfer from {} to {}",
+            params.agent_did, recipient_did
         );
 
         // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
@@ -179,7 +353,10 @@ impl ToolHandler for CreateTransferTool {
                 );
 
                 let response = CreateTransferResponse {
-                    transaction_id,
+                    transaction_id: didcomm_message
+                        .thid
+                        .clone()
+                        .unwrap_or(didcomm_message.id.clone()),
                     message_id: didcomm_message.id,
                     status: "sent".to_string(),
                     created_at: chrono::Utc::now().to_rfc3339(),
@@ -1209,7 +1386,7 @@ impl ToolHandler for CompleteTool {
     fn get_definition(&self) -> Tool {
         Tool {
             name: "tap_complete".to_string(),
-            description: "Completes a TAP payment transaction using the Complete message (TAIP-13)"
+            description: "Request from merchant to complete a TAP payment (TAIP-14) transaction using the Complete message so funds are settled and the transaction is finalized."
                 .to_string(),
             input_schema: schema::complete_schema(),
         }

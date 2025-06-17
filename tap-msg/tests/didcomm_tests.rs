@@ -15,7 +15,7 @@ async fn test_pack_tap_body() -> Result<()> {
     let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset: asset.clone(),
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),
@@ -85,7 +85,7 @@ async fn test_extract_tap_body() -> Result<()> {
     let beneficiary = Party::new("did:key:z6MkmRsjkKHNrBiVz5mhiqhJVYf9E9mxg3MVGqgqMkRwCJd6");
 
     let body = Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset: asset.clone(),
         originator: Some(originator.clone()),
         beneficiary: Some(beneficiary.clone()),

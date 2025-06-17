@@ -22,13 +22,23 @@ fn test_transfer_authorizable() {
     let auth_message = transfer.authorize("did:example:sender", None, None);
 
     // The auth_message is already a PlainMessage<Authorize>, so we can access the body directly
-    assert_eq!(auth_message.body.transaction_id, transfer.transaction_id);
+    // Since transfer.transaction_id is Option<String>, we need to unwrap it for comparison
+    assert_eq!(
+        auth_message.body.transaction_id,
+        transfer
+            .transaction_id
+            .clone()
+            .unwrap_or_else(|| transfer_message.id.clone())
+    );
 
     // Create Reject struct directly/manually since the trait is now at a different location
     let reject_code = "REJECT-001".to_string();
     let reject_reason = "Rejected due to compliance issues".to_string();
     let reject = Reject {
-        transaction_id: transfer_message.id.clone(),
+        transaction_id: transfer
+            .transaction_id
+            .clone()
+            .unwrap_or_else(|| transfer_message.id.clone()),
         reason: Some(format!("{}: {}", reject_code, reject_reason)),
     };
     assert_eq!(
@@ -59,13 +69,23 @@ fn test_didcomm_message_authorizable() {
     let auth_message = transfer.authorize("did:example:sender", None, None);
 
     // The auth_message is already a PlainMessage<Authorize>, so we can access the body directly
-    assert_eq!(auth_message.body.transaction_id, transfer.transaction_id);
+    // Since transfer.transaction_id is Option<String>, we need to unwrap it for comparison
+    assert_eq!(
+        auth_message.body.transaction_id,
+        transfer
+            .transaction_id
+            .clone()
+            .unwrap_or_else(|| transfer_message.id.clone())
+    );
 
     // Create Reject struct directly/manually
     let reject_code = "REJECT-001".to_string();
     let reject_reason = "Rejected due to compliance issues".to_string();
     let reject = Reject {
-        transaction_id: transfer_message.id.clone(),
+        transaction_id: transfer
+            .transaction_id
+            .clone()
+            .unwrap_or_else(|| transfer_message.id.clone()),
         reason: Some(format!("{}: {}", reject_code, reject_reason)),
     };
     assert_eq!(
@@ -75,7 +95,10 @@ fn test_didcomm_message_authorizable() {
 
     // Create Settle struct directly
     let settle = Settle {
-        transaction_id: transfer.transaction_id.clone(),
+        transaction_id: transfer
+            .transaction_id
+            .clone()
+            .unwrap_or_else(|| transfer_message.id.clone()),
         settlement_id: Some("tx-12345".to_string()),
         amount: Some("100".to_string()),
     };
@@ -94,7 +117,10 @@ fn test_full_flow() {
 
     // Create Settle struct directly
     let settle = Settle {
-        transaction_id: transfer.transaction_id.clone(),
+        transaction_id: transfer
+            .transaction_id
+            .clone()
+            .unwrap_or_else(|| "tx-123".to_string()),
         settlement_id: Some("tx-12345".to_string()),
         amount: Some("100".to_string()),
     };
@@ -178,7 +204,7 @@ fn create_test_transfer() -> Transfer {
     )];
 
     Transfer {
-        transaction_id: uuid::Uuid::new_v4().to_string(),
+        transaction_id: Some(uuid::Uuid::new_v4().to_string()),
         asset,
         originator: Some(originator),
         beneficiary: Some(beneficiary),

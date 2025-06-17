@@ -41,7 +41,7 @@ async fn test_internal_message_delivery_all_tables() -> Result<(), Box<dyn std::
 
     // Create a transfer message from agent1 to agent2
     let transfer = Transfer {
-        transaction_id: "test-tx-123".to_string(),
+        transaction_id: Some("test-tx-123".to_string()),
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".parse()?,
         amount: "1000.00".to_string(),
         originator: Some(Party::new(&agent1_did)),
