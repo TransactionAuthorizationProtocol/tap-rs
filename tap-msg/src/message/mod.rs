@@ -9,7 +9,6 @@ pub mod agent_management;
 pub mod authorize;
 pub mod basic_message;
 pub mod cancel;
-pub mod complete;
 pub mod connection;
 pub mod context;
 pub mod did_presentation;
@@ -45,9 +44,6 @@ pub use basic_message::BasicMessage;
 
 // Re-export cancel type
 pub use cancel::Cancel;
-
-// Re-export complete type
-pub use complete::Complete;
 
 // Re-export connection types
 pub use connection::{

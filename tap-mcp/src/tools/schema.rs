@@ -227,32 +227,6 @@ pub fn settle_schema() -> Value {
     })
 }
 
-/// Schema for complete tool
-pub fn complete_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "agent_did": {
-                "type": "string",
-                "description": "The DID of the agent that will sign and send this message"
-            },
-            "transaction_id": {
-                "type": "string",
-                "description": "Transaction ID to complete"
-            },
-            "settlement_address": {
-                "type": "string",
-                "description": "CAIP-10 settlement address"
-            },
-            "amount": {
-                "type": "string",
-                "description": "Optional amount completed"
-            }
-        },
-        "required": ["agent_did", "transaction_id", "settlement_address"],
-        "additionalProperties": false
-    })
-}
 
 /// Schema for list_transactions tool
 pub fn list_transactions_schema() -> Value {

@@ -174,7 +174,7 @@ async fn test_list_tools() -> Result<()> {
 
     if let Some(result) = response.result {
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 31); // All 31 tools should be available (including complete, revert, communication, delivery, customer, received message tools, database tools, agent management tools, and policy tools)
+        assert_eq!(tools.len(), 30); // All 30 tools should be available (including revert, communication, delivery, customer, received message tools, database tools, agent management tools, and policy tools)
 
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 
