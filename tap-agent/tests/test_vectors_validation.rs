@@ -34,7 +34,7 @@ use std::fs;
 use std::path::Path;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{
-    AuthorizationRequired, Cancel, Complete, ConfirmRelationship, Connect, DIDCommPresentation,
+    AuthorizationRequired, Cancel, ConfirmRelationship, Connect, DIDCommPresentation,
     Payment, RemoveAgent, ReplaceAgent, Revert, UpdateParty, UpdatePolicies,
 };
 use tap_msg::{
@@ -95,7 +95,6 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
         "https://tap.rsvp/schema/1.0#Authorize",
         "https://tap.rsvp/schema/1.0#Reject",
         "https://tap.rsvp/schema/1.0#Settle",
-        "https://tap.rsvp/schema/1.0#Complete",
         "https://tap.rsvp/schema/1.0#Cancel",
         "https://tap.rsvp/schema/1.0#Revert",
         "https://tap.rsvp/schema/1.0#AddAgents",
@@ -240,11 +239,6 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
                 serde_json::from_value(body_with_thread_id.clone())
                     .map_err(|e| format!("Failed to parse AuthorizationRequired: {}", e))?;
             auth_required.validate().map_err(|e| e.to_string())
-        }
-        "https://tap.rsvp/schema/1.0#Complete" => {
-            let complete: Complete = serde_json::from_value(body_with_thread_id.clone())
-                .map_err(|e| format!("Failed to parse Complete: {}", e))?;
-            complete.validate().map_err(|e| e.to_string())
         }
         "https://didcomm.org/out-of-band/2.0/invitation" => {
             // Out-of-band messages must have a goal_code starting with "tap."
