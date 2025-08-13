@@ -147,9 +147,7 @@ impl Party {
 
     /// Get the name field if present.
     pub fn name(&self) -> Option<&str> {
-        self.metadata
-            .get("name")
-            .and_then(|v| v.as_str())
+        self.metadata.get("name").and_then(|v| v.as_str())
     }
 
     /// Add a URL field (schema.org/Organization).
@@ -163,9 +161,7 @@ impl Party {
 
     /// Get the URL field if present.
     pub fn url(&self) -> Option<&str> {
-        self.metadata
-            .get("url")
-            .and_then(|v| v.as_str())
+        self.metadata.get("url").and_then(|v| v.as_str())
     }
 
     /// Add a logo field (schema.org/Organization).
@@ -179,9 +175,7 @@ impl Party {
 
     /// Get the logo field if present.
     pub fn logo(&self) -> Option<&str> {
-        self.metadata
-            .get("logo")
-            .and_then(|v| v.as_str())
+        self.metadata.get("logo").and_then(|v| v.as_str())
     }
 
     /// Add a description field (schema.org/Organization).
@@ -195,9 +189,7 @@ impl Party {
 
     /// Get the description field if present.
     pub fn description(&self) -> Option<&str> {
-        self.metadata
-            .get("description")
-            .and_then(|v| v.as_str())
+        self.metadata.get("description").and_then(|v| v.as_str())
     }
 
     /// Add an email field (schema.org/Organization or schema.org/Person).
@@ -211,9 +203,7 @@ impl Party {
 
     /// Get the email field if present.
     pub fn email(&self) -> Option<&str> {
-        self.metadata
-            .get("email")
-            .and_then(|v| v.as_str())
+        self.metadata.get("email").and_then(|v| v.as_str())
     }
 
     /// Add a telephone field (schema.org/Organization or schema.org/Person).
@@ -227,9 +217,7 @@ impl Party {
 
     /// Get the telephone field if present.
     pub fn telephone(&self) -> Option<&str> {
-        self.metadata
-            .get("telephone")
-            .and_then(|v| v.as_str())
+        self.metadata.get("telephone").and_then(|v| v.as_str())
     }
 }
 
@@ -333,15 +321,14 @@ mod tests {
 
     #[test]
     fn test_party_with_name_field() {
-        let party = Party::new("did:example:alice")
-            .with_name("Alice Corporation");
-        
+        let party = Party::new("did:example:alice").with_name("Alice Corporation");
+
         assert_eq!(party.name(), Some("Alice Corporation"));
-        
+
         // Test serialization
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["name"], "Alice Corporation");
-        
+
         // Test deserialization
         let deserialized: Party = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.name(), Some("Alice Corporation"));
@@ -349,55 +336,51 @@ mod tests {
 
     #[test]
     fn test_party_with_url_field() {
-        let party = Party::new("did:example:alice")
-            .with_url("https://alice.example.com");
-        
+        let party = Party::new("did:example:alice").with_url("https://alice.example.com");
+
         assert_eq!(party.url(), Some("https://alice.example.com"));
-        
+
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["url"], "https://alice.example.com");
     }
 
     #[test]
     fn test_party_with_logo_field() {
-        let party = Party::new("did:example:alice")
-            .with_logo("https://alice.example.com/logo.png");
-        
+        let party = Party::new("did:example:alice").with_logo("https://alice.example.com/logo.png");
+
         assert_eq!(party.logo(), Some("https://alice.example.com/logo.png"));
-        
+
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["logo"], "https://alice.example.com/logo.png");
     }
 
     #[test]
     fn test_party_with_description_field() {
-        let party = Party::new("did:example:alice")
-            .with_description("A trusted financial institution");
-        
+        let party =
+            Party::new("did:example:alice").with_description("A trusted financial institution");
+
         assert_eq!(party.description(), Some("A trusted financial institution"));
-        
+
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["description"], "A trusted financial institution");
     }
 
     #[test]
     fn test_party_with_email_field() {
-        let party = Party::new("did:example:alice")
-            .with_email("contact@alice.example.com");
-        
+        let party = Party::new("did:example:alice").with_email("contact@alice.example.com");
+
         assert_eq!(party.email(), Some("contact@alice.example.com"));
-        
+
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["email"], "contact@alice.example.com");
     }
 
     #[test]
     fn test_party_with_telephone_field() {
-        let party = Party::new("did:example:alice")
-            .with_telephone("+1-555-0200");
-        
+        let party = Party::new("did:example:alice").with_telephone("+1-555-0200");
+
         assert_eq!(party.telephone(), Some("+1-555-0200"));
-        
+
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["telephone"], "+1-555-0200");
     }
@@ -413,7 +396,7 @@ mod tests {
             .with_telephone("+1-555-0200")
             .with_country("US")
             .with_lei("123456789012345678");
-        
+
         assert_eq!(party.name(), Some("Alice Corporation"));
         assert_eq!(party.url(), Some("https://alice.example.com"));
         assert_eq!(party.logo(), Some("https://alice.example.com/logo.png"));
@@ -422,7 +405,7 @@ mod tests {
         assert_eq!(party.telephone(), Some("+1-555-0200"));
         assert_eq!(party.country(), Some("US".to_string()));
         assert_eq!(party.lei_code(), Some("123456789012345678".to_string()));
-        
+
         // Test JSON serialization includes all fields
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["@id"], "did:example:alice");
@@ -434,7 +417,7 @@ mod tests {
         assert_eq!(json["telephone"], "+1-555-0200");
         assert_eq!(json["https://schema.org/addressCountry"], "US");
         assert_eq!(json["https://schema.org/leiCode"], "123456789012345678");
-        
+
         // Test deserialization preserves all fields
         let deserialized: Party = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.name(), Some("Alice Corporation"));
@@ -446,22 +429,25 @@ mod tests {
     fn test_party_json_ld_compliance_with_organization_fields() {
         let party = Party::new("did:example:alice")
             .with_name("Alice Corporation")
-            .with_metadata_field("ivms101".to_string(), serde_json::json!({
-                "naturalPerson": {
-                    "name": {
-                        "primaryIdentifier": "Smith",
-                        "secondaryIdentifier": "Alice"
+            .with_metadata_field(
+                "ivms101".to_string(),
+                serde_json::json!({
+                    "naturalPerson": {
+                        "name": {
+                            "primaryIdentifier": "Smith",
+                            "secondaryIdentifier": "Alice"
+                        }
                     }
-                }
-            }));
-        
+                }),
+            );
+
         let json = serde_json::to_value(&party).unwrap();
-        
+
         // Verify JSON-LD structure
         assert_eq!(json["@id"], "did:example:alice");
         assert_eq!(json["name"], "Alice Corporation");
         assert!(json["ivms101"]["naturalPerson"]["name"]["primaryIdentifier"].is_string());
-        
+
         // Fields should be at root level, not nested under metadata
         assert!(json.get("metadata").is_none());
     }
@@ -472,24 +458,27 @@ mod tests {
         let party = Party::new("did:example:alice")
             .with_name("Alice Corporation")
             .with_country("US")
-            .with_metadata_field("ivms101".to_string(), serde_json::json!({
-                "legalPerson": {
-                    "name": {
-                        "nameIdentifier": [{
-                            "legalPersonName": "Alice Corporation",
-                            "legalPersonNameIdentifierType": "LEGL"
-                        }]
-                    },
-                    "nationalIdentification": {
-                        "nationalIdentifier": "123456789",
-                        "nationalIdentifierType": "LEIX"
+            .with_metadata_field(
+                "ivms101".to_string(),
+                serde_json::json!({
+                    "legalPerson": {
+                        "name": {
+                            "nameIdentifier": [{
+                                "legalPersonName": "Alice Corporation",
+                                "legalPersonNameIdentifierType": "LEGL"
+                            }]
+                        },
+                        "nationalIdentification": {
+                            "nationalIdentifier": "123456789",
+                            "nationalIdentifierType": "LEIX"
+                        }
                     }
-                }
-            }));
-        
+                }),
+            );
+
         assert_eq!(party.name(), Some("Alice Corporation"));
         assert_eq!(party.country(), Some("US".to_string()));
-        
+
         let json = serde_json::to_value(&party).unwrap();
         assert_eq!(json["name"], "Alice Corporation");
         assert_eq!(json["https://schema.org/addressCountry"], "US");

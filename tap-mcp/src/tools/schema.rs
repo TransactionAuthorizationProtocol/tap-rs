@@ -227,7 +227,6 @@ pub fn settle_schema() -> Value {
     })
 }
 
-
 /// Schema for list_transactions tool
 pub fn list_transactions_schema() -> Value {
     json!({

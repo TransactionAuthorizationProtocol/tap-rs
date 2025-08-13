@@ -276,7 +276,7 @@ impl OutOfBand {
 }
 
 /// Authorization Required message body (TAIP-4, TAIP-15).
-/// 
+///
 /// Indicates that authorization is required to proceed with a transaction or connection.
 /// This message was moved from TAIP-15 to TAIP-4 as a standard authorization message.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
@@ -367,7 +367,7 @@ impl AuthorizationRequired {
                 "Expires timestamp is required".to_string(),
             ));
         }
-        
+
         // Simple format check for ISO 8601
         if !self.expires.contains('T') || !self.expires.contains(':') {
             return Err(Error::Validation(
@@ -405,8 +405,11 @@ mod tests {
             "https://vasp.com/authorize?request=abc123".to_string(),
             "2024-12-31T23:59:59Z".to_string(),
         );
-        
-        assert_eq!(auth_req.authorization_url, "https://vasp.com/authorize?request=abc123");
+
+        assert_eq!(
+            auth_req.authorization_url,
+            "https://vasp.com/authorize?request=abc123"
+        );
         assert_eq!(auth_req.expires, "2024-12-31T23:59:59Z");
         assert!(auth_req.from.is_none());
         assert!(auth_req.metadata.is_empty());
@@ -419,7 +422,7 @@ mod tests {
             "2024-12-31T23:59:59Z".to_string(),
             "customer".to_string(),
         );
-        
+
         assert_eq!(auth_req.from, Some("customer".to_string()));
     }
 
@@ -431,9 +434,12 @@ mod tests {
         )
         .with_from("principal".to_string())
         .add_metadata("custom_field", serde_json::json!("value"));
-        
+
         assert_eq!(auth_req.from, Some("principal".to_string()));
-        assert_eq!(auth_req.metadata.get("custom_field"), Some(&serde_json::json!("value")));
+        assert_eq!(
+            auth_req.metadata.get("custom_field"),
+            Some(&serde_json::json!("value"))
+        );
     }
 
     #[test]
@@ -443,14 +449,17 @@ mod tests {
             "2024-12-31T23:59:59Z".to_string(),
             "customer".to_string(),
         );
-        
+
         let json = serde_json::to_value(&auth_req).unwrap();
-        
+
         // Check field names match TAIP-4 specification
-        assert_eq!(json["authorizationUrl"], "https://vasp.com/authorize?request=abc123");
+        assert_eq!(
+            json["authorizationUrl"],
+            "https://vasp.com/authorize?request=abc123"
+        );
         assert_eq!(json["expires"], "2024-12-31T23:59:59Z");
         assert_eq!(json["from"], "customer");
-        
+
         // Test deserialization
         let deserialized: AuthorizationRequired = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.authorization_url, auth_req.authorization_url);
@@ -464,35 +473,40 @@ mod tests {
             "https://vasp.com/authorize".to_string(),
             "2024-12-31T23:59:59Z".to_string(),
         );
-        
+
         assert!(auth_req.validate().is_ok());
     }
 
     #[test]
     fn test_authorization_required_validation_with_valid_from() {
         let valid_from_values = ["customer", "principal", "originator", "beneficiary"];
-        
+
         for from_value in &valid_from_values {
             let auth_req = AuthorizationRequired::new_with_from(
                 "https://vasp.com/authorize".to_string(),
                 "2024-12-31T23:59:59Z".to_string(),
                 from_value.to_string(),
             );
-            
-            assert!(auth_req.validate().is_ok(), "Validation failed for from value: {}", from_value);
+
+            assert!(
+                auth_req.validate().is_ok(),
+                "Validation failed for from value: {}",
+                from_value
+            );
         }
     }
 
     #[test]
     fn test_authorization_required_validation_empty_url() {
-        let auth_req = AuthorizationRequired::new(
-            "".to_string(),
-            "2024-12-31T23:59:59Z".to_string(),
-        );
-        
+        let auth_req =
+            AuthorizationRequired::new("".to_string(), "2024-12-31T23:59:59Z".to_string());
+
         let result = auth_req.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Authorization URL is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Authorization URL is required"));
     }
 
     #[test]
@@ -503,10 +517,13 @@ mod tests {
             from: None,
             metadata: HashMap::new(),
         };
-        
+
         let result = auth_req.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Expires timestamp is required"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Expires timestamp is required"));
     }
 
     #[test]
@@ -515,10 +532,13 @@ mod tests {
             "https://vasp.com/authorize".to_string(),
             "2024-12-31".to_string(), // Missing time component
         );
-        
+
         let result = auth_req.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid expiry date format"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid expiry date format"));
     }
 
     #[test]
@@ -528,10 +548,13 @@ mod tests {
             "2024-12-31T23:59:59Z".to_string(),
             "invalid_party".to_string(),
         );
-        
+
         let result = auth_req.validate();
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid 'from' value"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid 'from' value"));
     }
 
     #[test]
@@ -542,14 +565,14 @@ mod tests {
             "2024-01-01T12:00:00Z".to_string(),
             "customer".to_string(),
         );
-        
+
         let json = serde_json::to_value(&auth_req).unwrap();
-        
+
         // Verify field names match TAIP-4 specification
         assert!(json.get("authorizationUrl").is_some());
         assert!(json.get("expires").is_some());
         assert!(json.get("from").is_some());
-        
+
         // Verify old field names are not present
         assert!(json.get("authorization_url").is_none());
         assert!(json.get("url").is_none());

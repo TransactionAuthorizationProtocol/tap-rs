@@ -34,8 +34,8 @@ use std::fs;
 use std::path::Path;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{
-    AuthorizationRequired, Cancel, ConfirmRelationship, Connect, DIDCommPresentation,
-    Payment, RemoveAgent, ReplaceAgent, Revert, UpdateParty, UpdatePolicies,
+    AuthorizationRequired, Cancel, ConfirmRelationship, Connect, DIDCommPresentation, Payment,
+    RemoveAgent, ReplaceAgent, Revert, UpdateParty, UpdatePolicies,
 };
 use tap_msg::{
     AddAgents, Authorize, ErrorBody, Presentation, Reject, Settle, TapMessageBody, Transfer,

@@ -239,9 +239,7 @@ impl Agent {
 
     /// Get the name field if present.
     pub fn name(&self) -> Option<&str> {
-        self.metadata
-            .get("name")
-            .and_then(|v| v.as_str())
+        self.metadata.get("name").and_then(|v| v.as_str())
     }
 
     /// Add a URL field (schema.org/Organization).
@@ -255,9 +253,7 @@ impl Agent {
 
     /// Get the URL field if present.
     pub fn url(&self) -> Option<&str> {
-        self.metadata
-            .get("url")
-            .and_then(|v| v.as_str())
+        self.metadata.get("url").and_then(|v| v.as_str())
     }
 
     /// Add a logo field (schema.org/Organization).
@@ -271,9 +267,7 @@ impl Agent {
 
     /// Get the logo field if present.
     pub fn logo(&self) -> Option<&str> {
-        self.metadata
-            .get("logo")
-            .and_then(|v| v.as_str())
+        self.metadata.get("logo").and_then(|v| v.as_str())
     }
 
     /// Add a description field (schema.org/Organization).
@@ -287,9 +281,7 @@ impl Agent {
 
     /// Get the description field if present.
     pub fn description(&self) -> Option<&str> {
-        self.metadata
-            .get("description")
-            .and_then(|v| v.as_str())
+        self.metadata.get("description").and_then(|v| v.as_str())
     }
 
     /// Add an email field (schema.org/Organization).
@@ -303,9 +295,7 @@ impl Agent {
 
     /// Get the email field if present.
     pub fn email(&self) -> Option<&str> {
-        self.metadata
-            .get("email")
-            .and_then(|v| v.as_str())
+        self.metadata.get("email").and_then(|v| v.as_str())
     }
 
     /// Add a telephone field (schema.org/Organization).
@@ -319,9 +309,7 @@ impl Agent {
 
     /// Get the telephone field if present.
     pub fn telephone(&self) -> Option<&str> {
-        self.metadata
-            .get("telephone")
-            .and_then(|v| v.as_str())
+        self.metadata.get("telephone").and_then(|v| v.as_str())
     }
 
     /// Add a serviceUrl field for DIDComm endpoint fallback (TAIP-5).
@@ -335,9 +323,7 @@ impl Agent {
 
     /// Get the serviceUrl field if present.
     pub fn service_url(&self) -> Option<&str> {
-        self.metadata
-            .get("serviceUrl")
-            .and_then(|v| v.as_str())
+        self.metadata.get("serviceUrl").and_then(|v| v.as_str())
     }
 }
 
@@ -569,13 +555,13 @@ mod tests {
     fn test_agent_with_name_field() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_name("Example Exchange Inc.");
-        
+
         assert_eq!(agent.name(), Some("Example Exchange Inc."));
-        
+
         // Test serialization
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["name"], "Example Exchange Inc.");
-        
+
         // Test deserialization
         let deserialized: Agent = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.name(), Some("Example Exchange Inc."));
@@ -585,9 +571,9 @@ mod tests {
     fn test_agent_with_url_field() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_url("https://example.com");
-        
+
         assert_eq!(agent.url(), Some("https://example.com"));
-        
+
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["url"], "https://example.com");
     }
@@ -596,9 +582,9 @@ mod tests {
     fn test_agent_with_logo_field() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_logo("https://example.com/logo.png");
-        
+
         assert_eq!(agent.logo(), Some("https://example.com/logo.png"));
-        
+
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["logo"], "https://example.com/logo.png");
     }
@@ -607,9 +593,12 @@ mod tests {
     fn test_agent_with_description_field() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_description("A leading cryptocurrency exchange");
-        
-        assert_eq!(agent.description(), Some("A leading cryptocurrency exchange"));
-        
+
+        assert_eq!(
+            agent.description(),
+            Some("A leading cryptocurrency exchange")
+        );
+
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["description"], "A leading cryptocurrency exchange");
     }
@@ -618,9 +607,9 @@ mod tests {
     fn test_agent_with_email_field() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_email("support@example.com");
-        
+
         assert_eq!(agent.email(), Some("support@example.com"));
-        
+
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["email"], "support@example.com");
     }
@@ -629,9 +618,9 @@ mod tests {
     fn test_agent_with_telephone_field() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_telephone("+1-555-0100");
-        
+
         assert_eq!(agent.telephone(), Some("+1-555-0100"));
-        
+
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["telephone"], "+1-555-0100");
     }
@@ -640,9 +629,9 @@ mod tests {
     fn test_agent_with_service_url_field() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_service_url("https://example.com/didcomm");
-        
+
         assert_eq!(agent.service_url(), Some("https://example.com/didcomm"));
-        
+
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["serviceUrl"], "https://example.com/didcomm");
     }
@@ -657,15 +646,18 @@ mod tests {
             .with_email("support@example.com")
             .with_telephone("+1-555-0100")
             .with_service_url("https://example.com/didcomm");
-        
+
         assert_eq!(agent.name(), Some("Example Exchange Inc."));
         assert_eq!(agent.url(), Some("https://example.com"));
         assert_eq!(agent.logo(), Some("https://example.com/logo.png"));
-        assert_eq!(agent.description(), Some("A leading cryptocurrency exchange"));
+        assert_eq!(
+            agent.description(),
+            Some("A leading cryptocurrency exchange")
+        );
         assert_eq!(agent.email(), Some("support@example.com"));
         assert_eq!(agent.telephone(), Some("+1-555-0100"));
         assert_eq!(agent.service_url(), Some("https://example.com/didcomm"));
-        
+
         // Test JSON serialization includes all fields
         let json = serde_json::to_value(&agent).unwrap();
         assert_eq!(json["@id"], "did:web:example.com");
@@ -678,27 +670,33 @@ mod tests {
         assert_eq!(json["email"], "support@example.com");
         assert_eq!(json["telephone"], "+1-555-0100");
         assert_eq!(json["serviceUrl"], "https://example.com/didcomm");
-        
+
         // Test deserialization preserves all fields
         let deserialized: Agent = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.name(), Some("Example Exchange Inc."));
         assert_eq!(deserialized.url(), Some("https://example.com"));
-        assert_eq!(deserialized.service_url(), Some("https://example.com/didcomm"));
+        assert_eq!(
+            deserialized.service_url(),
+            Some("https://example.com/didcomm")
+        );
     }
 
     #[test]
     fn test_agent_json_ld_compliance_with_organization_fields() {
         let agent = Agent::new("did:web:example.com", "Exchange", "did:example:alice")
             .with_name("Example Exchange")
-            .with_metadata_field("lei:leiCode".to_string(), serde_json::Value::String("123456789012345678".to_string()));
-        
+            .with_metadata_field(
+                "lei:leiCode".to_string(),
+                serde_json::Value::String("123456789012345678".to_string()),
+            );
+
         let json = serde_json::to_value(&agent).unwrap();
-        
+
         // Verify JSON-LD structure
         assert_eq!(json["@id"], "did:web:example.com");
         assert_eq!(json["name"], "Example Exchange");
         assert_eq!(json["lei:leiCode"], "123456789012345678");
-        
+
         // Fields should be at root level, not nested
         assert!(json.get("metadata").is_none());
     }

@@ -11,9 +11,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
-use tap_msg::message::{
-    Agent, Authorize, Cancel, Party, Reject, Revert, Settle, Transfer,
-};
+use tap_msg::message::{Agent, Authorize, Cancel, Party, Reject, Revert, Settle, Transfer};
 use tap_node::storage::models::SchemaType;
 use tracing::{debug, error};
 
@@ -1249,4 +1247,3 @@ impl ToolHandler for ListTransactionsTool {
         }
     }
 }
-
