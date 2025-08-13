@@ -15,47 +15,49 @@ The TAIPs submodule has been updated with significant enhancements including:
 
 ### Phase 1: Agent and Party Enhancements
 
-- [ ] **Write failing tests for Agent schema.org Organization fields**
-  - [ ] Test Agent with `name` field serialization/deserialization
-  - [ ] Test Agent with `url` field serialization/deserialization  
-  - [ ] Test Agent with `logo` field serialization/deserialization
-  - [ ] Test Agent with `description` field serialization/deserialization
-  - [ ] Test Agent with `email` field serialization/deserialization
-  - [ ] Test Agent with `telephone` field serialization/deserialization
-  - [ ] Test Agent with multiple organization fields combined
-  - [ ] Test Agent JSON-LD compliance with new fields
+- [x] **Write failing tests for Agent schema.org Organization fields**
+  - [x] Test Agent with `name` field serialization/deserialization
+  - [x] Test Agent with `url` field serialization/deserialization  
+  - [x] Test Agent with `logo` field serialization/deserialization
+  - [x] Test Agent with `description` field serialization/deserialization
+  - [x] Test Agent with `email` field serialization/deserialization
+  - [x] Test Agent with `telephone` field serialization/deserialization
+  - [x] Test Agent with `serviceUrl` field (DIDComm endpoint fallback)
+  - [x] Test Agent with multiple organization fields combined
+  - [x] Test Agent JSON-LD compliance with new fields
 
-- [ ] **Implement Agent schema.org Organization fields**
-  - [ ] Add optional `name: Option<String>` field to Agent struct
-  - [ ] Add optional `url: Option<String>` field to Agent struct
-  - [ ] Add optional `logo: Option<String>` field to Agent struct
-  - [ ] Add optional `description: Option<String>` field to Agent struct
-  - [ ] Add optional `email: Option<String>` field to Agent struct
-  - [ ] Add optional `telephone: Option<String>` field to Agent struct
-  - [ ] Add builder methods for new fields
-  - [ ] Update Agent constructor methods to support new fields
-  - [ ] Ensure all tests pass
+- [x] **Implement Agent schema.org Organization fields**
+  - [x] Add accessor methods for `name` field to Agent struct
+  - [x] Add accessor methods for `url` field to Agent struct
+  - [x] Add accessor methods for `logo` field to Agent struct
+  - [x] Add accessor methods for `description` field to Agent struct
+  - [x] Add accessor methods for `email` field to Agent struct
+  - [x] Add accessor methods for `telephone` field to Agent struct
+  - [x] Add accessor methods for `serviceUrl` field to Agent struct
+  - [x] Add builder methods for new fields
+  - [x] Ensure all tests pass
 
-- [ ] **Write failing tests for Party schema.org Organization fields**
-  - [ ] Test Party with `name` field serialization/deserialization
-  - [ ] Test Party with `url` field serialization/deserialization
-  - [ ] Test Party with `logo` field serialization/deserialization
-  - [ ] Test Party with `description` field serialization/deserialization
-  - [ ] Test Party with `email` field serialization/deserialization
-  - [ ] Test Party with `telephone` field serialization/deserialization
-  - [ ] Test Party with multiple organization fields combined
-  - [ ] Test Party JSON-LD compliance with new fields
+- [x] **Write failing tests for Party schema.org Organization fields**
+  - [x] Test Party with `name` field serialization/deserialization
+  - [x] Test Party with `url` field serialization/deserialization
+  - [x] Test Party with `logo` field serialization/deserialization
+  - [x] Test Party with `description` field serialization/deserialization
+  - [x] Test Party with `email` field serialization/deserialization
+  - [x] Test Party with `telephone` field serialization/deserialization
+  - [x] Test Party with multiple organization fields combined
+  - [x] Test Party JSON-LD compliance with new fields
+  - [x] Test Party with IVMS101 and schema.org fields coexistence
 
-- [ ] **Implement Party schema.org Organization fields**
-  - [ ] Add optional `name: Option<String>` field to Party struct
-  - [ ] Add optional `url: Option<String>` field to Party struct
-  - [ ] Add optional `logo: Option<String>` field to Party struct
-  - [ ] Add optional `description: Option<String>` field to Party struct
-  - [ ] Add optional `email: Option<String>` field to Party struct
-  - [ ] Add optional `telephone: Option<String>` field to Party struct
-  - [ ] Add builder methods for new fields
-  - [ ] Update Party constructor methods to support new fields
-  - [ ] Ensure all tests pass
+- [x] **Implement Party schema.org Organization fields**
+  - [x] Add accessor methods for `name` field to Party struct
+  - [x] Add accessor methods for `url` field to Party struct
+  - [x] Add accessor methods for `logo` field to Party struct
+  - [x] Add accessor methods for `description` field to Party struct
+  - [x] Add accessor methods for `email` field to Party struct
+  - [x] Add accessor methods for `telephone` field to Party struct
+  - [x] Add builder methods for new fields
+  - [x] Add `with_metadata_field` builder method
+  - [x] Ensure all tests pass
 
 ### Phase 2: AuthorizationRequired Message Implementation
 
