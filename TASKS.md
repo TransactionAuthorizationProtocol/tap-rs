@@ -61,25 +61,24 @@ The TAIPs submodule has been updated with significant enhancements including:
 
 ### Phase 2: AuthorizationRequired Message Implementation
 
-- [ ] **Write failing tests for AuthorizationRequired message**
-  - [ ] Test AuthorizationRequired message creation and structure
-  - [ ] Test requirements array serialization/deserialization
-  - [ ] Test optional presentationDefinition field
-  - [ ] Test optional challengeNonce field
-  - [ ] Test optional validUntil field
-  - [ ] Test optional fallbackInstructions field
-  - [ ] Test AuthorizationRequired DIDComm message type constant
-  - [ ] Test AuthorizationRequired JSON schema compliance
+- [x] **Write failing tests for AuthorizationRequired message**
+  - [x] Test AuthorizationRequired message creation and structure
+  - [x] Test field serialization/deserialization (authorizationUrl, expires, from)
+  - [x] Test optional `from` field with valid party types
+  - [x] Test validation for required fields
+  - [x] Test validation for invalid `from` values
+  - [x] Test ISO 8601 timestamp format validation
+  - [x] Test AuthorizationRequired JSON compliance with TAIP-4
+  - [x] Test builder pattern and metadata support
 
-- [ ] **Implement AuthorizationRequired message**
-  - [ ] Create `authorization_required.rs` module in `tap-msg/src/message/`
-  - [ ] Define `AuthorizationRequired` struct with required fields
-  - [ ] Define `Requirement` struct for requirements array
-  - [ ] Implement TapMessage trait for AuthorizationRequired
-  - [ ] Add message type constant for DIDComm
-  - [ ] Add to message enum and mod.rs exports
-  - [ ] Implement validation logic
-  - [ ] Ensure all tests pass
+- [x] **Implement AuthorizationRequired message**
+  - [x] Update existing `AuthorizationRequired` struct in `connection.rs`
+  - [x] Change `url` field to `authorizationUrl` per TAIP-4
+  - [x] Make `expires` field required per TAIP-4
+  - [x] Add optional `from` field for party type
+  - [x] Update validation logic for new requirements
+  - [x] Update constructors and builder methods
+  - [x] Ensure all tests pass
 
 ### Phase 3: Settlement Address Enhancements
 
