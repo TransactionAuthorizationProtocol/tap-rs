@@ -124,9 +124,9 @@ The TAIPs submodule has been updated with significant enhancements including:
 
 ### Phase 5: Integration and Cleanup
 
-- [ ] **Update message exports and integration**
-  - [ ] Add AuthorizationRequired to TapMessageEnum
-  - [ ] Update message mod.rs exports
+- [x] **Update message exports and integration**
+  - [x] Add AuthorizationRequired to TapMessageEnum (already existed)
+  - [x] Update message mod.rs exports (settlement_address module added)
   - [ ] Update message factory methods
   - [ ] Update message validation
 
@@ -135,16 +135,16 @@ The TAIPs submodule has been updated with significant enhancements including:
   - [ ] Update transaction tools for new settlement address types
   - [ ] Test MCP integration with new message types
 
-- [ ] **Documentation and examples**
-  - [ ] Update example code for new fields
+- [x] **Documentation and examples**
+  - [x] Update example code for new fields (invoice examples updated)
   - [ ] Add AuthorizationRequired usage examples
-  - [ ] Add PayTo URI usage examples
-  - [ ] Update CHANGELOG.md
+  - [x] Add PayTo URI usage examples (in tests)
+  - [x] Update CHANGELOG.md
 
-- [ ] **Final validation**
-  - [ ] Run full test suite: `cargo test`
-  - [ ] Run clippy: `cargo clippy`
-  - [ ] Run format check: `cargo fmt --check`
+- [x] **Final validation**
+  - [x] Run full test suite: `cargo test`
+  - [x] Run clippy: `cargo clippy`
+  - [x] Run format check: `cargo fmt --check`
   - [ ] Validate against TAIP test vectors
   - [ ] Performance test new serialization paths
 
@@ -158,9 +158,9 @@ The TAIPs submodule has been updated with significant enhancements including:
 
 ## Success Criteria
 
-- [ ] All tests pass
-- [ ] No clippy warnings
-- [ ] Code is properly formatted
+- [x] All tests pass
+- [x] No clippy warnings
+- [x] Code is properly formatted
 - [ ] TAIP test vectors validate successfully
 - [ ] MCP integration works with new message types
-- [ ] Documentation is updated and examples work
+- [x] Documentation is updated and examples work
