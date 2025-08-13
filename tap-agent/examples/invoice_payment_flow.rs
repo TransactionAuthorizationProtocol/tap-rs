@@ -283,6 +283,9 @@ fn create_payment_message_with_invoice(
                 percent: 15.0,
                 tax_scheme: "VAT".to_string(),
             }),
+            name: None,
+            image: None,
+            url: None,
         },
         LineItem {
             id: "2".to_string(),
@@ -296,6 +299,9 @@ fn create_payment_message_with_invoice(
                 percent: 15.0,
                 tax_scheme: "VAT".to_string(),
             }),
+            name: None,
+            image: None,
+            url: None,
         },
     ];
 

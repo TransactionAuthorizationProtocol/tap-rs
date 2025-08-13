@@ -82,45 +82,45 @@ The TAIPs submodule has been updated with significant enhancements including:
 
 ### Phase 3: Settlement Address Enhancements
 
-- [ ] **Write failing tests for PayTo URI support**
-  - [ ] Test PayTo URI validation and parsing
-  - [ ] Test settlement address union type (CAIP-10 | PayTo URI)
-  - [ ] Test PayTo URI examples from RFC 8905 (IBAN, ACH, BIC, UPI)
-  - [ ] Test invalid PayTo URI rejection
+- [x] **Write failing tests for PayTo URI support**
+  - [x] Test PayTo URI validation and parsing
+  - [x] Test settlement address union type (CAIP-10 | PayTo URI)
+  - [x] Test PayTo URI examples from RFC 8905 (IBAN, ACH, BIC, UPI)
+  - [x] Test invalid PayTo URI rejection
 
-- [ ] **Implement PayTo URI support**
-  - [ ] Create `settlement_address.rs` module in `tap-msg/src/`
-  - [ ] Define `PayToURI` type with validation
-  - [ ] Define `SettlementAddress` enum (CAIP10 | PayToURI)
-  - [ ] Implement serialization/deserialization for SettlementAddress
-  - [ ] Add PayTo URI validation regex
-  - [ ] Ensure all tests pass
+- [x] **Implement PayTo URI support**
+  - [x] Create `settlement_address.rs` module in `tap-msg/src/`
+  - [x] Define `PayToURI` type with validation
+  - [x] Define `SettlementAddress` enum (CAIP10 | PayToURI)
+  - [x] Implement serialization/deserialization for SettlementAddress
+  - [x] Add PayTo URI validation regex
+  - [x] Ensure all tests pass
 
-- [ ] **Write failing tests for fallback settlement addresses**
-  - [ ] Test Payment message with `fallbackSettlementAddresses` array
-  - [ ] Test mixed CAIP-10 and PayTo URI addresses in fallback array
-  - [ ] Test optional fallback field serialization
+- [x] **Write failing tests for fallback settlement addresses**
+  - [x] Test Payment message with `fallbackSettlementAddresses` array
+  - [x] Test mixed CAIP-10 and PayTo URI addresses in fallback array
+  - [x] Test optional fallback field serialization
 
-- [ ] **Implement fallback settlement addresses in Payment messages**
-  - [ ] Add optional `fallback_settlement_addresses: Option<Vec<SettlementAddress>>` to Payment
-  - [ ] Update Payment builder methods
-  - [ ] Update Payment serialization/deserialization
-  - [ ] Ensure all tests pass
+- [x] **Implement fallback settlement addresses in Payment messages**
+  - [x] Add optional `fallback_settlement_addresses: Option<Vec<SettlementAddress>>` to Payment
+  - [x] Update Payment builder methods
+  - [x] Update Payment serialization/deserialization
+  - [x] Ensure all tests pass
 
 ### Phase 4: Invoice Product Attributes
 
-- [ ] **Write failing tests for Product attributes in invoice line items**
-  - [ ] Test LineItem with `name` field (schema.org/Product)
-  - [ ] Test LineItem with `image` field (schema.org/Product)  
-  - [ ] Test LineItem with `url` field (schema.org/Product)
-  - [ ] Test LineItem with multiple product fields combined
+- [x] **Write failing tests for Product attributes in invoice line items**
+  - [x] Test LineItem with `name` field (schema.org/Product)
+  - [x] Test LineItem with `image` field (schema.org/Product)  
+  - [x] Test LineItem with `url` field (schema.org/Product)
+  - [x] Test LineItem with multiple product fields combined
 
-- [ ] **Implement Product attributes in invoice line items**
-  - [ ] Add optional `name: Option<String>` field to LineItem
-  - [ ] Add optional `image: Option<String>` field to LineItem
-  - [ ] Add optional `url: Option<String>` field to LineItem
-  - [ ] Add builder methods for new fields
-  - [ ] Ensure all tests pass
+- [x] **Implement Product attributes in invoice line items**
+  - [x] Add optional `name: Option<String>` field to LineItem
+  - [x] Add optional `image: Option<String>` field to LineItem
+  - [x] Add optional `url: Option<String>` field to LineItem
+  - [x] Add builder methods for new fields
+  - [x] Ensure all tests pass
 
 ### Phase 5: Integration and Cleanup
 
