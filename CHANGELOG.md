@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+#### Settlement Address Enhancements
+- PayTo URI support (RFC 8905) for traditional payment systems (IBAN, ACH, BIC, UPI)
+- `SettlementAddress` enum supporting both CAIP-10 blockchain addresses and PayTo URIs
+- `fallbackSettlementAddresses` field in Payment messages for flexible payment options
+- Full validation and serialization for PayTo URIs
+
+#### Invoice Product Attributes
+- Schema.org/Product attributes to LineItem (name, image, url)
+- LineItem builder pattern for easier construction
+- Support for product metadata in invoice line items
+
+#### Agent and Party Enhancements  
+- Schema.org Organization fields for Agent and Party structures
+- Added fields: name, url, logo, description, email, telephone, serviceUrl
+- Builder methods and accessor functions for all new fields
+- Backward compatible with existing IVMS101 data
+
+### Changed
+- AuthorizationRequired message updated to match TAIP-4 specification
+  - Field `url` renamed to `authorizationUrl`
+  - Field `expires` now required
+  - Added optional `from` field
+
 ## [0.4.0] - 2025-06-17
 
 ### Added
