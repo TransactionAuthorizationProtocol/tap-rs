@@ -82,7 +82,10 @@ impl ResourceRegistry {
             Some("agents") => self.read_agents_resource(url.path(), url.query()).await,
             Some("messages") => self.read_messages_resource(url.path(), url.query()).await,
             Some("deliveries") => self.read_deliveries_resource(url.path(), url.query()).await,
-            Some("database-schema") => self.read_database_schema_resource(url.path(), url.query()).await,
+            Some("database-schema") => {
+                self.read_database_schema_resource(url.path(), url.query())
+                    .await
+            }
             Some("schemas") => self.read_schemas_resource(url.path()).await,
             Some("received") => self.read_received_resource(url.path(), url.query()).await,
             _ => Err(Error::resource_not_found(format!(
@@ -763,8 +766,9 @@ impl ResourceRegistry {
             table_name_filter = params.get("table_name").cloned();
         }
 
-        let agent_did = agent_did_filter.clone()
-            .ok_or_else(|| Error::resource_not_found("agent_did parameter is required to view database schema"))?;
+        let agent_did = agent_did_filter.clone().ok_or_else(|| {
+            Error::resource_not_found("agent_did parameter is required to view database schema")
+        })?;
 
         // Get agent storage
         let storage = self
@@ -797,20 +801,29 @@ impl ResourceRegistry {
             "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name".to_string()
         };
 
-        let table_rows = sqlx::query(&table_query).fetch_all(&mut conn).await.map_err(|e| {
-            error!("Failed to get tables: {}", e);
-            Error::resource_not_found(format!("Failed to get tables: {}", e))
-        })?;
+        let table_rows = sqlx::query(&table_query)
+            .fetch_all(&mut conn)
+            .await
+            .map_err(|e| {
+                error!("Failed to get tables: {}", e);
+                Error::resource_not_found(format!("Failed to get tables: {}", e))
+            })?;
 
         for table_row in table_rows {
             let table_name: String = table_row.try_get("name").unwrap_or_default();
 
             // Get columns for this table
             let column_query = format!("PRAGMA table_info('{}')", table_name);
-            let column_rows = sqlx::query(&column_query).fetch_all(&mut conn).await.map_err(|e| {
-                error!("Failed to get columns for table {}: {}", table_name, e);
-                Error::resource_not_found(format!("Failed to get columns for table {}: {}", table_name, e))
-            })?;
+            let column_rows = sqlx::query(&column_query)
+                .fetch_all(&mut conn)
+                .await
+                .map_err(|e| {
+                    error!("Failed to get columns for table {}: {}", table_name, e);
+                    Error::resource_not_found(format!(
+                        "Failed to get columns for table {}: {}",
+                        table_name, e
+                    ))
+                })?;
 
             let mut columns = Vec::new();
             for col_row in column_rows {
@@ -826,7 +839,10 @@ impl ResourceRegistry {
 
             // Get indexes for this table
             let index_query = format!("PRAGMA index_list('{}')", table_name);
-            let index_rows = sqlx::query(&index_query).fetch_all(&mut conn).await.unwrap_or_default();
+            let index_rows = sqlx::query(&index_query)
+                .fetch_all(&mut conn)
+                .await
+                .unwrap_or_default();
 
             let mut indexes = Vec::new();
             for idx_row in index_rows {
@@ -1276,7 +1292,7 @@ impl ResourceRegistry {
     /// Read a specific schema by message type
     async fn read_specific_schema(&self, message_type: &str) -> Result<Vec<ResourceContent>> {
         let all_schemas = self.get_all_schemas();
-        
+
         // Look for the specific schema
         if let Some(schema) = all_schemas["schemas"].get(message_type) {
             let content = json!({
@@ -1294,10 +1310,17 @@ impl ResourceRegistry {
             }])
         } else {
             // Also check by message_type URL
-            for (name, schema_def) in all_schemas["schemas"].as_object().unwrap_or(&serde_json::Map::new()) {
+            for (name, schema_def) in all_schemas["schemas"]
+                .as_object()
+                .unwrap_or(&serde_json::Map::new())
+            {
                 if let Some(schema_message_type) = schema_def.get("message_type") {
-                    if schema_message_type.as_str() == Some(message_type) 
-                        || schema_message_type.as_str().map(|s| s.contains(message_type)).unwrap_or(false) {
+                    if schema_message_type.as_str() == Some(message_type)
+                        || schema_message_type
+                            .as_str()
+                            .map(|s| s.contains(message_type))
+                            .unwrap_or(false)
+                    {
                         let content = json!({
                             "message_type": name,
                             "schema": schema_def,
