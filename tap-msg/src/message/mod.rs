@@ -58,7 +58,7 @@ pub use did_presentation::DIDCommPresentation;
 pub use error::ErrorBody;
 
 // Re-export escrow types
-pub use escrow::{Escrow, Capture};
+pub use escrow::{Capture, Escrow};
 
 // Re-export invoice types
 pub use invoice::{

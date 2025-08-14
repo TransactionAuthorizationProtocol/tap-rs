@@ -6,10 +6,10 @@
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::{
-    AddAgents, AuthorizationRequired, Authorize, BasicMessage, Cancel, Capture, ConfirmRelationship,
-    Connect, DIDCommPresentation, ErrorBody, Escrow, OutOfBand, Payment, Presentation, Reject, RemoveAgent,
-    ReplaceAgent, RequestPresentation, Revert, Settle, Transfer, TrustPing, TrustPingResponse,
-    UpdateParty, UpdatePolicies,
+    AddAgents, AuthorizationRequired, Authorize, BasicMessage, Cancel, Capture,
+    ConfirmRelationship, Connect, DIDCommPresentation, ErrorBody, Escrow, OutOfBand, Payment,
+    Presentation, Reject, RemoveAgent, ReplaceAgent, RequestPresentation, Revert, Settle, Transfer,
+    TrustPing, TrustPingResponse, UpdateParty, UpdatePolicies,
 };
 use serde::{Deserialize, Serialize};
 

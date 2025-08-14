@@ -12,8 +12,8 @@ use std::sync::Arc;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Agent, Authorize, Cancel, Capture, Connect, ConnectionConstraints, Escrow, Party, Payment, Reject, Revert, Settle,
-    Transfer, TransactionLimits,
+    Agent, Authorize, Cancel, Capture, Connect, ConnectionConstraints, Escrow, Party, Payment,
+    Reject, Revert, Settle, TransactionLimits, Transfer,
 };
 use tap_node::storage::models::SchemaType;
 use tracing::{debug, error};
@@ -1422,7 +1422,8 @@ impl ToolHandler for CreatePaymentTool {
     fn get_definition(&self) -> Tool {
         Tool {
             name: "tap_payment".to_string(),
-            description: "Creates a TAP payment request (TAIP-14) with optional invoice".to_string(),
+            description: "Creates a TAP payment request (TAIP-14) with optional invoice"
+                .to_string(),
             input_schema: schema::create_payment_schema(),
         }
     }
@@ -1513,9 +1514,9 @@ impl ToolHandler for CreateConnectTool {
             &transaction_id,
             &params.agent_did,
             &params.for_party,
-            params.role.as_deref()
+            params.role.as_deref(),
         );
-        
+
         // Add constraints if provided
         if let Some(constraints_info) = params.constraints {
             let mut constraints = ConnectionConstraints {
@@ -1523,7 +1524,7 @@ impl ToolHandler for CreateConnectTool {
                 category_purposes: None,
                 limits: None,
             };
-            
+
             if let Some(limits_info) = constraints_info.transaction_limits {
                 let mut limits = TransactionLimits {
                     per_transaction: None,
@@ -1536,10 +1537,10 @@ impl ToolHandler for CreateConnectTool {
                 // Note: Currency and other fields would need to be handled separately
                 constraints.limits = Some(limits);
             }
-            
+
             // Note: ConnectionConstraints doesn't have asset_types and currency_types
             // These would need to be handled through purposes or category_purposes
-            
+
             connect.constraints = Some(constraints);
         }
 
@@ -1704,7 +1705,10 @@ impl ToolHandler for CreateEscrowTool {
             .collect();
 
         // Verify exactly one EscrowAgent exists
-        let escrow_agent_count = agents.iter().filter(|a| a.role == Some("EscrowAgent".to_string())).count();
+        let escrow_agent_count = agents
+            .iter()
+            .filter(|a| a.role == Some("EscrowAgent".to_string()))
+            .count();
         if escrow_agent_count != 1 {
             return Ok(error_text_response(format!(
                 "Escrow must have exactly one agent with role 'EscrowAgent', found {}",
@@ -1714,9 +1718,23 @@ impl ToolHandler for CreateEscrowTool {
 
         // Create escrow message based on whether it's asset or currency
         let mut escrow = if let Some(asset) = params.asset {
-            Escrow::new_with_asset(asset, params.amount, originator, beneficiary, params.expiry, agents)
+            Escrow::new_with_asset(
+                asset,
+                params.amount,
+                originator,
+                beneficiary,
+                params.expiry,
+                agents,
+            )
         } else if let Some(currency) = params.currency {
-            Escrow::new_with_currency(currency, params.amount, originator, beneficiary, params.expiry, agents)
+            Escrow::new_with_currency(
+                currency,
+                params.amount,
+                originator,
+                beneficiary,
+                params.expiry,
+                agents,
+            )
         } else {
             return Ok(error_text_response(
                 "Either asset or currency must be specified".to_string(),
@@ -1778,10 +1796,7 @@ impl ToolHandler for CreateEscrowTool {
             }
             Err(e) => {
                 error!("Failed to send escrow: {}", e);
-                Ok(error_text_response(format!(
-                    "Failed to send escrow: {}",
-                    e
-                )))
+                Ok(error_text_response(format!("Failed to send escrow: {}", e)))
             }
         }
     }
@@ -1789,7 +1804,9 @@ impl ToolHandler for CreateEscrowTool {
     fn get_definition(&self) -> Tool {
         Tool {
             name: "tap_escrow".to_string(),
-            description: "Creates a TAP escrow request (TAIP-17) for holding assets on behalf of parties".to_string(),
+            description:
+                "Creates a TAP escrow request (TAIP-17) for holding assets on behalf of parties"
+                    .to_string(),
             input_schema: schema::create_escrow_schema(),
         }
     }
@@ -1914,7 +1931,8 @@ impl ToolHandler for CaptureTool {
     fn get_definition(&self) -> Tool {
         Tool {
             name: "tap_capture".to_string(),
-            description: "Captures escrowed funds (TAIP-17) to release them to the beneficiary".to_string(),
+            description: "Captures escrowed funds (TAIP-17) to release them to the beneficiary"
+                .to_string(),
             input_schema: schema::create_capture_schema(),
         }
     }
