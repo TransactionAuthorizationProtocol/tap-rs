@@ -214,6 +214,7 @@ fn create_payment_message(
         customer: Some(customer),
         agents: vec![settlement_agent],
         connection_id: None,
+        fallback_settlement_addresses: None,
         metadata: HashMap::new(),
         transaction_id: Some(transaction_id.to_string()),
         memo: Some("Payment for goods or services".to_string()),
