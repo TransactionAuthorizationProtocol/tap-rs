@@ -4,9 +4,10 @@ use crate::error::{Error, Result};
 use crate::mcp::protocol::{Resource, ResourceContent};
 use crate::tap_integration::TapIntegration;
 use serde_json::json;
+use sqlx::{Connection, Row, SqliteConnection};
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::debug;
+use tracing::{debug, error};
 use url::Url;
 
 /// Registry for all available resources
@@ -46,9 +47,15 @@ impl ResourceRegistry {
                 mime_type: Some("application/json".to_string()),
             },
             Resource {
+                uri: "tap://database-schema".to_string(),
+                name: "Database Schema".to_string(),
+                description: "Database schema information for agent storage. Query parameters: ?agent_did=<did>&table_name=<table>".to_string(),
+                mime_type: Some("application/json".to_string()),
+            },
+            Resource {
                 uri: "tap://schemas".to_string(),
                 name: "TAP Schemas".to_string(),
-                description: "JSON schemas for TAP message types".to_string(),
+                description: "JSON schemas for TAP message types. Use tap://schemas/{MessageType} to get specific schema (e.g., tap://schemas/Transfer, tap://schemas/Authorize)".to_string(),
                 mime_type: Some("application/json".to_string()),
             },
             Resource {
@@ -75,6 +82,7 @@ impl ResourceRegistry {
             Some("agents") => self.read_agents_resource(url.path(), url.query()).await,
             Some("messages") => self.read_messages_resource(url.path(), url.query()).await,
             Some("deliveries") => self.read_deliveries_resource(url.path(), url.query()).await,
+            Some("database-schema") => self.read_database_schema_resource(url.path(), url.query()).await,
             Some("schemas") => self.read_schemas_resource(url.path()).await,
             Some("received") => self.read_received_resource(url.path(), url.query()).await,
             _ => Err(Error::resource_not_found(format!(
@@ -736,9 +744,165 @@ impl ResourceRegistry {
         )))
     }
 
-    /// Read schemas resource
-    async fn read_schemas_resource(&self, _path: &str) -> Result<Vec<ResourceContent>> {
-        let schemas = json!({
+    /// Read database schema resource
+    async fn read_database_schema_resource(
+        &self,
+        _path: &str,
+        query: Option<&str>,
+    ) -> Result<Vec<ResourceContent>> {
+        // Parse query parameters
+        let mut agent_did_filter = None;
+        let mut table_name_filter = None;
+
+        if let Some(query_str) = query {
+            let params: HashMap<String, String> = url::form_urlencoded::parse(query_str.as_bytes())
+                .into_owned()
+                .collect();
+
+            agent_did_filter = params.get("agent_did").cloned();
+            table_name_filter = params.get("table_name").cloned();
+        }
+
+        let agent_did = agent_did_filter.clone()
+            .ok_or_else(|| Error::resource_not_found("agent_did parameter is required to view database schema"))?;
+
+        // Get agent storage
+        let storage = self
+            .tap_integration()
+            .storage_for_agent(&agent_did)
+            .await
+            .map_err(|e| {
+                Error::resource_not_found(format!("Failed to get agent storage: {}", e))
+            })?;
+
+        // Get database path from storage
+        let db_path = storage.db_path();
+        let db_url = format!("sqlite://{}?mode=ro", db_path.display());
+
+        // Connect to database in read-only mode
+        let mut conn = SqliteConnection::connect(&db_url).await.map_err(|e| {
+            error!("Failed to connect to database: {}", e);
+            Error::resource_not_found(format!("Failed to connect to database: {}", e))
+        })?;
+
+        let mut tables = Vec::new();
+
+        // Get list of tables
+        let table_query = if let Some(ref table_name) = table_name_filter {
+            format!(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}' ORDER BY name",
+                table_name
+            )
+        } else {
+            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name".to_string()
+        };
+
+        let table_rows = sqlx::query(&table_query).fetch_all(&mut conn).await.map_err(|e| {
+            error!("Failed to get tables: {}", e);
+            Error::resource_not_found(format!("Failed to get tables: {}", e))
+        })?;
+
+        for table_row in table_rows {
+            let table_name: String = table_row.try_get("name").unwrap_or_default();
+
+            // Get columns for this table
+            let column_query = format!("PRAGMA table_info('{}')", table_name);
+            let column_rows = sqlx::query(&column_query).fetch_all(&mut conn).await.map_err(|e| {
+                error!("Failed to get columns for table {}: {}", table_name, e);
+                Error::resource_not_found(format!("Failed to get columns for table {}: {}", table_name, e))
+            })?;
+
+            let mut columns = Vec::new();
+            for col_row in column_rows {
+                columns.push(json!({
+                    "cid": col_row.try_get::<i32, _>("cid").unwrap_or(0),
+                    "name": col_row.try_get::<String, _>("name").unwrap_or_default(),
+                    "type": col_row.try_get::<String, _>("type").unwrap_or_default(),
+                    "notnull": col_row.try_get::<i32, _>("notnull").unwrap_or(0) != 0,
+                    "dflt_value": col_row.try_get::<Option<String>, _>("dflt_value").ok().flatten(),
+                    "pk": col_row.try_get::<i32, _>("pk").unwrap_or(0) != 0,
+                }));
+            }
+
+            // Get indexes for this table
+            let index_query = format!("PRAGMA index_list('{}')", table_name);
+            let index_rows = sqlx::query(&index_query).fetch_all(&mut conn).await.unwrap_or_default();
+
+            let mut indexes = Vec::new();
+            for idx_row in index_rows {
+                indexes.push(json!({
+                    "name": idx_row.try_get::<String, _>("name").unwrap_or_default(),
+                    "unique": idx_row.try_get::<i32, _>("unique").unwrap_or(0) != 0,
+                    "origin": idx_row.try_get::<String, _>("origin").unwrap_or_default(),
+                    "partial": idx_row.try_get::<i32, _>("partial").unwrap_or(0) != 0,
+                }));
+            }
+
+            // Get row count
+            let count_query = format!("SELECT COUNT(*) as count FROM '{}'", table_name);
+            let row_count = sqlx::query(&count_query)
+                .fetch_one(&mut conn)
+                .await
+                .ok()
+                .and_then(|row| row.try_get::<i64, _>("count").ok())
+                .unwrap_or(0);
+
+            tables.push(json!({
+                "name": table_name,
+                "columns": columns,
+                "indexes": indexes,
+                "row_count": row_count,
+            }));
+        }
+
+        let content = json!({
+            "database_path": db_path.display().to_string(),
+            "agent_did": agent_did,
+            "tables": tables,
+            "applied_filters": {
+                "agent_did": agent_did_filter,
+                "table_name": table_name_filter,
+            }
+        });
+
+        Ok(vec![ResourceContent {
+            uri: format!(
+                "tap://database-schema{}",
+                if query.is_some() {
+                    format!("?{}", query.unwrap())
+                } else {
+                    String::new()
+                }
+            ),
+            mime_type: Some("application/json".to_string()),
+            text: Some(serde_json::to_string_pretty(&content)?),
+            blob: None,
+        }])
+    }
+
+    /// Read schemas resource  
+    async fn read_schemas_resource(&self, path: &str) -> Result<Vec<ResourceContent>> {
+        // Check if requesting a specific message type schema
+        if !path.is_empty() && path != "/" {
+            let message_type = path.trim_start_matches('/');
+            return self.read_specific_schema(message_type).await;
+        }
+
+        let schemas = self.get_all_schemas();
+
+        Ok(vec![ResourceContent {
+            uri: "tap://schemas".to_string(),
+            mime_type: Some("application/json".to_string()),
+            text: Some(serde_json::to_string_pretty(&schemas)?),
+            blob: None,
+        }])
+    }
+
+    /// Get all schemas as JSON value
+    fn get_all_schemas(&self) -> serde_json::Value {
+        json!({
+            "version": "1.0",
+            "description": "JSON schemas for TAP (Transfer Authorization Protocol) message types as defined in various TAIPs",
             "schemas": {
                 "Transfer": {
                     "description": "TAP Transfer message (TAIP-3) - Initiates a new transfer between parties",
@@ -1106,13 +1270,55 @@ impl ResourceRegistry {
                     "required": ["error_code", "error_description"]
                 }
             }
-        });
+        })
+    }
 
-        Ok(vec![ResourceContent {
-            uri: "tap://schemas".to_string(),
-            mime_type: Some("application/json".to_string()),
-            text: Some(serde_json::to_string_pretty(&schemas)?),
-            blob: None,
-        }])
+    /// Read a specific schema by message type
+    async fn read_specific_schema(&self, message_type: &str) -> Result<Vec<ResourceContent>> {
+        let all_schemas = self.get_all_schemas();
+        
+        // Look for the specific schema
+        if let Some(schema) = all_schemas["schemas"].get(message_type) {
+            let content = json!({
+                "message_type": message_type,
+                "schema": schema,
+                "version": all_schemas["version"],
+                "description": all_schemas["description"]
+            });
+
+            Ok(vec![ResourceContent {
+                uri: format!("tap://schemas/{}", message_type),
+                mime_type: Some("application/json".to_string()),
+                text: Some(serde_json::to_string_pretty(&content)?),
+                blob: None,
+            }])
+        } else {
+            // Also check by message_type URL
+            for (name, schema_def) in all_schemas["schemas"].as_object().unwrap_or(&serde_json::Map::new()) {
+                if let Some(schema_message_type) = schema_def.get("message_type") {
+                    if schema_message_type.as_str() == Some(message_type) 
+                        || schema_message_type.as_str().map(|s| s.contains(message_type)).unwrap_or(false) {
+                        let content = json!({
+                            "message_type": name,
+                            "schema": schema_def,
+                            "version": all_schemas["version"],
+                            "description": all_schemas["description"]
+                        });
+
+                        return Ok(vec![ResourceContent {
+                            uri: format!("tap://schemas/{}", message_type),
+                            mime_type: Some("application/json".to_string()),
+                            text: Some(serde_json::to_string_pretty(&content)?),
+                            blob: None,
+                        }]);
+                    }
+                }
+            }
+
+            Err(Error::resource_not_found(format!(
+                "Schema not found for message type: {}",
+                message_type
+            )))
+        }
     }
 }
