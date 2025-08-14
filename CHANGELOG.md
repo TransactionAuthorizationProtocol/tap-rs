@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Composable Escrow Support (TAIP-17)
+- New `Escrow` message for holding assets on behalf of parties
+- New `Capture` message for releasing escrowed funds
+- Support for both cryptocurrency assets and fiat currencies in escrows
+- Automatic expiry handling for escrows
+- Support for payment guarantees, asset swaps, and conditional payments
+- Multiple agent roles including dedicated EscrowAgent role
+- Full validation ensuring exactly one EscrowAgent per escrow
+
 #### Settlement Address Enhancements
 - PayTo URI support (RFC 8905) for traditional payment systems (IBAN, ACH, BIC, UPI)
 - `SettlementAddress` enum supporting both CAIP-10 blockchain addresses and PayTo URIs

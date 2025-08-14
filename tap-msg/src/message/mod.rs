@@ -13,6 +13,7 @@ pub mod connection;
 pub mod context;
 pub mod did_presentation;
 pub mod error;
+pub mod escrow;
 pub mod invoice;
 pub mod party;
 pub mod payment;
@@ -55,6 +56,9 @@ pub use did_presentation::DIDCommPresentation;
 
 // Re-export error type
 pub use error::ErrorBody;
+
+// Re-export escrow types
+pub use escrow::{Escrow, Capture};
 
 // Re-export invoice types
 pub use invoice::{
