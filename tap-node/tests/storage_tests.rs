@@ -112,6 +112,7 @@ mod storage_tests {
             agents: vec![],
             expiry: None,
             connection_id: None,
+            fallback_settlement_addresses: None,
         };
 
         create_test_message(

@@ -1593,7 +1593,7 @@ impl crate::agent::Agent for TapAgent {
     ) -> Result<String> {
         // Create the DIDComm PlainMessage for the message
         let plain_message = message.to_didcomm(self.get_agent_did())?;
-        
+
         // Serialize the plain message for signing (for debugging/logging purposes)
         let _message_json = serde_json::to_string(&plain_message)
             .map_err(|e| Error::Serialization(format!("Failed to serialize message: {}", e)))?;
@@ -1604,17 +1604,10 @@ impl crate::agent::Agent for TapAgent {
         let signed_message = plain_message.pack(&*self.key_manager, pack_options).await?;
 
         // Create the OOB invitation
-        let oob_invitation = crate::oob::OutOfBandInvitation::builder(
-            self.get_agent_did(),
-            goal_code,
-            goal,
-        )
-        .add_signed_attachment(
-            "tap-message",
-            &signed_message,
-            Some("Signed TAP message"),
-        )
-        .build();
+        let oob_invitation =
+            crate::oob::OutOfBandInvitation::builder(self.get_agent_did(), goal_code, goal)
+                .add_signed_attachment("tap-message", &signed_message, Some("Signed TAP message"))
+                .build();
 
         // Generate the URL
         oob_invitation.to_url(service_url)
@@ -1626,35 +1619,39 @@ impl crate::agent::Agent for TapAgent {
         config: Option<crate::payment_link::PaymentLinkConfig>,
     ) -> Result<String> {
         let config = config.unwrap_or_default();
-        
+
         // Create a signing function that uses our pack method
         let key_manager = self.key_manager.clone();
         let agent_did = self.get_agent_did().to_string();
-        
+
         let sign_fn = move |message_json: String| {
             let key_manager = key_manager.clone();
             let agent_did = agent_did.clone();
-            
+
             async move {
                 // Parse the message to get a PlainMessage
-                let plain_message: PlainMessage = serde_json::from_str(&message_json)
-                    .map_err(|e| Error::Serialization(format!("Failed to parse message for signing: {}", e)))?;
-                
+                let plain_message: PlainMessage =
+                    serde_json::from_str(&message_json).map_err(|e| {
+                        Error::Serialization(format!("Failed to parse message for signing: {}", e))
+                    })?;
+
                 // Create a temporary agent to get the signing key ID
                 let temp_config = AgentConfig::new(agent_did.clone());
                 let temp_agent = TapAgent::new(temp_config, key_manager.clone());
                 let sender_kid = temp_agent.get_signing_kid().await?;
-                    
-                let pack_options = crate::message_packing::PackOptions::new().with_sign(&sender_kid);
+
+                let pack_options =
+                    crate::message_packing::PackOptions::new().with_sign(&sender_kid);
                 plain_message.pack(&*key_manager, pack_options).await
             }
         };
-        
+
         // Use the payment link builder with our signing function
-        let payment_link = crate::payment_link::PaymentLink::builder(self.get_agent_did(), payment.clone())
-            .with_config(config)
-            .build_with_signer(sign_fn)
-            .await?;
+        let payment_link =
+            crate::payment_link::PaymentLink::builder(self.get_agent_did(), payment.clone())
+                .with_config(config)
+                .build_with_signer(sign_fn)
+                .await?;
 
         Ok(payment_link.url)
     }
@@ -1671,19 +1668,24 @@ impl crate::agent::Agent for TapAgent {
         oob_invitation.validate()?;
 
         // Get the signed attachment
-        let attachment = oob_invitation
-            .get_signed_attachment()
-            .ok_or_else(|| Error::Validation("No signed attachment found in OOB invitation".to_string()))?;
+        let attachment = oob_invitation.get_signed_attachment().ok_or_else(|| {
+            Error::Validation("No signed attachment found in OOB invitation".to_string())
+        })?;
 
         // Extract the signed message JSON
         let signed_message_json = match &attachment.data {
             tap_msg::didcomm::AttachmentData::Json { value } => &value.json,
-            _ => return Err(Error::Validation("Attachment does not contain JSON data".to_string())),
+            _ => {
+                return Err(Error::Validation(
+                    "Attachment does not contain JSON data".to_string(),
+                ))
+            }
         };
 
         // Convert to string for processing
-        let signed_message_str = serde_json::to_string(signed_message_json)
-            .map_err(|e| Error::Serialization(format!("Failed to serialize signed message: {}", e)))?;
+        let signed_message_str = serde_json::to_string(signed_message_json).map_err(|e| {
+            Error::Serialization(format!("Failed to serialize signed message: {}", e))
+        })?;
 
         // Process the signed message using our existing receive_message method
         self.receive_message(&signed_message_str).await

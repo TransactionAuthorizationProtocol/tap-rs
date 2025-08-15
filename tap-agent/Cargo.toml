@@ -58,6 +58,7 @@ tokio = { workspace = true, features = ["test-util"] }
 criterion = "0.6"
 tempfile = "3.8"
 serial_test = "3.0"
+tracing-subscriber = "0.3"
 
 [[bench]]
 name = "agent_benchmark"

@@ -191,8 +191,8 @@ impl OutOfBandInvitation {
 
     /// Parse an Out-of-Band invitation from a URL
     pub fn from_url(url_str: &str) -> Result<Self> {
-        let url = Url::parse(url_str)
-            .map_err(|e| Error::Validation(format!("Invalid URL: {}", e)))?;
+        let url =
+            Url::parse(url_str).map_err(|e| Error::Validation(format!("Invalid URL: {}", e)))?;
 
         // Look for _oob parameter
         for (key, value) in url.query_pairs() {
@@ -351,7 +351,8 @@ mod tests {
 
     #[test]
     fn test_signed_attachment() {
-        let signed_jws = r#"{"payload":"eyJ0ZXN0IjoidmFsdWUifQ","signatures":[{"signature":"test"}]}"#;
+        let signed_jws =
+            r#"{"payload":"eyJ0ZXN0IjoidmFsdWUifQ","signatures":[{"signature":"test"}]}"#;
 
         let oob = OutOfBandInvitation::builder(
             "did:example:alice",

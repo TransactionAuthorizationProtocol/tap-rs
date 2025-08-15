@@ -142,8 +142,11 @@ pub use message_packing::{
 pub use tap_msg::didcomm::PlainMessage;
 
 // Out-of-Band and Payment Link re-exports
-pub use oob::{OutOfBandInvitation, OutOfBandBuilder, OutOfBandBody};
-pub use payment_link::{PaymentLink, PaymentLinkBuilder, PaymentLinkConfig, PaymentLinkInfo, DEFAULT_PAYMENT_SERVICE_URL};
+pub use oob::{OutOfBandBody, OutOfBandBuilder, OutOfBandInvitation};
+pub use payment_link::{
+    PaymentLink, PaymentLinkBuilder, PaymentLinkConfig, PaymentLinkInfo,
+    DEFAULT_PAYMENT_SERVICE_URL,
+};
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]

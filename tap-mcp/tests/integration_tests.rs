@@ -662,14 +662,23 @@ async fn test_read_specific_schema_resource() -> Result<()> {
 
         let schema_text = schema_content["text"].as_str().unwrap();
         let schema: Value = serde_json::from_str(schema_text)?;
-        
+
         // Should only contain Payment schema, not all schemas
         assert!(schema["schemas"]["Payment"].is_object());
-        assert!(schema["schemas"]["Transfer"].is_null() || !schema["schemas"].as_object().unwrap().contains_key("Transfer"));
+        assert!(
+            schema["schemas"]["Transfer"].is_null()
+                || !schema["schemas"]
+                    .as_object()
+                    .unwrap()
+                    .contains_key("Transfer")
+        );
         assert_eq!(schema["schemas"].as_object().unwrap().len(), 1);
-        
+
         // Verify it's the Payment schema
-        assert_eq!(schema["schemas"]["Payment"]["message_type"], "https://tap.rsvp/schema/1.0#Payment");
+        assert_eq!(
+            schema["schemas"]["Payment"]["message_type"],
+            "https://tap.rsvp/schema/1.0#Payment"
+        );
     }
 
     Ok(())

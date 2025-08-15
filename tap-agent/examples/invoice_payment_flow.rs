@@ -367,5 +367,6 @@ fn create_payment_message_with_invoice(
         metadata: HashMap::new(),
         transaction_id: Some(transaction_id.to_string()),
         memo: Some("Payment with invoice".to_string()),
+        fallback_settlement_addresses: None,
     }
 }

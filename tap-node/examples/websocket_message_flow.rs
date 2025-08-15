@@ -1,5 +1,6 @@
 //! Example of using WebSocket messaging with TAP
 
+use base64::Engine;
 use std::sync::Arc;
 use std::time::Duration;
 use tap_agent::agent_key_manager::AgentKeyManagerBuilder;
@@ -39,8 +40,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             private_key_jwk: serde_json::json!({
                 "kty": "OKP",
                 "crv": "Ed25519",
-                "x": base64::encode(&alice_key.public_key),
-                "d": base64::encode(&alice_key.private_key)
+                "x": base64::engine::general_purpose::STANDARD.encode(&alice_key.public_key),
+                "d": base64::engine::general_purpose::STANDARD.encode(&alice_key.private_key)
             }),
         },
     };
@@ -53,8 +54,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             private_key_jwk: serde_json::json!({
                 "kty": "OKP",
                 "crv": "Ed25519",
-                "x": base64::encode(&bob_key.public_key),
-                "d": base64::encode(&bob_key.private_key)
+                "x": base64::engine::general_purpose::STANDARD.encode(&bob_key.public_key),
+                "d": base64::engine::general_purpose::STANDARD.encode(&bob_key.private_key)
             }),
         },
     };

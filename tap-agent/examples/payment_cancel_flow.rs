@@ -193,5 +193,6 @@ fn create_payment_message(
         metadata: HashMap::new(),
         transaction_id: Some(transaction_id.to_string()),
         memo: Some("Payment for goods or services".to_string()),
+        fallback_settlement_addresses: None,
     }
 }

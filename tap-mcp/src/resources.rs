@@ -899,11 +899,14 @@ impl ResourceRegistry {
     /// Read schemas resource  
     async fn read_schemas_resource(&self, path: &str) -> Result<Vec<ResourceContent>> {
         debug!("Reading schemas resource with path: '{}'", path);
-        
+
         // Check if requesting a specific message type schema
         if !path.is_empty() && path != "/" {
             let message_type = path.trim_start_matches('/');
-            debug!("Requesting specific schema for message type: '{}'", message_type);
+            debug!(
+                "Requesting specific schema for message type: '{}'",
+                message_type
+            );
             return self.read_specific_schema(message_type).await;
         }
 
@@ -1300,7 +1303,7 @@ impl ResourceRegistry {
         if let Some(schema) = all_schemas["schemas"].get(message_type) {
             let mut schema_map = serde_json::Map::new();
             schema_map.insert(message_type.to_string(), schema.clone());
-            
+
             let content = json!({
                 "version": all_schemas["version"],
                 "description": format!("Schema for TAP {} message type", message_type),
@@ -1328,7 +1331,7 @@ impl ResourceRegistry {
                     {
                         let mut schema_map = serde_json::Map::new();
                         schema_map.insert(name.clone(), schema_def.clone());
-                        
+
                         let content = json!({
                             "version": all_schemas["version"],
                             "description": format!("Schema for TAP {} message type", name),

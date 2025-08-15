@@ -101,7 +101,7 @@ impl PaymentLinkBuilder {
     {
         // Create the DIDComm PlainMessage for the payment
         let plain_message = self.payment.to_didcomm(&self.agent_did)?;
-        
+
         // Serialize the plain message for signing
         let message_json = serde_json::to_string(&plain_message)
             .map_err(|e| Error::Serialization(format!("Failed to serialize payment: {}", e)))?;
@@ -110,8 +110,11 @@ impl PaymentLinkBuilder {
         let signed_message = sign_fn(message_json).await?;
 
         // Create the OOB invitation
-        let goal = self.config.goal.unwrap_or_else(|| "Process payment request".to_string());
-        
+        let goal = self
+            .config
+            .goal
+            .unwrap_or_else(|| "Process payment request".to_string());
+
         let mut oob_builder = OutOfBandInvitation::builder(&self.agent_did, "tap.payment", &goal)
             .add_signed_attachment(
                 "payment-request",
@@ -196,7 +199,7 @@ impl PaymentLink {
     /// Parse a payment link from a URL
     pub fn from_url(url: &str) -> Result<PaymentLinkInfo> {
         let oob_invitation = OutOfBandInvitation::from_url(url)?;
-        
+
         // Validate it's a payment invitation
         if !oob_invitation.is_payment_invitation() {
             return Err(Error::Validation(
@@ -233,7 +236,8 @@ pub struct PaymentLinkInfo {
 impl PaymentLinkInfo {
     /// Get the signed payment message JSON
     pub fn get_signed_payment(&self) -> Option<&Value> {
-        self.oob_invitation.extract_attachment_json(&self.attachment_id)
+        self.oob_invitation
+            .extract_attachment_json(&self.attachment_id)
     }
 
     /// Get the merchant DID from the invitation
@@ -249,7 +253,7 @@ impl PaymentLinkInfo {
     /// Validate the payment link structure
     pub fn validate(&self) -> Result<()> {
         self.oob_invitation.validate()?;
-        
+
         // Check that the signed payment attachment exists
         if self.get_signed_payment().is_none() {
             return Err(Error::Validation(
