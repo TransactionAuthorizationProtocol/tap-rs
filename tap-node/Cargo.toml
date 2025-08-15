@@ -43,35 +43,35 @@ anyhow = { workspace = true }
 
 # Utilities
 tracing = { workspace = true }
-dashmap = "5.4"                # Concurrent HashMap implementation
+dashmap = "6.1"                # Concurrent HashMap implementation
 uuid = { workspace = true }
 futures = { version = "0.3" }
 sha2 = "0.10"
 base58 = "0.2"
-base64 = "0.13"                # For encoding signatures
+base64 = "0.22"                # For encoding signatures
 chrono = { workspace = true }
 log = "0.4"
 
 # HTTP client for native
-reqwest = { version = "0.11", features = ["json"], optional = true }
+reqwest = { version = "0.12", features = ["json"], optional = true }
 
 # WebSocket support for native
-tokio-tungstenite = { version = "0.20", features = [
+tokio-tungstenite = { version = "0.24", features = [
     "native-tls",
 ], optional = true }
 
 # Storage dependencies (native only)
-sqlx = { version = "0.8.2", features = [
+sqlx = { version = "0.8.6", features = [
     "runtime-tokio-native-tls",
     "sqlite",
     "migrate",
     "json",
 ], optional = true }
-dirs = { version = "5.0", optional = true }
+dirs = { version = "6.0", optional = true }
 
 [dev-dependencies]
 tokio-test = { workspace = true }
-criterion = { version = "0.5", features = ["async_tokio"] }
+criterion = { version = "0.6", features = ["async_tokio"] }
 futures = { version = "0.3" }
 env_logger = "0.10"
 tempfile = "3.8"
