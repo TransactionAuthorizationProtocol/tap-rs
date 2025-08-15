@@ -629,6 +629,53 @@ async fn test_read_schemas_resource() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_read_specific_schema_resource() -> Result<()> {
+    let env = TestEnvironment::new()?;
+    let mut server = env.create_server().await?;
+    let mut client = McpTestClient::new();
+
+    // Initialize
+    server
+        .handle_request_direct(client.create_initialize_request())
+        .await?;
+
+    // Read specific schema resource - Payment
+    let read_request = client.create_read_resource_request("tap://schemas/Payment");
+    let response = server.handle_request_direct(read_request).await?;
+
+    assert_matches!(
+        response,
+        JsonRpcResponse {
+            result: Some(_),
+            error: None,
+            ..
+        }
+    );
+
+    if let Some(result) = response.result {
+        let contents = result["contents"].as_array().unwrap();
+        assert_eq!(contents.len(), 1);
+
+        let schema_content = &contents[0];
+        assert_eq!(schema_content["uri"], "tap://schemas/Payment");
+        assert_eq!(schema_content["mimeType"], "application/json");
+
+        let schema_text = schema_content["text"].as_str().unwrap();
+        let schema: Value = serde_json::from_str(schema_text)?;
+        
+        // Should only contain Payment schema, not all schemas
+        assert!(schema["schemas"]["Payment"].is_object());
+        assert!(schema["schemas"]["Transfer"].is_null() || !schema["schemas"].as_object().unwrap().contains_key("Transfer"));
+        assert_eq!(schema["schemas"].as_object().unwrap().len(), 1);
+        
+        // Verify it's the Payment schema
+        assert_eq!(schema["schemas"]["Payment"]["message_type"], "https://tap.rsvp/schema/1.0#Payment");
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn test_complete_transaction_flow() -> Result<()> {
     let env = TestEnvironment::new()?;
     let mut server = env.create_server().await?;
