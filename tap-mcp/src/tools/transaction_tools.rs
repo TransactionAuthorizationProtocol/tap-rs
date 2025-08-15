@@ -17,7 +17,6 @@ use tap_msg::message::{
 };
 use tap_node::storage::models::SchemaType;
 use tracing::{debug, error};
-use uuid;
 
 /// Tool for creating transfer transactions
 pub struct CreateTransferTool {
@@ -1273,10 +1272,12 @@ struct CreatePaymentParams {
     #[serde(default)]
     memo: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     invoice: Option<Value>,
     #[serde(default)]
     settlement_address: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     fallback_settlement_addresses: Option<Vec<String>>,
     #[serde(default)]
     metadata: Option<Value>,
@@ -1453,8 +1454,10 @@ struct ConnectionConstraintsInfo {
     #[serde(default)]
     transaction_limits: Option<TransactionLimitsInfo>,
     #[serde(default)]
+    #[allow(dead_code)]
     asset_types: Option<Vec<String>>,
     #[serde(default)]
+    #[allow(dead_code)]
     currency_types: Option<Vec<String>>,
 }
 
@@ -1463,10 +1466,12 @@ struct TransactionLimitsInfo {
     #[serde(default)]
     max_amount: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     min_amount: Option<String>,
     #[serde(default)]
     daily_limit: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     monthly_limit: Option<String>,
 }
 
@@ -1547,7 +1552,7 @@ impl ToolHandler for CreateConnectTool {
         // Add metadata if provided
         if let Some(metadata) = params.metadata {
             if let Some(obj) = metadata.as_object() {
-                for (key, value) in obj {
+                for (_key, _value) in obj {
                     // Note: Connect struct doesn't have direct metadata field
                     // Metadata would be handled through the principal or agent objects
                 }
