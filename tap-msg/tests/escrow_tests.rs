@@ -1,7 +1,5 @@
 //! Integration tests for Escrow and Capture messages (TAIP-17)
 
-use serde_json::json;
-use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{Agent, Capture, Escrow, Party};
 
