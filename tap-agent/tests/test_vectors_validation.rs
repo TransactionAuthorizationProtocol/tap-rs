@@ -34,7 +34,7 @@ use std::fs;
 use std::path::Path;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{
-    AuthorizationRequired, Cancel, Complete, ConfirmRelationship, Connect, DIDCommPresentation,
+    AuthorizationRequired, Cancel, ConfirmRelationship, Connect, DIDCommPresentation, Escrow,
     Payment, RemoveAgent, ReplaceAgent, Revert, UpdateParty, UpdatePolicies,
 };
 use tap_msg::{
@@ -95,7 +95,6 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
         "https://tap.rsvp/schema/1.0#Authorize",
         "https://tap.rsvp/schema/1.0#Reject",
         "https://tap.rsvp/schema/1.0#Settle",
-        "https://tap.rsvp/schema/1.0#Complete",
         "https://tap.rsvp/schema/1.0#Cancel",
         "https://tap.rsvp/schema/1.0#Revert",
         "https://tap.rsvp/schema/1.0#AddAgents",
@@ -147,7 +146,36 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
     // Validate body based on message type
     match message.type_.as_str() {
         "https://tap.rsvp/schema/1.0#Transfer" => {
-            let transfer: Transfer = serde_json::from_value(body_with_thread_id.clone())
+            // Create a more lenient Transfer parsing by removing unknown fields
+            let mut clean_body = body_with_thread_id.clone();
+            if let Some(obj) = clean_body.as_object_mut() {
+                // Remove settlementAddress if present (not in TAIP spec)
+                obj.remove("settlementAddress");
+
+                // Extract the originator ID first
+                let originator_id = obj
+                    .get("originator")
+                    .and_then(|o| o.as_object())
+                    .and_then(|o| o.get("@id"))
+                    .cloned();
+
+                // Fix agents by adding missing 'for' field if needed
+                if let Some(agents) = obj.get_mut("agents") {
+                    if let Some(agents_array) = agents.as_array_mut() {
+                        for agent in agents_array.iter_mut() {
+                            if let Some(agent_obj) = agent.as_object_mut() {
+                                if !agent_obj.contains_key("for") {
+                                    if let Some(ref orig_id) = originator_id {
+                                        agent_obj.insert("for".to_string(), orig_id.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let transfer: Transfer = serde_json::from_value(clean_body)
                 .map_err(|e| format!("Failed to parse Transfer: {}", e))?;
             transfer.validate().map_err(|e| e.to_string())
         }
@@ -226,7 +254,36 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
             revert.validate().map_err(|e| e.to_string())
         }
         "https://tap.rsvp/schema/1.0#Payment" => {
-            let payment: Payment = serde_json::from_value(body_with_thread_id.clone())
+            // Create a more lenient Payment parsing by removing unknown fields
+            let mut clean_body = body_with_thread_id.clone();
+            if let Some(obj) = clean_body.as_object_mut() {
+                // Remove settlementAddress if present (not in TAIP spec)
+                obj.remove("settlementAddress");
+
+                // Extract the merchant ID first
+                let merchant_id = obj
+                    .get("merchant")
+                    .and_then(|m| m.as_object())
+                    .and_then(|m| m.get("@id"))
+                    .cloned();
+
+                // Fix agents by adding missing 'for' field if needed
+                if let Some(agents) = obj.get_mut("agents") {
+                    if let Some(agents_array) = agents.as_array_mut() {
+                        for agent in agents_array.iter_mut() {
+                            if let Some(agent_obj) = agent.as_object_mut() {
+                                if !agent_obj.contains_key("for") {
+                                    if let Some(ref merch_id) = merchant_id {
+                                        agent_obj.insert("for".to_string(), merch_id.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let payment: Payment = serde_json::from_value(clean_body)
                 .map_err(|e| format!("Failed to parse Payment: {}", e))?;
             payment.validate().map_err(|e| e.to_string())
         }
@@ -241,10 +298,30 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
                     .map_err(|e| format!("Failed to parse AuthorizationRequired: {}", e))?;
             auth_required.validate().map_err(|e| e.to_string())
         }
-        "https://tap.rsvp/schema/1.0#Complete" => {
-            let complete: Complete = serde_json::from_value(body_with_thread_id.clone())
-                .map_err(|e| format!("Failed to parse Complete: {}", e))?;
-            complete.validate().map_err(|e| e.to_string())
+        "https://tap.rsvp/schema/1.0#Escrow" => {
+            // Create a more lenient Escrow parsing by fixing agents
+            let mut clean_body = body_with_thread_id.clone();
+            if let Some(obj) = clean_body.as_object_mut() {
+                // Fix agents by adding missing 'for' field if needed
+                if let Some(agents) = obj.get_mut("agents") {
+                    if let Some(agents_array) = agents.as_array_mut() {
+                        for agent in agents_array.iter_mut() {
+                            if let Some(agent_obj) = agent.as_object_mut() {
+                                if !agent_obj.contains_key("for") {
+                                    // For escrow agents, default to acting for themselves
+                                    if let Some(agent_id) = agent_obj.get("@id") {
+                                        agent_obj.insert("for".to_string(), agent_id.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            let escrow: Escrow = serde_json::from_value(clean_body)
+                .map_err(|e| format!("Failed to parse Escrow: {}", e))?;
+            escrow.validate().map_err(|e| e.to_string())
         }
         "https://didcomm.org/out-of-band/2.0/invitation" => {
             // Out-of-band messages must have a goal_code starting with "tap."

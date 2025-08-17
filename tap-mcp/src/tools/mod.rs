@@ -66,6 +66,22 @@ impl ToolRegistry {
             "tap_create_transfer".to_string(),
             Box::new(CreateTransferTool::new(tap_integration.clone())),
         );
+        tools.insert(
+            "tap_payment".to_string(),
+            Box::new(CreatePaymentTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_connect".to_string(),
+            Box::new(CreateConnectTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_escrow".to_string(),
+            Box::new(CreateEscrowTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_capture".to_string(),
+            Box::new(CaptureTool::new(tap_integration.clone())),
+        );
 
         // Transaction action tools
         tools.insert(
@@ -83,10 +99,6 @@ impl ToolRegistry {
         tools.insert(
             "tap_settle".to_string(),
             Box::new(SettleTool::new(tap_integration.clone())),
-        );
-        tools.insert(
-            "tap_complete".to_string(),
-            Box::new(CompleteTool::new(tap_integration.clone())),
         );
 
         // Transaction management tools

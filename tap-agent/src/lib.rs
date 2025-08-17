@@ -98,6 +98,12 @@ pub mod message;
 /// Message packing and unpacking utilities
 pub mod message_packing;
 
+/// Out-of-band message handling
+pub mod oob;
+
+/// Payment link functionality
+pub mod payment_link;
+
 /// Key storage utilities
 pub mod storage;
 
@@ -134,6 +140,13 @@ pub use message_packing::{
     KeyManagerPacking, PackOptions, Packable, UnpackOptions, Unpackable, UnpackedMessage,
 };
 pub use tap_msg::didcomm::PlainMessage;
+
+// Out-of-Band and Payment Link re-exports
+pub use oob::{OutOfBandBody, OutOfBandBuilder, OutOfBandInvitation};
+pub use payment_link::{
+    PaymentLink, PaymentLinkBuilder, PaymentLinkConfig, PaymentLinkInfo,
+    DEFAULT_PAYMENT_SERVICE_URL,
+};
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]

@@ -9,11 +9,11 @@ pub mod agent_management;
 pub mod authorize;
 pub mod basic_message;
 pub mod cancel;
-pub mod complete;
 pub mod connection;
 pub mod context;
 pub mod did_presentation;
 pub mod error;
+pub mod escrow;
 pub mod invoice;
 pub mod party;
 pub mod payment;
@@ -46,9 +46,6 @@ pub use basic_message::BasicMessage;
 // Re-export cancel type
 pub use cancel::Cancel;
 
-// Re-export complete type
-pub use complete::Complete;
-
 // Re-export connection types
 pub use connection::{
     AuthorizationRequired, Connect, ConnectionConstraints, OutOfBand, TransactionLimits,
@@ -59,6 +56,9 @@ pub use did_presentation::DIDCommPresentation;
 
 // Re-export error type
 pub use error::ErrorBody;
+
+// Re-export escrow types
+pub use escrow::{Capture, Escrow};
 
 // Re-export invoice types
 pub use invoice::{

@@ -227,33 +227,6 @@ pub fn settle_schema() -> Value {
     })
 }
 
-/// Schema for complete tool
-pub fn complete_schema() -> Value {
-    json!({
-        "type": "object",
-        "properties": {
-            "agent_did": {
-                "type": "string",
-                "description": "The DID of the agent that will sign and send this message"
-            },
-            "transaction_id": {
-                "type": "string",
-                "description": "Transaction ID to complete"
-            },
-            "settlement_address": {
-                "type": "string",
-                "description": "CAIP-10 settlement address"
-            },
-            "amount": {
-                "type": "string",
-                "description": "Optional amount completed"
-            }
-        },
-        "required": ["agent_did", "transaction_id", "settlement_address"],
-        "additionalProperties": false
-    })
-}
-
 /// Schema for list_transactions tool
 pub fn list_transactions_schema() -> Value {
     json!({
@@ -957,6 +930,279 @@ pub fn presentation_schema() -> Value {
             }
         },
         "required": ["agent_did", "recipient_did", "presented_attributes"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for create_payment tool
+pub fn create_payment_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "asset": {
+                "type": "string",
+                "description": "CAIP-19 asset identifier (mutually exclusive with currency)"
+            },
+            "currency": {
+                "type": "string",
+                "description": "ISO 4217 currency code (mutually exclusive with asset)"
+            },
+            "amount": {
+                "type": "string",
+                "description": "Payment amount as decimal string"
+            },
+            "merchant": {
+                "type": "object",
+                "properties": {
+                    "@id": {
+                        "type": "string",
+                        "description": "DID of the merchant"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "description": "Optional merchant metadata"
+                    }
+                },
+                "required": ["@id"],
+                "additionalProperties": false
+            },
+            "agents": {
+                "type": "array",
+                "description": "List of agents involved in the payment",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "@id": {
+                            "type": "string",
+                            "description": "Agent DID"
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Agent role"
+                        },
+                        "for": {
+                            "type": "string",
+                            "description": "DID of party agent acts for"
+                        }
+                    },
+                    "required": ["@id", "role", "for"],
+                    "additionalProperties": false
+                }
+            },
+            "memo": {
+                "type": "string",
+                "description": "Optional payment memo"
+            },
+            "invoice": {
+                "type": "object",
+                "description": "Optional invoice data"
+            },
+            "settlement_address": {
+                "type": "string",
+                "description": "Optional settlement address"
+            },
+            "fallback_settlement_addresses": {
+                "type": "array",
+                "description": "Optional fallback settlement addresses",
+                "items": {
+                    "type": "string"
+                }
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Optional additional metadata"
+            }
+        },
+        "required": ["agent_did", "amount", "merchant"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for create_connect tool
+pub fn create_connect_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "recipient_did": {
+                "type": "string",
+                "description": "The DID of the recipient to connect with"
+            },
+            "constraints": {
+                "type": "object",
+                "description": "Optional connection constraints",
+                "properties": {
+                    "transaction_limits": {
+                        "type": "object",
+                        "properties": {
+                            "max_amount": {
+                                "type": "string",
+                                "description": "Maximum transaction amount"
+                            },
+                            "min_amount": {
+                                "type": "string",
+                                "description": "Minimum transaction amount"
+                            },
+                            "daily_limit": {
+                                "type": "string",
+                                "description": "Daily transaction limit"
+                            },
+                            "monthly_limit": {
+                                "type": "string",
+                                "description": "Monthly transaction limit"
+                            }
+                        },
+                        "additionalProperties": false
+                    },
+                    "asset_types": {
+                        "type": "array",
+                        "description": "Allowed asset types",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "currency_types": {
+                        "type": "array",
+                        "description": "Allowed currency types",
+                        "items": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "additionalProperties": false
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Optional additional metadata"
+            }
+        },
+        "required": ["agent_did", "recipient_did"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for create_escrow tool
+pub fn create_escrow_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "asset": {
+                "type": "string",
+                "description": "CAIP-19 asset identifier (mutually exclusive with currency)"
+            },
+            "currency": {
+                "type": "string",
+                "description": "ISO 4217 currency code (mutually exclusive with asset)"
+            },
+            "amount": {
+                "type": "string",
+                "description": "Escrow amount as decimal string"
+            },
+            "originator": {
+                "type": "object",
+                "properties": {
+                    "@id": {
+                        "type": "string",
+                        "description": "DID of the originator"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "description": "Optional originator metadata"
+                    }
+                },
+                "required": ["@id"],
+                "additionalProperties": false
+            },
+            "beneficiary": {
+                "type": "object",
+                "properties": {
+                    "@id": {
+                        "type": "string",
+                        "description": "DID of the beneficiary"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "description": "Optional beneficiary metadata"
+                    }
+                },
+                "required": ["@id"],
+                "additionalProperties": false
+            },
+            "expiry": {
+                "type": "string",
+                "description": "ISO 8601 timestamp when escrow expires"
+            },
+            "agents": {
+                "type": "array",
+                "description": "List of agents involved (exactly one must have role 'EscrowAgent')",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "@id": {
+                            "type": "string",
+                            "description": "Agent DID"
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Agent role (e.g., 'EscrowAgent')"
+                        },
+                        "for": {
+                            "type": "string",
+                            "description": "DID of party agent acts for"
+                        }
+                    },
+                    "required": ["@id", "role", "for"],
+                    "additionalProperties": false
+                }
+            },
+            "agreement": {
+                "type": "string",
+                "description": "Optional URL/URI referencing escrow terms"
+            },
+            "metadata": {
+                "type": "object",
+                "description": "Optional additional metadata"
+            }
+        },
+        "required": ["agent_did", "amount", "originator", "beneficiary", "expiry", "agents"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for capture tool
+pub fn create_capture_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "escrow_id": {
+                "type": "string",
+                "description": "ID of the escrow to capture funds from"
+            },
+            "amount": {
+                "type": "string",
+                "description": "Optional amount to capture (defaults to full escrow amount)"
+            },
+            "settlement_address": {
+                "type": "string",
+                "description": "Optional settlement address for captured funds"
+            }
+        },
+        "required": ["agent_did", "escrow_id"],
         "additionalProperties": false
     })
 }

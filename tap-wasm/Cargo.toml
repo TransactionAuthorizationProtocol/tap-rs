@@ -20,19 +20,19 @@ serde-wasm-bindgen = "0.4"
 serde_json = "1.0.96"
 uuid = { workspace = true }
 console_error_panic_hook = { version = "0.1.7", optional = true }
-tap-caip = { version = "0.4.0", path = "../tap-caip" }
+tap-caip = { version = "0.5.0", path = "../tap-caip" }
 # Add tap-agent with wasm feature enabled and default features disabled
-tap-agent = { version = "0.4.0", path = "../tap-agent", default-features = false, features = [
+tap-agent = { version = "0.5.0", path = "../tap-agent", default-features = false, features = [
     "wasm",
 ] }
-tap-msg = { version = "0.4.0", path = "../tap-msg", default-features = false, features = [
+tap-msg = { version = "0.5.0", path = "../tap-msg", default-features = false, features = [
     "wasm",
 ] }
 web-sys = { version = "0.3.64", features = ["console"] }
 chrono = { version = "0.4", features = ["wasmbind"] }
 getrandom = { workspace = true, features = ["js"] }
-base64 = "0.21"
-ed25519-dalek = { version = "2.0.0", features = ["rand_core"] }
+base64 = "0.22"
+ed25519-dalek = { version = "2.2", features = ["rand_core"] }
 rand = "0.8"
 
 [features]
@@ -40,7 +40,7 @@ default = ["console_error_panic_hook"]
 
 [dev-dependencies]
 wasm-bindgen-test = { workspace = true }
-criterion = "0.5"
+criterion = "0.6"
 
 [[bench]]
 name = "wasm_binding_benchmark"

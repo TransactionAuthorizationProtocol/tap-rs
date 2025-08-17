@@ -275,21 +275,23 @@ impl OutOfBand {
     }
 }
 
-/// Authorization Required message body.
+/// Authorization Required message body (TAIP-4, TAIP-15).
+///
+/// Indicates that authorization is required to proceed with a transaction or connection.
+/// This message was moved from TAIP-15 to TAIP-4 as a standard authorization message.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#AuthorizationRequired")]
 pub struct AuthorizationRequired {
-    /// Authorization URL.
-    #[serde(rename = "authorization_url")]
-    pub url: String,
+    /// Authorization URL where the user can authorize the transaction.
+    #[serde(rename = "authorizationUrl")]
+    pub authorization_url: String,
 
-    /// Agent ID.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
+    /// ISO 8601 timestamp when the authorization URL expires (REQUIRED per TAIP-4).
+    pub expires: String,
 
-    /// Expiry date/time.
+    /// Optional party type (e.g., "customer", "principal", "originator") that is required to open the URL.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub expires: Option<String>,
+    pub from: Option<String>,
 
     /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
@@ -298,13 +300,29 @@ pub struct AuthorizationRequired {
 
 impl AuthorizationRequired {
     /// Create a new AuthorizationRequired message.
-    pub fn new(url: String, expires: String) -> Self {
+    pub fn new(authorization_url: String, expires: String) -> Self {
         Self {
-            url,
-            agent_id: None,
-            expires: Some(expires),
+            authorization_url,
+            expires,
+            from: None,
             metadata: HashMap::new(),
         }
+    }
+
+    /// Create a new AuthorizationRequired message with a specified party type.
+    pub fn new_with_from(authorization_url: String, expires: String, from: String) -> Self {
+        Self {
+            authorization_url,
+            expires,
+            from: Some(from),
+            metadata: HashMap::new(),
+        }
+    }
+
+    /// Set the party type that is required to open the URL.
+    pub fn with_from(mut self, from: String) -> Self {
+        self.from = Some(from);
+        self
     }
 
     /// Add metadata to the message.
@@ -337,18 +355,32 @@ impl OutOfBand {
 impl AuthorizationRequired {
     /// Custom validation for AuthorizationRequired messages
     pub fn validate_authorization_required(&self) -> Result<()> {
-        if self.url.is_empty() {
+        if self.authorization_url.is_empty() {
             return Err(Error::Validation(
                 "Authorization URL is required".to_string(),
             ));
         }
 
-        // Validate expiry date if present
-        if let Some(expires) = &self.expires {
-            // Simple format check
-            if !expires.contains('T') || !expires.contains(':') {
+        // Validate expiry date (now required per TAIP-4)
+        if self.expires.is_empty() {
+            return Err(Error::Validation(
+                "Expires timestamp is required".to_string(),
+            ));
+        }
+
+        // Simple format check for ISO 8601
+        if !self.expires.contains('T') || !self.expires.contains(':') {
+            return Err(Error::Validation(
+                "Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string(),
+            ));
+        }
+
+        // Validate 'from' field if present
+        if let Some(ref from) = self.from {
+            let valid_from_values = ["customer", "principal", "originator", "beneficiary"];
+            if !valid_from_values.contains(&from.as_str()) {
                 return Err(Error::Validation(
-                    "Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string(),
+                    format!("Invalid 'from' value '{}'. Expected one of: customer, principal, originator, beneficiary", from),
                 ));
             }
         }
@@ -359,5 +391,191 @@ impl AuthorizationRequired {
     /// Validation method that will be called by TapMessageBody trait
     pub fn validate(&self) -> Result<()> {
         self.validate_authorization_required()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+
+    #[test]
+    fn test_authorization_required_creation() {
+        let auth_req = AuthorizationRequired::new(
+            "https://vasp.com/authorize?request=abc123".to_string(),
+            "2024-12-31T23:59:59Z".to_string(),
+        );
+
+        assert_eq!(
+            auth_req.authorization_url,
+            "https://vasp.com/authorize?request=abc123"
+        );
+        assert_eq!(auth_req.expires, "2024-12-31T23:59:59Z");
+        assert!(auth_req.from.is_none());
+        assert!(auth_req.metadata.is_empty());
+    }
+
+    #[test]
+    fn test_authorization_required_with_from() {
+        let auth_req = AuthorizationRequired::new_with_from(
+            "https://vasp.com/authorize".to_string(),
+            "2024-12-31T23:59:59Z".to_string(),
+            "customer".to_string(),
+        );
+
+        assert_eq!(auth_req.from, Some("customer".to_string()));
+    }
+
+    #[test]
+    fn test_authorization_required_builder_pattern() {
+        let auth_req = AuthorizationRequired::new(
+            "https://vasp.com/authorize".to_string(),
+            "2024-12-31T23:59:59Z".to_string(),
+        )
+        .with_from("principal".to_string())
+        .add_metadata("custom_field", serde_json::json!("value"));
+
+        assert_eq!(auth_req.from, Some("principal".to_string()));
+        assert_eq!(
+            auth_req.metadata.get("custom_field"),
+            Some(&serde_json::json!("value"))
+        );
+    }
+
+    #[test]
+    fn test_authorization_required_serialization() {
+        let auth_req = AuthorizationRequired::new_with_from(
+            "https://vasp.com/authorize?request=abc123".to_string(),
+            "2024-12-31T23:59:59Z".to_string(),
+            "customer".to_string(),
+        );
+
+        let json = serde_json::to_value(&auth_req).unwrap();
+
+        // Check field names match TAIP-4 specification
+        assert_eq!(
+            json["authorizationUrl"],
+            "https://vasp.com/authorize?request=abc123"
+        );
+        assert_eq!(json["expires"], "2024-12-31T23:59:59Z");
+        assert_eq!(json["from"], "customer");
+
+        // Test deserialization
+        let deserialized: AuthorizationRequired = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.authorization_url, auth_req.authorization_url);
+        assert_eq!(deserialized.expires, auth_req.expires);
+        assert_eq!(deserialized.from, auth_req.from);
+    }
+
+    #[test]
+    fn test_authorization_required_validation_success() {
+        let auth_req = AuthorizationRequired::new(
+            "https://vasp.com/authorize".to_string(),
+            "2024-12-31T23:59:59Z".to_string(),
+        );
+
+        assert!(auth_req.validate().is_ok());
+    }
+
+    #[test]
+    fn test_authorization_required_validation_with_valid_from() {
+        let valid_from_values = ["customer", "principal", "originator", "beneficiary"];
+
+        for from_value in &valid_from_values {
+            let auth_req = AuthorizationRequired::new_with_from(
+                "https://vasp.com/authorize".to_string(),
+                "2024-12-31T23:59:59Z".to_string(),
+                from_value.to_string(),
+            );
+
+            assert!(
+                auth_req.validate().is_ok(),
+                "Validation failed for from value: {}",
+                from_value
+            );
+        }
+    }
+
+    #[test]
+    fn test_authorization_required_validation_empty_url() {
+        let auth_req =
+            AuthorizationRequired::new("".to_string(), "2024-12-31T23:59:59Z".to_string());
+
+        let result = auth_req.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Authorization URL is required"));
+    }
+
+    #[test]
+    fn test_authorization_required_validation_empty_expires() {
+        let auth_req = AuthorizationRequired {
+            authorization_url: "https://vasp.com/authorize".to_string(),
+            expires: "".to_string(),
+            from: None,
+            metadata: HashMap::new(),
+        };
+
+        let result = auth_req.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Expires timestamp is required"));
+    }
+
+    #[test]
+    fn test_authorization_required_validation_invalid_expires_format() {
+        let auth_req = AuthorizationRequired::new(
+            "https://vasp.com/authorize".to_string(),
+            "2024-12-31".to_string(), // Missing time component
+        );
+
+        let result = auth_req.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid expiry date format"));
+    }
+
+    #[test]
+    fn test_authorization_required_validation_invalid_from() {
+        let auth_req = AuthorizationRequired::new_with_from(
+            "https://vasp.com/authorize".to_string(),
+            "2024-12-31T23:59:59Z".to_string(),
+            "invalid_party".to_string(),
+        );
+
+        let result = auth_req.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid 'from' value"));
+    }
+
+    #[test]
+    fn test_authorization_required_json_compliance_with_taip4() {
+        // Test that the JSON structure matches TAIP-4 example
+        let auth_req = AuthorizationRequired::new_with_from(
+            "https://beneficiary.vasp/authorize?request=abc123".to_string(),
+            "2024-01-01T12:00:00Z".to_string(),
+            "customer".to_string(),
+        );
+
+        let json = serde_json::to_value(&auth_req).unwrap();
+
+        // Verify field names match TAIP-4 specification
+        assert!(json.get("authorizationUrl").is_some());
+        assert!(json.get("expires").is_some());
+        assert!(json.get("from").is_some());
+
+        // Verify old field names are not present
+        assert!(json.get("authorization_url").is_none());
+        assert!(json.get("url").is_none());
+        assert!(json.get("agent_id").is_none());
     }
 }

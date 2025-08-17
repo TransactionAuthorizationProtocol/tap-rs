@@ -146,6 +146,7 @@ async fn test_automatic_authorization() {
         invoice: None,
         agents: vec![compliance_agent],
         connection_id: None,
+        fallback_settlement_addresses: None,
         metadata: std::collections::HashMap::new(),
     };
 

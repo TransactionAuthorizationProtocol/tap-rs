@@ -47,6 +47,118 @@ pub struct LineItem {
     /// Optional tax category for the line item
     #[serde(rename = "taxCategory", skip_serializing_if = "Option::is_none")]
     pub tax_category: Option<TaxCategory>,
+
+    /// Optional product name (schema.org/Product)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+
+    /// Optional product image URL (schema.org/Product)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image: Option<String>,
+
+    /// Optional product URL (schema.org/Product)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+}
+
+/// Builder for LineItem objects
+#[derive(Default)]
+pub struct LineItemBuilder {
+    id: Option<String>,
+    description: Option<String>,
+    quantity: Option<f64>,
+    unit_code: Option<String>,
+    unit_price: Option<f64>,
+    line_total: Option<f64>,
+    tax_category: Option<TaxCategory>,
+    name: Option<String>,
+    image: Option<String>,
+    url: Option<String>,
+}
+
+impl LineItemBuilder {
+    /// Set the line item ID
+    pub fn id(mut self, id: String) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    /// Set the line item description
+    pub fn description(mut self, description: String) -> Self {
+        self.description = Some(description);
+        self
+    }
+
+    /// Set the quantity
+    pub fn quantity(mut self, quantity: f64) -> Self {
+        self.quantity = Some(quantity);
+        self
+    }
+
+    /// Set the unit code
+    pub fn unit_code(mut self, unit_code: String) -> Self {
+        self.unit_code = Some(unit_code);
+        self
+    }
+
+    /// Set the unit price
+    pub fn unit_price(mut self, unit_price: f64) -> Self {
+        self.unit_price = Some(unit_price);
+        self
+    }
+
+    /// Set the line total
+    pub fn line_total(mut self, line_total: f64) -> Self {
+        self.line_total = Some(line_total);
+        self
+    }
+
+    /// Set the tax category
+    pub fn tax_category(mut self, tax_category: TaxCategory) -> Self {
+        self.tax_category = Some(tax_category);
+        self
+    }
+
+    /// Set the product name (schema.org/Product)
+    pub fn name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    /// Set the product image URL (schema.org/Product)
+    pub fn image(mut self, image: String) -> Self {
+        self.image = Some(image);
+        self
+    }
+
+    /// Set the product URL (schema.org/Product)
+    pub fn url(mut self, url: String) -> Self {
+        self.url = Some(url);
+        self
+    }
+
+    /// Build the LineItem
+    pub fn build(self) -> LineItem {
+        LineItem {
+            id: self.id.expect("id is required"),
+            description: self.description.expect("description is required"),
+            quantity: self.quantity.expect("quantity is required"),
+            unit_code: self.unit_code,
+            unit_price: self.unit_price.expect("unit_price is required"),
+            line_total: self.line_total.expect("line_total is required"),
+            tax_category: self.tax_category,
+            name: self.name,
+            image: self.image,
+            url: self.url,
+        }
+    }
+}
+
+impl LineItem {
+    /// Create a builder for constructing LineItem objects
+    pub fn builder() -> LineItemBuilder {
+        LineItemBuilder::default()
+    }
 }
 
 /// Tax subtotal information

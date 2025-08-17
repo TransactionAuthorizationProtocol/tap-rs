@@ -5,6 +5,7 @@ Core message processing for the Transaction Authorization Protocol (TAP) providi
 ## Features
 
 - **TAP Message Types**: Complete implementation of all TAP message types
+- **Settlement Address Flexibility**: Support for both blockchain (CAIP-10) and traditional payment systems (PayTo URI per RFC 8905)
 - **Generic Typed Messages**: Compile-time type safety with `PlainMessage<Transfer>` while maintaining backward compatibility
 - **Derive Macro**: Automatic implementation of `TapMessage` and `MessageContext` traits with `#[derive(TapMessage)]`
 - **Message Security**: Support for secure message formats with JWS (signed) and JWE (encrypted) capabilities
@@ -13,8 +14,9 @@ Core message processing for the Transaction Authorization Protocol (TAP) providi
 - **CAIP Support**: Validation for chain-agnostic identifiers (CAIP-2, CAIP-10, CAIP-19)
 - **Authorization Flows**: Support for authorization, rejection, and settlement flows
 - **Agent Policies**: TAIP-7 compliant policy implementation for defining agent requirements
-- **Invoice Support**: TAIP-16 compliant structured invoice implementation with tax and line item support
-- **Payment Requests**: TAIP-14 compliant payment requests with currency and asset options
+- **Invoice Support**: TAIP-16 compliant structured invoice implementation with tax and line item support, now with Product attributes
+- **Payment Requests**: TAIP-14 compliant payment requests with currency, asset options, and fallback settlement addresses
+- **Enhanced Metadata**: Schema.org Organization fields for Agents/Parties and Product attributes for invoice line items
 - **Name Hashing**: TAIP-12 compliant name hashing for privacy-preserving Travel Rule compliance
 - **Extensibility**: Easy addition of new message types
 
@@ -116,6 +118,83 @@ payment_request.invoice = Some(InvoiceReference::Invoice(invoice));
 
 // Validate the message
 payment_request.validate()?;
+```
+
+### Settlement Address Support (New in v0.5.0)
+
+TAP-RS now supports both blockchain and traditional payment system addresses:
+
+```rust
+use tap_msg::settlement_address::{SettlementAddress, PayToUri};
+use tap_msg::{Payment, Party};
+
+// Traditional payment addresses using PayTo URI (RFC 8905)
+let iban = SettlementAddress::from_string(
+    "payto://iban/DE75512108001245126199".to_string()
+)?;
+
+let ach = SettlementAddress::from_string(
+    "payto://ach/122000247/111000025".to_string()  
+)?;
+
+let upi = SettlementAddress::from_string(
+    "payto://upi/9999999999@paytm".to_string()
+)?;
+
+// Blockchain addresses using CAIP-10
+let eth = SettlementAddress::from_string(
+    "eip155:1:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb".to_string()
+)?;
+
+// Payment with fallback settlement addresses
+let payment = Payment::builder()
+    .amount("100.00".to_string())
+    .currency_code("USD".to_string())
+    .merchant(Party::new("did:example:merchant"))
+    .fallback_settlement_addresses(vec![
+        iban,  // Primary: IBAN transfer
+        ach,   // Fallback 1: ACH transfer  
+        eth,   // Fallback 2: Ethereum
+    ])
+    .build();
+```
+
+### Enhanced Metadata (New in v0.5.0)
+
+Agents, Parties, and LineItems now support rich schema.org metadata:
+
+```rust
+use tap_msg::{Agent, Party, LineItem};
+
+// Agent with Organization metadata
+let agent = Agent::new("did:example:processor", "PaymentProcessor", "did:example:merchant")
+    .with_name("Example Payment Services Inc.")
+    .with_url("https://example-payments.com")
+    .with_logo("https://example-payments.com/logo.png")
+    .with_description("Leading payment processing services")
+    .with_email("support@example-payments.com")
+    .with_telephone("+1-555-0100")
+    .with_service_url("https://api.example-payments.com/didcomm");
+
+// Party with Organization fields
+let party = Party::new("did:example:company")
+    .with_name("Acme Corporation")
+    .with_url("https://acme.com")
+    .with_metadata_field("addressCountry", "US")
+    .with_metadata_field("addressLocality", "New York");
+
+// LineItem with Product attributes
+let line_item = LineItem::builder()
+    .id("SKU-12345".to_string())
+    .description("Premium Coffee Subscription".to_string())
+    .quantity(1.0)
+    .unit_price(29.99)
+    .line_total(29.99)
+    // Product metadata
+    .name("Colombian Arabica Monthly Box".to_string())
+    .image("https://shop.example.com/images/coffee-box.jpg".to_string())
+    .url("https://shop.example.com/products/coffee-subscription".to_string())
+    .build();
 ```
 
 ## Message Types

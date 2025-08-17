@@ -2,7 +2,11 @@
 
 This repository contains a Rust implementation of the Transaction Authorization Protocol (TAP), a decentralized protocol for securely authorizing blockchain transactions before they are submitted on-chain. TAP-RS targets payment-related use cases, Travel Rule compliance, and secure transaction coordination.
 
-**New in this release**: Full Travel Rule support with IVMS101 data model implementation, automatic customer data extraction, and compliance workflow automation.
+**New in v0.5.0**: 
+- PayTo URI support (RFC 8905) for traditional payment systems (IBAN, ACH, BIC, UPI)
+- Fallback settlement addresses for flexible payment options
+- Schema.org Product attributes for invoice line items
+- Enhanced Agent and Party structures with Organization fields
 
 ## Project Structure
 
@@ -116,12 +120,14 @@ See individual tool READMEs for detailed usage instructions.
 
 ## Key Features
 
-- **Complete TAP Implementation**: Support for all TAP message types (Transfer, Authorize, Reject, Settle, Complete, etc.)
+- **Complete TAP Implementation**: Support for all TAP message types (Transfer, Authorize, Reject, Settle, Cancel, Revert, etc.)
 - **DIDComm v2 Integration**: Secure, encrypted messaging with authenticated signatures
 - **Chain Agnostic Identifiers**: Implementation of CAIP-2 (ChainID), CAIP-10 (AccountID), and CAIP-19 (AssetID)
+- **Settlement Address Flexibility**: Support for both blockchain (CAIP-10) and traditional payment systems (PayTo URI)
 - **Multiple DID Methods**: Support for did:key, did:web, did:pkh, and more
 - **Travel Rule Compliance**: Full IVMS 101.2023 implementation with automatic data attachment
 - **Customer Data Management**: Automatic extraction and storage of party information from TAP messages
+- **Enhanced Metadata Support**: Schema.org Organization fields for Agents/Parties and Product attributes for invoices
 - **Command-line Tools**: Utilities for DID generation, resolution, and key management
 - **Modular Agent Architecture**: Flexible identity and cryptography primitives
 - **High-Performance Message Routing**: Efficient node implementation for high-throughput environments
@@ -178,6 +184,67 @@ let message = transfer.to_didcomm_with_route(
 ```
 
 See the [tap-msg README](./tap-msg/README.md) for more detailed examples.
+
+## New in v0.5.0: Settlement Address Flexibility
+
+TAP-RS now supports both blockchain and traditional payment settlement addresses:
+
+```rust
+use tap_msg::settlement_address::{SettlementAddress, PayToUri};
+use tap_msg::Payment;
+
+// Traditional payment system addresses using PayTo URI (RFC 8905)
+let iban_address = SettlementAddress::from_string(
+    "payto://iban/DE75512108001245126199".to_string()
+)?;
+
+let ach_address = SettlementAddress::from_string(
+    "payto://ach/122000247/111000025".to_string()
+)?;
+
+// Blockchain addresses using CAIP-10
+let eth_address = SettlementAddress::from_string(
+    "eip155:1:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb".to_string()
+)?;
+
+// Payment with fallback settlement addresses
+let payment = Payment::builder()
+    .amount("100.00".to_string())
+    .currency_code("USD".to_string())
+    .merchant(Party::new("did:example:merchant"))
+    .fallback_settlement_addresses(vec![
+        iban_address,  // Primary: traditional bank transfer
+        eth_address,   // Fallback: Ethereum address
+    ])
+    .build();
+```
+
+## Enhanced Metadata Support
+
+Agents, Parties, and LineItems now support rich metadata:
+
+```rust
+use tap_msg::{Agent, LineItem};
+
+// Agent with Organization metadata
+let agent = Agent::new("did:example:agent", "PaymentProcessor", "did:example:merchant")
+    .with_name("Example Payment Services")
+    .with_url("https://example.com")
+    .with_email("support@example.com")
+    .with_telephone("+1-555-0100");
+
+// LineItem with Product attributes
+let line_item = LineItem::builder()
+    .id("item-001".to_string())
+    .description("Premium Coffee Beans".to_string())
+    .quantity(2.0)
+    .unit_price(25.99)
+    .line_total(51.98)
+    .name("Colombian Arabica Premium Blend".to_string())
+    .image("https://example.com/products/coffee.jpg".to_string())
+    .url("https://example.com/products/coffee".to_string())
+    .build();
+```
 
 ## Typed Messages for Type Safety
 

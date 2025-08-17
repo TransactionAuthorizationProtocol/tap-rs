@@ -6,10 +6,10 @@
 use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::{
-    AddAgents, AuthorizationRequired, Authorize, BasicMessage, Cancel, ConfirmRelationship,
-    Connect, DIDCommPresentation, ErrorBody, OutOfBand, Payment, Presentation, Reject, RemoveAgent,
-    ReplaceAgent, RequestPresentation, Revert, Settle, Transfer, TrustPing, TrustPingResponse,
-    UpdateParty, UpdatePolicies,
+    AddAgents, AuthorizationRequired, Authorize, BasicMessage, Cancel, Capture,
+    ConfirmRelationship, Connect, DIDCommPresentation, ErrorBody, Escrow, OutOfBand, Payment,
+    Presentation, Reject, RemoveAgent, ReplaceAgent, RequestPresentation, Revert, Settle, Transfer,
+    TrustPing, TrustPingResponse, UpdateParty, UpdatePolicies,
 };
 use serde::{Deserialize, Serialize};
 
@@ -28,6 +28,8 @@ pub enum TapMessage {
     BasicMessage(BasicMessage),
     /// Cancel message (TAIP-11)
     Cancel(Cancel),
+    /// Capture message (TAIP-17)
+    Capture(Capture),
     /// Confirm relationship message (TAIP-14)
     ConfirmRelationship(ConfirmRelationship),
     /// Connect message (TAIP-2)
@@ -36,6 +38,8 @@ pub enum TapMessage {
     DIDCommPresentation(DIDCommPresentation),
     /// Error message
     Error(ErrorBody),
+    /// Escrow message (TAIP-17)
+    Escrow(Escrow),
     /// Out of band message (TAIP-2)
     OutOfBand(OutOfBand),
     /// Payment message (TAIP-13)
@@ -129,6 +133,12 @@ impl TapMessage {
                 })?;
                 Ok(TapMessage::Cancel(msg))
             }
+            "https://tap.rsvp/schema/1.0#Capture" => {
+                let msg: Capture = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                    Error::SerializationError(format!("Failed to parse Capture: {}", e))
+                })?;
+                Ok(TapMessage::Capture(msg))
+            }
             "https://tap.rsvp/schema/1.0#ConfirmRelationship" => {
                 let msg: ConfirmRelationship = serde_json::from_value(plain_msg.body.clone())
                     .map_err(|e| {
@@ -161,6 +171,12 @@ impl TapMessage {
                         Error::SerializationError(format!("Failed to parse Error: {}", e))
                     })?;
                 Ok(TapMessage::Error(msg))
+            }
+            "https://tap.rsvp/schema/1.0#Escrow" => {
+                let msg: Escrow = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                    Error::SerializationError(format!("Failed to parse Escrow: {}", e))
+                })?;
+                Ok(TapMessage::Escrow(msg))
             }
             "https://tap.rsvp/schema/1.0#OutOfBand" => {
                 let msg: OutOfBand =
@@ -279,12 +295,14 @@ impl TapMessage {
             }
             TapMessage::BasicMessage(_) => "https://didcomm.org/basicmessage/2.0/message",
             TapMessage::Cancel(_) => "https://tap.rsvp/schema/1.0#Cancel",
+            TapMessage::Capture(_) => "https://tap.rsvp/schema/1.0#Capture",
             TapMessage::ConfirmRelationship(_) => "https://tap.rsvp/schema/1.0#ConfirmRelationship",
             TapMessage::Connect(_) => "https://tap.rsvp/schema/1.0#Connect",
             TapMessage::DIDCommPresentation(_) => {
                 "https://didcomm.org/present-proof/3.0/presentation"
             }
             TapMessage::Error(_) => "https://tap.rsvp/schema/1.0#Error",
+            TapMessage::Escrow(_) => "https://tap.rsvp/schema/1.0#Escrow",
             TapMessage::OutOfBand(_) => "https://tap.rsvp/schema/1.0#OutOfBand",
             TapMessage::Payment(_) => "https://tap.rsvp/schema/1.0#Payment",
             TapMessage::Presentation(_) => "https://tap.rsvp/schema/1.0#Presentation",

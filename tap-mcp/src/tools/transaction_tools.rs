@@ -12,7 +12,8 @@ use std::sync::Arc;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Agent, Authorize, Cancel, Complete, Party, Reject, Revert, Settle, Transfer,
+    Agent, Authorize, Cancel, Capture, Connect, ConnectionConstraints, Escrow, Party, Payment,
+    Reject, Revert, Settle, TransactionLimits, Transfer,
 };
 use tap_node::storage::models::SchemaType;
 use tracing::{debug, error};
@@ -1249,34 +1250,49 @@ impl ToolHandler for ListTransactionsTool {
         }
     }
 }
+// New tools for Payment, Connect, Escrow, and Capture messages
 
-/// Tool for completing transactions
-pub struct CompleteTool {
+/// Tool for creating Payment messages (TAIP-14)
+pub struct CreatePaymentTool {
     tap_integration: Arc<TapIntegration>,
 }
 
-/// Parameters for completing a transaction
+/// Parameters for creating a payment
 #[derive(Debug, Deserialize)]
-struct CompleteParams {
-    agent_did: String, // The DID of the agent that will sign and send this message
-    transaction_id: String,
-    settlement_address: String,
+struct CreatePaymentParams {
+    agent_did: String,
     #[serde(default)]
-    amount: Option<String>,
+    asset: Option<String>,
+    #[serde(default)]
+    currency: Option<String>,
+    amount: String,
+    merchant: PartyInfo,
+    #[serde(default)]
+    agents: Vec<AgentInfo>,
+    #[serde(default)]
+    memo: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    invoice: Option<Value>,
+    #[serde(default)]
+    settlement_address: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    fallback_settlement_addresses: Option<Vec<String>>,
+    #[serde(default)]
+    metadata: Option<Value>,
 }
 
-/// Response for completing a transaction
+/// Response for creating a payment
 #[derive(Debug, Serialize)]
-struct CompleteResponse {
+struct CreatePaymentResponse {
     transaction_id: String,
     message_id: String,
     status: String,
-    settlement_address: String,
-    amount: Option<String>,
-    completed_at: String,
+    created_at: String,
 }
 
-impl CompleteTool {
+impl CreatePaymentTool {
     pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
         Self { tap_integration }
     }
@@ -1287,9 +1303,9 @@ impl CompleteTool {
 }
 
 #[async_trait::async_trait]
-impl ToolHandler for CompleteTool {
+impl ToolHandler for CreatePaymentTool {
     async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
-        let params: CompleteParams = match arguments {
+        let params: CreatePaymentParams = match arguments {
             Some(args) => serde_json::from_value(args)
                 .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
             None => {
@@ -1300,27 +1316,70 @@ impl ToolHandler for CompleteTool {
         };
 
         debug!(
-            "Completing transaction: {} with settlement_address: {}",
-            params.transaction_id, params.settlement_address
+            "Creating payment: amount={}, merchant={}",
+            params.amount, params.merchant.id
         );
 
-        // Create complete message
-        let complete = Complete {
-            transaction_id: params.transaction_id.clone(),
-            settlement_address: params.settlement_address.clone(),
-            amount: params.amount.clone(),
+        // Create merchant party
+        let mut merchant = Party::new(&params.merchant.id);
+        if let Some(metadata) = params.merchant.metadata {
+            if let Some(obj) = metadata.as_object() {
+                for (key, value) in obj {
+                    merchant = merchant.with_metadata_field(key.clone(), value.clone());
+                }
+            }
+        }
+
+        // Create agents
+        let agents: Vec<Agent> = params
+            .agents
+            .iter()
+            .map(|info| Agent::new(&info.id, &info.role, &info.for_party))
+            .collect();
+
+        // Create payment message based on whether it's asset or currency
+        let mut payment = if let Some(asset) = params.asset {
+            // Parse asset ID
+            let asset_id = asset
+                .parse::<AssetId>()
+                .map_err(|e| Error::invalid_parameter(format!("Invalid asset ID: {}", e)))?;
+            Payment::with_asset(asset_id, params.amount, merchant, agents)
+        } else if let Some(currency) = params.currency {
+            Payment::with_currency(currency, params.amount, merchant, agents)
+        } else {
+            return Ok(error_text_response(
+                "Either asset or currency must be specified".to_string(),
+            ));
         };
 
-        // Validate the complete message
-        if let Err(e) = complete.validate() {
+        // Add optional fields
+        if let Some(memo) = params.memo {
+            payment.memo = Some(memo);
+        }
+        // Note: Payment struct doesn't have settlement_address field
+        // Settlement addresses are handled via fallback_settlement_addresses or through agents
+        if let Some(_settlement_address) = params.settlement_address {
+            // This would need to be handled through fallback_settlement_addresses field
+            // or through an agent with SettlementAddress role
+        }
+        if let Some(metadata) = params.metadata {
+            if let Some(obj) = metadata.as_object() {
+                for (key, value) in obj {
+                    payment.metadata.insert(key.clone(), value.clone());
+                }
+            }
+        }
+
+        // Validate the payment message
+        if let Err(e) = payment.validate() {
             return Ok(error_text_response(format!(
-                "Complete validation failed: {}",
+                "Payment validation failed: {}",
                 e
             )));
         }
 
-        // Create DIDComm message using the specified agent DID
-        let didcomm_message = match complete.to_didcomm(&params.agent_did) {
+        // Create DIDComm message
+        let didcomm_message = match payment.to_didcomm(&params.agent_did) {
             Ok(msg) => msg,
             Err(e) => {
                 return Ok(error_text_response(format!(
@@ -1330,41 +1389,19 @@ impl ToolHandler for CompleteTool {
             }
         };
 
-        // Determine recipient from the message
-        let recipient_did = if !didcomm_message.to.is_empty() {
-            didcomm_message.to[0].clone()
-        } else {
-            return Ok(error_text_response(
-                "No recipient found for complete message".to_string(),
-            ));
-        };
-
-        debug!(
-            "Sending complete from {} to {} for transaction: {}",
-            params.agent_did, recipient_did, params.transaction_id
-        );
-
-        // Send the message through the TAP node (this will handle storage, logging, and delivery tracking)
+        // Send the message through the TAP node
         match self
             .tap_integration()
             .node()
             .send_message(params.agent_did.clone(), didcomm_message.clone())
             .await
         {
-            Ok(packed_message) => {
-                debug!(
-                    "Complete message sent successfully to {}, packed message length: {}",
-                    recipient_did,
-                    packed_message.len()
-                );
-
-                let response = CompleteResponse {
-                    transaction_id: params.transaction_id,
+            Ok(_) => {
+                let response = CreatePaymentResponse {
+                    transaction_id: didcomm_message.id.clone(),
                     message_id: didcomm_message.id,
                     status: "sent".to_string(),
-                    settlement_address: params.settlement_address,
-                    amount: params.amount,
-                    completed_at: chrono::Utc::now().to_rfc3339(),
+                    created_at: chrono::Utc::now().to_rfc3339(),
                 };
 
                 let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
@@ -1374,9 +1411,9 @@ impl ToolHandler for CompleteTool {
                 Ok(success_text_response(response_json))
             }
             Err(e) => {
-                error!("Failed to send complete message: {}", e);
+                error!("Failed to send payment: {}", e);
                 Ok(error_text_response(format!(
-                    "Failed to send complete message: {}",
+                    "Failed to send payment: {}",
                     e
                 )))
             }
@@ -1385,10 +1422,523 @@ impl ToolHandler for CompleteTool {
 
     fn get_definition(&self) -> Tool {
         Tool {
-            name: "tap_complete".to_string(),
-            description: "Request from merchant to complete a TAP payment (TAIP-14) transaction using the Complete message so funds are settled and the transaction is finalized."
+            name: "tap_payment".to_string(),
+            description: "Creates a TAP payment request (TAIP-14) with optional invoice"
                 .to_string(),
-            input_schema: schema::complete_schema(),
+            input_schema: schema::create_payment_schema(),
+        }
+    }
+}
+
+/// Tool for creating Connect messages (TAIP-15)
+pub struct CreateConnectTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for creating a connect message
+#[derive(Debug, Deserialize)]
+struct CreateConnectParams {
+    agent_did: String,
+    recipient_did: String,
+    for_party: String,
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    constraints: Option<ConnectionConstraintsInfo>,
+    #[serde(default)]
+    metadata: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ConnectionConstraintsInfo {
+    #[serde(default)]
+    transaction_limits: Option<TransactionLimitsInfo>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    asset_types: Option<Vec<String>>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    currency_types: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TransactionLimitsInfo {
+    #[serde(default)]
+    max_amount: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    min_amount: Option<String>,
+    #[serde(default)]
+    daily_limit: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    monthly_limit: Option<String>,
+}
+
+/// Response for creating a connect message
+#[derive(Debug, Serialize)]
+struct CreateConnectResponse {
+    connection_id: String,
+    message_id: String,
+    status: String,
+    created_at: String,
+}
+
+impl CreateConnectTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for CreateConnectTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: CreateConnectParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Creating connect message from {} to {}",
+            params.agent_did, params.recipient_did
+        );
+
+        // Create connect message
+        // Connect requires transaction_id, agent_id, for_id, and optional role
+        let transaction_id = format!("connect-{}", uuid::Uuid::new_v4());
+        let mut connect = Connect::new(
+            &transaction_id,
+            &params.agent_did,
+            &params.for_party,
+            params.role.as_deref(),
+        );
+
+        // Add constraints if provided
+        if let Some(constraints_info) = params.constraints {
+            let mut constraints = ConnectionConstraints {
+                purposes: None,
+                category_purposes: None,
+                limits: None,
+            };
+
+            if let Some(limits_info) = constraints_info.transaction_limits {
+                let mut limits = TransactionLimits {
+                    per_transaction: None,
+                    daily: None,
+                    currency: None,
+                };
+                // Map the fields to the actual TransactionLimits struct
+                limits.per_transaction = limits_info.max_amount;
+                limits.daily = limits_info.daily_limit;
+                // Note: Currency and other fields would need to be handled separately
+                constraints.limits = Some(limits);
+            }
+
+            // Note: ConnectionConstraints doesn't have asset_types and currency_types
+            // These would need to be handled through purposes or category_purposes
+
+            connect.constraints = Some(constraints);
+        }
+
+        // Add metadata if provided
+        if let Some(metadata) = params.metadata {
+            if let Some(obj) = metadata.as_object() {
+                for (_key, _value) in obj {
+                    // Note: Connect struct doesn't have direct metadata field
+                    // Metadata would be handled through the principal or agent objects
+                }
+            }
+        }
+
+        // Validate the connect message
+        if let Err(e) = connect.validate() {
+            return Ok(error_text_response(format!(
+                "Connect validation failed: {}",
+                e
+            )));
+        }
+
+        // Create DIDComm message
+        let didcomm_message = match connect.to_didcomm(&params.agent_did) {
+            Ok(mut msg) => {
+                msg.to = vec![params.recipient_did.clone()];
+                msg
+            }
+            Err(e) => {
+                return Ok(error_text_response(format!(
+                    "Failed to create DIDComm message: {}",
+                    e
+                )));
+            }
+        };
+
+        // Send the message through the TAP node
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(_) => {
+                let response = CreateConnectResponse {
+                    connection_id: didcomm_message.id.clone(),
+                    message_id: didcomm_message.id,
+                    status: "sent".to_string(),
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize response: {}", e))
+                })?;
+
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to send connect message: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to send connect message: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_connect".to_string(),
+            description: "Creates a TAP connection request (TAIP-15) to establish a relationship between parties".to_string(),
+            input_schema: schema::create_connect_schema(),
+        }
+    }
+}
+
+/// Tool for creating Escrow messages (TAIP-17)
+pub struct CreateEscrowTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for creating an escrow
+#[derive(Debug, Deserialize)]
+struct CreateEscrowParams {
+    agent_did: String,
+    #[serde(default)]
+    asset: Option<String>,
+    #[serde(default)]
+    currency: Option<String>,
+    amount: String,
+    originator: PartyInfo,
+    beneficiary: PartyInfo,
+    expiry: String,
+    agents: Vec<AgentInfo>,
+    #[serde(default)]
+    agreement: Option<String>,
+    #[serde(default)]
+    metadata: Option<Value>,
+}
+
+/// Response for creating an escrow
+#[derive(Debug, Serialize)]
+struct CreateEscrowResponse {
+    escrow_id: String,
+    message_id: String,
+    status: String,
+    expiry: String,
+    created_at: String,
+}
+
+impl CreateEscrowTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for CreateEscrowTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: CreateEscrowParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!(
+            "Creating escrow: amount={}, originator={}, beneficiary={}, expiry={}",
+            params.amount, params.originator.id, params.beneficiary.id, params.expiry
+        );
+
+        // Create parties
+        let mut originator = Party::new(&params.originator.id);
+        if let Some(metadata) = params.originator.metadata {
+            if let Some(obj) = metadata.as_object() {
+                for (key, value) in obj {
+                    originator = originator.with_metadata_field(key.clone(), value.clone());
+                }
+            }
+        }
+
+        let mut beneficiary = Party::new(&params.beneficiary.id);
+        if let Some(metadata) = params.beneficiary.metadata {
+            if let Some(obj) = metadata.as_object() {
+                for (key, value) in obj {
+                    beneficiary = beneficiary.with_metadata_field(key.clone(), value.clone());
+                }
+            }
+        }
+
+        // Create agents
+        let agents: Vec<Agent> = params
+            .agents
+            .iter()
+            .map(|info| Agent::new(&info.id, &info.role, &info.for_party))
+            .collect();
+
+        // Verify exactly one EscrowAgent exists
+        let escrow_agent_count = agents
+            .iter()
+            .filter(|a| a.role == Some("EscrowAgent".to_string()))
+            .count();
+        if escrow_agent_count != 1 {
+            return Ok(error_text_response(format!(
+                "Escrow must have exactly one agent with role 'EscrowAgent', found {}",
+                escrow_agent_count
+            )));
+        }
+
+        // Create escrow message based on whether it's asset or currency
+        let mut escrow = if let Some(asset) = params.asset {
+            Escrow::new_with_asset(
+                asset,
+                params.amount,
+                originator,
+                beneficiary,
+                params.expiry,
+                agents,
+            )
+        } else if let Some(currency) = params.currency {
+            Escrow::new_with_currency(
+                currency,
+                params.amount,
+                originator,
+                beneficiary,
+                params.expiry,
+                agents,
+            )
+        } else {
+            return Ok(error_text_response(
+                "Either asset or currency must be specified".to_string(),
+            ));
+        };
+
+        // Add optional fields
+        if let Some(agreement) = params.agreement {
+            escrow = escrow.with_agreement(agreement);
+        }
+        if let Some(metadata) = params.metadata {
+            if let Some(obj) = metadata.as_object() {
+                for (key, value) in obj {
+                    escrow = escrow.with_metadata(key.clone(), value.clone());
+                }
+            }
+        }
+
+        // Validate the escrow message
+        if let Err(e) = escrow.validate() {
+            return Ok(error_text_response(format!(
+                "Escrow validation failed: {}",
+                e
+            )));
+        }
+
+        // Create DIDComm message
+        let didcomm_message = match escrow.to_didcomm(&params.agent_did) {
+            Ok(msg) => msg,
+            Err(e) => {
+                return Ok(error_text_response(format!(
+                    "Failed to create DIDComm message: {}",
+                    e
+                )));
+            }
+        };
+
+        // Send the message through the TAP node
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(_) => {
+                let response = CreateEscrowResponse {
+                    escrow_id: didcomm_message.id.clone(),
+                    message_id: didcomm_message.id,
+                    status: "created".to_string(),
+                    expiry: escrow.expiry,
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize response: {}", e))
+                })?;
+
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to send escrow: {}", e);
+                Ok(error_text_response(format!("Failed to send escrow: {}", e)))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_escrow".to_string(),
+            description:
+                "Creates a TAP escrow request (TAIP-17) for holding assets on behalf of parties"
+                    .to_string(),
+            input_schema: schema::create_escrow_schema(),
+        }
+    }
+}
+
+/// Tool for creating Capture messages (TAIP-17)
+pub struct CaptureTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for capturing escrowed funds
+#[derive(Debug, Deserialize)]
+struct CaptureParams {
+    agent_did: String,
+    escrow_id: String,
+    #[serde(default)]
+    amount: Option<String>,
+    #[serde(default)]
+    settlement_address: Option<String>,
+}
+
+/// Response for capturing escrowed funds
+#[derive(Debug, Serialize)]
+struct CaptureResponse {
+    escrow_id: String,
+    message_id: String,
+    status: String,
+    amount_captured: Option<String>,
+    captured_at: String,
+}
+
+impl CaptureTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for CaptureTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: CaptureParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        debug!("Capturing escrow: {}", params.escrow_id);
+
+        // Create capture message
+        let mut capture = if let Some(amount) = params.amount.clone() {
+            Capture::with_amount(amount)
+        } else {
+            Capture::new()
+        };
+
+        if let Some(address) = params.settlement_address {
+            capture = capture.with_settlement_address(address);
+        }
+
+        // Validate the capture message
+        if let Err(e) = capture.validate() {
+            return Ok(error_text_response(format!(
+                "Capture validation failed: {}",
+                e
+            )));
+        }
+
+        // Create DIDComm message with thread ID linking to the escrow
+        let didcomm_message = match capture.to_didcomm(&params.agent_did) {
+            Ok(mut msg) => {
+                msg.thid = Some(params.escrow_id.clone());
+                msg
+            }
+            Err(e) => {
+                return Ok(error_text_response(format!(
+                    "Failed to create DIDComm message: {}",
+                    e
+                )));
+            }
+        };
+
+        // Send the message through the TAP node
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(_) => {
+                let response = CaptureResponse {
+                    escrow_id: params.escrow_id,
+                    message_id: didcomm_message.id,
+                    status: "sent".to_string(),
+                    amount_captured: params.amount,
+                    captured_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize response: {}", e))
+                })?;
+
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to send capture: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to send capture: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_capture".to_string(),
+            description: "Captures escrowed funds (TAIP-17) to release them to the beneficiary"
+                .to_string(),
+            input_schema: schema::create_capture_schema(),
         }
     }
 }

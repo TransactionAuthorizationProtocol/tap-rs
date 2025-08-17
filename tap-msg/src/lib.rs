@@ -13,6 +13,7 @@ pub mod didcomm;
 pub mod error;
 // pub mod examples; // Temporarily disabled during refactor
 pub mod message;
+pub mod settlement_address;
 pub mod utils;
 
 // Re-export the derive macros from tap-msg-derive
@@ -29,6 +30,7 @@ pub use message::{
     LineItem, MessageContext, OrderReference, Party, Payment, Presentation, Reject, Settle,
     TapMessageBody, TaxCategory, TaxSubtotal, TaxTotal, TransactionContext, Transfer,
 };
+pub use settlement_address::{PayToUri, SettlementAddress, SettlementAddressError};
 
 // Conditional compilation for WASM targets
 #[cfg(target_arch = "wasm32")]

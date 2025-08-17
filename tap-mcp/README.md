@@ -93,7 +93,7 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
-TAP-MCP provides 29 comprehensive tools covering the complete TAP transaction lifecycle:
+TAP-MCP provides 34 comprehensive tools covering the complete TAP transaction lifecycle:
 
 ### Agent Management
 
@@ -579,6 +579,8 @@ Views the raw content of a received message. Shows the complete raw message as r
 
 ## Available Resources
 
+TAP-MCP provides 6 read-only resources for accessing TAP data without requiring tool calls:
+
 ### `tap://agents`
 Read-only access to agent information.
 
@@ -612,12 +614,39 @@ tap://deliveries?limit=50&offset=100       # Pagination
 tap://deliveries/123                        # Specific delivery record by ID
 ```
 
-### `tap://schemas`
-JSON schemas for TAP message types.
+### `tap://database-schema`
+**New in v0.5.0** - Access to database schema information for agent storage.
 
 ```
-tap://schemas                          # All schemas
+tap://database-schema?agent_did=did:key:z6Mk...    # Complete schema for agent's database (required)
+tap://database-schema?agent_did=did:key:z6Mk...&table_name=messages # Specific table schema
 ```
+
+Returns comprehensive database schema information including:
+- Table structures and column definitions
+- Index information and constraints  
+- Row counts for each table
+- Database path and metadata
+
+This resource provides the same information as the `tap_get_database_schema` tool but through the MCP resource interface, making it more appropriate for read-only data access.
+
+### `tap://schemas`
+JSON schemas for TAP message types with enhanced lookup capabilities.
+
+```
+tap://schemas                          # All TAP message schemas with version info
+tap://schemas/Transfer                 # Specific schema for Transfer message type
+tap://schemas/Authorize                # Specific schema for Authorize message type
+tap://schemas/Reject                   # Specific schema for Reject message type
+tap://schemas/Settle                   # Specific schema for Settle message type
+tap://schemas/Cancel                   # Specific schema for Cancel message type
+```
+
+**Enhanced in v0.5.0** with individual schema lookup:
+- Access specific message schemas by name (e.g., `Transfer`, `Authorize`)
+- Search by message type URL (e.g., `https://tap.rsvp/schema/1.0#Transfer`)
+- Includes comprehensive JSON schemas for all TAIP message types
+- Version information and TAIP specification references
 
 ### `tap://received`
 Access to raw received messages before processing.
@@ -737,6 +766,15 @@ tap-mcp-client resource tap://deliveries?agent_did=did:key:z6MkpGuzuD38tpgZKPfmL
 
 # Check failed deliveries
 tap-mcp-client resource tap://deliveries?status=failed
+
+# Get database schema for the agent
+tap-mcp-client resource tap://database-schema?agent_did=did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc
+
+# Get schema for Transfer messages
+tap-mcp-client resource tap://schemas/Transfer
+
+# Get all message schemas
+tap-mcp-client resource tap://schemas
 
 # List customers that the agent represents
 echo '{"agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc"}' | \

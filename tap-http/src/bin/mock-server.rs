@@ -1,10 +1,16 @@
-use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
+use http_body_util::BodyExt;
+use hyper::server::conn::http1;
+use hyper::service::service_fn;
+use hyper::{Method, Request, Response, StatusCode};
+use hyper_util::rt::TokioIo;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use tokio::net::TcpListener;
 
 /// Handle requests and return appropriate responses
-async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible> {
+async fn handle_request(
+    req: Request<hyper::body::Incoming>,
+) -> Result<Response<String>, Infallible> {
     println!("Received request: {:?}", req);
 
     // Handle different routes
@@ -15,7 +21,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             let response = Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
-                .body(Body::from(r#"{"status":"ok","version":"0.1.0"}"#))
+                .body(r#"{"status":"ok","version":"0.1.0"}"#.to_string())
                 .unwrap();
             Ok(response)
         }
@@ -25,7 +31,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             println!("DIDComm message received");
 
             // Get the request body
-            let body_bytes = hyper::body::to_bytes(req.into_body()).await.unwrap();
+            let body_bytes = req.into_body().collect().await.unwrap().to_bytes();
             let body_str = String::from_utf8_lossy(&body_bytes);
 
             // Print the request content
@@ -54,9 +60,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             let response = Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
-                .body(Body::from(
-                    r#"{"status":"success","message":"Message received and logged"}"#,
-                ))
+                .body(r#"{"status":"success","message":"Message received and logged"}"#.to_string())
                 .unwrap();
             Ok(response)
         }
@@ -66,7 +70,7 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
             println!("Unknown route requested: {}", req.uri().path());
             let response = Response::builder()
                 .status(StatusCode::NOT_FOUND)
-                .body(Body::from("Not Found"))
+                .body("Not Found".to_string())
                 .unwrap();
             Ok(response)
         }
@@ -74,21 +78,28 @@ async fn handle_request(req: Request<Body>) -> Result<Response<Body>, Infallible
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Configure the server address
     let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
     println!("Starting mock TAP server on {}", addr);
 
-    // Create a service function
-    let make_svc =
-        make_service_fn(|_conn| async { Ok::<_, Infallible>(service_fn(handle_request)) });
-
-    // Create and start the server
-    let server = Server::bind(&addr).serve(make_svc);
+    // Create a TCP listener
+    let listener = TcpListener::bind(addr).await?;
     println!("Server started. Press Ctrl+C to stop.");
 
-    // Run the server
-    if let Err(e) = server.await {
-        eprintln!("Server error: {}", e);
+    // Accept connections in a loop
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let io = TokioIo::new(stream);
+
+        // Spawn a task to handle the connection
+        tokio::task::spawn(async move {
+            if let Err(err) = http1::Builder::new()
+                .serve_connection(io, service_fn(handle_request))
+                .await
+            {
+                eprintln!("Error serving connection: {:?}", err);
+            }
+        });
     }
 }

@@ -223,6 +223,7 @@ fn create_test_payment_request() -> Payment {
         expiry: None,
         invoice: None,
         connection_id: None,
+        fallback_settlement_addresses: None,
         metadata: HashMap::new(),
         merchant,
         customer: Some(customer),

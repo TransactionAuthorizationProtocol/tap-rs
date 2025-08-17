@@ -22,6 +22,9 @@ pub fn create_basic_invoice_example() -> Result<Invoice> {
             unit_price: 10.0,
             line_total: 50.0,
             tax_category: None,
+            name: None,
+            image: None,
+            url: None,
         },
         LineItem {
             id: "2".to_string(),
@@ -31,6 +34,9 @@ pub fn create_basic_invoice_example() -> Result<Invoice> {
             unit_price: 5.0,
             line_total: 50.0,
             tax_category: None,
+            name: None,
+            image: None,
+            url: None,
         },
     ];
 
@@ -64,6 +70,9 @@ pub fn create_invoice_with_tax_example() -> Result<Invoice> {
             unit_price: 10.0,
             line_total: 50.0,
             tax_category: None,
+            name: None,
+            image: None,
+            url: None,
         },
         LineItem {
             id: "2".to_string(),
@@ -73,6 +82,9 @@ pub fn create_invoice_with_tax_example() -> Result<Invoice> {
             unit_price: 5.0,
             line_total: 50.0,
             tax_category: None,
+            name: None,
+            image: None,
+            url: None,
         },
     ];
 

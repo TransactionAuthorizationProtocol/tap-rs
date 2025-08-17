@@ -12,6 +12,7 @@ use crate::error::{Error, Result};
 use crate::message::agent::TapParticipant;
 use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessageBody};
 use crate::message::{Agent, Party};
+use crate::settlement_address::SettlementAddress;
 use crate::TapMessage;
 
 /// Invoice reference that can be either a URL or an Invoice object
@@ -135,6 +136,13 @@ pub struct Payment {
     #[tap(connection_id)]
     pub connection_id: Option<String>,
 
+    /// Fallback settlement addresses for payment flexibility (optional)
+    #[serde(
+        rename = "fallbackSettlementAddresses",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub fallback_settlement_addresses: Option<Vec<SettlementAddress>>,
+
     /// Additional metadata (optional).
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, serde_json::Value>,
@@ -154,6 +162,7 @@ pub struct PaymentBuilder {
     expiry: Option<String>,
     invoice: Option<InvoiceReference>,
     agents: Vec<Agent>,
+    fallback_settlement_addresses: Option<Vec<SettlementAddress>>,
     metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -258,6 +267,22 @@ impl PaymentBuilder {
         self
     }
 
+    /// Add a fallback settlement address
+    pub fn add_fallback_settlement_address(mut self, address: SettlementAddress) -> Self {
+        if let Some(addresses) = &mut self.fallback_settlement_addresses {
+            addresses.push(address);
+        } else {
+            self.fallback_settlement_addresses = Some(vec![address]);
+        }
+        self
+    }
+
+    /// Set all fallback settlement addresses
+    pub fn fallback_settlement_addresses(mut self, addresses: Vec<SettlementAddress>) -> Self {
+        self.fallback_settlement_addresses = Some(addresses);
+        self
+    }
+
     /// Build the Payment object
     ///
     /// # Panics
@@ -282,12 +307,18 @@ impl PaymentBuilder {
             invoice: self.invoice,
             agents: self.agents,
             connection_id: None,
+            fallback_settlement_addresses: self.fallback_settlement_addresses,
             metadata: self.metadata,
         }
     }
 }
 
 impl Payment {
+    /// Creates a builder for constructing Payment objects
+    pub fn builder() -> PaymentBuilder {
+        PaymentBuilder::default()
+    }
+
     /// Creates a new Payment with an asset
     pub fn with_asset(asset: AssetId, amount: String, merchant: Party, agents: Vec<Agent>) -> Self {
         Self {
@@ -303,6 +334,7 @@ impl Payment {
             invoice: None,
             agents,
             connection_id: None,
+            fallback_settlement_addresses: None,
             metadata: HashMap::new(),
         }
     }
@@ -327,6 +359,7 @@ impl Payment {
             invoice: None,
             agents,
             connection_id: None,
+            fallback_settlement_addresses: None,
             metadata: HashMap::new(),
         }
     }
@@ -352,6 +385,7 @@ impl Payment {
             invoice: None,
             agents,
             connection_id: None,
+            fallback_settlement_addresses: None,
             metadata: HashMap::new(),
         }
     }
