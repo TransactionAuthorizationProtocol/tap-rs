@@ -8,7 +8,6 @@ import type {
   DIDCommMessage,
   PackedMessage,
   KeyType,
-  DIDDocument,
   DIDResolver,
   DIDResolutionResult,
   PackOptions,
@@ -391,49 +390,6 @@ export class TapAgent {
     this.isDisposed = true;
   }
 
-  /**
-   * Built-in DID:key resolver implementation
-   * @param did - DID:key to resolve
-   * @returns Promise resolving to DID resolution result
-   * @private
-   */
-  private async resolveDidKey(did: string): Promise<DIDResolutionResult> {
-    try {
-      // Extract the multibase key from the DID
-      const keyId = did.replace('did:key:', '');
-      
-      // For now, create a basic DID document
-      // In a full implementation, this would decode the multibase key
-      // and create the appropriate verification methods
-      const didDocument: DIDDocument = {
-        id: did,
-        verificationMethod: [
-          {
-            id: `${did}#key-1`,
-            type: 'Ed25519VerificationKey2020',
-            controller: did,
-            publicKeyMultibase: keyId,
-          },
-        ],
-        authentication: [`${did}#key-1`],
-        assertionMethod: [`${did}#key-1`],
-        keyAgreement: [`${did}#key-1`],
-      };
-
-      return {
-        didResolutionMetadata: {},
-        didDocument,
-        didDocumentMetadata: {},
-      };
-    } catch (error) {
-      return {
-        didResolutionMetadata: {
-          error: 'notFound',
-        },
-        didDocumentMetadata: {},
-      };
-    }
-  }
 
   /**
    * Ensure the agent is not disposed
