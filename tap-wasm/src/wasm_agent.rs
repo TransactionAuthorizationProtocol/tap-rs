@@ -253,9 +253,30 @@ impl WasmTapAgent {
 
             // Pack the message
             let key_manager = agent.agent_key_manager();
+
+            // Debug log the message we're about to pack
+            if debug {
+                console::log_1(&JsValue::from_str(&format!(
+                    "Packing message: id={}, type={}, from={}, to={:?}",
+                    tap_message.id, tap_message.type_, tap_message.from, tap_message.to
+                )));
+            }
+
             let packed = match tap_message.pack(&**key_manager, pack_options).await {
-                Ok(packed_msg) => packed_msg,
-                Err(e) => return Err(JsValue::from_str(&format!("Failed to pack message: {}", e))),
+                Ok(packed_msg) => {
+                    if debug {
+                        console::log_1(&JsValue::from_str(&format!(
+                            "Packed message length: {}, preview: {}...",
+                            packed_msg.len(),
+                            &packed_msg.chars().take(50).collect::<String>()
+                        )));
+                    }
+                    packed_msg
+                }
+                Err(e) => {
+                    console::error_1(&JsValue::from_str(&format!("Pack error: {:?}", e)));
+                    return Err(JsValue::from_str(&format!("Failed to pack message: {}", e)));
+                }
             };
 
             if debug {
@@ -301,9 +322,11 @@ impl WasmTapAgent {
 
         future_to_promise(async move {
             // Create unpack options
+            // For signed messages, we don't expect a specific recipient
+            // For encrypted messages, we expect to be one of the recipients
             let unpack_options = UnpackOptions {
                 expected_security_mode: SecurityMode::Any,
-                expected_recipient_kid: Some(format!("{}#keys-1", agent.config.agent_did)),
+                expected_recipient_kid: None, // Don't require specific recipient for signed messages
                 require_signature: false,
             };
 

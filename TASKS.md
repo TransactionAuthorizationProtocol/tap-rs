@@ -16,14 +16,14 @@
 
 ### Phase 2: Message Operations & Tests
 
-- [ ] Write tests for delegating pack_message to existing TapAgent
-- [ ] Write tests for delegating unpack_message to existing TapAgent
-- [ ] Write tests for all TAP message types via WASM
-- [ ] Write tests for WASM-specific error handling
-- [ ] Implement pack_message delegation to TapAgent
-- [ ] Implement unpack_message delegation to TapAgent
-- [ ] Ensure TAP message type compatibility
-- [ ] Add WASM error conversion layer
+- [x] Write tests for delegating pack_message to existing TapAgent
+- [x] Write tests for delegating unpack_message to existing TapAgent
+- [x] Write tests for all TAP message types via WASM
+- [x] Write tests for WASM-specific error handling
+- [x] Implement pack_message delegation to TapAgent
+- [x] Implement unpack_message delegation to TapAgent
+- [x] Ensure TAP message type compatibility
+- [x] Add WASM error conversion layer
 
 ### Phase 3: WASM Bindings & JavaScript Interface
 
@@ -35,6 +35,7 @@
 - [ ] Implement async message operations
 - [ ] Implement utility function exports
 - [ ] Implement type conversion layer
+- [ ] Update tap-wasm/CLAUDE.md
 
 ### Phase 4: TypeScript Wrapper & npm Package
 
@@ -46,6 +47,7 @@
 - [ ] Implement type mapping with @taprsvp/types
 - [ ] Implement factory methods and utilities
 - [ ] Setup npm package structure (@taprsvp/agent)
+- [ ] Update tap-wasm/pkg/CLAUDE.md
 
 ### Phase 5: DID Resolution & Integration
 
