@@ -52,9 +52,9 @@
   <p>This example demonstrates how to use the TAP WebAssembly package.</p>
   
   <div class="actions">
-    <button id="createMessage">Create Transfer Message</button>
-    <button id="createAgent">Create Agent</button>
-    <button id="signMessage">Sign Message (requires creating both first)</button>
+    <button id="createAgent">1. Create Agent</button>
+    <button id="createMessage">2. Create Transfer Message</button>
+    <button id="signMessage">3. Pack & Sign Message</button>
   </div>
   
   <h2>Output:</h2>
@@ -62,12 +62,10 @@
   
   <script type="module">
     import init, { 
-      init_tap_wasm, 
-      Message, 
-      TapAgent, 
+      WasmTapAgent, 
+      TapNode,
       MessageType, 
-      generate_uuid_v4,
-      create_did_key
+      generate_uuid_v4
     } from '../pkg/tap_wasm.js';
 
     let message = null;
@@ -75,7 +73,6 @@
     
     // Initialize the WASM module
     await init();
-    init_tap_wasm();
     
     const output = document.getElementById('output');
     
@@ -95,31 +92,37 @@
       output.innerHTML = '';
       
       try {
-        // Create a new message
-        message = new Message('msg_' + generate_uuid_v4(), 'Transfer', '1.0');
+        if (!agent) {
+          log('Please create an agent first.');
+          return;
+        }
+        
+        // Create a new message using the agent
+        message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
         
         // Set the transfer message body
-        message.set_transfer_body({
+        const body = {
           asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
           originator: {
-            id: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK",
-            role: "originator"
+            '@id': "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
           },
           beneficiary: {
-            id: "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
-            role: "beneficiary"
+            '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL"
           },
           amount: "100.0",
           agents: [],
           memo: "Test transfer"
-        });
+        };
+        
+        // Update the message body
+        message.body = body;
         
         log('Created transfer message:');
         log(prettyPrint({
-          id: message.id(),
-          type: message.message_type(),
-          version: message.version(),
-          transfer: message.get_transfer_body()
+          id: message.id,
+          type: message.type,
+          from: message.from,
+          body: message.body
         }));
       } catch (error) {
         log('Error creating message: ' + error);
@@ -132,7 +135,7 @@
       
       try {
         // Create a new agent
-        agent = new TapAgent({
+        agent = new WasmTapAgent({
           nickname: "Test Agent",
           debug: true
         });
@@ -147,8 +150,8 @@
       }
     });
     
-    // Sign a message
-    document.getElementById('signMessage').addEventListener('click', () => {
+    // Pack and sign a message
+    document.getElementById('signMessage').addEventListener('click', async () => {
       output.innerHTML = '';
       
       if (!message || !agent) {
@@ -157,22 +160,38 @@
       }
       
       try {
-        // Set the message source
-        agent.set_from(message);
+        log('Packing message...');
         
-        // Sign the message
-        agent.sign_message(message);
+        // Pack the message (this signs it)
+        const packedResult = await agent.packMessage(message);
         
-        log('Signed message:');
+        log('Message packed successfully:');
         log(prettyPrint({
-          id: message.id(),
-          type: message.message_type(),
-          version: message.version(),
-          from: message.from_did(),
-          transfer: message.get_transfer_body()
+          originalMessage: {
+            id: message.id,
+            type: message.type,
+            from: message.from,
+            body: message.body
+          },
+          packedMessage: packedResult.message.substring(0, 100) + '...',
+          metadata: packedResult.metadata
         }));
+        
+        // Try to unpack the message to verify it worked
+        log('Unpacking message to verify...');
+        const unpackedResult = await agent.unpackMessage(packedResult.message);
+        
+        log('Message unpacked successfully:');
+        log(prettyPrint({
+          id: unpackedResult.id,
+          type: unpackedResult.type,
+          from: unpackedResult.from,
+          to: unpackedResult.to
+        }));
+        
       } catch (error) {
-        log('Error signing message: ' + error);
+        log('Error packing/unpacking message: ' + error);
+        console.error(error);
       }
     });
   </script>

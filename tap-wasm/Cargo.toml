@@ -40,8 +40,11 @@ default = ["console_error_panic_hook"]
 
 [dev-dependencies]
 wasm-bindgen-test = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.6"
 
 [[bench]]
 name = "wasm_binding_benchmark"
 harness = false
+required-features = []
