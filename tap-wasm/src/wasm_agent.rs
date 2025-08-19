@@ -90,11 +90,29 @@ impl WasmTapAgent {
             // Create the agent with the provided DID
             TapAgent::new(agent_config, Arc::new(key_manager))
         } else {
-            // For WASM, we'll create a simple agent with a default key
-            // We can't use from_ephemeral_key which is async
-            let agent_config =
-                AgentConfig::new(format!("did:key:z6Mk{}", uuid::Uuid::new_v4().simple()))
-                    .with_debug(debug);
+            // Generate a new key and DID for WASM
+            let options = DIDGenerationOptions { 
+                key_type: KeyType::Ed25519 
+            };
+            let generated_key = match key_manager.generate_key_without_save(options) {
+                Ok(key) => key,
+                Err(e) => {
+                    return Err(JsValue::from_str(&format!(
+                        "Failed to generate key: {}",
+                        e
+                    )))
+                }
+            };
+            
+            // Add the key to the key manager
+            if let Err(e) = key_manager.add_key_without_save(&generated_key) {
+                return Err(JsValue::from_str(&format!(
+                    "Failed to add key: {}",
+                    e
+                )));
+            }
+            
+            let agent_config = AgentConfig::new(generated_key.did.clone()).with_debug(debug);
             TapAgent::new(agent_config, Arc::new(key_manager))
         };
 
