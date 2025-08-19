@@ -5,14 +5,14 @@
 
 ### Phase 1: Core WASM Bindings & Tests
 
-- [ ] Write tests for WasmTapAgent wrapper around existing TapAgent
-- [ ] Write tests for private key export functionality
-- [ ] Write tests for private key import functionality
-- [ ] Write tests for JsValue to Rust type conversions
-- [ ] Create WasmTapAgent wrapper struct in tap-wasm
-- [ ] Implement private key export from AgentKeyManager
-- [ ] Implement private key import to create TapAgent
-- [ ] Implement JsValue conversion layer
+- [x] Write tests for WasmTapAgent wrapper around existing TapAgent
+- [x] Write tests for private key export functionality
+- [x] Write tests for private key import functionality
+- [x] Write tests for JsValue to Rust type conversions
+- [x] Create WasmTapAgent wrapper struct in tap-wasm
+- [x] Implement private key export from AgentKeyManager
+- [x] Implement private key import to create TapAgent
+- [x] Implement JsValue conversion layer
 
 ### Phase 2: Message Operations & Tests
 

@@ -34,6 +34,7 @@ getrandom = { workspace = true, features = ["js"] }
 base64 = "0.22"
 ed25519-dalek = { version = "2.2", features = ["rand_core"] }
 rand = "0.8"
+hex = "0.4"
 
 [features]
 default = ["console_error_panic_hook"]

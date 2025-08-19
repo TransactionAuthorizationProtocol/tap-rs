@@ -46,6 +46,54 @@ pub struct WasmTapAgent {
 
 #[wasm_bindgen]
 impl WasmTapAgent {
+    /// Creates a new agent from an existing private key
+    #[wasm_bindgen(js_name = fromPrivateKey)]
+    pub async fn from_private_key(
+        private_key_hex: String,
+        key_type_str: String,
+    ) -> Result<WasmTapAgent, JsValue> {
+        console_error_panic_hook::set_once();
+
+        // Convert hex string to bytes
+        let private_key_bytes = hex::decode(&private_key_hex)
+            .map_err(|e| JsValue::from_str(&format!("Invalid hex private key: {}", e)))?;
+
+        // Convert key type string to KeyType enum
+        let key_type = match key_type_str.as_str() {
+            "Ed25519" => KeyType::Ed25519,
+            "P256" => KeyType::P256,
+            "Secp256k1" => KeyType::Secp256k1,
+            _ => {
+                return Err(JsValue::from_str(&format!(
+                    "Invalid key type: {}",
+                    key_type_str
+                )))
+            }
+        };
+
+        // Create TapAgent from private key
+        let (agent, did) = TapAgent::from_private_key(&private_key_bytes, key_type, false)
+            .await
+            .map_err(|e| {
+                JsValue::from_str(&format!("Failed to create agent from private key: {}", e))
+            })?;
+
+        if agent.config.debug {
+            console::log_1(&JsValue::from_str(&format!(
+                "Created WASM TAP Agent from private key with DID: {}",
+                did
+            )));
+        }
+
+        Ok(WasmTapAgent {
+            agent,
+            nickname: None,
+            debug: false,
+            message_handlers: HashMap::new(),
+            message_subscribers: Vec::new(),
+        })
+    }
+
     /// Creates a new agent with the specified configuration
     #[wasm_bindgen(constructor)]
     pub fn new(config: JsValue) -> std::result::Result<WasmTapAgent, JsValue> {
@@ -91,27 +139,19 @@ impl WasmTapAgent {
             TapAgent::new(agent_config, Arc::new(key_manager))
         } else {
             // Generate a new key and DID for WASM
-            let options = DIDGenerationOptions { 
-                key_type: KeyType::Ed25519 
+            let options = DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
             };
             let generated_key = match key_manager.generate_key_without_save(options) {
                 Ok(key) => key,
-                Err(e) => {
-                    return Err(JsValue::from_str(&format!(
-                        "Failed to generate key: {}",
-                        e
-                    )))
-                }
+                Err(e) => return Err(JsValue::from_str(&format!("Failed to generate key: {}", e))),
             };
-            
+
             // Add the key to the key manager
             if let Err(e) = key_manager.add_key_without_save(&generated_key) {
-                return Err(JsValue::from_str(&format!(
-                    "Failed to add key: {}",
-                    e
-                )));
+                return Err(JsValue::from_str(&format!("Failed to add key: {}", e)));
             }
-            
+
             let agent_config = AgentConfig::new(generated_key.did.clone()).with_debug(debug);
             TapAgent::new(agent_config, Arc::new(key_manager))
         };
@@ -140,6 +180,46 @@ impl WasmTapAgent {
     /// Gets the agent's nickname
     pub fn nickname(&self) -> Option<String> {
         self.nickname.clone()
+    }
+
+    /// Export the agent's private key as a hex string
+    #[wasm_bindgen(js_name = exportPrivateKey)]
+    pub fn export_private_key(&self) -> Result<String, JsValue> {
+        // Get the key manager from the agent
+        let key_manager = self.agent.agent_key_manager();
+
+        // Get the agent's DID
+        let did = &self.agent.config.agent_did;
+
+        // Get the generated key from the key manager
+        let generated_key = key_manager
+            .get_generated_key(did)
+            .map_err(|e| JsValue::from_str(&format!("Failed to get key for DID {}: {}", did, e)))?;
+
+        // Convert private key bytes to hex string
+        let hex_private_key = hex::encode(&generated_key.private_key);
+
+        Ok(hex_private_key)
+    }
+
+    /// Export the agent's public key as a hex string
+    #[wasm_bindgen(js_name = exportPublicKey)]
+    pub fn export_public_key(&self) -> Result<String, JsValue> {
+        // Get the key manager from the agent
+        let key_manager = self.agent.agent_key_manager();
+
+        // Get the agent's DID
+        let did = &self.agent.config.agent_did;
+
+        // Get the generated key from the key manager
+        let generated_key = key_manager
+            .get_generated_key(did)
+            .map_err(|e| JsValue::from_str(&format!("Failed to get key for DID {}: {}", did, e)))?;
+
+        // Convert public key bytes to hex string
+        let hex_public_key = hex::encode(&generated_key.public_key);
+
+        Ok(hex_public_key)
     }
 
     /// Pack a message using this agent's keys for transmission
