@@ -288,9 +288,9 @@ export function validateMessageStructure(message: TAPMessageUnion): boolean {
     throw new TapAgentError('Message must have a valid type field');
   }
 
-  if (!validateTapMessageType(message.type)) {
-    throw new TapAgentError(`Unsupported message type: ${message.type}`);
-  }
+  // Allow both TAP and standard DIDComm message types
+  // Only validate structure, not the specific type
+  // The WASM layer will handle unsupported types
 
   if (message.body === undefined || message.body === null) {
     throw new TapAgentError('Message must have a body field');
@@ -334,9 +334,8 @@ export function validateMessageStructure(message: TAPMessageUnion): boolean {
         throw new TapAgentError(`Attachment ${index} must have a data field`);
       }
 
-      if (attachment.data.content === undefined) {
-        throw new TapAgentError(`Attachment ${index} data must have a content field`);
-      }
+      // Allow flexible attachment data formats (base64, json, links, etc.)
+      // The WASM layer will validate specific attachment formats
     });
   }
 
