@@ -375,11 +375,11 @@ describe('TapAgent', () => {
       agent = await TapAgent.create();
     });
 
-    it('should create a message with proper structure', () => {
+    it('should create a message with proper structure', async () => {
       const messageType = 'Transfer';
       const body = { amount: '100.0', asset: 'USD' };
       
-      const message = agent.createMessage(messageType, body);
+      const message = await agent.createMessage(messageType, body);
       
       expect(message).toEqual({
         id: 'uuid-1234-5678-9012',
@@ -391,23 +391,23 @@ describe('TapAgent', () => {
       expect(mockWasmModule.generateUUID).toHaveBeenCalled();
     });
 
-    it('should create message with custom ID', () => {
+    it('should create message with custom ID', async () => {
       const messageType = 'Payment';
       const body = { amount: '50.0' };
       const customId = 'custom-id-123';
       
-      const message = agent.createMessage(messageType, body, { id: customId });
+      const message = await agent.createMessage(messageType, body, { id: customId });
       
       expect(message.id).toBe(customId);
       expect(mockWasmModule.generateUUID).not.toHaveBeenCalled();
     });
 
-    it('should create message with recipients', () => {
+    it('should create message with recipients', async () => {
       const messageType = 'Authorize';
       const body = { transaction_id: 'tx-123' };
       const recipients = ['did:key:recipient1', 'did:key:recipient2'];
       
-      const message = agent.createMessage(messageType, body, { to: recipients });
+      const message = await agent.createMessage(messageType, body, { to: recipients });
       
       expect(message.to).toEqual(recipients);
     });
@@ -475,7 +475,7 @@ describe('TapAgent', () => {
         to: 'account2',
       };
 
-      const message = agent.createMessage('Transfer', transferBody);
+      const message = await agent.createMessage('Transfer', transferBody);
       
       // TypeScript should enforce that body matches TransferBody
       expect(message.body.amount).toBe('100.0');

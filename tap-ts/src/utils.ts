@@ -2,7 +2,7 @@
  * Utility functions for TAP agent operations
  */
 
-import { generatePrivateKey as wasmGeneratePrivateKey, generateUUID as wasmGenerateUUID, WasmKeyType } from 'tap-wasm';
+import { getWasmExports } from './wasm-loader.js';
 import type { KeyType } from './types.js';
 import { TapAgentError } from './types.js';
 
@@ -11,12 +11,13 @@ import { TapAgentError } from './types.js';
  * @param keyType - The type of key to generate (default: Ed25519)
  * @returns Hex-encoded private key string
  */
-export function generatePrivateKey(keyType: KeyType = 'Ed25519'): string {
+export async function generatePrivateKey(keyType: KeyType = 'Ed25519'): Promise<string> {
   try {
     if (!validateKeyType(keyType)) {
       throw new TapAgentError(`Unsupported key type: ${keyType}`);
     }
     
+    const { generatePrivateKey: wasmGeneratePrivateKey } = await getWasmExports();
     return wasmGeneratePrivateKey(keyType);
   } catch (error) {
     if (error instanceof TapAgentError) {
@@ -30,8 +31,9 @@ export function generatePrivateKey(keyType: KeyType = 'Ed25519'): string {
  * Generate a new UUID v4 string
  * @returns UUID v4 string
  */
-export function generateUUID(): string {
+export async function generateUUID(): Promise<string> {
   try {
+    const { generateUUID: wasmGenerateUUID } = await getWasmExports();
     return wasmGenerateUUID();
   } catch (error) {
     throw new TapAgentError('Failed to generate UUID', 'UUID_GENERATION_ERROR', error as Error);
@@ -90,7 +92,8 @@ export function validateKeyType(keyType: string | null | undefined): keyType is 
  * @returns WASM key type enum value
  * @internal
  */
-export function keyTypeToWasm(keyType: KeyType): number {
+export async function keyTypeToWasm(keyType: KeyType): Promise<number> {
+  const { WasmKeyType } = await getWasmExports();
   switch (keyType) {
     case 'Ed25519':
       return WasmKeyType.Ed25519;

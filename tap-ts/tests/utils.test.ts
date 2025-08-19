@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-// Mock the WASM module
-const mockWasmModule = {
+// Mock the WASM loader module
+const mockWasmExports = {
   generatePrivateKey: vi.fn(() => 'generated-private-key-hex'),
   generateUUID: vi.fn(() => 'uuid-1234-5678-9012-3456'),
   WasmKeyType: {
@@ -11,7 +11,10 @@ const mockWasmModule = {
   },
 };
 
-vi.mock('tap-wasm', () => mockWasmModule);
+vi.mock('../src/wasm-loader.js', () => ({
+  getWasmExports: vi.fn(async () => mockWasmExports),
+  initWasm: vi.fn(async () => {}),
+}));
 
 // Import after mocking
 const { generatePrivateKey, generateUUID, isValidDID, isValidPrivateKey, validateKeyType } = await import('../src/utils.js');
@@ -26,63 +29,63 @@ describe('Utils', () => {
   });
 
   describe('generatePrivateKey', () => {
-    it('should generate Ed25519 private key by default', () => {
-      const privateKey = generatePrivateKey();
+    it('should generate Ed25519 private key by default', async () => {
+      const privateKey = await generatePrivateKey();
       
       expect(privateKey).toBe('generated-private-key-hex');
-      expect(mockWasmModule.generatePrivateKey).toHaveBeenCalledWith('Ed25519');
+      expect(mockWasmExports.generatePrivateKey).toHaveBeenCalledWith('Ed25519');
     });
 
-    it('should generate private key for specified key type', () => {
-      const privateKey = generatePrivateKey('P256');
+    it('should generate private key for specified key type', async () => {
+      const privateKey = await generatePrivateKey('P256');
       
       expect(privateKey).toBe('generated-private-key-hex');
-      expect(mockWasmModule.generatePrivateKey).toHaveBeenCalledWith('P256');
+      expect(mockWasmExports.generatePrivateKey).toHaveBeenCalledWith('P256');
     });
 
-    it('should generate secp256k1 private key', () => {
-      const privateKey = generatePrivateKey('secp256k1');
+    it('should generate secp256k1 private key', async () => {
+      const privateKey = await generatePrivateKey('secp256k1');
       
       expect(privateKey).toBe('generated-private-key-hex');
-      expect(mockWasmModule.generatePrivateKey).toHaveBeenCalledWith('secp256k1');
+      expect(mockWasmExports.generatePrivateKey).toHaveBeenCalledWith('secp256k1');
     });
 
-    it('should throw error for invalid key type', () => {
-      expect(() => generatePrivateKey('InvalidType' as any)).toThrow('Unsupported key type');
+    it('should throw error for invalid key type', async () => {
+      await expect(generatePrivateKey('InvalidType' as any)).rejects.toThrow('Unsupported key type');
     });
 
-    it('should handle WASM errors gracefully', () => {
-      mockWasmModule.generatePrivateKey.mockImplementation(() => {
+    it('should handle WASM errors gracefully', async () => {
+      mockWasmExports.generatePrivateKey.mockImplementation(() => {
         throw new Error('WASM error');
       });
 
-      expect(() => generatePrivateKey()).toThrow('Failed to generate private key');
+      await expect(generatePrivateKey()).rejects.toThrow('Failed to generate private key');
     });
   });
 
   describe('generateUUID', () => {
-    it('should generate a valid UUID', () => {
-      const uuid = generateUUID();
+    it('should generate a valid UUID', async () => {
+      const uuid = await generateUUID();
       
       expect(uuid).toBe('uuid-1234-5678-9012-3456');
-      expect(mockWasmModule.generateUUID).toHaveBeenCalled();
+      expect(mockWasmExports.generateUUID).toHaveBeenCalled();
     });
 
-    it('should handle WASM errors gracefully', () => {
-      mockWasmModule.generateUUID.mockImplementation(() => {
+    it('should handle WASM errors gracefully', async () => {
+      mockWasmExports.generateUUID.mockImplementation(() => {
         throw new Error('WASM error');
       });
 
-      expect(() => generateUUID()).toThrow('Failed to generate UUID');
+      await expect(generateUUID()).rejects.toThrow('Failed to generate UUID');
     });
 
-    it('should generate different UUIDs on subsequent calls', () => {
-      mockWasmModule.generateUUID
+    it('should generate different UUIDs on subsequent calls', async () => {
+      mockWasmExports.generateUUID
         .mockReturnValueOnce('uuid-1111-2222-3333-4444')
         .mockReturnValueOnce('uuid-5555-6666-7777-8888');
 
-      const uuid1 = generateUUID();
-      const uuid2 = generateUUID();
+      const uuid1 = await generateUUID();
+      const uuid2 = await generateUUID();
       
       expect(uuid1).toBe('uuid-1111-2222-3333-4444');
       expect(uuid2).toBe('uuid-5555-6666-7777-8888');
@@ -197,8 +200,8 @@ describe('Utils', () => {
   });
 
   describe('Error Handling', () => {
-    it('should provide meaningful error messages', () => {
-      expect(() => generatePrivateKey('invalid' as any)).toThrow('Unsupported key type: invalid');
+    it('should provide meaningful error messages', async () => {
+      await expect(generatePrivateKey('invalid' as any)).rejects.toThrow('Unsupported key type: invalid');
       expect(isValidPrivateKey('short')).toBe(false);
       expect(isValidDID('invalid')).toBe(false);
     });
@@ -207,18 +210,18 @@ describe('Utils', () => {
   describe('Integration with WASM types', () => {
     it('should map key types to WASM enum values', () => {
       // This tests the internal mapping
-      expect(mockWasmModule.WasmKeyType.Ed25519).toBe(0);
-      expect(mockWasmModule.WasmKeyType.P256).toBe(1);
-      expect(mockWasmModule.WasmKeyType.Secp256k1).toBe(2);
+      expect(mockWasmExports.WasmKeyType.Ed25519).toBe(0);
+      expect(mockWasmExports.WasmKeyType.P256).toBe(1);
+      expect(mockWasmExports.WasmKeyType.Secp256k1).toBe(2);
     });
 
-    it('should handle WASM module initialization errors', () => {
+    it('should handle WASM module initialization errors', async () => {
       // Simulate WASM not being initialized
-      mockWasmModule.generatePrivateKey.mockImplementation(() => {
+      mockWasmExports.generatePrivateKey.mockImplementation(() => {
         throw new Error('WASM module not initialized');
       });
 
-      expect(() => generatePrivateKey()).toThrow('Failed to generate private key');
+      await expect(generatePrivateKey()).rejects.toThrow('Failed to generate private key');
     });
   });
 

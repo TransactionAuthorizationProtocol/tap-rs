@@ -38,7 +38,7 @@ describe('Simple TapAgent Test', () => {
 
   it('should create a message', async () => {
     const agent = await TapAgent.create();
-    const message = agent.createMessage('Transfer', { amount: '100.0' });
+    const message = await agent.createMessage('Transfer', { amount: '100.0' });
     
     expect(message.id).toBe('test-uuid-123');
     expect(message.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
@@ -48,7 +48,7 @@ describe('Simple TapAgent Test', () => {
 
   it('should pack a message', async () => {
     const agent = await TapAgent.create();
-    const message = agent.createMessage('Transfer', { amount: '100.0' });
+    const message = await agent.createMessage('Transfer', { amount: '100.0' });
     
     const packed = await agent.pack(message);
     

@@ -170,7 +170,7 @@ describe('Real WASM Interoperability Tests', () => {
 
   describe('Cross-Agent Message Exchange', () => {
     it('should successfully exchange TAP messages between agents', async () => {
-      const transferMessage = aliceAgent.createMessage('Transfer', {
+      const transferMessage = await aliceAgent.createMessage('Transfer', {
         amount: '250.00',
         asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
         originator: {
@@ -199,7 +199,7 @@ describe('Real WASM Interoperability Tests', () => {
     });
 
     it('should handle payment messages with invoices', async () => {
-      const paymentMessage = aliceAgent.createMessage('Payment', {
+      const paymentMessage = await aliceAgent.createMessage('Payment', {
         amount: '99.99',
         currency: 'USD',
         merchant: {
@@ -229,7 +229,7 @@ describe('Real WASM Interoperability Tests', () => {
     });
 
     it('should handle Connect messages with constraints', async () => {
-      const connectMessage = aliceAgent.createMessage('Connect', {
+      const connectMessage = await aliceAgent.createMessage('Connect', {
         constraints: {
           asset_types: ['eip155:1/erc20:*', 'eip155:137/erc20:*'],
           currency_types: ['USD', 'EUR', 'GBP'],
@@ -258,7 +258,7 @@ describe('Real WASM Interoperability Tests', () => {
 
   describe('Encryption Compatibility', () => {
     it('should use DIDComm-compliant encryption algorithms', async () => {
-      const message = aliceAgent.createMessage('Authorize', {
+      const message = await aliceAgent.createMessage('Authorize', {
         transaction_id: 'tx-789',
         settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
       });
@@ -293,7 +293,7 @@ describe('Real WASM Interoperability Tests', () => {
 
     it('should handle authenticated vs anonymous encryption', async () => {
       // Authenticated encryption (sender revealed)
-      const authMessage = aliceAgent.createMessage('Transfer', {
+      const authMessage = await aliceAgent.createMessage('Transfer', {
         amount: '100.00',
         asset: 'USD',
         originator: { '@id': aliceAgent.did },
@@ -339,7 +339,7 @@ describe('Real WASM Interoperability Tests', () => {
       expect(secp256k1Agent.did).toMatch(/^did:key:z/);
       
       // Test message exchange between different key types
-      const message = ed25519Agent.createMessage('BasicMessage', {
+      const message = await ed25519Agent.createMessage('BasicMessage', {
         content: 'Cross key-type test',
       });
       message.to = [p256Agent.did];
@@ -363,7 +363,7 @@ describe('Real WASM Interoperability Tests', () => {
       expect(importedAgent.did).toBe(originalDid);
       
       // Verify can exchange messages
-      const testMessage = originalAgent.createMessage('TrustPing', {
+      const testMessage = await originalAgent.createMessage('TrustPing', {
         response_requested: true,
       });
       testMessage.to = [importedAgent.did];
@@ -381,7 +381,7 @@ describe('Real WASM Interoperability Tests', () => {
       const parentThreadId = `parent-${Date.now()}`;
       
       // Initial message in thread
-      const initialMessage = aliceAgent.createMessage('Transfer', {
+      const initialMessage = await aliceAgent.createMessage('Transfer', {
         amount: '100.00',
         asset: 'USD',
         originator: { '@id': aliceAgent.did },
@@ -399,7 +399,7 @@ describe('Real WASM Interoperability Tests', () => {
       expect(unpacked1.pthid).toBe(parentThreadId);
       
       // Response in same thread
-      const responseMessage = bobAgent.createMessage('Authorize', {
+      const responseMessage = await bobAgent.createMessage('Authorize', {
         transaction_id: unpacked1.id,
         settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
       }, {
@@ -452,7 +452,7 @@ describe('Real WASM Interoperability Tests', () => {
     it('should reject messages from wrong recipients', async () => {
       const charlieAgent = await TapAgent.create();
       
-      const message = aliceAgent.createMessage('Transfer', {
+      const message = await aliceAgent.createMessage('Transfer', {
         amount: '100.00',
         asset: 'USD',
         originator: { '@id': aliceAgent.did },
@@ -482,7 +482,7 @@ describe('Real WASM Interoperability Tests', () => {
       const messageCount = 10;
       
       for (let i = 0; i < messageCount; i++) {
-        const message = aliceAgent.createMessage('Transfer', {
+        const message = await aliceAgent.createMessage('Transfer', {
           amount: `${i * 10}.00`,
           asset: 'USD',
           originator: { '@id': aliceAgent.did },

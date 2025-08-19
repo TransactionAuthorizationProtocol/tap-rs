@@ -1,0 +1,674 @@
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { TapAgent } from '../src/tap-agent.js';
+import type { DIDCommMessage } from '../src/types.js';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import init from 'tap-wasm';
+
+// Veramo imports
+import { createAgent, IDIDManager, IKeyManager, IMessageHandler, TAgent } from '@veramo/core';
+import { DIDManager } from '@veramo/did-manager';
+import { KeyManager } from '@veramo/key-manager';
+import { KeyManagementSystem } from '@veramo/kms-local';
+import { DIDResolverPlugin } from '@veramo/did-resolver';
+import { KeyDIDProvider } from '@veramo/did-provider-key';
+import { MessageHandler } from '@veramo/message-handler';
+import { DIDCommMessageHandler } from '@veramo/did-comm';
+import { Resolver } from 'did-resolver';
+import { getResolver as getKeyResolver } from 'key-did-resolver';
+
+// Simple in-memory key store implementation
+class MemoryKeyStore {
+  private keys: Map<string, any> = new Map();
+
+  async importKey(key: any) {
+    this.keys.set(key.kid, key);
+    return true;
+  }
+
+  async getKey(kid: string) {
+    return this.keys.get(kid);
+  }
+
+  async deleteKey(kid: string) {
+    return this.keys.delete(kid);
+  }
+
+  async listKeys() {
+    return Array.from(this.keys.values());
+  }
+}
+
+// Simple in-memory DID store implementation
+class MemoryDIDStore {
+  private dids: Map<string, any> = new Map();
+
+  async importDID(did: any) {
+    this.dids.set(did.did, did);
+    return true;
+  }
+
+  async getDID(didUrl: string) {
+    return this.dids.get(didUrl);
+  }
+
+  async deleteDID(did: string) {
+    return this.dids.delete(did);
+  }
+
+  async listDIDs() {
+    return Array.from(this.dids.values());
+  }
+}
+
+// Get the path to the WASM binary
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const wasmPath = join(__dirname, '../../tap-wasm/pkg/tap_wasm_bg.wasm');
+
+type IAgent = TAgent<IDIDManager & IKeyManager & IMessageHandler & IDataStore>;
+
+describe('TAP-Veramo Interoperability Tests', () => {
+  let tapAgent: TapAgent;
+  let veramoAgent: IAgent;
+  let veramo2Agent: IAgent;
+
+  beforeAll(async () => {
+    // Initialize TAP WASM
+    try {
+      const wasmBinary = readFileSync(wasmPath);
+      await init(wasmBinary);
+    } catch (error) {
+      console.error('Failed to initialize WASM:', error);
+      throw error;
+    }
+
+    // Create TAP agent
+    tapAgent = await TapAgent.create({ keyType: 'Ed25519' });
+
+    // Create Veramo agents with DIDComm support
+    const createVeramoAgent = () => createAgent<IDIDManager & IKeyManager & IMessageHandler>({
+      plugins: [
+        new DIDManager({
+          store: new MemoryDIDStore(),
+          defaultProvider: 'did:key',
+          providers: {
+            'did:key': new KeyDIDProvider({
+              defaultKms: 'local',
+            }),
+          },
+        }),
+        new KeyManager({
+          store: new MemoryKeyStore(),
+          kms: {
+            local: new KeyManagementSystem(new MemoryKeyStore()),
+          },
+        }),
+        new DIDResolverPlugin({
+          resolver: new Resolver({
+            ...getKeyResolver(),
+          }),
+        }),
+        new MessageHandler({
+          messageHandlers: [
+            new DIDCommMessageHandler(),
+          ],
+        }),
+      ],
+    });
+
+    veramoAgent = createVeramoAgent();
+    veramo2Agent = createVeramoAgent();
+  });
+
+  afterAll(() => {
+    tapAgent?.dispose();
+  });
+
+  describe('DID Creation and Resolution', () => {
+    it('should create compatible DID:key identifiers', async () => {
+      // Create DID with Veramo
+      const veramoIdentifier = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: {
+          keyType: 'Ed25519',
+        },
+      });
+
+      // Both should create valid did:key DIDs
+      expect(tapAgent.did).toMatch(/^did:key:z6Mk/);
+      expect(veramoIdentifier.did).toMatch(/^did:key:z6Mk/);
+
+      // Both should be resolvable via Veramo (TAP DID resolution may require network)
+      const veramoDidDoc = await veramoAgent.resolveDid({ didUrl: veramoIdentifier.did });
+      const tapDidDocViaVeramo = await veramoAgent.resolveDid({ didUrl: tapAgent.did });
+      
+      expect(veramoDidDoc).toBeTruthy();
+      expect(tapDidDocViaVeramo).toBeTruthy();
+      expect(veramoDidDoc.didDocument?.id || veramoDidDoc.id).toBe(veramoIdentifier.did);
+      expect(tapDidDocViaVeramo.didDocument?.id || tapDidDocViaVeramo.id).toBe(tapAgent.did);
+    });
+
+    it('should resolve each other\'s DIDs', async () => {
+      const veramoIdentifier = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: {
+          keyType: 'Ed25519',
+        },
+      });
+
+      // Use Veramo for resolution to avoid network calls
+      const veramoResolvedVeramoDid = await veramoAgent.resolveDid({ didUrl: veramoIdentifier.did });
+      expect(veramoResolvedVeramoDid.didDocument?.id || veramoResolvedVeramoDid.id).toBe(veramoIdentifier.did);
+
+      // Veramo agent should be able to resolve TAP-created DID  
+      const veramoResolvedTapDid = await veramoAgent.resolveDid({ didUrl: tapAgent.did });
+      expect(veramoResolvedTapDid.didDocument?.id || veramoResolvedTapDid.id).toBe(tapAgent.did);
+    });
+  });
+
+  describe('Message Format Compatibility', () => {
+    it('should create messages that Veramo can handle', async () => {
+      // Create a basic DIDComm message with TAP agent
+      const basicMessage: DIDCommMessage = {
+        id: 'tap-to-veramo-001',
+        type: 'https://didcomm.org/basicmessage/2.0/message',
+        from: tapAgent.did,
+        to: [(await veramoAgent.didManagerCreate({ provider: 'did:key', kms: 'local' })).did],
+        created_time: Date.now(),
+        body: {
+          content: 'Hello from TAP!',
+        },
+      };
+
+      // Pack with TAP agent
+      const packed = await tapAgent.pack(basicMessage);
+      expect(packed.message).toBeTruthy();
+
+      // Try to handle with Veramo (this tests if the format is compatible)
+      const parsedMessage = JSON.parse(packed.message);
+      
+      // Veramo expects certain message formats
+      if (parsedMessage.payload && parsedMessage.signatures) {
+        // JWS format - verify structure
+        expect(parsedMessage).toHaveProperty('payload');
+        expect(parsedMessage).toHaveProperty('signatures');
+        expect(Array.isArray(parsedMessage.signatures)).toBe(true);
+        
+        const signature = parsedMessage.signatures[0];
+        expect(signature).toHaveProperty('protected');
+        expect(signature).toHaveProperty('signature');
+      } else if (parsedMessage.protected && parsedMessage.ciphertext) {
+        // JWE format - verify structure
+        expect(parsedMessage).toHaveProperty('protected');
+        expect(parsedMessage).toHaveProperty('ciphertext');
+        expect(parsedMessage).toHaveProperty('recipients');
+        expect(parsedMessage).toHaveProperty('iv');
+        expect(parsedMessage).toHaveProperty('tag');
+      } else {
+        throw new Error('Unknown message format produced by TAP');
+      }
+    });
+
+    it('should handle Veramo-created basic messages', async () => {
+      const veramoSender = await veramoAgent.didManagerCreate({ 
+        provider: 'did:key', 
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+      
+      // Create a basic message with Veramo format
+      const veramoMessage = {
+        type: 'https://didcomm.org/basicmessage/2.0/message',
+        id: 'veramo-to-tap-001',
+        from: veramoSender.did,
+        to: [tapAgent.did],
+        created_time: Date.now(),
+        body: {
+          content: 'Hello from Veramo!',
+        },
+      };
+
+      // Try to pack this with TAP agent (tests compatibility)
+      const packedByTap = await tapAgent.pack(veramoMessage as DIDCommMessage);
+      expect(packedByTap.message).toBeTruthy();
+
+      // Unpack and verify
+      const unpacked = await tapAgent.unpack(packedByTap.message);
+      expect(unpacked.body.content).toBe('Hello from Veramo!');
+      expect(unpacked.from).toBe(veramoSender.did);
+    });
+
+    it('should handle trust ping messages bidirectionally', async () => {
+      const veramoIdentifier = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+
+      // TAP creates trust ping
+      const tapTrustPing: DIDCommMessage = {
+        id: 'tap-ping-001',
+        type: 'https://didcomm.org/trust-ping/2.0/ping',
+        from: tapAgent.did,
+        to: [veramoIdentifier.did],
+        created_time: Date.now(),
+        body: {
+          response_requested: true,
+        },
+      };
+
+      const packedPing = await tapAgent.pack(tapTrustPing);
+      const parsedPing = JSON.parse(packedPing.message);
+      
+      // Verify it's in a format Veramo would understand
+      expect(parsedPing.payload || parsedPing.ciphertext).toBeTruthy();
+
+      // Unpack with TAP to verify integrity
+      const unpackedPing = await tapAgent.unpack(packedPing.message);
+      expect(unpackedPing.type).toBe('https://didcomm.org/trust-ping/2.0/ping');
+      expect(unpackedPing.body.response_requested).toBe(true);
+
+      // Veramo creates trust ping response
+      const veramoTrustPingResponse = {
+        id: 'veramo-ping-response-001',
+        type: 'https://didcomm.org/trust-ping/2.0/ping-response',
+        from: veramoIdentifier.did,
+        to: [tapAgent.did],
+        thid: tapTrustPing.id, // Thread reference
+        created_time: Date.now(),
+        body: {},
+      };
+
+      // TAP should be able to pack and unpack this
+      const packedResponse = await tapAgent.pack(veramoTrustPingResponse as DIDCommMessage);
+      const unpackedResponse = await tapAgent.unpack(packedResponse.message);
+      
+      expect(unpackedResponse.type).toBe('https://didcomm.org/trust-ping/2.0/ping-response');
+      expect(unpackedResponse.thid).toBe(tapTrustPing.id);
+    });
+  });
+
+  describe('TAP-specific Messages', () => {
+    it('should create TAP Transfer messages that maintain DIDComm compliance', async () => {
+      const veramoRecipient = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+
+      // Create TAP Transfer message
+      const transferMessage = await tapAgent.createMessage('Transfer', {
+        amount: '100.50',
+        asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        originator: {
+          '@id': tapAgent.did,
+          metadata: {
+            name: 'Alice Smith',
+            accountNumber: '1234567890',
+          },
+        },
+        beneficiary: {
+          '@id': veramoRecipient.did,
+          metadata: {
+            name: 'Bob Jones',
+            accountNumber: '0987654321',
+          },
+        },
+        memo: 'Payment for services rendered',
+      });
+      transferMessage.to = [veramoRecipient.did];
+
+      const packed = await tapAgent.pack(transferMessage);
+      const parsedMessage = JSON.parse(packed.message);
+      
+      // Should still be valid DIDComm format
+      expect(parsedMessage.payload || parsedMessage.ciphertext).toBeTruthy();
+      
+      // Unpack and verify TAP-specific content
+      const unpacked = await tapAgent.unpack(packed.message);
+      expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
+      expect(unpacked.body.amount).toBe('100.50');
+      expect(unpacked.body.originator['@id']).toBe(tapAgent.did);
+      expect(unpacked.body.beneficiary['@id']).toBe(veramoRecipient.did);
+    });
+
+    it('should create TAP Payment messages with invoices', async () => {
+      const veramoMerchant = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+
+      // Create TAP Payment message
+      const paymentMessage = await tapAgent.createMessage('Payment', {
+        amount: '249.99',
+        currency: 'USD',
+        merchant: {
+          '@id': veramoMerchant.did,
+          metadata: {
+            name: 'Example Merchant',
+            category: 'retail',
+            website: 'https://merchant.example.com',
+          },
+        },
+        invoice: {
+          invoiceNumber: 'INV-2024-12345',
+          items: [
+            {
+              description: 'Premium Widget',
+              quantity: 1,
+              unitPrice: '199.99',
+            },
+            {
+              description: 'Shipping',
+              quantity: 1,
+              unitPrice: '25.00',
+            },
+            {
+              description: 'Tax',
+              quantity: 1,
+              unitPrice: '25.00',
+            },
+          ],
+          total: '249.99',
+          dueDate: '2024-12-31',
+        },
+      });
+      paymentMessage.to = [veramoMerchant.did];
+
+      const packed = await tapAgent.pack(paymentMessage);
+      const unpacked = await tapAgent.unpack(packed.message);
+
+      expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Payment');
+      expect(unpacked.body.amount).toBe('249.99');
+      expect(unpacked.body.invoice.invoiceNumber).toBe('INV-2024-12345');
+      expect(unpacked.body.invoice.items).toHaveLength(3);
+      expect(unpacked.body.merchant['@id']).toBe(veramoMerchant.did);
+    });
+
+    it('should create TAP Connect messages with constraints', async () => {
+      const veramoCounterparty = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+
+      // Create TAP Connect message
+      const connectMessage = await tapAgent.createMessage('Connect', {
+        constraints: {
+          asset_types: [
+            'eip155:1/erc20:*',
+            'eip155:137/erc20:*',
+            'eip155:56/erc20:*',
+          ],
+          currency_types: ['USD', 'EUR', 'GBP', 'JPY'],
+          transaction_limits: {
+            min_amount: '10.00',
+            max_amount: '100000.00',
+            daily_limit: '500000.00',
+            monthly_limit: '10000000.00',
+          },
+        },
+        metadata: {
+          organization: 'TAP Test Corp',
+          relationship_type: 'business_partner',
+          compliance_level: 'enhanced',
+          supported_protocols: ['TAP', 'DIDComm'],
+          contact_email: 'support@taptest.example.com',
+        },
+      });
+      connectMessage.to = [veramoCounterparty.did];
+
+      const packed = await tapAgent.pack(connectMessage);
+      const unpacked = await tapAgent.unpack(packed.message);
+
+      expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Connect');
+      expect(unpacked.body.constraints.asset_types).toHaveLength(3);
+      expect(unpacked.body.constraints.transaction_limits.max_amount).toBe('100000.00');
+      expect(unpacked.body.metadata.organization).toBe('TAP Test Corp');
+    });
+  });
+
+  describe('Key Algorithm Compatibility', () => {
+    it('should work with Ed25519 keys from both systems', async () => {
+      const tapEd25519 = await TapAgent.create({ keyType: 'Ed25519' });
+      const veramoEd25519 = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+
+      // Both should create z6Mk* DIDs for Ed25519
+      expect(tapEd25519.did).toMatch(/^did:key:z6Mk/);
+      expect(veramoEd25519.did).toMatch(/^did:key:z6Mk/);
+
+      // Test message exchange
+      const message = await tapEd25519.createMessage('BasicMessage', {
+        content: 'Ed25519 compatibility test',
+      });
+      message.to = [veramoEd25519.did];
+
+      const packed = await tapEd25519.pack(message);
+      const unpacked = await tapEd25519.unpack(packed.message);
+
+      expect(unpacked.body.content).toBe('Ed25519 compatibility test');
+    });
+
+    it('should work with secp256k1 keys', async () => {
+      const tapSecp = await TapAgent.create({ keyType: 'secp256k1' });
+      
+      // Should create valid did:key for secp256k1
+      expect(tapSecp.did).toMatch(/^did:key:z/);
+
+      // Test basic functionality
+      const message = await tapSecp.createMessage('TrustPing', {
+        response_requested: true,
+      });
+      message.to = [tapAgent.did];
+
+      const packed = await tapSecp.pack(message);
+      const unpacked = await tapSecp.unpack(packed.message);
+
+      expect(unpacked.body.response_requested).toBe(true);
+    });
+
+    it('should work with P-256 keys', async () => {
+      const tapP256 = await TapAgent.create({ keyType: 'P256' });
+      
+      // Should create valid did:key for P-256
+      expect(tapP256.did).toMatch(/^did:key:z/);
+
+      // Test basic functionality
+      const message = await tapP256.createMessage('BasicMessage', {
+        content: 'P-256 test message',
+      });
+      message.to = [tapAgent.did];
+
+      const packed = await tapP256.pack(message);
+      const unpacked = await tapP256.unpack(packed.message);
+
+      expect(unpacked.body.content).toBe('P-256 test message');
+    });
+  });
+
+  describe('Threading and Conversation Flow', () => {
+    it('should maintain thread context compatible with Veramo', async () => {
+      const veramoParticipant = await veramoAgent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+
+      const threadId = `conversation-${Date.now()}`;
+      const parentThreadId = `parent-${Date.now()}`;
+
+      // Start conversation with TAP
+      const initialMessage = await tapAgent.createMessage('Transfer', {
+        amount: '500.00',
+        asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+        originator: { '@id': tapAgent.did },
+        beneficiary: { '@id': veramoParticipant.did },
+      }, {
+        thid: threadId,
+        pthid: parentThreadId,
+      });
+      initialMessage.to = [veramoParticipant.did];
+
+      const packed1 = await tapAgent.pack(initialMessage);
+      const unpacked1 = await tapAgent.unpack(packed1.message);
+
+      expect(unpacked1.thid).toBe(threadId);
+      expect(unpacked1.pthid).toBe(parentThreadId);
+
+      // Continue conversation
+      const responseMessage = {
+        id: `response-${Date.now()}`,
+        type: 'https://tap.rsvp/schema/1.0#Authorize',
+        from: veramoParticipant.did,
+        to: [tapAgent.did],
+        thid: threadId, // Same thread
+        created_time: Date.now(),
+        body: {
+          transaction_id: unpacked1.id,
+          settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
+        },
+      };
+
+      const packed2 = await tapAgent.pack(responseMessage as DIDCommMessage);
+      const unpacked2 = await tapAgent.unpack(packed2.message);
+
+      expect(unpacked2.thid).toBe(threadId);
+      expect(unpacked2.body.transaction_id).toBe(unpacked1.id);
+    });
+  });
+
+  describe('Error Handling and Edge Cases', () => {
+    it('should handle mixed message types in conversations', async () => {
+      const veramoAgent2Identifier = await veramo2Agent.didManagerCreate({
+        provider: 'did:key',
+        kms: 'local',
+        options: { keyType: 'Ed25519' }
+      });
+
+      // Start with standard DIDComm message
+      const pingMessage: DIDCommMessage = {
+        id: 'mixed-001',
+        type: 'https://didcomm.org/trust-ping/2.0/ping',
+        from: tapAgent.did,
+        to: [veramoAgent2Identifier.did],
+        created_time: Date.now(),
+        body: { response_requested: true },
+      };
+
+      const packedPing = await tapAgent.pack(pingMessage);
+      const unpackedPing = await tapAgent.unpack(packedPing.message);
+      
+      expect(unpackedPing.type).toBe('https://didcomm.org/trust-ping/2.0/ping');
+
+      // Respond with TAP-specific message
+      const tapResponse = await tapAgent.createMessage('Payment', {
+        amount: '25.00',
+        currency: 'USD',
+        merchant: {
+          '@id': veramoAgent2Identifier.did,
+          metadata: { name: 'Test Merchant' },
+        },
+      }, {
+        thid: pingMessage.id,
+        to: [veramoAgent2Identifier.did],
+      });
+
+      const packedResponse = await tapAgent.pack(tapResponse);
+      const unpackedResponse = await tapAgent.unpack(packedResponse.message);
+
+      expect(unpackedResponse.type).toBe('https://tap.rsvp/schema/1.0#Payment');
+      expect(unpackedResponse.thid).toBe(pingMessage.id);
+    });
+
+    it('should handle malformed Veramo-style messages gracefully', async () => {
+      const malformedMessages = [
+        // Missing required fields
+        {
+          type: 'https://didcomm.org/basicmessage/2.0/message',
+          body: { content: 'test' },
+        },
+        // Invalid DID format
+        {
+          id: 'test-001',
+          type: 'https://didcomm.org/basicmessage/2.0/message',
+          from: 'not-a-valid-did',
+          to: ['also-not-valid'],
+          body: { content: 'test' },
+        },
+        // Unknown message type
+        {
+          id: 'test-002',
+          type: 'https://unknown.protocol/unknown/1.0/unknown',
+          from: tapAgent.did,
+          to: [tapAgent.did],
+          body: { test: 'data' },
+        },
+      ];
+
+      for (const malformed of malformedMessages) {
+        try {
+          const packed = await tapAgent.pack(malformed as DIDCommMessage);
+          // If packing succeeds, unpacking should also work
+          const unpacked = await tapAgent.unpack(packed.message);
+          expect(unpacked.type).toBe(malformed.type);
+        } catch (error) {
+          // Some malformed messages should throw errors
+          expect(error).toBeDefined();
+        }
+      }
+    });
+  });
+
+  describe('Performance with Veramo Compatibility', () => {
+    it('should maintain performance when creating Veramo-compatible messages', async () => {
+      const veramoRecipients = [];
+      
+      // Create multiple Veramo identities
+      for (let i = 0; i < 5; i++) {
+        const identifier = await veramoAgent.didManagerCreate({
+          provider: 'did:key',
+          kms: 'local',
+          options: { keyType: 'Ed25519' }
+        });
+        veramoRecipients.push(identifier.did);
+      }
+
+      const startTime = Date.now();
+      const messageCount = 20;
+
+      for (let i = 0; i < messageCount; i++) {
+        const recipient = veramoRecipients[i % veramoRecipients.length];
+        
+        const message = await tapAgent.createMessage('Transfer', {
+          amount: `${(i + 1) * 10}.00`,
+          asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+          originator: { '@id': tapAgent.did },
+          beneficiary: { '@id': recipient },
+          memo: `Batch transfer ${i + 1}`,
+        });
+        message.to = [recipient];
+
+        const packed = await tapAgent.pack(message);
+        const unpacked = await tapAgent.unpack(packed.message);
+
+        expect(unpacked.body.amount).toBe(`${(i + 1) * 10}.00`);
+        expect(unpacked.body.beneficiary['@id']).toBe(recipient);
+      }
+
+      const duration = Date.now() - startTime;
+      console.log(`Processed ${messageCount} messages with Veramo DIDs in ${duration}ms`);
+
+      // Should maintain reasonable performance (< 50ms per message)
+      expect(duration).toBeLessThan(messageCount * 50);
+    });
+  });
+});

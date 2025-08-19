@@ -60,7 +60,7 @@ describe('Integration Tests', () => {
         agents: [],
       };
 
-      const message = sender.createMessage('Transfer', transferBody, {
+      const message = await sender.createMessage('Transfer', transferBody, {
         to: [receiver.did],
       });
 
@@ -122,7 +122,7 @@ describe('Integration Tests', () => {
       expect(originator.did).not.toBe(beneficiary.did);
 
       // Step 1: Create transfer request
-      const transferMessage = originator.createMessage('Transfer', {
+      const transferMessage = await originator.createMessage('Transfer', {
         amount: '50.0',
         asset: 'USD',
         originator: { '@id': originator.did },
@@ -146,7 +146,7 @@ describe('Integration Tests', () => {
       expect(unpackedTransfer.from).toBe(originator.did);
 
       // Step 4: Beneficiary creates authorization response
-      const authMessage = beneficiary.createMessage('Authorize', {
+      const authMessage = await beneficiary.createMessage('Authorize', {
         transaction_id: transferMessage.id,
         settlement_address: 'ethereum:0x1234...5678',
       }, {
@@ -222,7 +222,7 @@ describe('Integration Tests', () => {
         metadata: Array(100).fill(0).map((_, i) => ({ key: `value-${i}`, nested: { deep: true, index: i } })),
       };
 
-      const largeMessage = agent.createMessage('Transfer', largeBody);
+      const largeMessage = await agent.createMessage('Transfer', largeBody);
 
       const packed = await agent.pack(largeMessage);
       const packedObj = JSON.parse(packed.message);
@@ -266,8 +266,10 @@ describe('Integration Tests', () => {
       const agent = await TapAgent.create();
       createdAgents.push(agent);
 
-      const messages = Array(10).fill(null).map((_, i) => 
-        agent.createMessage('Transfer', { amount: `${i * 10}.0` })
+      const messages = await Promise.all(
+        Array(10).fill(null).map((_, i) => 
+          agent.createMessage('Transfer', { amount: `${i * 10}.0` })
+        )
       );
 
       // Pack all messages concurrently with real WASM
@@ -310,7 +312,7 @@ describe('Integration Tests', () => {
       const agent = await TapAgent.create();
       createdAgents.push(agent);
       
-      const customMessage = agent.createMessage<CustomTransferBody>('Transfer', {
+      const customMessage = await agent.createMessage<CustomTransferBody>('Transfer', {
         amount: '250.75',
         currency: 'EUR',
         memo: 'Monthly payment',
@@ -353,7 +355,7 @@ describe('Integration Tests', () => {
 
       // Create and pack many messages rapidly with real WASM
       const operations = Array(messageCount).fill(null).map(async (_, i) => {
-        const message = agent.createMessage('Transfer', { 
+        const message = await agent.createMessage('Transfer', { 
           amount: `${i}.0`,
           reference: `tx-${i}`,
         });

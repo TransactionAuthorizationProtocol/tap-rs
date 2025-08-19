@@ -2,7 +2,8 @@
  * TAP Agent TypeScript wrapper for WASM implementation
  */
 
-import initWasm, { WasmTapAgent, generateUUID } from 'tap-wasm';
+import { initWasm, getWasmExports } from './wasm-loader.js';
+import type { WasmTapAgent as WasmTapAgentType } from 'tap-wasm';
 import type {
   TapAgentConfig,
   DIDCommMessage,
@@ -41,7 +42,7 @@ import {
  * message packing/unpacking with flexible key management
  */
 export class TapAgent {
-  private wasmAgent: WasmTapAgent;
+  private wasmAgent: WasmTapAgentType;
   private didResolver: DIDResolver | undefined;
   private isDisposed = false;
   private metrics: AgentMetrics;
@@ -50,7 +51,7 @@ export class TapAgent {
   /**
    * Private constructor - use static factory methods instead
    */
-  private constructor(wasmAgent: WasmTapAgent, config?: TapAgentConfig) {
+  private constructor(wasmAgent: WasmTapAgentType, config?: TapAgentConfig) {
     this.wasmAgent = wasmAgent;
     this.didResolver = config?.didResolver;
     this.createdAt = Date.now();
@@ -72,6 +73,9 @@ export class TapAgent {
     try {
       // Initialize WASM module if not already done
       await initWasm();
+      
+      // Get WASM exports
+      const { WasmTapAgent } = await getWasmExports();
 
       const keyType = config?.keyType ?? 'Ed25519';
       
@@ -111,6 +115,9 @@ export class TapAgent {
     try {
       // Initialize WASM module if not already done
       await initWasm();
+      
+      // Get WASM exports
+      const { WasmTapAgent } = await getWasmExports();
 
       if (!validateKeyType(keyType)) {
         throw new TapAgentKeyError(`Unsupported key type: ${keyType}`);
@@ -310,7 +317,7 @@ export class TapAgent {
    * @param options - Optional message options
    * @returns New DIDComm message
    */
-  public createMessage<T = unknown>(
+  public async createMessage<T = unknown>(
     messageType: TapMessageTypeName | string,
     body: T,
     options?: {
@@ -320,10 +327,11 @@ export class TapAgent {
       pthid?: string;
       expires_time?: number;
     }
-  ): DIDCommMessage<T> {
+  ): Promise<DIDCommMessage<T>> {
     this.ensureNotDisposed();
 
     try {
+      const { generateUUID } = await getWasmExports();
       const message: DIDCommMessage<T> = {
         id: options?.id ?? generateUUID(),
         type: messageTypeToUri(messageType),
