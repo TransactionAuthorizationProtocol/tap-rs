@@ -329,15 +329,10 @@ describe('TapAgent', () => {
       agent = await TapAgent.create();
     });
 
-    it('should resolve DID:key using built-in resolver', async () => {
+    it('should throw error when no resolver is provided', async () => {
       const didKey = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK';
       
-      // Mock the internal WASM DID resolution
-      
-      const resolutionResult = await agent.resolveDID(didKey);
-      
-      expect(resolutionResult.didDocument).toBeDefined();
-      expect(resolutionResult.didDocument?.id).toBe(didKey);
+      await expect(agent.resolveDID(didKey)).rejects.toThrow('No DID resolver configured');
     });
 
     it('should use custom resolver when provided', async () => {

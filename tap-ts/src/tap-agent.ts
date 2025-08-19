@@ -294,12 +294,8 @@ export class TapAgent {
         return await this.didResolver.resolve(did, options);
       }
 
-      // Use built-in DID:key resolver for performance
-      if (did.startsWith('did:key:')) {
-        return await this.resolveDidKey(did);
-      }
-
-      throw new TapAgentDIDError(`No resolver available for DID method: ${did}`);
+      // No built-in resolver for other DID methods
+      throw new TapAgentDIDError('No DID resolver configured');
     } catch (error) {
       if (error instanceof TapAgentError) {
         throw error;

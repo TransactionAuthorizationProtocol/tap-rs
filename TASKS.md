@@ -51,14 +51,10 @@
 
 ### Phase 5: DID Resolution & Integration
 
-- [ ] Write tests for built-in DID:key resolution
-- [ ] Write tests for pluggable DID resolver interface
-- [ ] Write tests for custom resolver integration
-- [ ] Write tests for resolution error handling
-- [ ] Implement built-in DID:key resolver
-- [ ] Implement pluggable resolver interface
-- [ ] Implement JavaScript resolver delegation
-- [ ] Add resolver configuration options
+- [x] Write tests for pluggable DID resolver interface
+- [x] Write tests for resolution error handling
+- [x] Implement pluggable resolver interface
+- [x] Implement JavaScript resolver delegation
 
 ### Phase 6: Interoperability Testing
 

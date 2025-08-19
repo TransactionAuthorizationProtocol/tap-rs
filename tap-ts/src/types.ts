@@ -112,6 +112,7 @@ export interface DIDResolver {
 
 export interface DIDResolutionOptions {
   accept?: string;
+  noCache?: boolean;
   [key: string]: unknown;
 }
 
@@ -124,6 +125,7 @@ export interface DIDResolutionResult {
 export interface DIDResolutionMetadata {
   contentType?: string;
   error?: string;
+  message?: string;
   [key: string]: unknown;
 }
 
@@ -136,6 +138,7 @@ export interface DIDDocumentMetadata {
   nextVersionId?: string;
   equivalentId?: string[];
   canonicalId?: string;
+  transformed?: boolean;
   [key: string]: unknown;
 }
 
@@ -162,9 +165,10 @@ export interface VerificationMethod {
   type: string;
   controller: string;
   publicKeyBase58?: string;
-  publicKeyJwk?: JsonWebKey;
+  publicKeyJwk?: JsonWebKey | any;
   publicKeyHex?: string;
   publicKeyMultibase?: string;
+  blockchainAccountId?: string;
   [key: string]: unknown;
 }
 
