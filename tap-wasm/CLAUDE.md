@@ -74,28 +74,44 @@ cargo bench -p tap-wasm
 ## WASM Exports
 
 ### Agent Management
-- `WasmTapAgent::new()` - Create new agent
-- `WasmTapAgent::from_private_key()` - Create from existing key
+- `WasmTapAgent::new(config)` - Create new agent with optional config
+- `WasmTapAgent::from_private_key(hex, key_type)` - Create from existing private key
 - `get_did()` - Get agent's DID
-- `export_private_key()` - Export private key
+- `export_private_key()` - Export private key as hex string
+- `export_public_key()` - Export public key as hex string
+- `nickname()` - Get agent's nickname if set
 
 ### Message Operations  
-- `pack_message()` - Pack and encrypt TAP messages
-- `unpack_message()` - Decrypt and unpack TAP messages
-- Support for all TAP message types
-- DIDComm v2 message handling
+- `pack_message(message)` - Pack TAP messages (returns Promise)
+- `unpack_message(packed, expected_type)` - Unpack TAP messages (returns Promise)
+- `create_message(type)` - Create new message with UUID
+- `process_message(message, metadata)` - Process received messages (returns Promise)
+- Support for all TAP message types (Transfer, Payment, Authorize, etc.)
+- DIDComm v2 General JWS JSON format
+
+### Message Handlers
+- `register_message_handler(type, handler)` - Register handler for message type
+- `subscribe_to_messages(callback)` - Subscribe to all messages
+- Async handler support with Promise resolution
+
+### Key Generation
+- `generate_key(key_type)` - Generate new key for agent (returns Promise)
+- Supports Ed25519, P256, and Secp256k1 key types
 
 ### Utility Functions
-- `generate_private_key()` - Generate new private keys
-- `generate_uuid()` - Generate UUIDs
-- Key format conversions
-- CAIP identifier validation
+- `generate_private_key(key_type)` - Generate new private keys as hex
+- `generate_uuid()` - Generate UUID v4
+- `generate_uuid_v4()` - Generate UUID v4 (explicit version)
+- All key types supported: Ed25519, P256, Secp256k1
 
 ### Type Conversions
-- Rust structs ↔ JavaScript objects
-- Error handling across WASM boundary
-- Async operation support
-- Memory-efficient data transfer
+- JavaScript object → TAP PlainMessage conversion
+- TAP PlainMessage → JavaScript object conversion
+- Automatic timestamp conversions (JS Date.now() ↔ Unix timestamps)
+- Array handling for 'to' recipients
+- Nested object support in message bodies
+- Unicode and special character support
+- Null/undefined field handling
 
 ## Features
 
@@ -176,6 +192,49 @@ Multiple testing approaches:
 - Browser integration tests with real browsers
 - Node.js compatibility tests
 - Performance benchmarks
+
+### Test Coverage (60 tests total)
+
+**WASM Bindings Tests** (11 tests)
+- Agent creation with default config
+- Agent creation with debug mode
+- Agent creation with nickname
+- Agent creation from Ed25519/P256/Secp256k1 private keys
+- Private key export/import roundtrip
+- Public key export
+- Error handling for invalid keys
+
+**Async Operations Tests** (9 tests)
+- Promise-based pack/unpack operations
+- Concurrent message operations
+- Async error propagation
+- Promise rejection handling
+
+**Message Operations Tests** (10 tests)
+- Pack/unpack message delegation
+- All TAP message types (Transfer, Payment, Authorize, Reject, Cancel)
+- Message type validation
+- Error handling for invalid messages
+
+**Utility Functions Tests** (10 tests)
+- UUID v4 generation and uniqueness
+- Private key generation for all key types
+- Hex encoding correctness
+- Key usability with agents
+
+**Type Conversion Tests** (6 tests)
+- JavaScript to Rust message conversion
+- Rust to JavaScript message conversion
+- Null/undefined handling
+- Number conversions and timestamps
+- String encoding with special characters
+- Array conversions
+
+**Additional Test Files** (14 tests)
+- WASM agent tests
+- Simple pack test
+- Key management tests
+- Private key operations
 
 Run tests:
 ```bash

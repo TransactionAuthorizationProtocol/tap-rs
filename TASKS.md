@@ -27,15 +27,15 @@
 
 ### Phase 3: WASM Bindings & JavaScript Interface
 
-- [ ] Write tests for WASM bindings (new, from_private_key, get_did)
-- [ ] Write tests for async pack_message and unpack_message
-- [ ] Write tests for utility functions (generate_private_key, generate_uuid)
-- [ ] Write tests for JavaScript type conversions (JsValue <-> Rust types)
-- [ ] Implement WASM bindings for TapAgent
-- [ ] Implement async message operations
-- [ ] Implement utility function exports
-- [ ] Implement type conversion layer
-- [ ] Update tap-wasm/CLAUDE.md
+- [x] Write tests for WASM bindings (new, from_private_key, get_did)
+- [x] Write tests for async pack_message and unpack_message
+- [x] Write tests for utility functions (generate_private_key, generate_uuid)
+- [x] Write tests for JavaScript type conversions (JsValue <-> Rust types)
+- [x] Implement WASM bindings for TapAgent
+- [x] Implement async message operations
+- [x] Implement utility function exports
+- [x] Implement type conversion layer
+- [x] Update tap-wasm/CLAUDE.md
 
 ### Phase 4: TypeScript Wrapper & npm Package
 

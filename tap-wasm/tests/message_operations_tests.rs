@@ -39,9 +39,9 @@ async fn test_pack_message_delegation() {
 
     // The message should be in General JWS JSON format (DIDComm v2)
     // Parse it as JSON to verify structure
-    let parsed: serde_json::Value = serde_json::from_str(&message_str)
-        .expect("Packed message should be valid JSON");
-    
+    let parsed: serde_json::Value =
+        serde_json::from_str(&message_str).expect("Packed message should be valid JSON");
+
     // For signed messages, it should have payload and signatures fields
     assert!(
         parsed.get("payload").is_some(),

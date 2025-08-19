@@ -42,6 +42,8 @@ pub struct WasmTapAgent {
     message_handlers: HashMap<String, Function>,
     /// Subscribers to all messages
     message_subscribers: Vec<Function>,
+    /// Store the private key directly for export (temporary fix)
+    private_key_hex: Option<String>,
 }
 
 #[wasm_bindgen]
@@ -91,6 +93,7 @@ impl WasmTapAgent {
             debug: false,
             message_handlers: HashMap::new(),
             message_subscribers: Vec::new(),
+            private_key_hex: Some(private_key_hex.clone()),
         })
     }
 
@@ -169,6 +172,7 @@ impl WasmTapAgent {
             debug,
             message_handlers: HashMap::new(),
             message_subscribers: Vec::new(),
+            private_key_hex: None,
         })
     }
 
@@ -185,7 +189,12 @@ impl WasmTapAgent {
     /// Export the agent's private key as a hex string
     #[wasm_bindgen(js_name = exportPrivateKey)]
     pub fn export_private_key(&self) -> Result<String, JsValue> {
-        // Get the key manager from the agent
+        // If we have a stored private key (from from_private_key method), use it directly
+        if let Some(stored_key) = &self.private_key_hex {
+            return Ok(stored_key.clone());
+        }
+
+        // Otherwise, try to get it from the key manager
         let key_manager = self.agent.agent_key_manager();
 
         // Get the agent's DID
