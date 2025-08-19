@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TapAgent } from '../src/tap-agent.js';
-import type { DIDCommMessage, PackedMessage } from '../src/types.js';
+import type { DIDCommMessage } from '../src/types.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -141,7 +141,7 @@ describe('Integration Tests', () => {
       // Step 3: Originator unpacks (self-signed for this test)
       // In real scenarios, proper key exchange would be needed
       const unpackedTransfer = await originator.unpack(packedTransfer.message);
-      expect(unpackedTransfer.body.amount).toBe('50.0');
+      expect((unpackedTransfer.body as any).amount).toBe('50.0');
       expect(unpackedTransfer.id).toBe(transferMessage.id);
       expect(unpackedTransfer.from).toBe(originator.did);
 
@@ -188,7 +188,7 @@ describe('Integration Tests', () => {
       
       // Unpack to verify the core message was preserved
       const unpacked = await agent.unpack(packed.message);
-      expect(unpacked.body.invoice_id).toBe('inv-123');
+      expect((unpacked.body as any).invoice_id).toBe('inv-123');
       
       // Note: Attachments may not be preserved through WASM pack/unpack
       // This is expected behavior for the current implementation
@@ -230,11 +230,11 @@ describe('Integration Tests', () => {
       
       // Verify unpacking works with large payloads
       const unpacked = await agent.unpack(packed.message);
-      expect(unpacked.body.data).toBe('x'.repeat(10000));
-      expect(unpacked.body.metadata).toHaveLength(100);
+      expect((unpacked.body as any).data).toBe('x'.repeat(10000));
+      expect((unpacked.body as any).metadata).toHaveLength(100);
       // Verify metadata structure is preserved (may be simplified by WASM)
-      expect(unpacked.body.metadata[0]).toHaveProperty('key');
-      expect(unpacked.body.metadata[0]).toHaveProperty('nested');
+      expect((unpacked.body as any).metadata[0]).toHaveProperty('key');
+      expect((unpacked.body as any).metadata[0]).toHaveProperty('nested');
     });
   });
 
@@ -278,7 +278,7 @@ describe('Integration Tests', () => {
       expect(packedMessages).toHaveLength(10);
 
       // Verify all messages were packed successfully
-      packedMessages.forEach((packed, index) => {
+      packedMessages.forEach((packed) => {
         const packedObj = JSON.parse(packed.message);
         expect(packedObj).toHaveProperty('payload');
         expect(packed.metadata.type).toBeDefined();
@@ -290,7 +290,7 @@ describe('Integration Tests', () => {
       );
       
       unpackedMessages.forEach((unpacked, index) => {
-        expect(unpacked.body.amount).toBe(`${index * 10}.0`);
+        expect((unpacked.body as any).amount).toBe(`${index * 10}.0`);
       });
     });
   });
@@ -329,7 +329,7 @@ describe('Integration Tests', () => {
       expect(packedObj).toHaveProperty('payload');
 
       // Verify the typed body survives the WASM round-trip
-      const unpacked = await agent.unpack<CustomTransferBody>(packed.message);
+      const unpacked = await agent.unpack(packed.message);
       expect(unpacked.body).toEqual({
         amount: '250.75',
         currency: 'EUR',
@@ -368,7 +368,7 @@ describe('Integration Tests', () => {
       expect(results).toHaveLength(messageCount);
       
       // Verify all messages were packed successfully
-      results.forEach((packed, index) => {
+      results.forEach((packed) => {
         const packedObj = JSON.parse(packed.message);
         expect(packedObj).toHaveProperty('payload');
         expect(packed.metadata.type).toBeDefined();

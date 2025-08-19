@@ -15,6 +15,7 @@ import type {
   UnpackOptions,
   TapMessageTypeName,
   AgentMetrics,
+  TAPMessageUnion,
 } from './types.js';
 import {
   TapAgentError,
@@ -169,12 +170,12 @@ export class TapAgent {
 
   /**
    * Pack a message for transmission
-   * @param message - DIDComm message to pack
+   * @param message - TAP message or DIDComm message to pack
    * @param options - Optional packing options
    * @returns Promise resolving to packed message
    */
-  public async pack<T = unknown>(
-    message: DIDCommMessage<T>,
+  public async pack(
+    message: TAPMessageUnion,
     options?: PackOptions
   ): Promise<PackedMessage> {
     this.ensureNotDisposed();
@@ -186,7 +187,8 @@ export class TapAgent {
       // Apply options to message
       let processedMessage = message;
       if (options) {
-        const overrides: Partial<DIDCommMessage<T>> = {};
+        // Create a more flexible override object that can handle both TAP and generic DIDComm fields
+        const overrides: any = {};
         
         if (options.to) {
           overrides.to = options.to;
@@ -224,12 +226,12 @@ export class TapAgent {
    * Unpack a received message
    * @param packedMessage - Packed message string
    * @param options - Optional unpacking options
-   * @returns Promise resolving to unpacked DIDComm message
+   * @returns Promise resolving to unpacked TAP message or DIDComm message
    */
-  public async unpack<T = unknown>(
+  public async unpack(
     packedMessage: string,
     options?: UnpackOptions
-  ): Promise<DIDCommMessage<T>> {
+  ): Promise<TAPMessageUnion> {
     this.ensureNotDisposed();
     
     try {
@@ -244,7 +246,7 @@ export class TapAgent {
       );
 
       // Convert from WASM format
-      const message = convertFromWasmMessage<T>(wasmMessage);
+      const message = convertFromWasmMessage(wasmMessage);
 
       // Apply options validation
       if (options?.maxAge && message.created_time) {
@@ -262,6 +264,8 @@ export class TapAgent {
       this.metrics.messagesUnpacked++;
       this.updateLastActivity();
 
+      // Return the message as-is - type checking will be done by the caller
+      // The isTAPMessage type guard can be used by consumers to narrow the type
       return message;
     } catch (error) {
       if (error instanceof TapAgentError) {

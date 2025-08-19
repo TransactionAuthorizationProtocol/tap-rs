@@ -2,7 +2,7 @@
  * Type mapping functions between TypeScript and WASM/Rust types
  */
 
-import type { DIDCommMessage, MessageAttachment, TapMessageTypeName } from './types.js';
+import type { MessageAttachment, TapMessageTypeName, TAPMessageUnion } from './types.js';
 import { TapAgentError } from './types.js';
 import { safeStringify } from './utils.js';
 
@@ -59,7 +59,7 @@ const TAP_MESSAGE_URIS = new Set<string>(
  * @param message - TypeScript DIDComm message
  * @returns WASM-compatible message format
  */
-export function convertToWasmMessage<T = unknown>(message: DIDCommMessage<T>): WasmMessage {
+export function convertToWasmMessage(message: TAPMessageUnion): WasmMessage {
   try {
     // Validate required fields
     if (!message.id || typeof message.id !== 'string') {
@@ -116,12 +116,14 @@ export function convertToWasmMessage<T = unknown>(message: DIDCommMessage<T>): W
       wasmMessage.pthid = message.pthid;
     }
     
-    if (message.attachments !== undefined) {
-      wasmMessage.attachments = message.attachments;
+    // Handle optional fields with type compatibility for both TAP and DIDComm messages
+    const messageAny = message as any;
+    if (messageAny.attachments !== undefined) {
+      wasmMessage.attachments = messageAny.attachments;
     }
     
-    if (message.headers !== undefined) {
-      wasmMessage.headers = message.headers;
+    if (messageAny.headers !== undefined) {
+      wasmMessage.headers = messageAny.headers;
     }
 
     return wasmMessage;
@@ -138,7 +140,7 @@ export function convertToWasmMessage<T = unknown>(message: DIDCommMessage<T>): W
  * @param wasmMessage - WASM message format
  * @returns TypeScript DIDComm message
  */
-export function convertFromWasmMessage<T = unknown>(wasmMessage: WasmMessage): DIDCommMessage<T> {
+export function convertFromWasmMessage(wasmMessage: WasmMessage): TAPMessageUnion {
   try {
     // Validate required fields
     if (!wasmMessage.id || typeof wasmMessage.id !== 'string') {
@@ -153,11 +155,11 @@ export function convertFromWasmMessage<T = unknown>(wasmMessage: WasmMessage): D
       throw new TapAgentError("Invalid WASM message structure: missing required field 'body'");
     }
 
-    // Convert from WASM format
-    const message: DIDCommMessage<T> = {
+    // Convert from WASM format (using any to handle both TAP and DIDComm message types)
+    const message: any = {
       id: wasmMessage.id,
       type: wasmMessage.type,
-      body: wasmMessage.body as T,
+      body: wasmMessage.body,
     };
 
     // Add optional fields
@@ -185,12 +187,14 @@ export function convertFromWasmMessage<T = unknown>(wasmMessage: WasmMessage): D
       message.pthid = wasmMessage.pthid;
     }
     
+    // Handle optional fields for both TAP and DIDComm message compatibility
+    const messageAny = message as any;
     if (wasmMessage.attachments !== undefined) {
-      message.attachments = wasmMessage.attachments;
+      messageAny.attachments = wasmMessage.attachments;
     }
     
     if (wasmMessage.headers !== undefined) {
-      message.headers = wasmMessage.headers;
+      messageAny.headers = wasmMessage.headers;
     }
 
     return message;
@@ -274,7 +278,7 @@ export function messageTypeToUri(typeName: TapMessageTypeName | string): string 
  * @param message - Message to validate
  * @returns True if valid, throws error if invalid
  */
-export function validateMessageStructure<T = unknown>(message: DIDCommMessage<T>): boolean {
+export function validateMessageStructure(message: TAPMessageUnion): boolean {
   // Basic structure validation
   if (!message.id || typeof message.id !== 'string') {
     throw new TapAgentError('Message must have a valid id field');
@@ -318,13 +322,14 @@ export function validateMessageStructure<T = unknown>(message: DIDCommMessage<T>
     throw new TapAgentError('Message pthid field must be a non-empty string if provided');
   }
 
-  // Validate attachments if present
-  if (message.attachments !== undefined) {
-    if (!Array.isArray(message.attachments)) {
+  // Validate attachments if present (using any for type compatibility)
+  const messageAny = message as any;
+  if (messageAny.attachments !== undefined) {
+    if (!Array.isArray(messageAny.attachments)) {
       throw new TapAgentError('Message attachments field must be an array if provided');
     }
 
-    message.attachments.forEach((attachment, index) => {
+    messageAny.attachments.forEach((attachment: any, index: number) => {
       if (!attachment.data || typeof attachment.data !== 'object') {
         throw new TapAgentError(`Attachment ${index} must have a data field`);
       }
@@ -344,10 +349,10 @@ export function validateMessageStructure<T = unknown>(message: DIDCommMessage<T>
  * @param override - Override message properties
  * @returns Merged message
  */
-export function mergeMessages<T = unknown>(
-  base: DIDCommMessage<T>,
-  override: Partial<DIDCommMessage<T>>
-): DIDCommMessage<T> {
+export function mergeMessages(
+  base: TAPMessageUnion,
+  override: Partial<TAPMessageUnion>
+): TAPMessageUnion {
   const merged = { ...base };
 
   Object.keys(override).forEach(key => {

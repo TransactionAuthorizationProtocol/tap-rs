@@ -1,3 +1,26 @@
+// Import TAP message types from the official TAIPs package
+import type { 
+  TAPMessage, 
+  DIDCommMessage as TAPDIDCommMessage,
+  Transfer, 
+  Payment, 
+  Authorize, 
+  Reject, 
+  Settle, 
+  Cancel, 
+  Revert, 
+  Connect, 
+  Escrow, 
+  Capture, 
+  AddAgents, 
+  ReplaceAgent, 
+  RemoveAgent, 
+  UpdatePolicies, 
+  UpdateParty, 
+  ConfirmRelationship, 
+  AuthorizationRequired 
+} from '@taprsvp/types';
+
 /**
  * Configuration options for creating a TapAgent instance
  */
@@ -203,31 +226,33 @@ export class TapAgentDIDError extends TapAgentError {
 export type Result<T, E = TapAgentError> = { success: true; data: T } | { success: false; error: E };
 
 /**
- * Utility type for TAP message types mapping
- * This will be extended to map to @taprsvp/types when available
+ * TAP message types mapping using official @taprsvp/types
  */
 export interface TapMessageTypes {
-  Transfer: unknown;
-  Payment: unknown;
-  Authorize: unknown;
-  Reject: unknown;
-  Settle: unknown;
-  Cancel: unknown;
-  Revert: unknown;
-  Connect: unknown;
-  Escrow: unknown;
-  Capture: unknown;
-  AddAgents: unknown;
-  ReplaceAgent: unknown;
-  RemoveAgent: unknown;
-  UpdatePolicies: unknown;
-  UpdateParty: unknown;
-  ConfirmRelationship: unknown;
-  AuthorizationRequired: unknown;
-  Presentation: unknown;
-  TrustPing: unknown;
-  BasicMessage: unknown;
+  Transfer: Transfer;
+  Payment: Payment;
+  Authorize: Authorize;
+  Reject: Reject;
+  Settle: Settle;
+  Cancel: Cancel;
+  Revert: Revert;
+  Connect: Connect;
+  Escrow: Escrow;
+  Capture: Capture;
+  AddAgents: AddAgents;
+  ReplaceAgent: ReplaceAgent;
+  RemoveAgent: RemoveAgent;
+  UpdatePolicies: UpdatePolicies;
+  UpdateParty: UpdateParty;
+  ConfirmRelationship: ConfirmRelationship;
+  AuthorizationRequired: AuthorizationRequired;
 }
+
+/**
+ * Union type of all TAP messages with backward compatibility
+ * Supports both official TAPMessage types and generic DIDComm messages
+ */
+export type TAPMessageUnion = TAPMessage | DIDCommMessage<unknown>;
 
 /**
  * Message type names as strings
@@ -275,3 +300,42 @@ export interface AgentMetrics {
   /** Last activity timestamp */
   lastActivity: number;
 }
+
+/**
+ * Type guard to check if a message is a TAPMessage
+ */
+export function isTAPMessage(message: TAPMessageUnion): message is TAPMessage {
+  if (!message || typeof message !== 'object') {
+    return false;
+  }
+  
+  const tapMessageTypes = [
+    'https://tap.rsvp/schema/1.0#Transfer',
+    'https://tap.rsvp/schema/1.0#Payment',
+    'https://tap.rsvp/schema/1.0#Authorize',
+    'https://tap.rsvp/schema/1.0#Reject',
+    'https://tap.rsvp/schema/1.0#Settle',
+    'https://tap.rsvp/schema/1.0#Cancel',
+    'https://tap.rsvp/schema/1.0#Revert',
+    'https://tap.rsvp/schema/1.0#Connect',
+    'https://tap.rsvp/schema/1.0#Escrow',
+    'https://tap.rsvp/schema/1.0#Capture',
+    'https://tap.rsvp/schema/1.0#AddAgents',
+    'https://tap.rsvp/schema/1.0#ReplaceAgent',
+    'https://tap.rsvp/schema/1.0#RemoveAgent',
+    'https://tap.rsvp/schema/1.0#UpdatePolicies',
+    'https://tap.rsvp/schema/1.0#UpdateParty',
+    'https://tap.rsvp/schema/1.0#ConfirmRelationship',
+    'https://tap.rsvp/schema/1.0#AuthorizationRequired',
+  ];
+  
+  return tapMessageTypes.includes((message as any).type);
+}
+
+// Re-export key types from @taprsvp/types for convenience
+export type { TAPMessage, Transfer, Payment, Authorize, Reject, Settle, Cancel, Revert, 
+  Connect, Escrow, Capture, AddAgents, ReplaceAgent, RemoveAgent, UpdatePolicies, 
+  UpdateParty, ConfirmRelationship, AuthorizationRequired };
+
+// Re-export the TAP DIDCommMessage for comparison  
+export type { TAPDIDCommMessage };

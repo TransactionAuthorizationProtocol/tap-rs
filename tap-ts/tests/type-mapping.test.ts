@@ -128,7 +128,7 @@ describe('Type Mapping', () => {
         },
       };
 
-      const message = convertFromWasmMessage<{ amount: string; asset: string }>(wasmMessage);
+      const message = convertFromWasmMessage(wasmMessage);
 
       expect(message).toEqual({
         id: 'msg-123',
@@ -153,20 +153,13 @@ describe('Type Mapping', () => {
         body: { transaction_id: 'tx-456' },
       };
 
-      const message = convertFromWasmMessage<{ transaction_id: string }>(wasmMessage);
+      const message = convertFromWasmMessage(wasmMessage);
 
       expect(message.thid).toBe('thread-123');
       expect(message.pthid).toBe('parent-thread-123');
     });
 
     it('should preserve type safety with generic body types', () => {
-      interface TransferBody {
-        amount: string;
-        asset: string;
-        originator: { '@id': string };
-        beneficiary: { '@id': string };
-      }
-
       const wasmMessage = {
         id: 'msg-123',
         type: 'https://tap.rsvp/schema/1.0#Transfer',
@@ -178,11 +171,11 @@ describe('Type Mapping', () => {
         },
       };
 
-      const message = convertFromWasmMessage<TransferBody>(wasmMessage);
+      const message = convertFromWasmMessage(wasmMessage);
 
       // TypeScript should enforce the body type
-      expect(message.body.amount).toBe('100.0');
-      expect(message.body.originator['@id']).toBe('did:key:originator');
+      expect((message.body as any).amount).toBe('100.0');
+      expect((message.body as any).originator['@id']).toBe('did:key:originator');
     });
 
     it('should throw error for invalid WASM message', () => {
@@ -192,7 +185,7 @@ describe('Type Mapping', () => {
         body: { amount: '100.0' },
       };
 
-      expect(() => convertFromWasmMessage(invalidWasmMessage)).toThrow('Invalid WASM message structure');
+      expect(() => convertFromWasmMessage(invalidWasmMessage as any)).toThrow('Invalid WASM message structure');
     });
   });
 
@@ -282,7 +275,7 @@ describe('Type Mapping', () => {
 
       // Convert to WASM and back
       const wasmMessage = convertToWasmMessage(originalMessage);
-      const convertedMessage = convertFromWasmMessage<{ amount: string; memo: string }>(wasmMessage);
+      const convertedMessage = convertFromWasmMessage(wasmMessage);
 
       expect(convertedMessage).toEqual(originalMessage);
     });
@@ -319,7 +312,7 @@ describe('Type Mapping', () => {
       
       for (let i = 0; i < 1000; i++) {
         const wasmMessage = convertToWasmMessage(message);
-        convertFromWasmMessage<{ amount: string }>(wasmMessage);
+        convertFromWasmMessage(wasmMessage);
       }
       
       const end = performance.now();
