@@ -39,15 +39,15 @@
 
 ### Phase 4: TypeScript Wrapper & npm Package
 
-- [ ] Write tests for TypeScript TapAgent class
-- [ ] Write tests for type mapping with @taprsvp/types
-- [ ] Write tests for static factory methods (create, fromPrivateKey)
-- [ ] Write tests for message creation helpers
-- [ ] Create TypeScript wrapper in tap-wasm-js
-- [ ] Implement type mapping with @taprsvp/types
-- [ ] Implement factory methods and utilities
-- [ ] Setup npm package structure (@taprsvp/agent)
-- [ ] Update tap-wasm/pkg/CLAUDE.md
+- [x] Write tests for TypeScript TapAgent class
+- [x] Write tests for type mapping with @taprsvp/types
+- [x] Write tests for static factory methods (create, fromPrivateKey)
+- [x] Write tests for message creation helpers
+- [x] Create TypeScript wrapper in tap-ts
+- [x] Implement type mapping with @taprsvp/types
+- [x] Implement factory methods and utilities
+- [x] Setup npm package structure (@taprsvp/agent)
+- [x] Create tap-ts/CLAUDE.md documentation
 
 ### Phase 5: DID Resolution & Integration
 
