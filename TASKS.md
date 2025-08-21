@@ -77,10 +77,10 @@
 
 ### Phase 8: Documentation & Release
 
-- [ ] Write API documentation
-- [ ] Write getting started guide
-- [ ] Write example applications
-- [ ] Create API reference docs
+- [x] Write API documentation
+- [x] Write getting started guide
+- [x] Write example applications
+- [x] Create API reference docs
 - [ ] Publish to npm as @taprsvp/agent
-- [ ] Update main README
-- [ ] Create release notes
+- [x] Update main README
+- [x] Create release notes
