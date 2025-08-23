@@ -1,6 +1,5 @@
 use crate::util::js_to_tap_message;
-use js_sys::{Array, Function, Object, Promise, Reflect};
-use std::collections::HashMap;
+use js_sys::{Array, Object, Promise, Reflect};
 use std::sync::Arc;
 use tap_agent::agent::TapAgent;
 use tap_agent::{
@@ -23,7 +22,6 @@ impl WasmTapAgentExt for TapAgent {
     }
 }
 use tap_msg::didcomm::PlainMessage;
-use uuid::Uuid;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 use web_sys::console;
@@ -38,10 +36,6 @@ pub struct WasmTapAgent {
     nickname: Option<String>,
     /// Debug mode flag
     debug: bool,
-    /// Message handlers for different message types
-    message_handlers: HashMap<String, Function>,
-    /// Subscribers to all messages
-    message_subscribers: Vec<Function>,
     /// Store the private key directly for export (temporary fix)
     private_key_hex: Option<String>,
 }
@@ -91,8 +85,6 @@ impl WasmTapAgent {
             agent,
             nickname: None,
             debug: false,
-            message_handlers: HashMap::new(),
-            message_subscribers: Vec::new(),
             private_key_hex: Some(private_key_hex.clone()),
         })
     }
@@ -170,8 +162,6 @@ impl WasmTapAgent {
             agent,
             nickname,
             debug,
-            message_handlers: HashMap::new(),
-            message_subscribers: Vec::new(),
             private_key_hex: None,
         })
     }
@@ -448,179 +438,4 @@ impl WasmTapAgent {
         })
     }
 
-    /// Registers a message handler function for a specific message type
-    #[wasm_bindgen(js_name = registerMessageHandler)]
-    pub fn register_message_handler(&mut self, message_type: &str, handler: Function) {
-        self.message_handlers
-            .insert(message_type.to_string(), handler);
-        if self.debug {
-            console::log_1(&JsValue::from_str(&format!(
-                "Registered handler for message type: {}",
-                message_type
-            )));
-        }
-    }
-
-    /// Processes a received message by routing it to the appropriate handler
-    #[wasm_bindgen(js_name = processMessage)]
-    pub fn process_message(&self, message: JsValue, metadata: JsValue) -> Promise {
-        // Clone data that needs to be moved into the async block
-        let debug = self.debug;
-        let message_handlers = self.message_handlers.clone();
-        let message_subscribers = self.message_subscribers.clone();
-        let message_clone = message.clone();
-        let metadata_clone = metadata.clone();
-
-        future_to_promise(async move {
-            let message_type =
-                if let Ok(type_prop) = Reflect::get(&message, &JsValue::from_str("type")) {
-                    type_prop.as_string().unwrap_or_default()
-                } else {
-                    String::new()
-                };
-
-            // Notify all subscribers
-            for subscriber in &message_subscribers {
-                let _ = subscriber.call2(&JsValue::NULL, &message_clone.clone(), &metadata_clone);
-            }
-
-            // Find and call the appropriate handler
-            if let Some(handler) = message_handlers.get(&message_type) {
-                let result = handler.call2(&JsValue::NULL, &message_clone, &metadata_clone);
-                match result {
-                    Ok(value) => {
-                        if value.is_instance_of::<Promise>() {
-                            // It's a Promise, convert to a Future and await it
-                            let future = wasm_bindgen_futures::JsFuture::from(
-                                value.dyn_into::<Promise>().unwrap(),
-                            );
-                            match future.await {
-                                Ok(result) => Ok(result),
-                                Err(e) => Err(e),
-                            }
-                        } else {
-                            // Not a Promise, just return it
-                            Ok(value)
-                        }
-                    }
-                    Err(e) => Err(e),
-                }
-            } else {
-                if debug {
-                    console::log_1(&JsValue::from_str(&format!(
-                        "No handler registered for message type: {}",
-                        message_type
-                    )));
-                }
-                Ok(JsValue::FALSE)
-            }
-        })
-    }
-
-    /// Subscribes to all messages processed by this agent
-    #[wasm_bindgen(js_name = subscribeToMessages)]
-    pub fn subscribe_to_messages(&mut self, callback: Function) -> Function {
-        self.message_subscribers.push(callback.clone());
-
-        let agent_ptr = self as *mut WasmTapAgent;
-        let cb_ref = callback.clone();
-
-        let _unsubscribe = move || {
-            let agent = unsafe { &mut *agent_ptr };
-            agent
-                .message_subscribers
-                .retain(|cb| !Object::is(cb, &cb_ref));
-        };
-
-        Function::new_no_args("agent.message_subscribers.pop()")
-    }
-
-    /// Creates a new message with a random ID
-    #[wasm_bindgen(js_name = createMessage)]
-    pub fn create_message(&self, message_type: &str) -> JsValue {
-        let id = format!("msg_{}", Uuid::new_v4().simple());
-        let result = Object::new();
-
-        // Set basic message properties
-        Reflect::set(&result, &JsValue::from_str("id"), &JsValue::from_str(&id)).unwrap();
-        Reflect::set(
-            &result,
-            &JsValue::from_str("type"),
-            &JsValue::from_str(message_type),
-        )
-        .unwrap();
-        Reflect::set(
-            &result,
-            &JsValue::from_str("from"),
-            &JsValue::from_str(&self.agent.config.agent_did),
-        )
-        .unwrap();
-
-        // Create empty arrays/objects for other fields
-        let to_array = Array::new();
-        Reflect::set(&result, &JsValue::from_str("to"), &to_array).unwrap();
-
-        let body = Object::new();
-        Reflect::set(&result, &JsValue::from_str("body"), &body).unwrap();
-
-        // Set created time
-        let now = js_sys::Date::now();
-        Reflect::set(
-            &result,
-            &JsValue::from_str("created"),
-            &JsValue::from_f64(now),
-        )
-        .unwrap();
-
-        result.into()
-    }
-
-    /// Generate a new key for the agent
-    #[wasm_bindgen(js_name = generateKey)]
-    pub fn generate_key(&self, key_type_str: &str) -> Promise {
-        let agent = self.agent.clone();
-        let debug = self.debug;
-        let key_type_str = key_type_str.to_string(); // Clone the string to avoid reference issues
-
-        // Convert key type string to KeyType
-        let key_type = match key_type_str.as_str() {
-            "Ed25519" => KeyType::Ed25519,
-            "P256" => KeyType::P256,
-            "Secp256k1" => KeyType::Secp256k1,
-            _ => {
-                let err_msg = format!("Unsupported key type: {}", key_type_str);
-                return future_to_promise(async move { Err(JsValue::from_str(&err_msg)) });
-            }
-        };
-
-        future_to_promise(async move {
-            // Create DID generation options
-            let _options = DIDGenerationOptions { key_type };
-
-            // Generate the key
-            if debug {
-                console::log_1(&JsValue::from_str(&format!(
-                    "Generating {} key for agent {}",
-                    key_type_str, agent.config.agent_did
-                )));
-            }
-
-            // Using the agent's key manager to generate a key
-            // Note: In a real implementation, we would need to access the key manager directly
-            // This is a simplified example
-            let result = Object::new();
-            Reflect::set(
-                &result,
-                &JsValue::from_str("keyType"),
-                &JsValue::from_str(&key_type_str),
-            )?;
-            Reflect::set(
-                &result,
-                &JsValue::from_str("agentDid"),
-                &JsValue::from_str(&agent.config.agent_did),
-            )?;
-
-            Ok(result.into())
-        })
-    }
 }

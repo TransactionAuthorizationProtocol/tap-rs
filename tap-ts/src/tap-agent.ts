@@ -6,14 +6,12 @@ import { initWasm, getWasmExports } from './wasm-loader.js';
 import type { WasmTapAgent as WasmTapAgentType } from 'tap-wasm';
 import type {
   TapAgentConfig,
-  DIDCommMessage,
   PackedMessage,
   KeyType,
   DIDResolver,
   DIDResolutionResult,
   PackOptions,
   UnpackOptions,
-  TapMessageTypeName,
   AgentMetrics,
   TAPMessageUnion,
 } from './types.js';
@@ -33,7 +31,6 @@ import {
   convertToWasmMessage,
   convertFromWasmMessage,
   validateMessageStructure,
-  messageTypeToUri,
   mergeMessages,
 } from './type-mapping.js';
 
@@ -311,61 +308,13 @@ export class TapAgent {
   }
 
   /**
-   * Create a new message with proper structure
-   * @param messageType - TAP message type
-   * @param body - Message body
-   * @param options - Optional message options
-   * @returns New DIDComm message
+   * Generate a UUID for message IDs
+   * @returns UUID string
    */
-  public async createMessage<T = unknown>(
-    messageType: TapMessageTypeName | string,
-    body: T,
-    options?: {
-      id?: string;
-      to?: string[];
-      thid?: string;
-      pthid?: string;
-      expires_time?: number;
-    }
-  ): Promise<DIDCommMessage<T>> {
+  public async generateUUID(): Promise<string> {
     this.ensureNotDisposed();
-
-    try {
-      const { generateUUID } = await getWasmExports();
-      const message: DIDCommMessage<T> = {
-        id: options?.id ?? generateUUID(),
-        type: messageTypeToUri(messageType),
-        from: this.did,
-        created_time: Date.now(),
-        body,
-      };
-
-      if (options?.to) {
-        message.to = options.to;
-      }
-
-      if (options?.thid) {
-        message.thid = options.thid;
-      }
-
-      if (options?.pthid) {
-        message.pthid = options.pthid;
-      }
-
-      if (options?.expires_time) {
-        message.expires_time = options.expires_time;
-      }
-
-      // Validate the created message
-      validateMessageStructure(message);
-
-      return message;
-    } catch (error) {
-      if (error instanceof TapAgentError) {
-        throw error;
-      }
-      throw new TapAgentMessageError('Failed to create message', error as Error);
-    }
+    const { generateUUID } = await getWasmExports();
+    return generateUUID();
   }
 
   /**

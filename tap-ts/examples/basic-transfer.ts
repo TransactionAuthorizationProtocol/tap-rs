@@ -1,10 +1,11 @@
 /**
  * Basic Transfer Example
  * 
- * This example demonstrates a simple transfer between two agents
+ * This example demonstrates a simple transfer between two agents using TAP-compliant message types
  */
 
-import { TapAgent } from '@taprsvp/agent';
+import { TapAgent, createTransferMessage, createAuthorizeMessage, createSettleMessage } from '../dist/index.js';
+import type { TransferMessage, AuthorizeMessage, SettleMessage } from '@taprsvp/types';
 
 async function main() {
   console.log('TAP Basic Transfer Example\n');
@@ -19,9 +20,11 @@ async function main() {
   const bob = await TapAgent.create({ keyType: 'Ed25519' });
   console.log('Bob DID:', bob.did);
   
-  // Alice creates a transfer to Bob
+  // Alice creates a TAP-compliant transfer message
   console.log('\n--- Step 1: Alice creates transfer ---');
-  const transfer = await alice.createMessage('Transfer', {
+  const transfer: TransferMessage = await createTransferMessage({
+    from: alice.did,
+    to: [bob.did],
     amount: '1000.00',
     asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48', // USDC
     originator: {
@@ -44,9 +47,6 @@ async function main() {
     agents: []  // Could include settlement agents, compliance officers, etc.
   });
   
-  // Set recipient
-  transfer.to = [bob.did];
-  
   // Pack the message
   const packedTransfer = await alice.pack(transfer);
   console.log('Transfer packed, size:', packedTransfer.message.length, 'bytes');
@@ -60,15 +60,15 @@ async function main() {
   console.log('Asset:', receivedTransfer.body.asset);
   console.log('Memo:', receivedTransfer.body.memo);
   
-  // Bob authorizes the transfer
+  // Bob creates an authorization message
   console.log('\n--- Step 3: Bob authorizes transfer ---');
-  const authorize = await bob.createMessage('Authorize', {
+  const authorize: AuthorizeMessage = await createAuthorizeMessage({
+    from: bob.did,
+    to: [alice.did],
     transaction_id: receivedTransfer.id,
     settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
-    expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
-  }, {
-    thid: receivedTransfer.id, // Thread ID links to original transfer
-    to: [alice.did]
+    expiry: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+    thid: receivedTransfer.id // Thread ID links to original transfer
   });
   
   const packedAuth = await bob.pack(authorize);
@@ -80,15 +80,16 @@ async function main() {
   console.log('Authorization received for transaction:', receivedAuth.body.transaction_id);
   console.log('Settlement address:', receivedAuth.body.settlement_address);
   
-  // Alice confirms settlement
+  // Alice creates a settlement confirmation
   console.log('\n--- Step 5: Alice confirms settlement ---');
-  const settle = await alice.createMessage('Settle', {
+  const settle: SettleMessage = await createSettleMessage({
+    from: alice.did,
+    to: [bob.did],
     transaction_id: receivedTransfer.id,
+    settlement_address: receivedAuth.body.settlementAddress || '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
     settlement_id: `eip155:1:0x${Math.random().toString(16).slice(2, 42)}`,
-    amount: '1000.00'
-  }, {
-    thid: receivedTransfer.id,
-    to: [bob.did]
+    amount: '1000.00',
+    thid: receivedTransfer.id
   });
   
   const packedSettle = await alice.pack(settle);

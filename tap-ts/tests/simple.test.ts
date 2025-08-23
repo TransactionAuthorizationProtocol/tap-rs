@@ -12,8 +12,18 @@ const mockWasmAgent = {
   }),
   unpackMessage: vi.fn().mockResolvedValue({
     id: 'test-msg',
-    typ: 'https://tap.rsvp/schema/1.0#Transfer',
-    body: { test: 'data' }
+    type: 'https://tap.rsvp/schema/1.0#Transfer',
+    from: 'did:key:sender',
+    to: ['did:key:receiver'],
+    created_time: Date.now(),
+    body: { 
+      '@context': 'https://tap.rsvp/schema/1.0',
+      '@type': 'Transfer',
+      amount: '100.0',
+      asset: 'USD',
+      originator: { '@id': 'did:key:sender' },
+      beneficiary: { '@id': 'did:key:receiver' }
+    }
   }),
 };
 
@@ -27,7 +37,7 @@ const mockWasmModule = {
 
 vi.mock('tap-wasm', () => mockWasmModule);
 
-const { TapAgent } = await import('../src/tap-agent.js');
+const { TapAgent, createTransferMessage } = await import('../src/index.js');
 
 describe('Simple TapAgent Test', () => {
   it('should create an agent and access its DID', async () => {
@@ -36,19 +46,49 @@ describe('Simple TapAgent Test', () => {
     expect(mockWasmAgent.get_did).toHaveBeenCalled();
   });
 
-  it('should create a message', async () => {
-    const agent = await TapAgent.create();
-    const message = await agent.createMessage('Transfer', { amount: '100.0' });
+  it('should create a transfer message using helper', async () => {
+    const message = await createTransferMessage({
+      from: 'did:key:sender',
+      to: ['did:key:receiver'],
+      amount: '100.0',
+      asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      originator: {
+        '@id': 'did:key:sender',
+        '@type': 'https://schema.org/Person',
+        name: 'Alice'
+      },
+      beneficiary: {
+        '@id': 'did:key:receiver',
+        '@type': 'https://schema.org/Person',
+        name: 'Bob'
+      }
+    });
     
     expect(message.id).toBe('test-uuid-123');
     expect(message.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
-    expect(message.from).toBe('did:key:test123');
-    expect(message.body).toEqual({ amount: '100.0' });
+    expect(message.from).toBe('did:key:sender');
+    expect(message.to).toEqual(['did:key:receiver']);
+    expect(message.body.amount).toBe('100.0');
   });
 
   it('should pack a message', async () => {
     const agent = await TapAgent.create();
-    const message = await agent.createMessage('Transfer', { amount: '100.0' });
+    const message = await createTransferMessage({
+      from: agent.did,
+      to: ['did:key:receiver'],
+      amount: '100.0',
+      asset: 'USD',
+      originator: {
+        '@id': agent.did,
+        '@type': 'https://schema.org/Person',
+        name: 'Alice'
+      },
+      beneficiary: {
+        '@id': 'did:key:receiver',
+        '@type': 'https://schema.org/Person',
+        name: 'Bob'
+      }
+    });
     
     const packed = await agent.pack(message);
     
@@ -59,6 +99,5 @@ describe('Simple TapAgent Test', () => {
     const callArgs = mockWasmAgent.packMessage.mock.calls[0][0];
     expect(callArgs.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
     expect(callArgs.id).toBe('test-uuid-123');
-    expect(callArgs.body).toEqual({ amount: '100.0' });
   });
 });

@@ -138,63 +138,7 @@ async fn test_concurrent_unpack_operations() {
     assert!(result3.is_ok(), "Third unpack should succeed");
 }
 
-/// Test generate_key returns a Promise
-#[wasm_bindgen_test]
-async fn test_generate_key_returns_promise() {
-    let config = Object::new();
-    let agent = WasmTapAgent::new(config.into()).expect("Failed to create agent");
-
-    let result = agent.generate_key("Ed25519");
-
-    // Verify it's a Promise
-    assert!(
-        result.is_instance_of::<Promise>(),
-        "generate_key should return a Promise"
-    );
-
-    // Await the promise
-    let key_result = JsFuture::from(result).await;
-    assert!(key_result.is_ok(), "Key generation should succeed");
-
-    // Verify the result structure
-    let key_obj = key_result.unwrap();
-    assert!(Reflect::has(&key_obj, &JsValue::from_str("keyType")).unwrap());
-    assert!(Reflect::has(&key_obj, &JsValue::from_str("agentDid")).unwrap());
-}
-
-/// Test process_message returns a Promise
-#[wasm_bindgen_test]
-async fn test_process_message_returns_promise() {
-    let config = Object::new();
-    let mut agent = WasmTapAgent::new(config.into()).expect("Failed to create agent");
-
-    // Register a handler
-    let handler = js_sys::Function::new_no_args("return true;");
-    agent.register_message_handler("TestMessage", handler);
-
-    // Create a test message
-    let message = Object::new();
-    Reflect::set(
-        &message,
-        &JsValue::from_str("type"),
-        &JsValue::from_str("TestMessage"),
-    )
-    .unwrap();
-
-    let metadata = Object::new();
-
-    let result = agent.process_message(message.into(), metadata.into());
-
-    // Verify it's a Promise
-    assert!(
-        result.is_instance_of::<Promise>(),
-        "process_message should return a Promise"
-    );
-
-    // Await the promise
-    let process_result = JsFuture::from(result).await;
-    assert!(process_result.is_ok(), "Message processing should succeed");
-}
+// Tests for generate_key and process_message removed - no longer part of WASM API
 
 /// Test error propagation in async operations
 #[wasm_bindgen_test]
@@ -218,26 +162,7 @@ async fn test_async_error_propagation() {
     assert!(result.is_err(), "Unpacking invalid data should fail");
 }
 
-/// Test promise rejection handling
-#[wasm_bindgen_test]
-async fn test_promise_rejection_handling() {
-    let config = Object::new();
-    let agent = WasmTapAgent::new(config.into()).expect("Failed to create agent");
-
-    // Generate key with invalid type should reject
-    let result = agent.generate_key("InvalidKeyType");
-
-    assert!(
-        result.is_instance_of::<Promise>(),
-        "Should still return a Promise"
-    );
-
-    let key_result = JsFuture::from(result).await;
-    assert!(
-        key_result.is_err(),
-        "Promise should reject with invalid key type"
-    );
-}
+// Test for promise rejection with generate_key removed - no longer part of WASM API
 
 // Helper function to create a test message
 fn create_test_message(from_did: &str) -> Object {

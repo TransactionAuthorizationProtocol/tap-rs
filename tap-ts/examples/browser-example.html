@@ -250,7 +250,7 @@
   <script type="module">
     // Import TAP Agent from CDN or local build
     // For production, replace with: import { TapAgent } from '@taprsvp/agent';
-    import { TapAgent, generatePrivateKey, generateUUID } from '../dist/index.js';
+    import { TapAgent, generatePrivateKey, generateUUID, createTransferMessage, createAuthorizeMessage, createRejectMessage } from '../dist/index.js';
     
     // Global state
     let agent1 = null;
@@ -386,8 +386,10 @@
         
         log(`Agent 1 creating transfer of ${amount} ${asset}...`);
         
-        // Create transfer message
-        const transfer = await agent1.createMessage('Transfer', {
+        // Create TAP-compliant transfer message
+        const transfer = createTransferMessage({
+          from: agent1.did,
+          to: [agent2.did],
           amount: amount,
           asset: asset,
           originator: {
@@ -403,8 +405,6 @@
           memo: memo,
           agents: []  // Could include agents for settlement, compliance, etc.
         });
-        
-        transfer.to = [agent2.did];
         
         // Pack the message
         const packed = await agent1.pack(transfer);
@@ -451,13 +451,13 @@
       try {
         log('Agent 2 authorizing transfer...');
         
-        const authorize = await agent2.createMessage('Authorize', {
+        const authorize = createAuthorizeMessage({
+          from: agent2.did,
+          to: [senderDid],
           transaction_id: transactionId,
           settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
-          expiry: new Date(Date.now() + 60 * 60 * 1000).toISOString()
-        }, {
-          thid: transactionId,
-          to: [senderDid]
+          expiry: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+          thid: transactionId
         });
         
         const packed = await agent2.pack(authorize);
@@ -487,12 +487,12 @@
       try {
         log('Agent 2 rejecting transfer...');
         
-        const reject = await agent2.createMessage('Reject', {
+        const reject = createRejectMessage({
+          from: agent2.did,
+          to: [senderDid],
           transaction_id: transactionId,
-          reason: 'User rejected the transfer'
-        }, {
-          thid: transactionId,
-          to: [senderDid]
+          reason: 'User rejected the transfer',
+          thid: transactionId
         });
         
         const packed = await agent2.pack(reject);
@@ -527,10 +527,16 @@
       const start = performance.now();
       
       for (let i = 0; i < iterations; i++) {
-        const message = await agent1.createMessage('BasicMessage', {
-          content: `Test message ${i}`
-        });
-        message.to = [agent2.did];
+        const message = {
+          id: generateUUID(),
+          type: 'https://didcomm.org/basicmessage/2.0/message',
+          from: agent1.did,
+          to: [agent2.did],
+          created_time: Date.now(),
+          body: {
+            content: `Test message ${i}`
+          }
+        };
         
         const packed = await agent1.pack(message);
         const unpacked = await agent2.unpack(packed.message);

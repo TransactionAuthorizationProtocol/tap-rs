@@ -1,144 +1,98 @@
 # TAP-WASM
 
-WebAssembly bindings for the Transaction Authorization Protocol (TAP).
+Lightweight WebAssembly bindings for the Transaction Authorization Protocol (TAP), focusing on cryptographic operations that cannot be performed natively in JavaScript.
 
 ## Features
 
-- **WebAssembly Support**: Run TAP in browser and Node.js environments
-- **DIDComm Integration**: Full support for DIDComm v2 messaging
-- **TAP Message Types**: Support for all TAP message types
-- **Agent Management**: Create and manage TAP agents
-- **Message Handling**: Create, sign, and verify TAP messages
-- **Serialization**: Efficient serialization between Rust and JavaScript
-- **Performance**: Optimized for browser performance
-- **Shared Core**: Uses the same core implementation as the native TAP agent
+- **Cryptographic Operations Only**: Focused on signing/verification that requires WASM
+- **DIDComm v2 Support**: Pack and unpack messages with JWS signatures  
+- **Multiple Key Types**: Ed25519, P-256, and secp256k1 support
+- **TypeScript Ready**: Full type definitions included
+- **Optimized Size**: Minimal API surface for smaller bundles (~272KB gzipped)
+
+## Purpose
+
+The TAP WASM module provides a minimal set of cryptographic operations for TAP messages:
+- **Key Management**: Generate, import, and export cryptographic keys
+- **Message Signing**: Pack messages with DIDComm v2 JWS signatures
+- **Signature Verification**: Unpack and verify signed messages
+
+Message creation, structuring, and business logic are handled by the TypeScript SDK (`@taprsvp/agent`), keeping the WASM bundle focused and small.
 
 ## Installation
 
-```bash
-# Using npm
-npm install tap-wasm
+For most users, install the TypeScript SDK which includes the WASM module:
 
-# Using yarn
-yarn add tap-wasm
+```bash
+npm install @taprsvp/agent
+```
+
+For direct WASM usage (advanced):
+
+```bash
+npm install tap-wasm
 ```
 
 ## Basic Usage
 
-### Browser with ES modules
+### TypeScript/JavaScript (Recommended)
+
+Use the TypeScript SDK for a complete TAP implementation:
 
 ```javascript
-import init, { 
-  WasmTapAgent, 
-  TapNode, 
-  MessageType 
-} from 'tap-wasm';
-
-// Recommended pattern using a static create method
-class TAPAgent {
-  static async create(options = {}) {
-    // Initialize WASM first
-    await init();
-    
-    // Then create the agent
-    return new WasmTapAgent(options);
-  }
-}
+import { TapAgent } from '@taprsvp/agent';
 
 async function main() {
-  try {
-    // Create an agent using the static factory method
-    // This ensures WASM is initialized before agent creation
-    const agent = await TAPAgent.create({
-      nickname: "Test Agent",
-      debug: true
-    });
-    console.log(`Agent created with DID: ${agent.get_did()}`);
-
-    // Create a transfer message
-    const message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-    
-    // Set the transfer message body
-    message.body = {
-      asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
-      originator: {
-        '@id': agent.get_did(),
-        role: "originator"
-      },
-      beneficiary: {
-        '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
-        role: "beneficiary"
-      },
-      amount: "100.0",
-      agents: [],
-      memo: "Test transfer"
-    };
-
-    // Pack the message
-    const packedResult = await agent.packMessage(message);
-    console.log("Packed message:", packedResult.message);
-    
-    // Unpack the message
-    const unpackedMessage = await agent.unpackMessage(packedResult.message);
-    console.log("Unpacked message:", unpackedMessage);
-  } catch (error) {
-    console.error("Error:", error);
-  }
+  // Create agent with auto-generated keys
+  const agent = await TapAgent.create({ keyType: 'Ed25519' });
+  console.log('Agent DID:', agent.did);
+  
+  // Create message in TypeScript
+  const message = await agent.createMessage('Transfer', {
+    amount: '100.00',
+    asset: 'USD',
+    originator: { '@id': agent.did },
+    beneficiary: { '@id': 'did:key:recipient' }
+  });
+  
+  // Use WASM for cryptographic operations
+  const packed = await agent.pack(message);  // Signs with WASM
+  const unpacked = await agent.unpack(packed.message);  // Verifies with WASM
 }
 
 main();
 ```
 
-### Node.js
+### Direct WASM Usage (Advanced)
+
+For direct WASM usage without the TypeScript SDK:
 
 ```javascript
-const tap_wasm = require('tap-wasm');
-
-// Recommended pattern using a static create method
-class TAPAgent {
-  static async create(options = {}) {
-    // Initialize WASM first
-    await tap_wasm.default();
-    
-    // Then create the agent
-    return new tap_wasm.WasmTapAgent(options);
-  }
-}
+import init, { WasmTapAgent } from 'tap-wasm';
 
 async function main() {
-  try {
-    // Create an agent using the static factory method
-    // This ensures WASM is initialized before agent creation
-    const agent = await TAPAgent.create({
-      nickname: "Test Agent",
-      debug: true
-    });
-    console.log(`Agent created with DID: ${agent.get_did()}`);
-    
-    // Create a transfer message
-    const message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-    
-    // Set the message body (similar to browser example)
-    message.body = {
-      asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
-      originator: {
-        '@id': agent.get_did(),
-        role: "originator"
-      },
-      beneficiary: {
-        '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL",
-        role: "beneficiary"
-      },
-      amount: "100.0",
-      agents: []
-    };
-    
-    // Pack and send the message
-    const packed = await agent.packMessage(message);
-    console.log("Message packed successfully:", packed.message);
-  } catch (error) {
-    console.error("Error:", error);
-  }
+  // Initialize WASM module
+  await init();
+  
+  // Create agent
+  const agent = new WasmTapAgent({});
+  console.log('DID:', agent.get_did());
+  
+  // Export keys
+  const privateKey = agent.exportPrivateKey();
+  const publicKey = agent.exportPublicKey();
+  
+  // Pack a message (must be properly formatted)
+  const message = {
+    id: 'msg_123',
+    type: 'https://tap.rsvp/schema/1.0#Transfer',
+    from: agent.get_did(),
+    to: ['did:key:recipient'],
+    body: { /* TAP message body */ }
+  };
+  
+  const packed = await agent.packMessage(message);
+  const unpacked = await agent.unpackMessage(packed.message);
 }
 
 main();
@@ -146,170 +100,109 @@ main();
 
 ## API Reference
 
-### Message Creation and Handling
+### WasmTapAgent
 
-#### Creating a Message
+The core WASM agent providing cryptographic operations.
 
-```javascript
-// Create a new message
-const message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-
-// The message will have the following structure:
-// {
-//   id: "msg_...", // Auto-generated UUID
-//   type: "https://tap.rsvp/schema/1.0#Transfer",
-//   from: "agent's DID",
-//   to: [],
-//   body: {},
-//   created: <timestamp>
-// }
-```
-
-#### Message Properties
+#### Creation
 
 ```javascript
-// Access and modify message properties
-message.id = "msg_123"; // Message ID
-message.type = "https://tap.rsvp/schema/1.0#Transfer"; // Message type
-message.from = "did:example:123"; // Sender DID
-message.to = ["did:example:456"]; // Recipient DIDs
-message.body = {...}; // Message body
-message.created = Date.now(); // Created timestamp
-message.expires = Date.now() + 3600000; // Expiry timestamp
-message.thid = "thread_123"; // Thread ID
-message.pthid = "parent_thread_123"; // Parent thread ID
-```
-
-### Agent Management
-
-#### Creating an Agent
-
-```javascript
-// RECOMMENDED: Create a new agent using static factory pattern
-class TAPAgent {
-  static async create(options = {}) {
-    // Initialize WASM first
-    await init();
-    
-    // Then create the agent
-    return new WasmTapAgent(options);
-  }
-}
-
-// Use the factory method (RECOMMENDED)
-const agent = await TAPAgent.create({
-  did: "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK", // Optional - generated if not provided
-  nickname: "Example Agent",
-  debug: true // Optional - logs to console if true
+// Create with auto-generated keys
+const agent = new WasmTapAgent({
+  nickname: 'optional-nickname',
+  debug: false
 });
 
-// ALTERNATIVELY: Create directly (NOT RECOMMENDED - may cause WASM initialization errors)
-// Only use this approach if you're certain WASM is already initialized
-const agent2 = new WasmTapAgent({
-  nickname: "Example Agent",
-  debug: true
-});
+// Create from existing private key
+const agent = await WasmTapAgent.fromPrivateKey(
+  privateKeyHex,  // Hex-encoded private key
+  'Ed25519'       // Key type: 'Ed25519', 'P256', or 'Secp256k1'
+);
 ```
 
-#### Agent Operations
+#### Key Management
 
 ```javascript
-// Get agent properties
+// Get agent's DID
 const did = agent.get_did();
-const nickname = agent.nickname();
 
-// Message packing and unpacking
-const packedResult = await agent.packMessage(message);
-const unpackedMessage = await agent.unpackMessage(packedResult.message);
+// Export keys
+const privateKey = agent.exportPrivateKey();  // Hex string
+const publicKey = agent.exportPublicKey();    // Hex string
 
-// Create a message
-const newMessage = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-
-// Register a message handler
-agent.registerMessageHandler('https://tap.rsvp/schema/1.0#Transfer', (message, metadata) => {
-  console.log("Received transfer message:", message);
-  // Process the message
-  return Promise.resolve(responseMessage); // Optional response message
-});
-
-// Process an incoming message
-const result = await agent.processMessage(message, { source: "browser" });
-
-// Subscribe to all messages
-const unsubscribe = agent.subscribeToMessages((message, metadata) => {
-  console.log("Processing message:", message);
-});
+// Get nickname
+const nickname = agent.nickname();  // Optional string
 ```
 
-### Node Management
+#### Message Operations
 
 ```javascript
-// Create a TAP node
-const node = new TapNode({ debug: true });
+// Pack (sign) a message
+const packedResult = await agent.packMessage(message);
+// Returns: { message: string, metadata: {...} }
 
-// Add agents to the node
-node.add_agent(agent1);
-node.add_agent(agent2);
-
-// Get agents
-const agent = node.get_agent("did:example:123");
-const allAgents = node.list_agents();
-
-// Remove an agent
-node.remove_agent("did:example:123");
+// Unpack (verify) a message
+const unpacked = await agent.unpackMessage(
+  packedMessage,      // JWS string
+  expectedType        // Optional: expected message type for validation
+);
+// Returns: { id, type, from, to, body, ... }
 ```
 
 ### Utility Functions
 
 ```javascript
-// Generate a UUID
+import { generate_uuid_v4, generatePrivateKey } from 'tap-wasm';
+
+// Generate UUID
 const uuid = generate_uuid_v4();
+
+// Generate private key
+const privateKey = generatePrivateKey('Ed25519');  // Returns hex string
 ```
 
-## Integration with tap-agent
+## Key Types
 
-This implementation wraps the core `tap-agent` Rust crate, using its WASM-compatible features. This ensures compatibility and consistency between the WASM bindings and the native Rust implementation.
+Supported cryptographic key types:
 
-The integration:
+- **Ed25519**: Fast, secure, recommended for most use cases
+- **P256**: NIST standard, good compatibility  
+- **Secp256k1**: Bitcoin/Ethereum compatible
 
-1. Uses the `WasmAgent` trait from the `tap-agent` crate
-2. Wraps the `TapAgent` implementation with WASM bindings
-3. Provides JavaScript-friendly methods for all operations
-4. Leverages the same cryptographic operations as the native agent
+## Integration with TypeScript SDK
+
+The TypeScript SDK (`@taprsvp/agent`) provides:
+- Message creation and structuring
+- Type safety and validation
+- DID resolution
+- Business logic
+
+While WASM provides:
+- Cryptographic key operations
+- Message signing (pack)
+- Signature verification (unpack)
+
+This separation keeps the WASM bundle small while providing a complete TAP implementation.
 
 ## Building from Source
 
-### Prerequisites
-
-- Rust and Cargo (https://rustup.rs/)
-- wasm-pack (https://rustwasm.github.io/wasm-pack/installer/)
-
-### Build Steps
-
 ```bash
-# Clone the repository
-git clone https://github.com/TransactionAuthorizationProtocol/tap-rs.git
-cd tap-rs
+# Clone repository
+git clone https://github.com/notabene-id/tap-rs.git
+cd tap-rs/tap-wasm
 
-# Build the WebAssembly package
-cd tap-wasm
+# Build WASM
 wasm-pack build --target web
 
-# The output will be in the pkg/ directory
+# Output in pkg/ directory
 ```
 
-## Examples
+## Performance
 
-For more examples, see the [examples directory](./examples).
-
-### Browser Example
-
-A complete browser example is available at [examples/browser-agent-example.html](./examples/browser-agent-example.html). It demonstrates:
-
-- Creating a TAP agent
-- Creating and modifying TAP messages
-- Packing and unpacking messages
-- Handling events
+- WASM module: ~272KB gzipped
+- Pack operation: < 5ms typical
+- Unpack operation: < 5ms typical
+- Key generation: < 2ms typical
 
 ## License
 

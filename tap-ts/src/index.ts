@@ -2,11 +2,12 @@
  * @taprsvp/agent - TypeScript wrapper for TAP WASM Agent
  * 
  * Browser-optimized agent for TAP message packing/unpacking with flexible key management.
- * This package provides a clean TypeScript API over the TAP WASM implementation.
+ * This package provides cryptographic operations via WASM while you create messages using @taprsvp/types.
  * 
  * @example Basic Usage
  * ```typescript
- * import { TapAgent, generatePrivateKey } from '@taprsvp/agent';
+ * import { TapAgent, generatePrivateKey, createTransferMessage } from '@taprsvp/agent';
+ * import type { Transfer } from '@taprsvp/types';
  * 
  * // Create a new agent
  * const agent = await TapAgent.create({
@@ -14,15 +15,18 @@
  *   nickname: 'my-agent'
  * });
  * 
- * // Create and pack a message
- * const message = agent.createMessage('Transfer', {
+ * // Create a TAP-compliant message using types
+ * const transfer: Transfer = createTransferMessage({
+ *   from: agent.did,
+ *   to: ['did:key:recipient'],
  *   amount: '100.0',
- *   asset: 'USD',
+ *   asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
  *   originator: { '@id': agent.did },
  *   beneficiary: { '@id': 'did:key:recipient' }
  * });
  * 
- * const packed = await agent.pack(message);
+ * // Pack (sign) the message
+ * const packed = await agent.pack(transfer);
  * console.log('Packed message:', packed.message);
  * ```
  * 
@@ -68,6 +72,16 @@ export {
   isValidPrivateKey,
   validateKeyType,
 } from './utils.js';
+export {
+  createTransferMessage,
+  createPaymentMessage,
+  createAuthorizeMessage,
+  createRejectMessage,
+  createSettleMessage,
+  createConnectMessage,
+  createBasicMessage,
+  createDIDCommMessage,
+} from './message-helpers.js';
 
 // Type exports
 export type {

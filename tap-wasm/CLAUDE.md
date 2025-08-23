@@ -71,32 +71,23 @@ cargo bench -p tap-wasm
 - Support both Promise and callback patterns
 - Enable tree-shaking for smaller bundles
 
-## WASM Exports
+## WASM Exports (Simplified API)
+
+The WASM module now focuses exclusively on cryptographic operations that cannot be done in JavaScript:
 
 ### Agent Management
-- `WasmTapAgent::new(config)` - Create new agent with optional config
+- `WasmTapAgent::new(config)` - Create new agent with auto-generated keys
 - `WasmTapAgent::from_private_key(hex, key_type)` - Create from existing private key
 - `get_did()` - Get agent's DID
 - `export_private_key()` - Export private key as hex string
 - `export_public_key()` - Export public key as hex string
 - `nickname()` - Get agent's nickname if set
 
-### Message Operations  
-- `pack_message(message)` - Pack TAP messages (returns Promise)
-- `unpack_message(packed, expected_type)` - Unpack TAP messages (returns Promise)
-- `create_message(type)` - Create new message with UUID
-- `process_message(message, metadata)` - Process received messages (returns Promise)
-- Support for all TAP message types (Transfer, Payment, Authorize, etc.)
-- DIDComm v2 General JWS JSON format
-
-### Message Handlers
-- `register_message_handler(type, handler)` - Register handler for message type
-- `subscribe_to_messages(callback)` - Subscribe to all messages
-- Async handler support with Promise resolution
-
-### Key Generation
-- `generate_key(key_type)` - Generate new key for agent (returns Promise)
-- Supports Ed25519, P256, and Secp256k1 key types
+### Cryptographic Operations
+- `pack_message(message)` - Sign and pack messages (returns Promise)
+- `unpack_message(packed, expected_type)` - Verify and unpack messages (returns Promise)
+- DIDComm v2 General JWS JSON format support
+- Signature generation and verification
 
 ### Utility Functions
 - `generate_private_key(key_type)` - Generate new private keys as hex

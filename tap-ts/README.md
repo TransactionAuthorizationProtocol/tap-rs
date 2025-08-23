@@ -32,8 +32,13 @@ const agent = await TapAgent.create({ keyType: 'Ed25519' });
 
 console.log('Agent DID:', agent.did);
 
-// Create a TAP Transfer message
-const transfer = await agent.createMessage('Transfer', {
+// Create a TAP Transfer message using @taprsvp/types
+import { createTransferMessage } from '@taprsvp/agent';
+import type { Transfer } from '@taprsvp/types';
+
+const transfer: Transfer = createTransferMessage({
+  from: agent.did,
+  to: ['did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL'],
   amount: '100.00',
   asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
   originator: {
@@ -49,7 +54,6 @@ const transfer = await agent.createMessage('Transfer', {
   },
   agents: []  // Agents involved in the transaction
 });
-transfer.to = ['did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL'];
 
 // Pack the message for secure transmission
 const packed = await agent.pack(transfer);
@@ -113,21 +117,12 @@ Unpacks a received DIDComm message.
 const message = await agent.unpack(packedMessage);
 ```
 
-##### `createMessage<T>(type: string, body: T, options?: MessageOptions): Promise<DIDCommMessage<T>>`
+##### `generateUUID(): Promise<string>`
 
-Creates a new TAP message with proper structure.
+Generates a UUID for message IDs.
 
 ```typescript
-const message = await agent.createMessage('Payment', {
-  amount: '25.00',
-  currency: 'USD',
-  merchant: { '@id': merchantDid }
-}, {
-  thid: 'thread-123',     // Thread ID
-  pthid: 'parent-456',     // Parent thread ID  
-  to: [recipientDid],      // Recipients
-  expires_time: Date.now() + 3600000 // 1 hour expiry
-});
+const messageId = await agent.generateUUID();
 ```
 
 ##### `exportPrivateKey(): string`
@@ -201,13 +196,18 @@ if (isValidPrivateKey(privateKeyHex)) {
 }
 ```
 
-## TAP Message Types
+## Creating TAP Messages
 
-The SDK supports all TAP message types:
+Create TAP-compliant messages using helper functions and types from `@taprsvp/types`:
 
 ### Transfer
 ```typescript
-const transfer = await agent.createMessage('Transfer', {
+import { createTransferMessage } from '@taprsvp/agent';
+import type { Transfer } from '@taprsvp/types';
+
+const transfer: Transfer = createTransferMessage({
+  from: originatorDid,
+  to: [beneficiaryDid],
   amount: '100.00',
   asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
   originator: {
@@ -234,7 +234,12 @@ const transfer = await agent.createMessage('Transfer', {
 
 ### Payment
 ```typescript
-const payment = await agent.createMessage('Payment', {
+import { createPaymentMessage } from '@taprsvp/agent';
+import type { Payment } from '@taprsvp/types';
+
+const payment: Payment = createPaymentMessage({
+  from: merchantDid,
+  to: [customerDid],
   amount: '50.00',
   currency: 'USD',
   merchant: {

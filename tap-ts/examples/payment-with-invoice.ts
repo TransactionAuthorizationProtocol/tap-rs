@@ -1,10 +1,11 @@
 /**
  * Payment with Invoice Example
  * 
- * This example demonstrates a payment request with detailed invoice
+ * This example demonstrates a payment request with detailed invoice using TAP-compliant types
  */
 
-import { TapAgent } from '@taprsvp/agent';
+import { TapAgent, createPaymentMessage, createAuthorizeMessage, createSettleMessage, createRejectMessage } from '../dist/index.js';
+import type { PaymentMessage, AuthorizeMessage, SettleMessage, RejectMessage } from '@taprsvp/types';
 
 async function main() {
   console.log('TAP Payment with Invoice Example\n');
@@ -19,9 +20,11 @@ async function main() {
   const customer = await TapAgent.create({ keyType: 'Ed25519' });
   console.log('Customer DID:', customer.did);
   
-  // Merchant creates payment request with invoice
+  // Merchant creates TAP-compliant payment request with invoice
   console.log('\n--- Step 1: Merchant creates payment request ---');
-  const paymentRequest = await merchant.createMessage('Payment', {
+  const paymentRequest: PaymentMessage = await createPaymentMessage({
+    from: merchant.did,
+    to: [customer.did],
     amount: '2,745.99',
     currency: 'USD',
     merchant: {
@@ -89,8 +92,6 @@ async function main() {
     agents: []  // Could include payment processors, escrow agents, etc.
   });
   
-  paymentRequest.to = [customer.did];
-  
   const packedPayment = await merchant.pack(paymentRequest);
   console.log('Payment request created');
   console.log('Invoice number:', paymentRequest.body.invoice.invoiceNumber);
@@ -100,7 +101,7 @@ async function main() {
   // Customer receives payment request
   console.log('\n--- Step 2: Customer receives payment request ---');
   const receivedPayment = await customer.unpack(packedPayment.message);
-  console.log('Payment request from:', receivedPayment.body.merchant.metadata.name);
+  console.log('Payment request from:', receivedPayment.body.merchant.name);
   console.log('\nInvoice Details:');
   console.log('- Invoice #:', receivedPayment.body.invoice.invoiceNumber);
   console.log('- Due Date:', receivedPayment.body.invoice.dueDate);
@@ -114,15 +115,15 @@ async function main() {
   console.log('- Discount:', receivedPayment.body.invoice.discount.amount);
   console.log('- TOTAL:', receivedPayment.body.invoice.total);
   
-  // Customer authorizes payment
+  // Customer creates authorization
   console.log('\n--- Step 3: Customer authorizes payment ---');
-  const authorize = await customer.createMessage('Authorize', {
+  const authorize: AuthorizeMessage = await createAuthorizeMessage({
+    from: customer.did,
+    to: [merchant.did],
     transaction_id: receivedPayment.id,
     settlement_address: '0x1234567890abcdef1234567890abcdef12345678',
-    expiry: new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString() // 1 hour
-  }, {
-    thid: receivedPayment.id,
-    to: [merchant.did]
+    expiry: new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString(), // 1 hour
+    thid: receivedPayment.id
   });
   
   const packedAuth = await customer.pack(authorize);
@@ -134,15 +135,16 @@ async function main() {
   const receivedAuth = await merchant.unpack(packedAuth.message);
   console.log('Authorization received for invoice:', receivedPayment.body.invoice.invoiceNumber);
   
-  // Merchant confirms settlement
+  // Merchant creates settlement confirmation
   console.log('\n--- Step 5: Merchant confirms settlement ---');
-  const settle = await merchant.createMessage('Settle', {
+  const settle: SettleMessage = await createSettleMessage({
+    from: merchant.did,
+    to: [customer.did],
     transaction_id: receivedPayment.id,
+    settlement_address: receivedAuth.body.settlementAddress || '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
     settlement_id: `eip155:1:0x${Math.random().toString(16).slice(2, 42)}`,
-    amount: receivedPayment.body.amount
-  }, {
-    thid: receivedPayment.id,
-    to: [customer.did]
+    amount: receivedPayment.body.amount,
+    thid: receivedPayment.id
   });
   
   const packedSettle = await merchant.pack(settle);
@@ -161,12 +163,12 @@ async function main() {
   
   // Alternative: Customer rejects payment
   console.log('\n--- Alternative Flow: Rejection ---');
-  const reject = await customer.createMessage('Reject', {
+  const reject: RejectMessage = await createRejectMessage({
+    from: customer.did,
+    to: [merchant.did],
     transaction_id: receivedPayment.id,
-    reason: 'Items not matching purchase order specifications'
-  }, {
-    thid: receivedPayment.id,
-    to: [merchant.did]
+    reason: 'Items not matching purchase order specifications',
+    thid: receivedPayment.id
   });
   
   const packedReject = await customer.pack(reject);

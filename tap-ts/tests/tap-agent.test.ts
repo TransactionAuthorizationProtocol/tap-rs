@@ -375,41 +375,29 @@ describe('TapAgent', () => {
       agent = await TapAgent.create();
     });
 
-    it('should create a message with proper structure', async () => {
-      const messageType = 'Transfer';
-      const body = { amount: '100.0', asset: 'USD' };
+    it('should generate UUID for message IDs', async () => {
+      const uuid = await agent.generateUUID();
       
-      const message = await agent.createMessage(messageType, body);
-      
-      expect(message).toEqual({
-        id: 'uuid-1234-5678-9012',
-        type: `https://tap.rsvp/schema/1.0#${messageType}`,
-        from: agent.did,
-        created_time: expect.any(Number),
-        body,
-      });
+      expect(uuid).toBe('uuid-1234-5678-9012');
       expect(mockWasmModule.generateUUID).toHaveBeenCalled();
     });
 
-    it('should create message with custom ID', async () => {
-      const messageType = 'Payment';
-      const body = { amount: '50.0' };
-      const customId = 'custom-id-123';
+    it('should provide agent metrics', async () => {
+      // Perform some operations
+      await agent.pack({
+        id: 'test-id',
+        type: 'test-type',
+        from: agent.did,
+        to: ['did:key:recipient'],
+        created_time: Date.now(),
+        body: {}
+      });
       
-      const message = await agent.createMessage(messageType, body, { id: customId });
+      const metrics = agent.getMetrics();
       
-      expect(message.id).toBe(customId);
-      expect(mockWasmModule.generateUUID).not.toHaveBeenCalled();
-    });
-
-    it('should create message with recipients', async () => {
-      const messageType = 'Authorize';
-      const body = { transaction_id: 'tx-123' };
-      const recipients = ['did:key:recipient1', 'did:key:recipient2'];
-      
-      const message = await agent.createMessage(messageType, body, { to: recipients });
-      
-      expect(message.to).toEqual(recipients);
+      expect(metrics.messagesPacked).toBe(1);
+      expect(metrics.messagesUnpacked).toBe(0);
+      expect(metrics.uptime).toBeGreaterThanOrEqual(0);
     });
   });
 
@@ -461,25 +449,29 @@ describe('TapAgent', () => {
     });
 
     it('should maintain type safety in message operations', async () => {
-      interface TransferBody {
-        amount: string;
-        asset: string;
-        from: string;
-        to: string;
-      }
-
-      const transferBody: TransferBody = {
-        amount: '100.0',
-        asset: 'USD',
-        from: 'account1',
-        to: 'account2',
+      // Create a properly typed message
+      const message = {
+        id: 'msg-123',
+        type: 'https://tap.rsvp/schema/1.0#Transfer',
+        from: agent.did,
+        to: ['did:key:recipient'],
+        created_time: Date.now(),
+        body: {
+          '@context': 'https://tap.rsvp/schema/1.0',
+          '@type': 'Transfer',
+          amount: '100.0',
+          asset: 'USD',
+          originator: { '@id': agent.did },
+          beneficiary: { '@id': 'did:key:recipient' }
+        }
       };
 
-      const message = await agent.createMessage('Transfer', transferBody);
+      const packed = await agent.pack(message);
+      const unpacked = await agent.unpack(packed.message);
       
-      // TypeScript should enforce that body matches TransferBody
-      expect(message.body.amount).toBe('100.0');
-      expect(message.body.asset).toBe('USD');
+      // Type safety should be maintained through pack/unpack
+      expect(unpacked.body).toBeDefined();
+      expect(unpacked.type).toBe(message.type);
     });
 
     it('should type-check packed message metadata', async () => {

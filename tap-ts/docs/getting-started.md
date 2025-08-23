@@ -251,7 +251,7 @@ For browser environments, you can use the SDK with ES modules:
   <div id="output"></div>
   
   <script type="module">
-    import { TapAgent } from 'https://unpkg.com/@taprsvp/agent@latest/dist/index.js';
+    import { TapAgent, generateUUID } from 'https://unpkg.com/@taprsvp/agent@latest/dist/index.js';
     
     async function runExample() {
       const output = document.getElementById('output');
@@ -266,9 +266,16 @@ For browser environments, you can use the SDK with ES modules:
       `;
       
       // Create a message
-      const message = await agent.createMessage('BasicMessage', {
-        content: 'Hello from the browser!'
-      });
+      const message = {
+        id: generateUUID(),
+        type: 'https://didcomm.org/basicmessage/2.0/message',
+        from: agent.did,
+        to: [],
+        created_time: Date.now(),
+        body: {
+          content: 'Hello from the browser!'
+        }
+      };
       
       // Pack it
       const packed = await agent.pack(message);
