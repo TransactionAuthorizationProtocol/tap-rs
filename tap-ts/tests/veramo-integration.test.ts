@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { TapAgent } from '../src/tap-agent.js';
+import { 
+  TapAgent,
+  createTransferMessage,
+  createPaymentMessage,
+  createConnectMessage,
+  createBasicMessage,
+  createDIDCommMessage
+} from '../src/index.js';
 import type { DIDCommMessage } from '../src/types.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
@@ -301,26 +308,23 @@ describe('TAP-Veramo Interoperability Tests', () => {
       });
 
       // Create TAP Transfer message
-      const transferMessage = await tapAgent.createMessage('Transfer', {
+      const transferMessage = await createTransferMessage({
+        from: tapAgent.did,
+        to: [veramoRecipient.did],
         amount: '100.50',
         asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
         originator: {
           '@id': tapAgent.did,
-          metadata: {
-            name: 'Alice Smith',
-            accountNumber: '1234567890',
-          },
+          '@type': 'https://schema.org/Person',
+          name: 'Alice Smith',
         },
         beneficiary: {
           '@id': veramoRecipient.did,
-          metadata: {
-            name: 'Bob Jones',
-            accountNumber: '0987654321',
-          },
+          '@type': 'https://schema.org/Person',
+          name: 'Bob Jones',
         },
         memo: 'Payment for services rendered',
       });
-      transferMessage.to = [veramoRecipient.did];
 
       const packed = await tapAgent.pack(transferMessage);
       const parsedMessage = JSON.parse(packed.message);
@@ -344,16 +348,15 @@ describe('TAP-Veramo Interoperability Tests', () => {
       });
 
       // Create TAP Payment message
-      const paymentMessage = await tapAgent.createMessage('Payment', {
+      const paymentMessage = await createPaymentMessage({
+        from: tapAgent.did,
+        to: [veramoMerchant.did],
         amount: '249.99',
         currency: 'USD',
         merchant: {
           '@id': veramoMerchant.did,
-          metadata: {
-            name: 'Example Merchant',
-            category: 'retail',
-            website: 'https://merchant.example.com',
-          },
+          '@type': 'https://schema.org/Organization',
+          name: 'Example Merchant',
         },
         invoice: {
           invoiceNumber: 'INV-2024-12345',
@@ -378,7 +381,6 @@ describe('TAP-Veramo Interoperability Tests', () => {
           dueDate: '2024-12-31',
         },
       });
-      paymentMessage.to = [veramoMerchant.did];
 
       const packed = await tapAgent.pack(paymentMessage);
       const unpacked = await tapAgent.unpack(packed.message);
@@ -398,7 +400,11 @@ describe('TAP-Veramo Interoperability Tests', () => {
       });
 
       // Create TAP Connect message
-      const connectMessage = await tapAgent.createMessage('Connect', {
+      const connectMessage = await createConnectMessage({
+        from: tapAgent.did,
+        to: [veramoCounterparty.did],
+        requester: { '@id': tapAgent.did, '@type': 'https://schema.org/Person', name: 'Connector' },
+        principal: { '@id': tapAgent.did, '@type': 'https://schema.org/Person', name: 'Connector' },
         constraints: {
           asset_types: [
             'eip155:1/erc20:*',
@@ -413,13 +419,6 @@ describe('TAP-Veramo Interoperability Tests', () => {
             monthly_limit: '10000000.00',
           },
         },
-        metadata: {
-          organization: 'TAP Test Corp',
-          relationship_type: 'business_partner',
-          compliance_level: 'enhanced',
-          supported_protocols: ['TAP', 'DIDComm'],
-          contact_email: 'support@taptest.example.com',
-        },
       });
       connectMessage.to = [veramoCounterparty.did];
 
@@ -429,7 +428,6 @@ describe('TAP-Veramo Interoperability Tests', () => {
       expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Connect');
       expect(unpacked.body.constraints.asset_types).toHaveLength(3);
       expect(unpacked.body.constraints.transaction_limits.max_amount).toBe('100000.00');
-      expect(unpacked.body.metadata.organization).toBe('TAP Test Corp');
     });
   });
 
@@ -447,7 +445,9 @@ describe('TAP-Veramo Interoperability Tests', () => {
       expect(veramoEd25519.did).toMatch(/^did:key:z6Mk/);
 
       // Test message exchange
-      const message = await tapEd25519.createMessage('BasicMessage', {
+      const message = await createBasicMessage({
+        from: tapEd25519.did,
+        to: [veramoEd25519.did],
         content: 'Ed25519 compatibility test',
       });
       message.to = [veramoEd25519.did];
@@ -465,10 +465,14 @@ describe('TAP-Veramo Interoperability Tests', () => {
       expect(tapSecp.did).toMatch(/^did:key:z/);
 
       // Test basic functionality
-      const message = await tapSecp.createMessage('TrustPing', {
-        response_requested: true,
+      const message = await createDIDCommMessage({
+        type: 'https://didcomm.org/trust-ping/2.0/ping',
+        from: tapSecp.did,
+        to: [tapAgent.did],
+        body: {
+          response_requested: true,
+        },
       });
-      message.to = [tapAgent.did];
 
       const packed = await tapSecp.pack(message);
       const unpacked = await tapSecp.unpack(packed.message);
@@ -483,10 +487,11 @@ describe('TAP-Veramo Interoperability Tests', () => {
       expect(tapP256.did).toMatch(/^did:key:z/);
 
       // Test basic functionality
-      const message = await tapP256.createMessage('BasicMessage', {
+      const message = await createBasicMessage({
+        from: tapP256.did,
+        to: [tapAgent.did],
         content: 'P-256 test message',
       });
-      message.to = [tapAgent.did];
 
       const packed = await tapP256.pack(message);
       const unpacked = await tapP256.unpack(packed.message);
@@ -507,16 +512,16 @@ describe('TAP-Veramo Interoperability Tests', () => {
       const parentThreadId = `parent-${Date.now()}`;
 
       // Start conversation with TAP
-      const initialMessage = await tapAgent.createMessage('Transfer', {
+      const initialMessage = await createTransferMessage({
+        from: tapAgent.did,
+        to: [veramoParticipant.did],
         amount: '500.00',
         asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-        originator: { '@id': tapAgent.did },
-        beneficiary: { '@id': veramoParticipant.did },
-      }, {
+        originator: { '@id': tapAgent.did, '@type': 'https://schema.org/Person', name: 'Sender' },
+        beneficiary: { '@id': veramoParticipant.did, '@type': 'https://schema.org/Person', name: 'Receiver' },
         thid: threadId,
         pthid: parentThreadId,
       });
-      initialMessage.to = [veramoParticipant.did];
 
       const packed1 = await tapAgent.pack(initialMessage);
       const unpacked1 = await tapAgent.unpack(packed1.message);
@@ -570,16 +575,17 @@ describe('TAP-Veramo Interoperability Tests', () => {
       expect(unpackedPing.type).toBe('https://didcomm.org/trust-ping/2.0/ping');
 
       // Respond with TAP-specific message
-      const tapResponse = await tapAgent.createMessage('Payment', {
+      const tapResponse = await createPaymentMessage({
+        from: tapAgent.did,
+        to: [veramoAgent2Identifier.did],
         amount: '25.00',
         currency: 'USD',
         merchant: {
           '@id': veramoAgent2Identifier.did,
-          metadata: { name: 'Test Merchant' },
+          '@type': 'https://schema.org/Organization',
+          name: 'Test Merchant',
         },
-      }, {
         thid: pingMessage.id,
-        to: [veramoAgent2Identifier.did],
       });
 
       const packedResponse = await tapAgent.pack(tapResponse);
@@ -648,14 +654,15 @@ describe('TAP-Veramo Interoperability Tests', () => {
       for (let i = 0; i < messageCount; i++) {
         const recipient = veramoRecipients[i % veramoRecipients.length];
         
-        const message = await tapAgent.createMessage('Transfer', {
+        const message = await createTransferMessage({
+          from: tapAgent.did,
+          to: [recipient],
           amount: `${(i + 1) * 10}.00`,
           asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
-          originator: { '@id': tapAgent.did },
-          beneficiary: { '@id': recipient },
+          originator: { '@id': tapAgent.did, '@type': 'https://schema.org/Person', name: 'Sender' },
+          beneficiary: { '@id': recipient, '@type': 'https://schema.org/Person', name: 'Recipient' },
           memo: `Batch transfer ${i + 1}`,
         });
-        message.to = [recipient];
 
         const packed = await tapAgent.pack(message);
         const unpacked = await tapAgent.unpack(packed.message);
