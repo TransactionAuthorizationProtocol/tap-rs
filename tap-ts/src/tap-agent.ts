@@ -175,7 +175,7 @@ export class TapAgent {
    * Pack a message for transmission
    * @param message - TAP message or DIDComm message to pack
    * @param options - Optional packing options
-   * @returns Promise resolving to packed message
+   * @returns Promise resolving to JWS or JWE object
    */
   public async pack(
     message: TAPMessageUnion,
@@ -211,12 +211,16 @@ export class TapAgent {
 
       // Convert to WASM format and pack
       const wasmMessage = convertToWasmMessage(processedMessage);
-      const packed = await this.wasmAgent.packMessage(wasmMessage);
+      const packedResult = await this.wasmAgent.packMessage(wasmMessage);
+
+      // The WASM returns { message: string, metadata?: {...} }
+      // Parse the message string to get the actual JWS/JWE object
+      const packedObject = JSON.parse(packedResult.message) as PackedMessage;
 
       this.metrics.messagesPacked++;
       this.updateLastActivity();
 
-      return packed as PackedMessage;
+      return packedObject;
     } catch (error) {
       if (error instanceof TapAgentError) {
         throw error;
@@ -227,24 +231,31 @@ export class TapAgent {
 
   /**
    * Unpack a received message
-   * @param packedMessage - Packed message string
+   * @param packedMessage - Packed JWS/JWE object or JSON string
    * @param options - Optional unpacking options
    * @returns Promise resolving to unpacked TAP message or DIDComm message
    */
   public async unpack(
-    packedMessage: string,
+    packedMessage: PackedMessage | string,
     options?: UnpackOptions
   ): Promise<TAPMessageUnion> {
     this.ensureNotDisposed();
     
     try {
-      if (!packedMessage || typeof packedMessage !== 'string') {
+      // Convert to string if it's an object
+      let messageString: string;
+      if (typeof packedMessage === 'string') {
+        messageString = packedMessage;
+      } else if (typeof packedMessage === 'object' && packedMessage !== null) {
+        // It's already a JWS/JWE object, stringify it
+        messageString = JSON.stringify(packedMessage);
+      } else {
         throw new TapAgentMessageError('Invalid packed message format');
       }
 
       // Unpack using WASM
       const wasmMessage = await this.wasmAgent.unpackMessage(
-        packedMessage,
+        messageString,
         options?.expectedType
       );
 

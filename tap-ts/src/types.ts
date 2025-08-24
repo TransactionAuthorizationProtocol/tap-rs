@@ -264,6 +264,67 @@ export type TAPMessageUnion = TAPMessage | DIDCommMessage<unknown>;
 export type TapMessageTypeName = keyof TapMessageTypes;
 
 /**
+ * JWS (JSON Web Signature) structure
+ */
+export interface JWSMessage {
+  /** Base64URL-encoded payload */
+  payload: string;
+  /** Array of signatures */
+  signatures: Array<{
+    /** Protected header (base64url) */
+    protected: string;
+    /** Optional unprotected header */
+    header?: Record<string, unknown>;
+    /** Signature (base64url) */
+    signature: string;
+  }>;
+}
+
+/**
+ * JWE (JSON Web Encryption) structure
+ */
+export interface JWEMessage {
+  /** Protected header (base64url) */
+  protected: string;
+  /** Optional unprotected header */
+  unprotected?: Record<string, unknown>;
+  /** Initialization vector (base64url) */
+  iv: string;
+  /** Ciphertext (base64url) */
+  ciphertext: string;
+  /** Authentication tag (base64url) */
+  tag: string;
+  /** Recipients array */
+  recipients: Array<{
+    /** Optional recipient header */
+    header?: Record<string, unknown>;
+    /** Encrypted key (base64url) */
+    encrypted_key?: string;
+  }>;
+  /** Optional Additional Authenticated Data (base64url) */
+  aad?: string;
+}
+
+/**
+ * Packed message can be either JWS or JWE
+ */
+export type PackedMessage = JWSMessage | JWEMessage;
+
+/**
+ * Helper to determine if packed message is JWS
+ */
+export function isJWS(message: PackedMessage): message is JWSMessage {
+  return 'signatures' in message && 'payload' in message;
+}
+
+/**
+ * Helper to determine if packed message is JWE
+ */
+export function isJWE(message: PackedMessage): message is JWEMessage {
+  return 'ciphertext' in message && 'protected' in message && 'recipients' in message;
+}
+
+/**
  * Options for message packing operations
  */
 export interface PackOptions {

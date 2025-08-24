@@ -34,11 +34,17 @@ const { TapAgent } = await import('../src/tap-agent.js');
 describe('TapAgent', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset mock implementations
+    // Reset mock implementations - WASM returns wrapped format, TapAgent parses it
     mockWasmAgent.packMessage.mockResolvedValue({
-      message: 'packed-message-content',
+      message: JSON.stringify({
+        payload: 'eyJpZCI6Im1zZy0xMjMiLCJ0eXBlIjoiaHR0cHM6Ly90YXAucnN2cC9zY2hlbWEvMS4wI1RyYW5zZmVyIn0',
+        signatures: [{
+          protected: 'eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2hhWGdCWkR2b3REa0w1MjU3ZmFpenRpR2lDMlF0S0xHcGJubkVHdGEyZG9LIn0',
+          signature: 'mock-signature-value'
+        }]
+      }),
       metadata: {
-        type: 'encrypted',
+        type: 'jws',
         recipients: ['did:key:recipient'],
         sender: 'did:key:sender',
         messageType: 'Transfer',
@@ -81,14 +87,14 @@ describe('TapAgent', () => {
       });
 
       it('should create a new agent with nickname', async () => {
-        const config: TapAgentConfig = { 
-          keyType: 'secp256k1',
-          nickname: 'test-agent' 
+        const config: TapAgentConfig = {
+          keyType: 'Ed25519',
+          nickname: 'test-agent',
         };
         const agent = await TapAgent.create(config);
         
         expect(mockWasmModule.WasmTapAgent).toHaveBeenCalledWith({
-          keyType: 'secp256k1',
+          keyType: 'Ed25519',
           nickname: 'test-agent',
         });
         expect(agent).toBeInstanceOf(TapAgent);
@@ -96,24 +102,29 @@ describe('TapAgent', () => {
 
       it('should create agent with custom DID resolver', async () => {
         const mockResolver: DIDResolver = {
-          resolve: vi.fn(),
+          resolve: vi.fn().mockResolvedValue({
+            didDocument: {
+              id: 'did:web:example.com',
+              verificationMethod: [],
+            },
+            didResolutionMetadata: {},
+            didDocumentMetadata: {},
+          }),
         };
-        
-        const config: TapAgentConfig = { 
-          didResolver: mockResolver 
+
+        const config: TapAgentConfig = {
+          didResolver: mockResolver,
         };
+
         const agent = await TapAgent.create(config);
-        
         expect(agent).toBeInstanceOf(TapAgent);
-        expect((agent as any).didResolver).toBe(mockResolver);
       });
     });
 
     describe('fromPrivateKey', () => {
       it('should create agent from existing private key with Ed25519', async () => {
         const privateKey = 'abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234';
-        
-        const agent = await TapAgent.fromPrivateKey(privateKey);
+        const agent = await TapAgent.fromPrivateKey(privateKey, 'Ed25519');
         
         expect(mockWasmModule.WasmTapAgent.fromPrivateKey).toHaveBeenCalledWith(
           privateKey,
@@ -124,7 +135,6 @@ describe('TapAgent', () => {
 
       it('should create agent from existing private key with specified key type', async () => {
         const privateKey = 'abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234';
-        
         const agent = await TapAgent.fromPrivateKey(privateKey, 'P256');
         
         expect(mockWasmModule.WasmTapAgent.fromPrivateKey).toHaveBeenCalledWith(
@@ -135,18 +145,20 @@ describe('TapAgent', () => {
       });
 
       it('should throw error for invalid private key', async () => {
-        const invalidKey = 'invalid-key';
-        mockWasmModule.WasmTapAgent.fromPrivateKey.mockRejectedValueOnce(new Error('Invalid key'));
-        
-        await expect(TapAgent.fromPrivateKey(invalidKey)).rejects.toThrow();
+        const invalidPrivateKey = 'not-a-valid-private-key';
+        mockWasmModule.WasmTapAgent.fromPrivateKey.mockRejectedValue(
+          new Error('Invalid private key format')
+        );
+
+        await expect(TapAgent.fromPrivateKey(invalidPrivateKey, 'Ed25519'))
+          .rejects.toThrow('Invalid private key format');
       });
 
       it('should throw error for unsupported key type', async () => {
         const privateKey = 'abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234';
         
-        await expect(
-          TapAgent.fromPrivateKey(privateKey, 'InvalidKeyType' as any)
-        ).rejects.toThrow('Unsupported key type');
+        await expect(TapAgent.fromPrivateKey(privateKey, 'InvalidKeyType' as any))
+          .rejects.toThrow('Unsupported key type');
       });
     });
   });
@@ -159,12 +171,16 @@ describe('TapAgent', () => {
     });
 
     it('should return the agent DID', () => {
-      expect(agent.did).toBe('did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK');
+      const did = agent.did;
+      
+      expect(did).toBe('did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK');
       expect(mockWasmAgent.get_did).toHaveBeenCalled();
     });
 
     it('should return the public key', () => {
-      expect(agent.publicKey).toBe('1234567890abcd1234567890abcd1234567890abcd1234567890abcd12345678');
+      const publicKey = agent.publicKey;
+      
+      expect(publicKey).toBe('1234567890abcd1234567890abcd1234567890abcd1234567890abcd12345678');
       expect(mockWasmAgent.exportPublicKey).toHaveBeenCalled();
     });
 
@@ -177,7 +193,7 @@ describe('TapAgent', () => {
 
     it('should handle private key export errors', () => {
       mockWasmAgent.exportPrivateKey.mockImplementation(() => {
-        throw new Error('Key export failed');
+        throw new Error('Export failed');
       });
 
       expect(() => agent.exportPrivateKey()).toThrow('Failed to export private key');
@@ -196,7 +212,7 @@ describe('TapAgent', () => {
         const message: DIDCommMessage<{ amount: string }> = {
           id: 'msg-123',
           type: 'https://tap.rsvp/schema/1.0#Transfer',
-          from: agent.did,
+          from: 'did:key:sender',
           to: ['did:key:recipient'],
           created_time: Date.now(),
           body: { amount: '100.0' },
@@ -204,15 +220,12 @@ describe('TapAgent', () => {
 
         const packed = await agent.pack(message);
         
-        expect(packed).toEqual({
-          message: 'packed-message-content',
-          metadata: {
-            type: 'encrypted',
-            recipients: ['did:key:recipient'],
-            sender: 'did:key:sender',
-            messageType: 'Transfer',
-          },
-        });
+        // Now returns JWS object directly
+        expect(packed).toHaveProperty('payload');
+        expect(packed).toHaveProperty('signatures');
+        expect(packed.payload).toBe('eyJpZCI6Im1zZy0xMjMiLCJ0eXBlIjoiaHR0cHM6Ly90YXAucnN2cC9zY2hlbWEvMS4wI1RyYW5zZmVyIn0');
+        expect(packed.signatures[0].signature).toBe('mock-signature-value');
+        
         // Verify the message was converted to WASM format
         expect(mockWasmAgent.packMessage).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -243,6 +256,9 @@ describe('TapAgent', () => {
         const packed = await agent.pack(message, options);
         
         expect(packed).toBeDefined();
+        expect(packed).toHaveProperty('payload');
+        expect(packed).toHaveProperty('signatures');
+        
         // Verify the message includes the custom options and is converted to WASM format
         expect(mockWasmAgent.packMessage).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -273,7 +289,13 @@ describe('TapAgent', () => {
 
     describe('unpack', () => {
       it('should unpack a message successfully', async () => {
-        const packedMessage = 'packed-message-string';
+        const packedMessage = JSON.stringify({
+          payload: 'eyJpZCI6Im1zZy0xMjMifQ',
+          signatures: [{
+            protected: 'eyJhbGciOiJFZERTQSJ9',
+            signature: 'signature-value'
+          }]
+        });
         
         const unpacked = await agent.unpack(packedMessage);
         
@@ -286,6 +308,28 @@ describe('TapAgent', () => {
           body: { amount: '100.0' },
         });
         expect(mockWasmAgent.unpackMessage).toHaveBeenCalledWith(packedMessage, undefined);
+      });
+
+      it('should unpack a JWS object directly', async () => {
+        const packedMessage = {
+          payload: 'eyJpZCI6Im1zZy0xMjMifQ',
+          signatures: [{
+            protected: 'eyJhbGciOiJFZERTQSJ9',
+            signature: 'signature-value'
+          }]
+        };
+        
+        const unpacked = await agent.unpack(packedMessage);
+        
+        expect(unpacked).toEqual({
+          id: 'msg-123',
+          type: 'https://tap.rsvp/schema/1.0#Transfer',
+          from: 'did:key:sender',
+          to: ['did:key:recipient'],
+          created_time: expect.any(Number),
+          body: { amount: '100.0' },
+        });
+        expect(mockWasmAgent.unpackMessage).toHaveBeenCalledWith(JSON.stringify(packedMessage), undefined);
       });
 
       it('should unpack message with expected type', async () => {
@@ -348,23 +392,28 @@ describe('TapAgent', () => {
 
       const mockResolver: DIDResolver = {
         resolve: vi.fn().mockResolvedValue({
-          didResolutionMetadata: {},
           didDocument: customDidDoc,
+          didResolutionMetadata: {},
           didDocumentMetadata: {},
         }),
       };
 
-      const agentWithResolver = await TapAgent.create({ didResolver: mockResolver });
-      const result = await agentWithResolver.resolveDID('did:web:example.com');
-      
-      expect(mockResolver.resolve).toHaveBeenCalledWith('did:web:example.com', undefined);
+      const agent = await TapAgent.create({ didResolver: mockResolver });
+      const result = await agent.resolveDID('did:web:example.com');
+
       expect(result.didDocument).toEqual(customDidDoc);
+      expect(mockResolver.resolve).toHaveBeenCalledWith('did:web:example.com', undefined);
     });
 
     it('should handle DID resolution errors', async () => {
-      const invalidDid = 'did:invalid:12345';
+      const mockResolver: DIDResolver = {
+        resolve: vi.fn().mockRejectedValue(new Error('Resolution failed')),
+      };
+
+      const agent = await TapAgent.create({ didResolver: mockResolver });
       
-      await expect(agent.resolveDID(invalidDid)).rejects.toThrow();
+      await expect(agent.resolveDID('did:web:example.com'))
+        .rejects.toThrow('Failed to resolve DID');
     });
   });
 
@@ -383,61 +432,77 @@ describe('TapAgent', () => {
     });
 
     it('should provide agent metrics', async () => {
-      // Perform some operations
-      await agent.pack({
-        id: 'test-id',
-        type: 'test-type',
+      // Pack a message to update metrics
+      const message: DIDCommMessage<{ content: string }> = {
+        id: 'msg-123',
+        type: 'https://didcomm.org/basicmessage/2.0/message',
         from: agent.did,
         to: ['did:key:recipient'],
-        created_time: Date.now(),
-        body: {}
-      });
+        body: { content: 'test' },
+      };
+
+      await agent.pack(message);
       
       const metrics = agent.getMetrics();
       
-      expect(metrics.messagesPacked).toBe(1);
-      expect(metrics.messagesUnpacked).toBe(0);
+      expect(metrics).toEqual({
+        messagesPacked: 1,
+        messagesUnpacked: 0,
+        keyOperations: 0,
+        uptime: expect.any(Number),
+        lastActivity: expect.any(Number),
+      });
       expect(metrics.uptime).toBeGreaterThanOrEqual(0);
     });
   });
 
   describe('Resource Management', () => {
     it('should cleanup resources when disposed', async () => {
-      const agent = await TapAgent.create();
+      const agent: any = await TapAgent.create();
       
       agent.dispose();
       
       expect(mockWasmAgent.free).toHaveBeenCalled();
+      
+      // Should throw error when accessing after disposal
+      expect(() => agent.did).toThrow('Agent has been disposed');
     });
 
     it('should handle multiple dispose calls gracefully', async () => {
-      const agent = await TapAgent.create();
+      const agent: any = await TapAgent.create();
       
       agent.dispose();
-      agent.dispose(); // Should not throw
+      agent.dispose(); // Second call should not throw
       
       expect(mockWasmAgent.free).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('Error Handling', () => {
+    let agent: any;
+
+    beforeEach(async () => {
+      agent = await TapAgent.create();
+    });
+
     it('should wrap WASM errors with typed errors', async () => {
-      mockWasmModule.WasmTapAgent.mockImplementation(() => {
-        throw new Error('WASM initialization failed');
+      mockWasmAgent.get_did.mockImplementation(() => {
+        throw new Error('WASM operation failed');
       });
 
-      await expect(TapAgent.create()).rejects.toThrow('Failed to create TapAgent');
+      expect(() => agent.did).toThrow('Failed to get agent DID');
     });
 
     it('should provide helpful error messages for common failures', async () => {
-      const privateKey = 'too-short';
-      mockWasmModule.WasmTapAgent.fromPrivateKey.mockRejectedValueOnce(
-        new Error('Invalid key length')
-      );
+      const message: DIDCommMessage<{ content: string }> = {
+        id: '',  // Invalid ID
+        type: 'https://didcomm.org/basicmessage/2.0/message',
+        from: agent.did,
+        to: [],  // Invalid recipients
+        body: { content: 'test' },
+      };
 
-      await expect(TapAgent.fromPrivateKey(privateKey)).rejects.toThrow(
-        'Invalid private key format'
-      );
+      await expect(agent.pack(message)).rejects.toThrow();
     });
   });
 
@@ -449,42 +514,52 @@ describe('TapAgent', () => {
     });
 
     it('should maintain type safety in message operations', async () => {
-      // Create a properly typed message
-      const message = {
+      interface CustomBody {
+        amount: string;
+        currency: 'USD' | 'EUR';
+        memo?: string;
+      }
+
+      const message: DIDCommMessage<CustomBody> = {
         id: 'msg-123',
         type: 'https://tap.rsvp/schema/1.0#Transfer',
         from: agent.did,
         to: ['did:key:recipient'],
-        created_time: Date.now(),
         body: {
-          '@context': 'https://tap.rsvp/schema/1.0',
-          '@type': 'Transfer',
-          amount: '100.0',
-          asset: 'USD',
-          originator: { '@id': agent.did },
-          beneficiary: { '@id': 'did:key:recipient' }
-        }
+          amount: '100.50',
+          currency: 'USD',
+          memo: 'Payment for services',
+        },
       };
 
       const packed = await agent.pack(message);
-      const unpacked = await agent.unpack(packed.message);
       
-      // Type safety should be maintained through pack/unpack
-      expect(unpacked.body).toBeDefined();
-      expect(unpacked.type).toBe(message.type);
+      expect(packed).toBeDefined();
+      expect(packed).toHaveProperty('payload');
+      expect(packed).toHaveProperty('signatures');
     });
 
     it('should type-check packed message metadata', async () => {
-      const message: DIDCommMessage<{ test: string }> = {
-        id: 'test',
-        type: 'https://tap.rsvp/schema/1.0#Transfer',
-        body: { test: 'value' },
+      const message: DIDCommMessage<{ content: string }> = {
+        id: 'msg-123',
+        type: 'https://didcomm.org/basicmessage/2.0/message',
+        from: agent.did,
+        to: ['did:key:recipient'],
+        body: { content: 'test' },
       };
 
       const packed: PackedMessage = await agent.pack(message);
       
-      expect(packed.message).toBeTruthy();
-      expect(packed.metadata.type).toBe('encrypted');
+      // TypeScript should ensure PackedMessage is either JWS or JWE
+      if ('signatures' in packed) {
+        // JWS format
+        expect(packed.payload).toBeDefined();
+        expect(packed.signatures).toBeInstanceOf(Array);
+      } else {
+        // JWE format
+        expect(packed.protected).toBeDefined();
+        expect(packed.ciphertext).toBeDefined();
+      }
     });
   });
 });

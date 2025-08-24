@@ -61,17 +61,16 @@ describe('Real WASM Interoperability Tests', () => {
 
       const packed = await aliceAgent.pack(message);
       
-      // Verify it's a valid JWS structure
-      const parsed = JSON.parse(packed.message);
-      expect(parsed).toHaveProperty('payload');
-      expect(parsed).toHaveProperty('signatures');
+      // Verify it's a valid JWS structure (now returns object directly)
+      expect(packed).toHaveProperty('payload');
+      expect(packed).toHaveProperty('signatures');
       
       // Payload should be base64url encoded
-      expect(parsed.payload).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(packed.payload).toMatch(/^[A-Za-z0-9_-]+$/);
       
       // Should have at least one signature
-      expect(parsed.signatures).toBeInstanceOf(Array);
-      expect(parsed.signatures.length).toBeGreaterThan(0);
+      expect(packed.signatures).toBeInstanceOf(Array);
+      expect(packed.signatures.length).toBeGreaterThan(0);
     });
 
     it('should handle standard DIDComm message types', async () => {
@@ -96,10 +95,10 @@ describe('Real WASM Interoperability Tests', () => {
         };
 
         const packed = await aliceAgent.pack(message);
-        const parsed = JSON.parse(packed.message);
         
-        expect(parsed).toHaveProperty('payload');
-        expect(parsed).toHaveProperty('signatures');
+        // Now returns object directly
+        expect(packed).toHaveProperty('payload');
+        expect(packed).toHaveProperty('signatures');
       }
     });
 
@@ -118,7 +117,7 @@ describe('Real WASM Interoperability Tests', () => {
       };
 
       const packed = await aliceAgent.pack(message);
-      const unpacked = await aliceAgent.unpack(packed.message);
+      const unpacked = await aliceAgent.unpack(packed);
       
       // The WASM layer currently doesn't preserve all DIDComm headers when unpacking JWS
       // This is a known limitation - headers are embedded in the payload for JWS format
@@ -151,7 +150,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
 
       const packed = await aliceAgent.pack(transferMessage);
-      const unpacked = await aliceAgent.unpack(packed.message);
+      const unpacked = await aliceAgent.unpack(packed);
       
       expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
       expect(unpacked.body).toBeDefined();
@@ -178,7 +177,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
 
       const packed = await aliceAgent.pack(paymentMessage);
-      const unpacked = await aliceAgent.unpack(packed.message);
+      const unpacked = await aliceAgent.unpack(packed);
       
       expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Payment');
       expect(unpacked.body).toBeDefined();
@@ -213,7 +212,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
 
       const packed = await aliceAgent.pack(connectMessage);
-      const unpacked = await aliceAgent.unpack(packed.message);
+      const unpacked = await aliceAgent.unpack(packed);
       
       expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Connect');
       expect(unpacked.body).toBeDefined();
@@ -231,17 +230,16 @@ describe('Real WASM Interoperability Tests', () => {
       });
 
       const packed = await aliceAgent.pack(message);
-      const parsed = JSON.parse(packed.message);
       
-      // Check message format
-      if (parsed.payload && parsed.signatures) {
+      // Check message format  
+      if (packed.payload && packed.signatures) {
         // JWS format
-        expect(parsed.signatures[0]).toHaveProperty('protected');
-        expect(parsed.signatures[0]).toHaveProperty('signature');
+        expect(packed.signatures[0]).toHaveProperty('protected');
+        expect(packed.signatures[0]).toHaveProperty('signature');
         
         // Decode protected header
         const protectedHeader = JSON.parse(
-          Buffer.from(parsed.signatures[0].protected, 'base64url').toString()
+          Buffer.from(packed.signatures[0].protected, 'base64url').toString()
         );
         
         // Should specify algorithm
@@ -262,12 +260,11 @@ describe('Real WASM Interoperability Tests', () => {
       });
 
       const authPacked = await aliceAgent.pack(authMessage);
-      const parsed = JSON.parse(authPacked.message);
       
       // JWS always reveals sender through signature
-      if (parsed.signatures) {
+      if (authPacked.signatures) {
         const protectedHeader = JSON.parse(
-          Buffer.from(parsed.signatures[0].protected, 'base64url').toString()
+          Buffer.from(authPacked.signatures[0].protected, 'base64url').toString()
         );
         
         // Sender's key ID should be in the protected header
@@ -295,7 +292,7 @@ describe('Real WASM Interoperability Tests', () => {
       
       const packed = await ed25519Agent.pack(message);
       // For JWS, same agent unpacks since it's signed, not encrypted
-      const unpacked = await ed25519Agent.unpack(packed.message);
+      const unpacked = await ed25519Agent.unpack(packed);
       
       expect((unpacked.body as any).content).toBe('Cross key-type test');
       
@@ -321,7 +318,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
       
       const packed = await originalAgent.pack(testMessage);
-      const unpacked = await importedAgent.unpack(packed.message);
+      const unpacked = await importedAgent.unpack(packed);
       
       expect((unpacked.body as any).response_requested).toBe(true);
       
@@ -348,7 +345,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
       
       const packed1 = await aliceAgent.pack(initialMessage);
-      const unpacked1 = await aliceAgent.unpack(packed1.message);
+      const unpacked1 = await aliceAgent.unpack(packed1);
       
       expect(unpacked1.thid).toBe(threadId);
       expect(unpacked1.pthid).toBe(parentThreadId);
@@ -363,7 +360,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
       
       const packed2 = await bobAgent.pack(responseMessage);
-      const unpacked2 = await bobAgent.unpack(packed2.message);
+      const unpacked2 = await bobAgent.unpack(packed2);
       
       expect(unpacked2.thid).toBe(threadId);
     });
@@ -382,7 +379,7 @@ describe('Real WASM Interoperability Tests', () => {
 
       // Should still pack/unpack unknown message types
       const packed = await aliceAgent.pack(invalidMessage);
-      const unpacked = await aliceAgent.unpack(packed.message);
+      const unpacked = await aliceAgent.unpack(packed);
       
       expect(unpacked.type).toBe('https://example.com/unknown/message/type');
       expect(unpacked.body).toEqual({ test: 'unknown' });
@@ -411,7 +408,7 @@ describe('Real WASM Interoperability Tests', () => {
       
       // For JWS (signed) messages, signature verification may fail if Charlie isn't the recipient
       // However, current implementation allows unpacking by same agent
-      const unpacked = await aliceAgent.unpack(packed.message);
+      const unpacked = await aliceAgent.unpack(packed);
       expect(unpacked.to).toContain(bobAgent.did);
       expect(unpacked.to).not.toContain(charlieAgent.did);
       
@@ -435,7 +432,7 @@ describe('Real WASM Interoperability Tests', () => {
         });
         
         const packed = await aliceAgent.pack(message);
-        const unpacked = await aliceAgent.unpack(packed.message);
+        const unpacked = await aliceAgent.unpack(packed);
         
         expect((unpacked.body as any).amount).toBe(`${i * 10}.00`);
       }

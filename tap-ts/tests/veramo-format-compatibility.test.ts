@@ -37,16 +37,15 @@ describe('TAP-Veramo Message Format Compatibility', () => {
       };
 
       const packed = await tapAgent.pack(message);
-      const jws = JSON.parse(packed.message);
 
       // Verify it matches Veramo's expected JWS structure
-      expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
-      expect(Array.isArray(jws.signatures)).toBe(true);
-      expect(jws.signatures.length).toBeGreaterThan(0);
+      expect(packed).toHaveProperty('payload');
+      expect(packed).toHaveProperty('signatures');
+      expect(Array.isArray(packed.signatures)).toBe(true);
+      expect(packed.signatures.length).toBeGreaterThan(0);
 
       // Check signature structure
-      const sig = jws.signatures[0];
+      const sig = packed.signatures[0];
       expect(sig).toHaveProperty('protected');
       expect(sig).toHaveProperty('signature');
 
@@ -65,7 +64,7 @@ describe('TAP-Veramo Message Format Compatibility', () => {
 
       // Decode and verify payload
       const payload = JSON.parse(
-        Buffer.from(jws.payload, 'base64url').toString()
+        Buffer.from(packed.payload, 'base64url').toString()
       );
 
       expect(payload.id).toBe(message.id);
@@ -133,11 +132,9 @@ describe('TAP-Veramo Message Format Compatibility', () => {
         };
 
         const packed = await tapAgent.pack(message);
-        const jws = JSON.parse(packed.message);
-
         // All should produce valid JWS
-        expect(jws).toHaveProperty('payload');
-        expect(jws).toHaveProperty('signatures');
+        expect(packed).toHaveProperty('payload');
+        expect(packed).toHaveProperty('signatures');
       }
     });
 
@@ -165,15 +162,13 @@ describe('TAP-Veramo Message Format Compatibility', () => {
         };
 
         const packed = await tapAgent.pack(message);
-        const jws = JSON.parse(packed.message);
-
         // TAP messages should also use standard JWS format
-        expect(jws).toHaveProperty('payload');
-        expect(jws).toHaveProperty('signatures');
+        expect(packed).toHaveProperty('payload');
+        expect(packed).toHaveProperty('signatures');
 
         // Verify TAP messages maintain DIDComm v2 compatibility
         const protectedHeader = JSON.parse(
-          Buffer.from(jws.signatures[0].protected, 'base64url').toString()
+          Buffer.from(packed.signatures[0].protected, 'base64url').toString()
         );
         expect(protectedHeader.typ).toBe('application/didcomm-signed+json');
       }
@@ -197,11 +192,10 @@ describe('TAP-Veramo Message Format Compatibility', () => {
       };
 
       const packed = await tapAgent.pack(message);
-      const jws = JSON.parse(packed.message);
 
       // Decode payload to verify threading
       const payload = JSON.parse(
-        Buffer.from(jws.payload, 'base64url').toString()
+        Buffer.from(packed.payload, 'base64url').toString()
       );
 
       expect(payload.thid).toBe(threadId);
@@ -231,10 +225,9 @@ describe('TAP-Veramo Message Format Compatibility', () => {
       };
 
       const packed = await tapAgent.pack(message);
-      const jws = JSON.parse(packed.message);
 
       const protectedHeader = JSON.parse(
-        Buffer.from(jws.signatures[0].protected, 'base64url').toString()
+        Buffer.from(packed.signatures[0].protected, 'base64url').toString()
       );
 
       // Key ID should follow DID URL format

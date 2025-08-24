@@ -7,8 +7,14 @@ const mockWasmAgent = {
   exportPrivateKey: vi.fn(() => 'abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234'),
   exportPublicKey: vi.fn(() => '1234567890abcd1234567890abcd1234567890abcd1234567890abcd12345678'),
   packMessage: vi.fn().mockResolvedValue({
-    message: 'packed-content',
-    metadata: { type: 'encrypted' }
+    message: JSON.stringify({
+      payload: 'eyJpZCI6InRlc3QtdXVpZC0xMjMifQ',
+      signatures: [{
+        protected: 'eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6dGVzdDEyMyJ9',
+        signature: 'test-signature'
+      }]
+    }),
+    metadata: { type: 'jws' }
   }),
   unpackMessage: vi.fn().mockResolvedValue({
     id: 'test-msg',
@@ -92,7 +98,11 @@ describe('Simple TapAgent Test', () => {
     
     const packed = await agent.pack(message);
     
-    expect(packed.message).toBe('packed-content');
+    // Now returns JWS object directly
+    expect(packed).toHaveProperty('payload');
+    expect(packed).toHaveProperty('signatures');
+    expect(packed.payload).toBe('eyJpZCI6InRlc3QtdXVpZC0xMjMifQ');
+    expect(packed.signatures[0].signature).toBe('test-signature');
     expect(mockWasmAgent.packMessage).toHaveBeenCalled();
     
     // Check that the message was converted to WASM format

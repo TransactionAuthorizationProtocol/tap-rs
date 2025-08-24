@@ -85,24 +85,15 @@ describe('Integration Tests', () => {
       // Pack the message with real WASM implementation
       const packed = await sender.pack(message);
       
-      // Verify packed message structure
-      expect(packed).toEqual({
-        message: expect.any(String),
-        metadata: expect.objectContaining({
-          type: expect.any(String),
-          sender: sender.did,
-        }),
-      });
-
-      // Verify packed message is a valid JWS (the actual format used by WASM)
-      const packedMessageObj = JSON.parse(packed.message);
-      expect(packedMessageObj).toHaveProperty('payload');
-      expect(packedMessageObj).toHaveProperty('signatures');
-      expect(packedMessageObj.payload).toMatch(/^eyJ/);
+      // Now returns JWS object directly
+      expect(packed).toHaveProperty('payload');
+      expect(packed).toHaveProperty('signatures');
+      expect(Array.isArray(packed.signatures)).toBe(true);
+      expect(packed.payload).toMatch(/^eyJ/);
 
       // For this test, let's use the same agent to unpack (self-signed)
       // In real scenarios, proper key exchange would be needed for signature verification
-      const unpacked = await sender.unpack(packed.message);
+      const unpacked = await sender.unpack(packed);
       
       // Verify the unpacked message contains the core fields
       expect(unpacked).toEqual(expect.objectContaining({
@@ -150,13 +141,12 @@ describe('Integration Tests', () => {
 
       // Step 2: Pack and transmit transfer with real WASM
       const packedTransfer = await originator.pack(transferMessage);
-      const packedObj = JSON.parse(packedTransfer.message);
-      expect(packedObj).toHaveProperty('payload');
-      expect(packedTransfer.metadata.type).toBeDefined();
+      expect(packedTransfer).toHaveProperty('payload');
+      expect(packedTransfer).toHaveProperty('signatures');
 
       // Step 3: Originator unpacks (self-signed for this test)
       // In real scenarios, proper key exchange would be needed
-      const unpackedTransfer = await originator.unpack(packedTransfer.message);
+      const unpackedTransfer = await originator.unpack(packedTransfer);
       expect((unpackedTransfer.body as any).amount).toBe('50.0');
       expect(unpackedTransfer.id).toBe(transferMessage.id);
       expect(unpackedTransfer.from).toBe(originator.did);
@@ -197,13 +187,12 @@ describe('Integration Tests', () => {
 
       const packed = await agent.pack(messageWithAttachment);
       
-      // Verify the message was packed successfully
-      const packedObj = JSON.parse(packed.message);
-      expect(packedObj).toHaveProperty('payload');
-      expect(packed.metadata.type).toBeDefined();
+      // Verify the message was packed successfully (now returns JWS directly)
+      expect(packed).toHaveProperty('payload');
+      expect(packed).toHaveProperty('signatures');
       
       // Unpack to verify the core message was preserved
-      const unpacked = await agent.unpack(packed.message);
+      const unpacked = await agent.unpack(packed);
       expect((unpacked.body as any).invoice_id).toBe('inv-123');
       
       // Note: Attachments may not be preserved through WASM pack/unpack
@@ -246,11 +235,12 @@ describe('Integration Tests', () => {
       });
 
       const packed = await agent.pack(largeMessage);
-      const packedObj = JSON.parse(packed.message);
-      expect(packedObj).toHaveProperty('payload');
+      // Now returns JWS object directly
+      expect(packed).toHaveProperty('payload');
+      expect(packed).toHaveProperty('signatures');
       
       // Verify unpacking works with large payloads
-      const unpacked = await agent.unpack(packed.message);
+      const unpacked = await agent.unpack(packed);
       expect((unpacked.body as any).data).toBe('x'.repeat(10000));
       expect((unpacked.body as any).metadata).toHaveLength(100);
       // Verify metadata structure is preserved (may be simplified by WASM)
@@ -309,14 +299,13 @@ describe('Integration Tests', () => {
 
       // Verify all messages were packed successfully
       packedMessages.forEach((packed) => {
-        const packedObj = JSON.parse(packed.message);
-        expect(packedObj).toHaveProperty('payload');
-        expect(packed.metadata.type).toBeDefined();
+        expect(packed).toHaveProperty('payload');
+        expect(packed).toHaveProperty('signatures');
       });
       
       // Verify we can unpack all messages and they contain correct content
       const unpackedMessages = await Promise.all(
-        packedMessages.map(packed => agent.unpack(packed.message))
+        packedMessages.map(packed => agent.unpack(packed))
       );
       
       unpackedMessages.forEach((unpacked, index) => {
@@ -362,11 +351,11 @@ describe('Integration Tests', () => {
       expect(customMessage.body.metadata.category).toBe('business');
 
       const packed = await agent.pack(customMessage);
-      const packedObj = JSON.parse(packed.message);
-      expect(packedObj).toHaveProperty('payload');
+      expect(packed).toHaveProperty('payload');
+      expect(packed).toHaveProperty('signatures');
 
       // Verify the typed body survives the WASM round-trip
-      const unpacked = await agent.unpack(packed.message);
+      const unpacked = await agent.unpack(packed);
       expect(unpacked.body).toEqual({
         amount: '250.75',
         currency: 'EUR',
@@ -411,9 +400,8 @@ describe('Integration Tests', () => {
       
       // Verify all messages were packed successfully
       results.forEach((packed) => {
-        const packedObj = JSON.parse(packed.message);
-        expect(packedObj).toHaveProperty('payload');
-        expect(packed.metadata.type).toBeDefined();
+        expect(packed).toHaveProperty('payload');
+        expect(packed).toHaveProperty('signatures');
       });
 
       // Should complete operations in reasonable time (< 5 seconds for real WASM)

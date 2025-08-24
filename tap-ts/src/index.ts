@@ -88,6 +88,8 @@ export type {
   TapAgentConfig,
   DIDCommMessage,
   PackedMessage,
+  JWSMessage,
+  JWEMessage,
   KeyType,
   DIDDocument,
   DIDResolver,
@@ -111,6 +113,8 @@ export {
   TapAgentKeyError,
   TapAgentMessageError,
   TapAgentDIDError,
+  isJWS,
+  isJWE,
 } from './types.js';
 
 // Type mapping utilities (for advanced use)
