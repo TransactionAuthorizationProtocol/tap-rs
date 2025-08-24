@@ -6,6 +6,7 @@ import { initWasm, getWasmExports } from './wasm-loader.js';
 import type { WasmTapAgent as WasmTapAgentType } from 'tap-wasm';
 import type {
   TapAgentConfig,
+  PackedMessageResult,
   PackedMessage,
   KeyType,
   DIDResolver,
@@ -180,7 +181,7 @@ export class TapAgent {
   public async pack(
     message: TAPMessageUnion,
     options?: PackOptions
-  ): Promise<PackedMessage> {
+  ): Promise<PackedMessageResult> {
     this.ensureNotDisposed();
     
     try {
@@ -214,13 +215,11 @@ export class TapAgent {
       const packedResult = await this.wasmAgent.packMessage(wasmMessage);
 
       // The WASM returns { message: string, metadata?: {...} }
-      // Parse the message string to get the actual JWS/JWE object
-      const packedObject = JSON.parse(packedResult.message) as PackedMessage;
-
+      // Return the full result with message and metadata
       this.metrics.messagesPacked++;
       this.updateLastActivity();
 
-      return packedObject;
+      return packedResult;
     } catch (error) {
       if (error instanceof TapAgentError) {
         throw error;
@@ -382,7 +381,7 @@ export class TapAgent {
 export type {
   TapAgentConfig,
   DIDCommMessage,
-  PackedMessage,
+  PackedMessageResult,
   KeyType,
   PackOptions,
   UnpackOptions,

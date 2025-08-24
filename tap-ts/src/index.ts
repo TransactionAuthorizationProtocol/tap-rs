@@ -87,6 +87,7 @@ export {
 export type {
   TapAgentConfig,
   DIDCommMessage,
+  PackedMessageResult,
   PackedMessage,
   JWSMessage,
   JWEMessage,

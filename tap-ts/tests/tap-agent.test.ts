@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import type { DIDCommMessage, PackedMessage, TapAgentConfig, DIDDocument, DIDResolver } from '../src/types.js';
+import type { DIDCommMessage, PackedMessage, PackedMessageResult, TapAgentConfig, DIDDocument, DIDResolver } from '../src/types.js';
 
 // Shared mock instance that all tests will use
 const mockWasmAgent = {
@@ -548,7 +548,8 @@ describe('TapAgent', () => {
         body: { content: 'test' },
       };
 
-      const packed: PackedMessage = await agent.pack(message);
+      const packedResult: PackedMessageResult = await agent.pack(message);
+      const packed: PackedMessage = JSON.parse(packedResult.message);
       
       // TypeScript should ensure PackedMessage is either JWS or JWE
       if ('signatures' in packed) {

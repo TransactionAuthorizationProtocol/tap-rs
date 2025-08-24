@@ -241,7 +241,33 @@ impl WasmTapAgent {
 
             // Create pack options
             let security_mode = SecurityMode::Signed; // Default to signed
-            let sender_kid = Some(format!("{}#keys-1", agent.config.agent_did));
+            
+            // Get the actual key ID from the key manager instead of hardcoding #keys-1
+            let sender_kid = {
+                let key_manager = agent.agent_key_manager();
+                if let Ok(key) = key_manager.get_generated_key(&agent.config.agent_did) {
+                    // Use the first verification method ID from the DID document
+                    if let Some(vm) = key.did_doc.verification_method.first() {
+                        Some(vm.id.clone())
+                    } else {
+                        // Fallback to proper DID:key format
+                        if agent.config.agent_did.starts_with("did:key:") {
+                            let key_part = &agent.config.agent_did[8..]; // Skip "did:key:"
+                            Some(format!("{}#{}", agent.config.agent_did, key_part))
+                        } else {
+                            Some(format!("{}#keys-1", agent.config.agent_did))
+                        }
+                    }
+                } else {
+                    // Fallback to proper DID:key format
+                    if agent.config.agent_did.starts_with("did:key:") {
+                        let key_part = &agent.config.agent_did[8..]; // Skip "did:key:"
+                        Some(format!("{}#{}", agent.config.agent_did, key_part))
+                    } else {
+                        Some(format!("{}#keys-1", agent.config.agent_did))
+                    }
+                }
+            };
             let recipient_kid = None; // Can be set from message if needed
 
             let pack_options = PackOptions {

@@ -36,9 +36,9 @@ export interface TapAgentConfig {
 }
 
 /**
- * Represents a packed/encrypted message ready for transmission
+ * Result of packing a message, containing the packed message and metadata
  */
-export interface PackedMessage {
+export interface PackedMessageResult {
   /** The JWE/JWS formatted message string */
   message: string;
   /** Metadata about the packed message */
@@ -313,15 +313,15 @@ export type PackedMessage = JWSMessage | JWEMessage;
 /**
  * Helper to determine if packed message is JWS
  */
-export function isJWS(message: PackedMessage): message is JWSMessage {
-  return 'signatures' in message && 'payload' in message;
+export function isJWS(message: any): message is JWSMessage {
+  return message && typeof message === 'object' && 'signatures' in message && 'payload' in message;
 }
 
 /**
  * Helper to determine if packed message is JWE
  */
-export function isJWE(message: PackedMessage): message is JWEMessage {
-  return 'ciphertext' in message && 'protected' in message && 'recipients' in message;
+export function isJWE(message: any): message is JWEMessage {
+  return message && typeof message === 'object' && 'ciphertext' in message && 'protected' in message && 'recipients' in message;
 }
 
 /**
