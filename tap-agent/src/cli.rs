@@ -123,7 +123,7 @@ pub enum Commands {
         #[arg(short, long)]
         recipient: Option<String>,
 
-        /// The security mode to use (plain, signed, or authcrypt)
+        /// The security mode to use (plain, signed, authcrypt, or anoncrypt)
         #[arg(short, long, default_value = "signed")]
         mode: String,
     },
@@ -884,6 +884,7 @@ async fn pack_message_async(
         "plain" => SecurityMode::Plain,
         "signed" => SecurityMode::Signed,
         "authcrypt" | "auth" | "encrypted" => SecurityMode::AuthCrypt,
+        "anoncrypt" | "anon" => SecurityMode::AnonCrypt,
         _ => {
             eprintln!(
                 "Unknown security mode: {}. Using 'signed' as default.",
@@ -893,11 +894,48 @@ async fn pack_message_async(
         }
     };
 
+    // Get the actual key IDs from the key manager
+    let sender_kid = if let Some(ref s) = sender {
+        // Try to get the actual key ID from the key manager
+        if let Ok(key) = key_manager.get_generated_key(s) {
+            // Get the first authentication method ID from the DID document
+            if let Some(auth_method_id) = key.did_doc.authentication.first() {
+                Some(auth_method_id.clone())
+            } else if let Some(vm) = key.did_doc.verification_method.first() {
+                Some(vm.id.clone())
+            } else {
+                None
+            }
+        } else {
+            // Fallback to the DID-based format for did:key
+            if s.starts_with("did:key:") {
+                let key_part = &s[8..]; // Skip "did:key:"
+                Some(format!("{}#{}", s, key_part))
+            } else {
+                Some(format!("{}#keys-1", s))
+            }
+        }
+    } else {
+        None
+    };
+    
+    let recipient_kid = if let Some(did) = recipient_did {
+        // For recipients, we don't have their keys, so use the standard format
+        if did.starts_with("did:key:") {
+            let key_part = &did[8..]; // Skip "did:key:"
+            Some(format!("{}#{}", did, key_part))
+        } else {
+            Some(format!("{}#keys-1", did))
+        }
+    } else {
+        None
+    };
+    
     // Create pack options
     let pack_options = PackOptions {
         security_mode,
-        sender_kid: sender.as_ref().map(|s| format!("{}#keys-1", s)),
-        recipient_kid: recipient_did.map(|did| format!("{}#keys-1", did)),
+        sender_kid,
+        recipient_kid,
     };
 
     // Pack the message directly using the PlainMessage's Packable implementation
@@ -985,11 +1023,31 @@ async fn unpack_message_async(
         crate::agent_key_manager::AgentKeyManagerBuilder::new().load_from_default_storage();
     let key_manager = Arc::new(key_manager_builder.build()?);
 
+    // Get the actual key ID for the recipient
+    let expected_recipient_kid = if let Ok(key) = key_manager.get_generated_key(&recipient) {
+        // Get the first authentication method ID from the DID document
+        if let Some(auth_method_id) = key.did_doc.authentication.first() {
+            Some(auth_method_id.clone())
+        } else if let Some(vm) = key.did_doc.verification_method.first() {
+            Some(vm.id.clone())
+        } else {
+            None
+        }
+    } else {
+        // Fallback to the DID-based format for did:key
+        if recipient.starts_with("did:key:") {
+            let key_part = &recipient[8..]; // Skip "did:key:"
+            Some(format!("{}#{}", recipient, key_part))
+        } else {
+            Some(format!("{}#keys-1", recipient))
+        }
+    };
+    
     // Create unpack options
     use crate::message_packing::UnpackOptions;
     let unpack_options = UnpackOptions {
         expected_security_mode: SecurityMode::Any,
-        expected_recipient_kid: Some(format!("{}#keys-1", recipient)),
+        expected_recipient_kid,
         require_signature: false,
     };
 

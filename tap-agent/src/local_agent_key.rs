@@ -27,7 +27,6 @@ use rand::{rngs::OsRng, RngCore};
 use serde_json::Value;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tracing::warn;
 use uuid::Uuid;
 
 /// A local implementation of the AgentKey that stores the key material directly
@@ -266,11 +265,10 @@ impl LocalAgentKey {
                 } else {
                     // Generate default key ID based on DID method
                     if did.starts_with("did:key:") {
-                        // For did:key, we can't easily reconstruct the proper fragment here
-                        // without the full key material, so we'll use a placeholder
-                        // The proper kid should be set in the JWK
-                        warn!("did:key JWK missing kid field, using fallback");
-                        format!("{}#keys-1", did)
+                        // For did:key, extract the multibase key from the DID and use it as fragment
+                        // did:key:z6Mk... -> did:key:z6Mk...#z6Mk...
+                        let key_part = &did[8..]; // Skip "did:key:"
+                        format!("{}#{}", did, key_part)
                     } else if did.starts_with("did:web:") {
                         format!("{}#keys-1", did)
                     } else {
@@ -289,7 +287,7 @@ impl LocalAgentKey {
     }
 
     /// Generate a new Ed25519 key with the given key ID
-    pub fn generate_ed25519(kid: &str) -> Result<Self> {
+    pub fn generate_ed25519(_kid: &str) -> Result<Self> {
         // Generate a new Ed25519 keypair
         let mut csprng = OsRng;
         let signing_key = ed25519_dalek::SigningKey::generate(&mut csprng);
@@ -307,6 +305,9 @@ impl LocalAgentKey {
         // Encode the key with multibase (base58btc with 'z' prefix)
         let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
         let did = format!("did:key:{}", multibase_encoded);
+        
+        // Generate the proper verification method ID (did:key:z...#z...)
+        let kid = format!("{}#{}", did, multibase_encoded);
 
         // Create the secret
         let secret = Secret {
@@ -315,7 +316,7 @@ impl LocalAgentKey {
             secret_material: SecretMaterial::JWK {
                 private_key_jwk: serde_json::json!({
                     "kty": "OKP",
-                    "kid": kid,
+                    "kid": kid.clone(),
                     "crv": "Ed25519",
                     "x": base64::engine::general_purpose::STANDARD.encode(public_key),
                     "d": base64::engine::general_purpose::STANDARD.encode(private_key)
@@ -324,7 +325,7 @@ impl LocalAgentKey {
         };
 
         Ok(Self {
-            kid: kid.to_string(),
+            kid,
             did,
             secret,
             key_type: KeyType::Ed25519,
@@ -332,7 +333,7 @@ impl LocalAgentKey {
     }
 
     /// Generate a new P-256 key with the given key ID
-    pub fn generate_p256(kid: &str) -> Result<Self> {
+    pub fn generate_p256(_kid: &str) -> Result<Self> {
         // Generate a new P-256 keypair
         let mut rng = OsRng;
         let signing_key = p256::ecdsa::SigningKey::random(&mut rng);
@@ -352,6 +353,9 @@ impl LocalAgentKey {
         // Encode the key with multibase (base58btc with 'z' prefix)
         let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
         let did = format!("did:key:{}", multibase_encoded);
+        
+        // Generate the proper verification method ID (did:key:z...#z...)
+        let kid = format!("{}#{}", did, multibase_encoded);
 
         // Extract x and y coordinates from public key
         let x = &public_key[1..33]; // Skip the first byte (0x04 for uncompressed)
@@ -364,7 +368,7 @@ impl LocalAgentKey {
             secret_material: SecretMaterial::JWK {
                 private_key_jwk: serde_json::json!({
                     "kty": "EC",
-                    "kid": kid,
+                    "kid": kid.clone(),
                     "crv": "P-256",
                     "x": base64::engine::general_purpose::STANDARD.encode(x),
                     "y": base64::engine::general_purpose::STANDARD.encode(y),
@@ -374,7 +378,7 @@ impl LocalAgentKey {
         };
 
         Ok(Self {
-            kid: kid.to_string(),
+            kid,
             did,
             secret,
             key_type: KeyType::P256,
@@ -382,7 +386,7 @@ impl LocalAgentKey {
     }
 
     /// Generate a new secp256k1 key with the given key ID
-    pub fn generate_secp256k1(kid: &str) -> Result<Self> {
+    pub fn generate_secp256k1(_kid: &str) -> Result<Self> {
         // Generate a new secp256k1 keypair
         let mut rng = OsRng;
         let signing_key = k256::ecdsa::SigningKey::random(&mut rng);
@@ -402,6 +406,9 @@ impl LocalAgentKey {
         // Encode the key with multibase (base58btc with 'z' prefix)
         let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
         let did = format!("did:key:{}", multibase_encoded);
+        
+        // Generate the proper verification method ID (did:key:z...#z...)
+        let kid = format!("{}#{}", did, multibase_encoded);
 
         // Extract x and y coordinates from public key
         let x = &public_key[1..33]; // Skip the first byte (0x04 for uncompressed)
@@ -414,7 +421,7 @@ impl LocalAgentKey {
             secret_material: SecretMaterial::JWK {
                 private_key_jwk: serde_json::json!({
                     "kty": "EC",
-                    "kid": kid,
+                    "kid": kid.clone(),
                     "crv": "secp256k1",
                     "x": base64::engine::general_purpose::STANDARD.encode(x),
                     "y": base64::engine::general_purpose::STANDARD.encode(y),
@@ -424,7 +431,7 @@ impl LocalAgentKey {
         };
 
         Ok(Self {
-            kid: kid.to_string(),
+            kid,
             did,
             secret,
             key_type: KeyType::Secp256k1,

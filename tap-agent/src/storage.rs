@@ -677,6 +677,17 @@ fn set_secure_file_permissions(path: &Path) -> Result<()> {
 
 /// Generate a JWK for a stored key
 fn generate_jwk_for_key(key: &StoredKey) -> serde_json::Value {
+    // Generate the proper key ID based on DID type
+    let kid = if key.did.starts_with("did:key:") {
+        // For did:key, extract the multibase key and use it as fragment
+        // did:key:z6Mk... -> did:key:z6Mk...#z6Mk...
+        let key_part = &key.did[8..]; // Skip "did:key:"
+        format!("{}#{}", key.did, key_part)
+    } else {
+        // For other DID methods, use #keys-1 as default
+        format!("{}#keys-1", key.did)
+    };
+    
     match key.key_type {
         KeyType::Ed25519 => {
             serde_json::json!({
@@ -684,7 +695,7 @@ fn generate_jwk_for_key(key: &StoredKey) -> serde_json::Value {
                 "crv": "Ed25519",
                 "x": key.public_key,
                 "d": key.private_key,
-                "kid": format!("{}#keys-1", key.did)
+                "kid": kid
             })
         }
         KeyType::P256 => {
@@ -693,7 +704,7 @@ fn generate_jwk_for_key(key: &StoredKey) -> serde_json::Value {
                 "crv": "P-256",
                 "x": key.public_key,
                 "d": key.private_key,
-                "kid": format!("{}#keys-1", key.did)
+                "kid": kid
             })
         }
         KeyType::Secp256k1 => {
@@ -702,7 +713,7 @@ fn generate_jwk_for_key(key: &StoredKey) -> serde_json::Value {
                 "crv": "secp256k1",
                 "x": key.public_key,
                 "d": key.private_key,
-                "kid": format!("{}#keys-1", key.did)
+                "kid": kid
             })
         }
     }

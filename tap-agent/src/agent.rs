@@ -909,11 +909,10 @@ impl TapAgent {
     fn determine_security_mode<T: TapMessageBody>(&self) -> SecurityMode {
         // If security mode is explicitly configured, use that
         if let Some(ref mode) = self.config.security_mode {
-            if mode.to_uppercase() == "AUTHCRYPT" {
-                return SecurityMode::AuthCrypt;
-            } else {
-                // Default to Signed for any other value
-                return SecurityMode::Signed;
+            match mode.to_uppercase().as_str() {
+                "AUTHCRYPT" => return SecurityMode::AuthCrypt,
+                "ANONCRYPT" => return SecurityMode::AnonCrypt,
+                _ => return SecurityMode::Signed,
             }
         }
 
@@ -1320,7 +1319,7 @@ impl crate::agent::Agent for TapAgent {
 
         // Get the appropriate key IDs
         let sender_kid = self.get_signing_kid().await?;
-        let recipient_kid = if to.len() == 1 && security_mode == SecurityMode::AuthCrypt {
+        let recipient_kid = if to.len() == 1 && (security_mode == SecurityMode::AuthCrypt || security_mode == SecurityMode::AnonCrypt) {
             Some(self.get_encryption_kid(to[0]).await?)
         } else {
             None
@@ -1329,7 +1328,7 @@ impl crate::agent::Agent for TapAgent {
         // Create pack options for the plaintext message
         let pack_options = PackOptions {
             security_mode,
-            sender_kid: Some(sender_kid),
+            sender_kid: if security_mode == SecurityMode::AnonCrypt { None } else { Some(sender_kid) },
             recipient_kid,
         };
 
@@ -1433,9 +1432,9 @@ impl crate::agent::Agent for TapAgent {
         // Get our encryption key ID
         let our_kid = self.get_signing_kid().await.ok();
 
-        // Create unpack options
+        // Create unpack options (accept both AuthCrypt and AnonCrypt)
         let unpack_options = UnpackOptions {
-            expected_security_mode: SecurityMode::AuthCrypt,
+            expected_security_mode: SecurityMode::Any,
             expected_recipient_kid: our_kid,
             require_signature: false,
         };
@@ -1537,9 +1536,9 @@ impl crate::agent::Agent for TapAgent {
             // Get our encryption key ID
             let our_kid = self.get_signing_kid().await.ok();
 
-            // Create unpack options
+            // Create unpack options (accept both AuthCrypt and AnonCrypt for encrypted messages)
             let unpack_options = UnpackOptions {
-                expected_security_mode: SecurityMode::AuthCrypt,
+                expected_security_mode: SecurityMode::Any,
                 expected_recipient_kid: our_kid,
                 require_signature: false,
             };

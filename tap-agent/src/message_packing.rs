@@ -320,6 +320,37 @@ impl Packable for PlainMessage {
                 // Serialize the JWE
                 serde_json::to_string(&jwe).map_err(|e| Error::Serialization(e.to_string()))
             }
+            SecurityMode::AnonCrypt => {
+                // AnonCrypt mode requires only recipient KID (sender is anonymous)
+                let recipient_kid = options.recipient_kid.clone().ok_or_else(|| {
+                    Error::Validation("AnonCrypt mode requires recipient_kid".to_string())
+                })?;
+
+                // We need some key for encryption - use the first available key if no sender specified
+                let encryption_key = if let Some(sender_kid) = &options.sender_kid {
+                    key_manager.get_encryption_key(sender_kid).await?
+                } else {
+                    // For anonymous encryption, we can use any available encryption key
+                    // In practice, this might need to be handled differently depending on requirements
+                    return Err(Error::Validation("AnonCrypt mode requires a temporary encryption key".to_string()));
+                };
+
+                // Get the recipient's verification key
+                let recipient_key = key_manager.resolve_verification_key(&recipient_kid).await?;
+
+                // Serialize the message
+                let plaintext =
+                    serde_json::to_string(self).map_err(|e| Error::Serialization(e.to_string()))?;
+
+                // Create a JWE for the recipient without sender information
+                let jwe = encryption_key
+                    .create_jwe(plaintext.as_bytes(), &[recipient_key], None)
+                    .await
+                    .map_err(|e| Error::Cryptography(format!("Failed to create JWE: {}", e)))?;
+
+                // Serialize the JWE
+                serde_json::to_string(&jwe).map_err(|e| Error::Serialization(e.to_string()))
+            }
             SecurityMode::Any => {
                 // Any mode is not valid for packing, only for unpacking
                 Err(Error::Validation(
@@ -514,6 +545,78 @@ where
                 .map_err(|e| Error::Serialization(e.to_string()))?;
 
             // Create a JWE for the recipient
+            let jwe = encryption_key
+                .create_jwe(plaintext.as_bytes(), &[recipient_key], None)
+                .await
+                .map_err(|e| Error::Cryptography(format!("Failed to create JWE: {}", e)))?;
+
+            // Serialize the JWE
+            serde_json::to_string(&jwe).map_err(|e| Error::Serialization(e.to_string()))
+        }
+        SecurityMode::AnonCrypt => {
+            // AnonCrypt mode requires only recipient KID (sender is anonymous)
+            let recipient_kid = options.recipient_kid.clone().ok_or_else(|| {
+                Error::Validation("AnonCrypt mode requires recipient_kid".to_string())
+            })?;
+
+            // We need some key for encryption - use the first available key if no sender specified
+            let encryption_key = if let Some(sender_kid) = &options.sender_kid {
+                key_manager.get_encryption_key(sender_kid).await?
+            } else {
+                // For anonymous encryption, we can use any available encryption key
+                return Err(Error::Validation("AnonCrypt mode requires a temporary encryption key".to_string()));
+            };
+
+            // Get the recipient's verification key
+            let recipient_key = key_manager.resolve_verification_key(&recipient_kid).await?;
+
+            // Convert to a Value first and create a PlainMessage (similar to AuthCrypt)
+            let value =
+                serde_json::to_value(obj).map_err(|e| Error::Serialization(e.to_string()))?;
+
+            let obj = value
+                .as_object()
+                .ok_or_else(|| Error::Validation("Message is not a JSON object".to_string()))?;
+
+            let id_string = obj
+                .get("id")
+                .map(|v| v.as_str().unwrap_or_default().to_string())
+                .unwrap_or_else(|| Uuid::new_v4().to_string());
+
+            let msg_type = obj
+                .get("type")
+                .and_then(|v| v.as_str())
+                .unwrap_or("https://tap.rsvp/schema/1.0/message");
+
+            let to = if let Some(kid) = &options.recipient_kid {
+                let did = kid.split('#').next().unwrap_or(kid).to_string();
+                vec![did]
+            } else {
+                vec![]
+            };
+
+            // Create a PlainMessage (no sender info for anonymous)
+            let plain_message = PlainMessage {
+                id: id_string,
+                typ: "application/didcomm-plain+json".to_string(),
+                type_: msg_type.to_string(),
+                body: value,
+                from: String::new(), // Anonymous - no sender
+                to,
+                thid: None,
+                pthid: None,
+                created_time: Some(chrono::Utc::now().timestamp() as u64),
+                expires_time: None,
+                from_prior: None,
+                attachments: None,
+                extra_headers: std::collections::HashMap::new(),
+            };
+
+            // Serialize the message
+            let plaintext = serde_json::to_string(&plain_message)
+                .map_err(|e| Error::Serialization(e.to_string()))?;
+
+            // Create a JWE for the recipient without sender information
             let jwe = encryption_key
                 .create_jwe(plaintext.as_bytes(), &[recipient_key], None)
                 .await
@@ -863,7 +966,8 @@ mod tests {
             })
             .unwrap();
 
-        let sender_kid = format!("{}#keys-1", key.did);
+        // Get the actual verification method ID from the DID document
+        let sender_kid = key.did_doc.verification_method[0].id.clone();
 
         // Create a test message
         let message = PlainMessage {
@@ -924,7 +1028,8 @@ mod tests {
                 .generate_key(DIDGenerationOptions { key_type })
                 .unwrap();
 
-            let sender_kid = format!("{}#keys-1", key.did);
+            // Get the actual verification method ID from the DID document
+            let sender_kid = key.did_doc.verification_method[0].id.clone();
 
             // Create a test message
             let message = PlainMessage {
@@ -1012,7 +1117,8 @@ mod tests {
             extra_headers: Default::default(),
         };
 
-        let sender_kid = format!("{}#keys-1", key1.did);
+        // Get the actual verification method ID from the DID document
+        let sender_kid = key1.did_doc.verification_method[0].id.clone();
         let pack_options = PackOptions::new().with_sign(&sender_kid);
         let packed = message.pack(&*key_manager1, pack_options).await.unwrap();
 
