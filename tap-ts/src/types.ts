@@ -100,6 +100,17 @@ export interface MessageAttachment {
     encoding?: string;
     /** Raw attachment data */
     content: string | object;
+  } | {
+    /** JWS for Veramo compatibility */
+    jws?: string;
+    /** Hash for Veramo compatibility */
+    hash?: string;
+    /** Links for Veramo compatibility */
+    links?: string[];
+    /** Base64 data for Veramo compatibility */
+    base64?: string;
+    /** JSON data for Veramo compatibility */
+    json?: Record<string, unknown>;
   };
 }
 

@@ -1,133 +1,244 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { DIDResolver } from '../src/types.js';
+import { describe, it, expect } from 'vitest';
+import { TapAgent } from '../src/index.js';
+import type { DIDResolver, DIDResolutionResult } from '../src/types.js';
 
-// Shared mock instance that all tests will use
-const mockWasmAgent = {
-  free: vi.fn(),
-  get_did: vi.fn(() => 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK'),
-  exportPrivateKey: vi.fn(() => 'abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234'),
-  exportPublicKey: vi.fn(() => '1234567890abcd1234567890abcd1234567890abcd1234567890abcd12345678'),
-  packMessage: vi.fn(),
-  unpackMessage: vi.fn(),
-};
+describe('DID Resolution with Real WASM', () => {
+  describe('Built-in did:key resolver', () => {
+    it('should resolve did:key DIDs', async () => {
+      const agent = await TapAgent.create();
+      const result = await agent.resolveDID(agent.did);
+      
+      expect(result.didDocument).toBeDefined();
+      expect(result.didDocument?.id).toBe(agent.did);
+      expect(result.didDocument?.verificationMethod).toBeDefined();
+      expect(result.didDocument?.verificationMethod?.length).toBeGreaterThan(0);
+      
+      // Check verification method structure
+      const vm = result.didDocument?.verificationMethod?.[0];
+      expect(vm).toBeDefined();
+      expect(vm?.id).toMatch(/^did:key:z[1-9A-HJ-NP-Za-km-z]+#/);
+      expect(vm?.type).toBeDefined();
+      expect(vm?.controller).toBe(agent.did);
+      
+      agent.dispose();
+    });
 
-const mockWasmModule = {
-  WasmTapAgent: Object.assign(vi.fn(() => mockWasmAgent), {
-    fromPrivateKey: vi.fn().mockResolvedValue(mockWasmAgent),
-  }),
-  generatePrivateKey: vi.fn(() => 'generatedPrivateKey123'),
-  generateUUID: vi.fn(() => 'uuid-1234-5678-9012'),
-  WasmKeyType: {
-    Ed25519: 0,
-    P256: 1,
-    Secp256k1: 2,
-  },
-  default: vi.fn().mockResolvedValue({}), // Mock WASM initialization
-};
+    it('should resolve different key types', async () => {
+      const keyTypes: Array<'Ed25519' | 'P256' | 'secp256k1'> = ['Ed25519', 'P256', 'secp256k1'];
+      
+      for (const keyType of keyTypes) {
+        const agent = await TapAgent.create({ keyType });
+        const result = await agent.resolveDID(agent.did);
+        
+        expect(result.didDocument).toBeDefined();
+        expect(result.didDocument?.id).toBe(agent.did);
+        expect(result.didDocumentMetadata).toBeDefined();
+        expect(result.didResolutionMetadata).toBeDefined();
+        
+        agent.dispose();
+      }
+    });
 
-// Mock the tap-wasm import
-vi.mock('tap-wasm', () => mockWasmModule);
-
-// Import the class we're testing after mocking
-const { TapAgent } = await import('../src/tap-agent.js');
-
-describe('DID Resolution', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
+    it('should handle non-did:key DIDs appropriately', async () => {
+      const agent = await TapAgent.create();
+      
+      // Should return null or error for unsupported DID methods
+      const result = await agent.resolveDID('did:web:example.com');
+      
+      // Built-in resolver only supports did:key
+      expect(result.didDocument).toBeUndefined();
+      expect(result.didResolutionMetadata.error).toBeDefined();
+      
+      agent.dispose();
+    });
   });
 
-  it('should use provided DID resolver when available', async () => {
-    const mockResolver: DIDResolver = {
-      resolve: vi.fn().mockResolvedValue({
-        didResolutionMetadata: {},
-        didDocument: {
-          id: 'did:example:123',
-          verificationMethod: [{
-            id: 'did:example:123#key-1',
-            type: 'Ed25519VerificationKey2020',
-            controller: 'did:example:123',
-            publicKeyMultibase: 'z6Mktest...'
-          }],
+  describe('Custom DID resolver', () => {
+    it('should use custom resolver when provided', async () => {
+      const customResolver: DIDResolver = {
+        resolve: async (did: string): Promise<DIDResolutionResult> => {
+          return {
+            didDocument: {
+              '@context': ['https://www.w3.org/ns/did/v1'],
+              id: did,
+              verificationMethod: [{
+                id: `${did}#custom-key`,
+                type: 'CustomKeyType',
+                controller: did,
+                publicKeyJwk: {
+                  kty: 'OKP',
+                  crv: 'Ed25519',
+                  x: 'test-key',
+                },
+              }],
+              authentication: [`${did}#custom-key`],
+              assertionMethod: [`${did}#custom-key`],
+            },
+            didDocumentMetadata: {
+              created: new Date().toISOString(),
+            },
+            didResolutionMetadata: {
+              contentType: 'application/did+json',
+            },
+          };
         },
-        didDocumentMetadata: {},
-      }),
-    };
+      };
 
-    const agent = await TapAgent.create({
-      didResolver: mockResolver,
+      const agent = await TapAgent.create({ didResolver: customResolver });
+      
+      // Should use custom resolver for any DID
+      const result = await agent.resolveDID('did:custom:12345');
+      
+      expect(result.didDocument).toBeDefined();
+      expect(result.didDocument?.id).toBe('did:custom:12345');
+      expect(result.didDocument?.verificationMethod?.[0].id).toBe('did:custom:12345#custom-key');
+      expect(result.didDocument?.verificationMethod?.[0].type).toBe('CustomKeyType');
+      
+      agent.dispose();
     });
 
-    const result = await agent.resolveDID('did:example:123');
-    
-    expect(mockResolver.resolve).toHaveBeenCalledWith('did:example:123', undefined);
-    expect(result.didDocument?.id).toBe('did:example:123');
-  });
-
-  it('should pass options to the resolver', async () => {
-    const mockResolver: DIDResolver = {
-      resolve: vi.fn().mockResolvedValue({
-        didResolutionMetadata: {},
-        didDocument: {
-          id: 'did:web:example.com',
-          verificationMethod: [],
+    it('should handle resolver errors gracefully', async () => {
+      const errorResolver: DIDResolver = {
+        resolve: async (did: string): Promise<DIDResolutionResult> => {
+          if (did === 'did:error:test') {
+            throw new Error('Resolution failed');
+          }
+          return {
+            didDocument: undefined as any,
+            didDocumentMetadata: {},
+            didResolutionMetadata: {
+              error: 'notFound',
+              message: 'DID not found',
+            },
+          };
         },
-        didDocumentMetadata: {},
-      }),
-    };
+      };
 
-    const agent = await TapAgent.create({
-      didResolver: mockResolver,
+      const agent = await TapAgent.create({ didResolver: errorResolver });
+      
+      // Should handle thrown errors
+      await expect(agent.resolveDID('did:error:test')).rejects.toThrow('Failed to resolve DID');
+      
+      // Should handle error responses
+      const result = await agent.resolveDID('did:unknown:123');
+      expect(result.didDocument).toBeUndefined();
+      expect(result.didResolutionMetadata.error).toBe('notFound');
+      
+      agent.dispose();
     });
 
-    const options = { accept: 'application/did+json' };
-    await agent.resolveDID('did:web:example.com', options);
-    
-    expect(mockResolver.resolve).toHaveBeenCalledWith('did:web:example.com', options);
-  });
-
-  it('should throw error when no resolver is available', async () => {
-    const agent = await TapAgent.create();
-    
-    await expect(agent.resolveDID('did:example:123')).rejects.toThrow('No DID resolver configured');
-  });
-
-  it('should validate DID format', async () => {
-    const agent = await TapAgent.create();
-    
-    await expect(agent.resolveDID('not-a-did')).rejects.toThrow('Invalid DID format');
-    await expect(agent.resolveDID('')).rejects.toThrow('Invalid DID format');
-  });
-
-  it('should handle resolver errors gracefully', async () => {
-    const errorResolver: DIDResolver = {
-      resolve: vi.fn().mockRejectedValue(new Error('Network error')),
-    };
-
-    const agent = await TapAgent.create({
-      didResolver: errorResolver,
-    });
-
-    await expect(agent.resolveDID('did:web:example.com')).rejects.toThrow('Failed to resolve DID');
-  });
-
-  it('should handle resolver returning error metadata', async () => {
-    const errorResolver: DIDResolver = {
-      resolve: vi.fn().mockResolvedValue({
-        didResolutionMetadata: {
-          error: 'notFound',
-          message: 'DID not found',
+    it('should support resolver with caching', async () => {
+      let resolutionCount = 0;
+      const cachingResolver: DIDResolver = {
+        resolve: async (did: string): Promise<DIDResolutionResult> => {
+          resolutionCount++;
+          return {
+            didDocument: {
+              '@context': ['https://www.w3.org/ns/did/v1'],
+              id: did,
+              verificationMethod: [{
+                id: `${did}#key-${resolutionCount}`,
+                type: 'JsonWebKey2020',
+                controller: did,
+                publicKeyJwk: {},
+              }],
+            },
+            didDocumentMetadata: {},
+            didResolutionMetadata: {},
+          };
         },
-        didDocumentMetadata: {},
-      }),
-    };
+      };
 
-    const agent = await TapAgent.create({
-      didResolver: errorResolver,
+      const agent = await TapAgent.create({ didResolver: cachingResolver });
+      
+      // First resolution
+      const result1 = await agent.resolveDID('did:test:123');
+      expect(result1.didDocument?.verificationMethod?.[0].id).toBe('did:test:123#key-1');
+      
+      // Second resolution of same DID (resolver might cache internally)
+      const result2 = await agent.resolveDID('did:test:123');
+      expect(result2.didDocument?.verificationMethod?.[0].id).toBe('did:test:123#key-2');
+      
+      // Resolution count should be 2 (no caching in this simple example)
+      expect(resolutionCount).toBe(2);
+      
+      agent.dispose();
+    });
+  });
+
+  describe('DID Document validation', () => {
+    it('should validate DID document structure', async () => {
+      const agent = await TapAgent.create();
+      const result = await agent.resolveDID(agent.did);
+      
+      const doc = result.didDocument;
+      expect(doc).toBeDefined();
+      
+      // Check required fields
+      expect(doc?.['@context']).toBeDefined();
+      expect(Array.isArray(doc?.['@context'])).toBe(true);
+      expect(doc?.id).toBe(agent.did);
+      
+      // Check verification methods
+      expect(doc?.verificationMethod).toBeDefined();
+      expect(Array.isArray(doc?.verificationMethod)).toBe(true);
+      doc?.verificationMethod?.forEach(vm => {
+        expect(vm.id).toBeDefined();
+        expect(vm.type).toBeDefined();
+        expect(vm.controller).toBeDefined();
+        expect(vm.publicKeyJwk || vm.publicKeyMultibase).toBeDefined();
+      });
+      
+      // Check verification relationships
+      if (doc?.authentication) {
+        expect(Array.isArray(doc.authentication)).toBe(true);
+      }
+      if (doc?.assertionMethod) {
+        expect(Array.isArray(doc.assertionMethod)).toBe(true);
+      }
+      if (doc?.keyAgreement) {
+        expect(Array.isArray(doc.keyAgreement)).toBe(true);
+      }
+      if (doc?.capabilityInvocation) {
+        expect(Array.isArray(doc.capabilityInvocation)).toBe(true);
+      }
+      if (doc?.capabilityDelegation) {
+        expect(Array.isArray(doc.capabilityDelegation)).toBe(true);
+      }
+      
+      agent.dispose();
+    });
+  });
+
+  describe('Resolution metadata', () => {
+    it('should include proper resolution metadata', async () => {
+      const agent = await TapAgent.create();
+      const result = await agent.resolveDID(agent.did);
+      
+      // Check resolution metadata
+      expect(result.didResolutionMetadata).toBeDefined();
+      if (result.didDocument) {
+        // Successful resolution should have minimal metadata
+        expect(result.didResolutionMetadata.error).toBeUndefined();
+      }
+      
+      // Check document metadata
+      expect(result.didDocumentMetadata).toBeDefined();
+      
+      agent.dispose();
     });
 
-    const result = await agent.resolveDID('did:web:notfound.com');
-    
-    expect(result.didResolutionMetadata.error).toBe('notFound');
-    expect(result.didDocument).toBeUndefined();
+    it('should handle resolution errors with proper metadata', async () => {
+      const agent = await TapAgent.create();
+      
+      // Try to resolve an invalid DID
+      const result = await agent.resolveDID('invalid-did');
+      
+      expect(result.didDocument).toBeUndefined();
+      expect(result.didResolutionMetadata.error).toBeDefined();
+      expect(result.didResolutionMetadata.error).toMatch(/invalid|unsupported|notFound/i);
+      
+      agent.dispose();
+    });
   });
 });

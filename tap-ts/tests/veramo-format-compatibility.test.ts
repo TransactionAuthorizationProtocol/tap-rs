@@ -108,7 +108,7 @@ describe('TAP-Veramo Message Format Compatibility', () => {
         // Expected to fail - either format or signature issue
         // The important thing is TAP attempts to process it
         expect(error).toBeDefined();
-        expect(error.message).toBeTruthy();
+        expect((error as Error).message).toBeTruthy();
       }
     });
   });

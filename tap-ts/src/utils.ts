@@ -257,3 +257,12 @@ export async function retryWithBackoff<T>(
     lastError
   );
 }
+
+/**
+ * WASM Key Type constants for direct access
+ */
+export const WasmKeyType = {
+  Ed25519: 0,
+  P256: 1,
+  Secp256k1: 2,
+} as const;

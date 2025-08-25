@@ -8,7 +8,7 @@ import {
   createBasicMessage,
   createDIDCommMessage 
 } from '../src/index.js';
-import { generatePrivateKey } from '../src/utils.js';
+// import { generatePrivateKey } from '../src/utils.js';
 import type { DIDCommMessage } from '../src/types.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';

@@ -77,6 +77,7 @@ export {
   createPaymentMessage,
   createAuthorizeMessage,
   createRejectMessage,
+  createCancelMessage,
   createSettleMessage,
   createConnectMessage,
   createBasicMessage,

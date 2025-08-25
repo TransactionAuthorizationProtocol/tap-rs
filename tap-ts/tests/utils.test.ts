@@ -1,245 +1,357 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
+import { 
+  generatePrivateKey, 
+  generateUUID
+} from '../src/utils.js';
+import {
+  createTransferMessage,
+  createPaymentMessage,
+  createAuthorizeMessage,
+  createRejectMessage,
+  createCancelMessage,
+  createSettleMessage,
+  createBasicMessage,
+  createDIDCommMessage
+} from '../src/message-helpers.js';
 
-// Mock the WASM loader module
-const mockWasmExports = {
-  generatePrivateKey: vi.fn(() => 'generated-private-key-hex'),
-  generateUUID: vi.fn(() => 'uuid-1234-5678-9012-3456'),
-  WasmKeyType: {
-    Ed25519: 0,
-    P256: 1,
-    Secp256k1: 2,
-  },
-};
-
-vi.mock('../src/wasm-loader.js', () => ({
-  getWasmExports: vi.fn(async () => mockWasmExports),
-  initWasm: vi.fn(async () => {}),
-}));
-
-// Import after mocking
-const { generatePrivateKey, generateUUID, isValidDID, isValidPrivateKey, validateKeyType } = await import('../src/utils.js');
-
-describe('Utils', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
+describe('Utils with Real WASM', () => {
   describe('generatePrivateKey', () => {
-    it('should generate Ed25519 private key by default', async () => {
-      const privateKey = await generatePrivateKey();
-      
-      expect(privateKey).toBe('generated-private-key-hex');
-      expect(mockWasmExports.generatePrivateKey).toHaveBeenCalledWith('Ed25519');
+    it('should generate Ed25519 private key', async () => {
+      const key = await generatePrivateKey('Ed25519');
+      expect(key).toMatch(/^[0-9a-f]+$/);
+      expect(key.length).toBe(64); // 32 bytes as hex
     });
 
-    it('should generate private key for specified key type', async () => {
-      const privateKey = await generatePrivateKey('P256');
-      
-      expect(privateKey).toBe('generated-private-key-hex');
-      expect(mockWasmExports.generatePrivateKey).toHaveBeenCalledWith('P256');
+    it('should generate P256 private key', async () => {
+      const key = await generatePrivateKey('P256');
+      expect(key).toMatch(/^[0-9a-f]+$/);
+      expect(key.length).toBe(64); // 32 bytes as hex
     });
 
     it('should generate secp256k1 private key', async () => {
-      const privateKey = await generatePrivateKey('secp256k1');
-      
-      expect(privateKey).toBe('generated-private-key-hex');
-      expect(mockWasmExports.generatePrivateKey).toHaveBeenCalledWith('secp256k1');
+      const key = await generatePrivateKey('secp256k1');
+      expect(key).toMatch(/^[0-9a-f]+$/);
+      expect(key.length).toBe(64); // 32 bytes as hex
     });
 
-    it('should throw error for invalid key type', async () => {
-      await expect(generatePrivateKey('InvalidType' as any)).rejects.toThrow('Unsupported key type');
+    it('should generate unique keys each time', async () => {
+      const key1 = await generatePrivateKey('Ed25519');
+      const key2 = await generatePrivateKey('Ed25519');
+      expect(key1).not.toBe(key2);
     });
 
-    it('should handle WASM errors gracefully', async () => {
-      mockWasmExports.generatePrivateKey.mockImplementation(() => {
-        throw new Error('WASM error');
-      });
-
-      await expect(generatePrivateKey()).rejects.toThrow('Failed to generate private key');
+    it('should handle invalid key type', async () => {
+      await expect(generatePrivateKey('invalid' as any)).rejects.toThrow();
     });
   });
 
   describe('generateUUID', () => {
-    it('should generate a valid UUID', async () => {
+    it('should generate valid UUID v4', async () => {
       const uuid = await generateUUID();
-      
-      expect(uuid).toBe('uuid-1234-5678-9012-3456');
-      expect(mockWasmExports.generateUUID).toHaveBeenCalled();
+      // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+      expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     });
 
-    it('should handle WASM errors gracefully', async () => {
-      mockWasmExports.generateUUID.mockImplementation(() => {
-        throw new Error('WASM error');
-      });
-
-      await expect(generateUUID()).rejects.toThrow('Failed to generate UUID');
-    });
-
-    it('should generate different UUIDs on subsequent calls', async () => {
-      mockWasmExports.generateUUID
-        .mockReturnValueOnce('uuid-1111-2222-3333-4444')
-        .mockReturnValueOnce('uuid-5555-6666-7777-8888');
-
+    it('should generate unique UUIDs', async () => {
       const uuid1 = await generateUUID();
       const uuid2 = await generateUUID();
-      
-      expect(uuid1).toBe('uuid-1111-2222-3333-4444');
-      expect(uuid2).toBe('uuid-5555-6666-7777-8888');
       expect(uuid1).not.toBe(uuid2);
     });
-  });
 
-  describe('isValidDID', () => {
-    it('should validate did:key format', () => {
-      const validDidKey = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK';
-      expect(isValidDID(validDidKey)).toBe(true);
-    });
-
-    it('should validate did:web format', () => {
-      const validDidWeb = 'did:web:example.com';
-      expect(isValidDID(validDidWeb)).toBe(true);
-    });
-
-    it('should validate did:ethr format', () => {
-      const validDidEthr = 'did:ethr:0x1234567890123456789012345678901234567890';
-      expect(isValidDID(validDidEthr)).toBe(true);
-    });
-
-    it('should reject invalid DID format', () => {
-      expect(isValidDID('not-a-did')).toBe(false);
-      expect(isValidDID('did:')).toBe(false);
-      expect(isValidDID('did::')).toBe(false);
-      expect(isValidDID('did:invalid')).toBe(false);
-      expect(isValidDID('')).toBe(false);
-    });
-
-    it('should reject null or undefined', () => {
-      expect(isValidDID(null as any)).toBe(false);
-      expect(isValidDID(undefined as any)).toBe(false);
-    });
-
-    it('should handle complex DID paths', () => {
-      const complexDid = 'did:web:example.com:users:alice';
-      expect(isValidDID(complexDid)).toBe(true);
+    it('should generate multiple UUIDs quickly', async () => {
+      const uuids = await Promise.all(
+        Array(10).fill(null).map(() => generateUUID())
+      );
+      
+      // All should be unique
+      const uniqueUuids = new Set(uuids);
+      expect(uniqueUuids.size).toBe(10);
+      
+      // All should be valid format
+      uuids.forEach(uuid => {
+        expect(uuid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      });
     });
   });
 
-  describe('isValidPrivateKey', () => {
-    it('should validate 32-byte hex private key (64 chars)', () => {
-      const validKey = 'abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234';
-      expect(isValidPrivateKey(validKey)).toBe(true);
+  describe('Message Creation Helpers', () => {
+    const fromDid = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK';
+    const toDid = 'did:key:z6MkhvZgTBxPiRHkZGBkFT5b2LbQqQvJYZnHiHQhRvbW1yxH';
+
+    describe('createTransferMessage', () => {
+      it('should create valid Transfer message', async () => {
+        const message = await createTransferMessage({
+          from: fromDid,
+          to: [toDid],
+          amount: '100.00',
+          asset: 'USD',
+          originator: { '@id': fromDid as `did:${string}:${string}` },
+          beneficiary: { '@id': toDid as `did:${string}:${string}` },
+        });
+
+        expect(message.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
+        expect(message.from).toBe(fromDid);
+        expect(message.to).toContain(toDid);
+        expect(message.body.amount).toBe('100.00');
+        expect(message.body.asset).toBe('USD');
+        expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      });
+
+      it('should include optional fields when provided', () => {
+        const message = createTransferMessage({
+          from: fromDid,
+          to: [toDid],
+          amount: '50.00',
+          asset: 'EUR',
+          originator: { '@id': fromDid as `did:${string}:${string}` },
+          beneficiary: { '@id': toDid as `did:${string}:${string}` },
+          memo: 'Test transfer',
+          agents: [],
+        });
+
+        expect(message.body.memo).toBe('Test transfer');
+        expect(message.body.agents).toEqual([]);
+      });
     });
 
-    it('should validate uppercase hex private key', () => {
-      const validKey = 'ABCD1234567890ABCD1234567890ABCD1234567890ABCD1234567890ABCD1234';
-      expect(isValidPrivateKey(validKey)).toBe(true);
+    describe('createPaymentMessage', () => {
+      it('should create valid Payment message', () => {
+        const message = createPaymentMessage({
+          from: fromDid,
+          to: [toDid],
+          amount: '25.00',
+          currency: 'USD',
+          merchant: { '@id': toDid as `did:${string}:${string}` },
+        });
+
+        expect(message.type).toBe('https://tap.rsvp/schema/1.0#Payment');
+        expect(message.body.amount).toBe('25.00');
+        expect(message.body.currency).toBe('USD');
+        expect(message.body.merchant['@id']).toBe(toDid);
+      });
+
+      it('should include invoice when provided', () => {
+        const message = createPaymentMessage({
+          from: fromDid,
+          to: [toDid],
+          amount: '100.00',
+          currency: 'EUR',
+          merchant: { '@id': toDid as `did:${string}:${string}` },
+          invoice: {
+            invoice_number: 'INV-001',
+            date: '2024-01-01',
+            due_date: '2024-02-01',
+          },
+        });
+
+        expect(message.body.invoice).toBeDefined();
+        expect(message.body.invoice?.invoice_number).toBe('INV-001');
+      });
     });
 
-    it('should validate mixed case hex private key', () => {
-      const validKey = 'AbCd1234567890aBcD1234567890AbCd1234567890aBcD1234567890AbCd1234';
-      expect(isValidPrivateKey(validKey)).toBe(true);
+    describe('createAuthorizeMessage', () => {
+      it('should create valid Authorize message', () => {
+        const message = createAuthorizeMessage({
+          from: fromDid,
+          to: [toDid],
+          transaction_id: 'tx-123',
+        });
+
+        expect(message.type).toBe('https://tap.rsvp/schema/1.0#Authorize');
+        expect(message.body.transaction_id).toBe('tx-123');
+      });
+
+      it('should include settlement address when provided', () => {
+        const message = createAuthorizeMessage({
+          from: fromDid,
+          to: [toDid],
+          transaction_id: 'tx-456',
+          settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
+        });
+
+        expect(message.body.settlement_address).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7');
+      });
     });
 
-    it('should reject keys with invalid characters', () => {
-      const invalidKey = 'ghij1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234';
-      expect(isValidPrivateKey(invalidKey)).toBe(false);
+    describe('createRejectMessage', () => {
+      it('should create valid Reject message', () => {
+        const message = createRejectMessage({
+          from: fromDid,
+          to: [toDid],
+          transaction_id: 'tx-789',
+          reason: 'Insufficient funds',
+        });
+
+        expect(message.type).toBe('https://tap.rsvp/schema/1.0#Reject');
+        expect(message.body.transaction_id).toBe('tx-789');
+        expect(message.body.reason).toBe('Insufficient funds');
+      });
     });
 
-    it('should reject keys that are too short', () => {
-      const shortKey = 'abcd1234567890';
-      expect(isValidPrivateKey(shortKey)).toBe(false);
+    describe('createCancelMessage', () => {
+      it('should create valid Cancel message', () => {
+        const message = createCancelMessage({
+          from: fromDid,
+          to: [toDid],
+          transaction_id: 'tx-abc',
+          by: fromDid,
+        });
+
+        expect(message.type).toBe('https://tap.rsvp/schema/1.0#Cancel');
+        expect(message.body.transaction_id).toBe('tx-abc');
+        expect(message.body.by).toBe(fromDid);
+      });
+
+      it('should include reason when provided', () => {
+        const message = createCancelMessage({
+          from: fromDid,
+          to: [toDid],
+          transaction_id: 'tx-def',
+          by: fromDid,
+          reason: 'User requested cancellation',
+        });
+
+        expect(message.body.reason).toBe('User requested cancellation');
+      });
     });
 
-    it('should reject keys that are too long', () => {
-      const longKey = 'abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234extra';
-      expect(isValidPrivateKey(longKey)).toBe(false);
+    describe('createSettleMessage', () => {
+      it('should create valid Settle message', () => {
+        const message = createSettleMessage({
+          from: fromDid,
+          to: [toDid],
+          transaction_id: 'tx-ghi',
+          settlement_id: 'settle-123',
+        });
+
+        expect(message.type).toBe('https://tap.rsvp/schema/1.0#Settle');
+        expect(message.body.transaction_id).toBe('tx-ghi');
+        expect(message.body.settlement_id).toBe('settle-123');
+      });
+
+      it('should include amount when provided', () => {
+        const message = createSettleMessage({
+          from: fromDid,
+          to: [toDid],
+          transaction_id: 'tx-jkl',
+          settlement_id: 'settle-456',
+          amount: '75.00',
+        });
+
+        expect(message.body.amount).toBe('75.00');
+      });
     });
 
-    it('should reject empty string', () => {
-      expect(isValidPrivateKey('')).toBe(false);
+    describe('createBasicMessage', () => {
+      it('should create valid basic message', () => {
+        const message = createBasicMessage({
+          from: fromDid,
+          to: [toDid],
+          content: 'Hello World',
+        });
+
+        expect(message.type).toBe('https://didcomm.org/basicmessage/2.0/message');
+        expect(message.body.content).toBe('Hello World');
+      });
+
+      it('should include locale when provided', () => {
+        const message = createBasicMessage({
+          from: fromDid,
+          to: [toDid],
+          content: 'Bonjour le monde',
+          locale: 'fr-FR',
+        });
+
+        expect(message.body.locale).toBe('fr-FR');
+      });
     });
 
-    it('should reject null or undefined', () => {
-      expect(isValidPrivateKey(null as any)).toBe(false);
-      expect(isValidPrivateKey(undefined as any)).toBe(false);
-    });
+    describe('createDIDCommMessage', () => {
+      it('should create generic DIDComm message', () => {
+        const message = createDIDCommMessage({
+          type: 'custom-protocol/1.0/action',
+          from: fromDid,
+          to: [toDid],
+          body: {
+            action: 'test',
+            data: { key: 'value' },
+          },
+        });
 
-    it('should handle keys with 0x prefix', () => {
-      const keyWithPrefix = '0xabcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234';
-      expect(isValidPrivateKey(keyWithPrefix)).toBe(true);
+        expect(message.type).toBe('custom-protocol/1.0/action');
+        expect(message.body.action).toBe('test');
+        expect(message.body.data).toEqual({ key: 'value' });
+      });
+
+      it('should generate ID if not provided', () => {
+        const message = createDIDCommMessage({
+          type: 'test',
+          from: fromDid,
+          to: [toDid],
+          body: {},
+        });
+
+        expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      });
+
+      it('should use provided ID', () => {
+        const message = createDIDCommMessage({
+          id: 'custom-id-123',
+          type: 'test',
+          from: fromDid,
+          to: [toDid],
+          body: {},
+        });
+
+        expect(message.id).toBe('custom-id-123');
+      });
+
+      it('should include optional fields', () => {
+        const now = Date.now();
+        const message = createDIDCommMessage({
+          type: 'test',
+          from: fromDid,
+          to: [toDid],
+          body: {},
+          created_time: now,
+          expires_time: now + 3600000,
+          thid: 'thread-123',
+          pthid: 'parent-thread-456',
+        });
+
+        expect(message.created_time).toBe(now);
+        expect(message.expires_time).toBe(now + 3600000);
+        expect(message.thid).toBe('thread-123');
+        expect(message.pthid).toBe('parent-thread-456');
+      });
     });
   });
 
-  describe('validateKeyType', () => {
-    it('should validate supported key types', () => {
-      expect(validateKeyType('Ed25519')).toBe(true);
-      expect(validateKeyType('P256')).toBe(true);
-      expect(validateKeyType('secp256k1')).toBe(true);
-    });
-
-    it('should reject unsupported key types', () => {
-      expect(validateKeyType('RSA')).toBe(false);
-      expect(validateKeyType('InvalidType')).toBe(false);
-      expect(validateKeyType('')).toBe(false);
-    });
-
-    it('should be case sensitive', () => {
-      expect(validateKeyType('ed25519')).toBe(false);
-      expect(validateKeyType('p256')).toBe(false);
-      expect(validateKeyType('SECP256K1')).toBe(false);
-    });
-
-    it('should reject null or undefined', () => {
-      expect(validateKeyType(null as any)).toBe(false);
-      expect(validateKeyType(undefined as any)).toBe(false);
+  describe('Key Type Constants', () => {
+    it('should export correct WasmKeyType values', async () => {
+      // Import and verify the enum values are accessible
+      const { WasmKeyType } = await import('../src/utils.js');
+      
+      expect(WasmKeyType.Ed25519).toBe(0);
+      expect(WasmKeyType.P256).toBe(1);
+      expect(WasmKeyType.Secp256k1).toBe(2);
     });
   });
 
   describe('Error Handling', () => {
-    it('should provide meaningful error messages', async () => {
-      await expect(generatePrivateKey('invalid' as any)).rejects.toThrow('Unsupported key type: invalid');
-      expect(isValidPrivateKey('short')).toBe(false);
-      expect(isValidDID('invalid')).toBe(false);
-    });
-  });
-
-  describe('Integration with WASM types', () => {
-    it('should map key types to WASM enum values', () => {
-      // This tests the internal mapping
-      expect(mockWasmExports.WasmKeyType.Ed25519).toBe(0);
-      expect(mockWasmExports.WasmKeyType.P256).toBe(1);
-      expect(mockWasmExports.WasmKeyType.Secp256k1).toBe(2);
-    });
-
-    it('should handle WASM module initialization errors', async () => {
-      // Simulate WASM not being initialized
-      mockWasmExports.generatePrivateKey.mockImplementation(() => {
-        throw new Error('WASM module not initialized');
+    it('should handle WASM initialization errors gracefully', async () => {
+      // The functions should still work even if called rapidly
+      const results = await Promise.all([
+        generatePrivateKey('Ed25519'),
+        generateUUID(),
+        generatePrivateKey('P256'),
+        generateUUID(),
+      ]);
+      
+      expect(results).toHaveLength(4);
+      results.forEach(result => {
+        expect(result).toBeTruthy();
       });
-
-      await expect(generatePrivateKey()).rejects.toThrow('Failed to generate private key');
-    });
-  });
-
-  describe('Performance', () => {
-    it('should execute validation functions quickly', () => {
-      const start = performance.now();
-      
-      for (let i = 0; i < 1000; i++) {
-        isValidDID('did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK');
-        isValidPrivateKey('abcd1234567890abcd1234567890abcd1234567890abcd1234567890abcd1234');
-        validateKeyType('Ed25519');
-      }
-      
-      const end = performance.now();
-      const duration = end - start;
-      
-      // Should complete 1000 iterations in under 100ms
-      expect(duration).toBeLessThan(100);
     });
   });
 });

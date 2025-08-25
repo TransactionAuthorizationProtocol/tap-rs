@@ -30,11 +30,38 @@ export async function initWasm(): Promise<any> {
       const { fileURLToPath } = await import('url');
       const { dirname } = await import('path');
       
-      const __filename = fileURLToPath(import.meta.url);
-      const __dirname = dirname(__filename);
-      const wasmPath = join(__dirname, '../../tap-wasm/pkg/tap_wasm_bg.wasm');
+      // Try to get the actual file location - handle both src and dist directories
+      let __dirname: string;
+      try {
+        const __filename = fileURLToPath(import.meta.url);
+        __dirname = dirname(__filename);
+      } catch {
+        // Fallback for environments where import.meta.url might not work
+        __dirname = process.cwd();
+      }
       
-      const wasmBinary = readFileSync(wasmPath);
+      // Try multiple paths to find the WASM file
+      const possiblePaths = [
+        join(__dirname, '../../tap-wasm/pkg/tap_wasm_bg.wasm'),
+        join(__dirname, '../node_modules/tap-wasm/tap_wasm_bg.wasm'),
+        join(process.cwd(), '../tap-wasm/pkg/tap_wasm_bg.wasm'),
+        join(process.cwd(), 'node_modules/tap-wasm/tap_wasm_bg.wasm'),
+      ];
+      
+      let wasmBinary: Buffer | undefined;
+      for (const wasmPath of possiblePaths) {
+        try {
+          wasmBinary = readFileSync(wasmPath);
+          break;
+        } catch {
+          // Try next path
+        }
+      }
+      
+      if (!wasmBinary) {
+        throw new Error('Could not find WASM file in any of the expected locations');
+      }
+      
       wasmModule = await init(wasmBinary);
     }
     

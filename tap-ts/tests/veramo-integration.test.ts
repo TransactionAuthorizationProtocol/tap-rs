@@ -246,13 +246,13 @@ describe("TAP-Veramo Interoperability Tests", () => {
 
         // TAP should be able to unpack Veramo's JWS
         const tapUnpacked = await tapAgent.unpack(JSON.stringify(veramoPacked));
-        expect(tapUnpacked.body.content).toBe("Hello from Veramo (JWS)!");
+        expect(((tapUnpacked.body as any) as any).content).toBe("Hello from Veramo (JWS)!");
         expect(tapUnpacked.from).toBe(veramoSender.did);
       } catch (error) {
         // Veramo requires specific setup for JWS which may not be fully configured
-        console.log("Veramo JWS packing error:", error.message);
+        console.log("Veramo JWS packing error:", (error as Error).message);
         // For now, test that we can at least handle the message format
-        expect(error.message).toContain("from");
+        expect((error as Error).message).toContain("from");
       }
     });
 
@@ -269,7 +269,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         id: "tap-jws-001",
         type: "https://didcomm.org/basicmessage/2.0/message",
         from: tapAgent.did,
-        to: [veramoRecipient.did],
+        to: [veramoRecipient.did as any],
         created_time: Date.now(),
         body: {
           content: "Hello from TAP (JWS)!",
@@ -289,9 +289,9 @@ describe("TAP-Veramo Interoperability Tests", () => {
         expect(veramoUnpacked.metaData.packing).toBe("jws");
       } catch (error) {
         // Veramo may not be able to resolve TAP's DID document
-        console.log("Veramo unpacking error:", error.message);
+        console.log("Veramo unpacking error:", (error as Error).message);
         // This is expected as Veramo needs to resolve TAP's DID or handle TAP message format
-        expect(error.message).toMatch(/DID|unable to determine message type|Incorrect format JWS/);
+        expect((error as Error).message).toMatch(/DID|unable to determine message type|Incorrect format JWS/);
       }
     });
 
@@ -323,11 +323,11 @@ describe("TAP-Veramo Interoperability Tests", () => {
 
         // TAP should be able to unpack Veramo's JWE (handle format differences with JSON encoding)
         const tapUnpacked = await tapAgent.unpack(JSON.stringify(veramoPacked));
-        expect(tapUnpacked.body.content).toBe("Hello from Veramo (JWE anoncrypt)!");
+        expect((tapUnpacked.body as any).content).toBe("Hello from Veramo (JWE anoncrypt)!");
       } catch (error) {
         // Expected failure - TAP may not fully support Veramo's JWE anoncrypt format yet
-        console.log("TAP JWE anoncrypt unpacking error:", error.message);
-        expect(error.message).toMatch(/Failed to unpack|from.*field.*managed|invalid|parse/i);
+        console.log("TAP JWE anoncrypt unpacking error:", (error as Error).message);
+        expect((error as Error).message).toMatch(/Failed to unpack|from.*field.*managed|invalid|parse/i);
       }
     });
 
@@ -346,7 +346,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         id: "tap-test-001",
         type: "https://didcomm.org/basicmessage/2.0/message",
         from: tapAgent.did,
-        to: [veramoRecipient.did],
+        to: [veramoRecipient.did as any],
         created_time: Date.now(),
         body: {
           content: "Testing TAP to Veramo",
@@ -367,8 +367,8 @@ describe("TAP-Veramo Interoperability Tests", () => {
           expect(veramoUnpacked.metaData.packing).toBe("jws");
         } catch (error) {
           // Expected failure due to key ID format differences
-          console.log("Veramo JWS unpacking error:", error.message);
-          expect(error.message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
+          console.log("Veramo JWS unpacking error:", (error as Error).message);
+          expect((error as Error).message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
         }
       } else if (tapPacked.protected && tapPacked.ciphertext) {
         try {
@@ -379,8 +379,8 @@ describe("TAP-Veramo Interoperability Tests", () => {
           expect(veramoUnpacked.message.body.content).toBe("Testing TAP to Veramo");
           expect(["authcrypt", "anoncrypt"]).toContain(veramoUnpacked.metaData.packing);
         } catch (error) {
-          console.log("Veramo JWE unpacking error:", error.message);
-          expect(error.message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
+          console.log("Veramo JWE unpacking error:", (error as Error).message);
+          expect((error as Error).message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
         }
       }
     });
@@ -412,14 +412,14 @@ describe("TAP-Veramo Interoperability Tests", () => {
         // 2. TAP unpacks Veramo's ping (handle format differences with JSON encoding)
         const tapUnpackedPing = await tapAgent.unpack(JSON.stringify(veramoPackedPing));
         expect(tapUnpackedPing.type).toBe("https://didcomm.org/trust-ping/2.0/ping");
-        expect(tapUnpackedPing.body.response_requested).toBe(true);
+        expect((tapUnpackedPing.body as any).response_requested).toBe(true);
 
         // 3. TAP creates and packs a ping response
         const tapPingResponse: DIDCommMessage = {
           id: "tap-ping-response-001",
           type: "https://didcomm.org/trust-ping/2.0/ping-response",
           from: tapAgent.did,
-          to: [veramoIdentifier.did],
+          to: [veramoIdentifier.did as any],
           thid: veramoPing.id, // Thread reference to original ping
           created_time: Date.now(),
           body: {},
@@ -439,8 +439,8 @@ describe("TAP-Veramo Interoperability Tests", () => {
       } catch (error) {
         // Veramo requires the `from` DID to be managed by the agent for packing
         // This is expected behavior - log and skip for now
-        console.log("Veramo bidirectional test error:", error.message);
-        expect(error.message).toMatch(/from.*field.*managed|DID document.*not.*located/);
+        console.log("Veramo bidirectional test error:", (error as Error).message);
+        expect((error as Error).message).toMatch(/from.*field.*managed|DID document.*not.*located/);
       }
     });
   });
@@ -456,7 +456,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Create TAP Transfer message
       const transferMessage = await createTransferMessage({
         from: tapAgent.did,
-        to: [veramoRecipient.did],
+        to: [veramoRecipient.did as any],
         amount: "100.50",
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         originator: {
@@ -489,8 +489,8 @@ describe("TAP-Veramo Interoperability Tests", () => {
         expect(veramoUnpacked.metaData.packing).toBe("jws");
       } catch (error) {
         // Expected failure due to key ID format differences
-        console.log("Veramo Transfer unpacking error:", error.message);
-        expect(error.message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
+        console.log("Veramo Transfer unpacking error:", (error as Error).message);
+        expect((error as Error).message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
       }
     });
 
@@ -504,7 +504,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Create TAP Payment message
       const paymentMessage = await createPaymentMessage({
         from: tapAgent.did,
-        to: [veramoMerchant.did],
+        to: [veramoMerchant.did as any],
         amount: "249.99",
         currency: "USD",
         merchant: {
@@ -552,8 +552,8 @@ describe("TAP-Veramo Interoperability Tests", () => {
         expect(veramoUnpacked.message.body.merchant["@id"]).toBe(veramoMerchant.did);
       } catch (error) {
         // Expected failure due to key ID format differences
-        console.log("Veramo Payment unpacking error:", error.message);
-        expect(error.message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
+        console.log("Veramo Payment unpacking error:", (error as Error).message);
+        expect((error as Error).message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
       }
     });
 
@@ -567,7 +567,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // 1. TAP creates and packs a Connect message
       const connectMessage = await createConnectMessage({
         from: tapAgent.did,
-        to: [veramoCounterparty.did],
+        to: [veramoCounterparty.did as any],
         requester: {
           "@id": tapAgent.did,
           "@type": "https://schema.org/Person",
@@ -630,8 +630,8 @@ describe("TAP-Veramo Interoperability Tests", () => {
         expect(tapUnpackedResponse.thid).toBe(connectMessage.id);
       } catch (error) {
         // Expected failure due to key ID format differences or agent management issues
-        console.log("Veramo bidirectional Connect test error:", error.message);
-        expect(error.message).toMatch(/DID document.*not.*located|from.*field.*managed|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
+        console.log("Veramo bidirectional Connect test error:", (error as Error).message);
+        expect((error as Error).message).toMatch(/DID document.*not.*located|from.*field.*managed|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
       }
     });
   });
@@ -652,15 +652,15 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Test message exchange
       const message = await createBasicMessage({
         from: tapEd25519.did,
-        to: [veramoEd25519.did],
+        to: [veramoEd25519.did as any],
         content: "Ed25519 compatibility test",
       });
-      message.to = [veramoEd25519.did];
+      message.to = [veramoEd25519.did as any];
 
       const packed = await tapEd25519.pack(message);
       const unpacked = await tapEd25519.unpack(packed.message);
 
-      expect(unpacked.body.content).toBe("Ed25519 compatibility test");
+      expect((unpacked.body as any).content).toBe("Ed25519 compatibility test");
     });
 
     it("should work with secp256k1 keys", async () => {
@@ -682,7 +682,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       const packed = await tapSecp.pack(message);
       const unpacked = await tapSecp.unpack(packed.message);
 
-      expect(unpacked.body.response_requested).toBe(true);
+      expect((unpacked.body as any).response_requested).toBe(true);
     });
 
     it("should work with P-256 keys", async () => {
@@ -701,7 +701,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       const packed = await tapP256.pack(message);
       const unpacked = await tapP256.unpack(packed.message);
 
-      expect(unpacked.body.content).toBe("P-256 test message");
+      expect((unpacked.body as any).content).toBe("P-256 test message");
     });
   });
 
@@ -719,7 +719,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Start conversation with TAP
       const initialMessage = await createTransferMessage({
         from: tapAgent.did,
-        to: [veramoParticipant.did],
+        to: [veramoParticipant.did as any],
         amount: "500.00",
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         originator: {
@@ -760,7 +760,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       const unpacked2 = await tapAgent.unpack(packed2.message);
 
       expect(unpacked2.thid).toBe(threadId);
-      expect(unpacked2.body.transaction_id).toBe(unpacked1.id);
+      expect((unpacked2.body as any).transaction_id).toBe(unpacked1.id);
     });
   });
 
@@ -777,7 +777,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         id: "mixed-001",
         type: "https://didcomm.org/trust-ping/2.0/ping",
         from: tapAgent.did,
-        to: [veramoAgent2Identifier.did],
+        to: [veramoAgent2Identifier.did as any],
         created_time: Date.now(),
         body: { response_requested: true },
       };
@@ -790,7 +790,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Respond with TAP-specific message
       const tapResponse = await createPaymentMessage({
         from: tapAgent.did,
-        to: [veramoAgent2Identifier.did],
+        to: [veramoAgent2Identifier.did as any],
         amount: "25.00",
         currency: "USD",
         merchant: {
@@ -888,8 +888,8 @@ describe("TAP-Veramo Interoperability Tests", () => {
         const packed = await tapAgent.pack(message);
         const unpacked = await tapAgent.unpack(packed.message);
 
-        expect(unpacked.body.amount).toBe(`${(i + 1) * 10}.00`);
-        expect(unpacked.body.beneficiary["@id"]).toBe(recipient);
+        expect((unpacked.body as any).amount).toBe(`${(i + 1) * 10}.00`);
+        expect((unpacked.body as any).beneficiary["@id"]).toBe(recipient);
       }
 
       const duration = Date.now() - startTime;

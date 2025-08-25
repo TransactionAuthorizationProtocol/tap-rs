@@ -15,6 +15,7 @@ import type {
   Reject,
   Settle,
   Connect,
+  Cancel,
   DIDCommMessage,
   Agent,
   Party,
@@ -181,6 +182,42 @@ export async function createRejectMessage(params: {
     created_time: Date.now(),
     thid: params.thid || params.transaction_id,
     body: rejectBody,
+  };
+  
+  if (params.pthid !== undefined) message.pthid = params.pthid;
+  
+  return message;
+}
+
+/**
+ * Create a TAP Cancel message
+ * @param params Cancel parameters
+ * @returns TAP-compliant Cancel message
+ */
+export async function createCancelMessage(params: {
+  from: string;
+  to: string[];
+  transaction_id: string;
+  by: string;
+  reason?: string;
+  thid?: string;
+  pthid?: string;
+}): Promise<DIDCommMessage<Cancel>> {
+  const cancelBody: Cancel = {
+    '@context': 'https://tap.rsvp/schema/1.0',
+    '@type': 'Cancel',
+    by: params.by as any,
+    ...(params.reason !== undefined && { reason: params.reason }),
+  };
+
+  const message: any = {
+    id: await generateUUID(),
+    type: 'https://tap.rsvp/schema/1.0#Cancel',
+    from: params.from as DID,
+    to: params.to as DID[],
+    created_time: Date.now(),
+    thid: params.thid || params.transaction_id,
+    body: cancelBody,
   };
   
   if (params.pthid !== undefined) message.pthid = params.pthid;

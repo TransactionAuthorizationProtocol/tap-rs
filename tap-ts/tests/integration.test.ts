@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { TapAgent, createTransferMessage, createAuthorizeMessage, createRejectMessage, createBasicMessage, createDIDCommMessage } from '../src/index.js';
+import { TapAgent, createTransferMessage, createAuthorizeMessage, createDIDCommMessage } from '../src/index.js';
 import type { DIDCommMessage } from '../src/types.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
