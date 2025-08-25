@@ -62,15 +62,17 @@ describe('Real WASM Interoperability Tests', () => {
       const packed = await aliceAgent.pack(message);
       
       // Verify it's a valid JWS structure (now returns object directly)
-      expect(packed).toHaveProperty('payload');
-      expect(packed).toHaveProperty('signatures');
+      // Parse the JWS from the packed message result
+      const jws = JSON.parse(packed.message);
+      expect(jws).toHaveProperty('payload');
+      expect(jws).toHaveProperty('signatures');
       
       // Payload should be base64url encoded
-      expect(packed.payload).toMatch(/^[A-Za-z0-9_-]+$/);
+      expect(jws.payload).toMatch(/^[A-Za-z0-9_-]+$/);
       
       // Should have at least one signature
-      expect(packed.signatures).toBeInstanceOf(Array);
-      expect(packed.signatures.length).toBeGreaterThan(0);
+      expect(jws.signatures).toBeInstanceOf(Array);
+      expect(jws.signatures.length).toBeGreaterThan(0);
     });
 
     it('should handle standard DIDComm message types', async () => {
@@ -96,9 +98,13 @@ describe('Real WASM Interoperability Tests', () => {
 
         const packed = await aliceAgent.pack(message);
         
-        // Now returns object directly
-        expect(packed).toHaveProperty('payload');
-        expect(packed).toHaveProperty('signatures');
+        // Now returns PackedMessageResult
+        expect(packed).toHaveProperty('message');
+        expect(packed).toHaveProperty('metadata');
+        
+        const jws = JSON.parse(packed.message);
+        expect(jws).toHaveProperty('payload');
+        expect(jws).toHaveProperty('signatures');
       }
     });
 
@@ -117,7 +123,7 @@ describe('Real WASM Interoperability Tests', () => {
       };
 
       const packed = await aliceAgent.pack(message);
-      const unpacked = await aliceAgent.unpack(packed);
+      const unpacked = await aliceAgent.unpack(packed.message);
       
       // The WASM layer currently doesn't preserve all DIDComm headers when unpacking JWS
       // This is a known limitation - headers are embedded in the payload for JWS format
@@ -138,19 +144,19 @@ describe('Real WASM Interoperability Tests', () => {
         amount: '250.00',
         asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
         originator: {
-          '@id': aliceAgent.did,
+          '@id': aliceAgent.did as `did:${string}:${string}`,
           '@type': 'https://schema.org/Person',
           name: 'Alice',
         },
         beneficiary: {
-          '@id': bobAgent.did,
+          '@id': bobAgent.did as `did:${string}:${string}`,
           '@type': 'https://schema.org/Person',
           name: 'Bob',
         },
       });
 
       const packed = await aliceAgent.pack(transferMessage);
-      const unpacked = await aliceAgent.unpack(packed);
+      const unpacked = await aliceAgent.unpack(packed.message);
       
       expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
       expect(unpacked.body).toBeDefined();
@@ -177,7 +183,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
 
       const packed = await aliceAgent.pack(paymentMessage);
-      const unpacked = await aliceAgent.unpack(packed);
+      const unpacked = await aliceAgent.unpack(packed.message);
       
       expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Payment');
       expect(unpacked.body).toBeDefined();
@@ -190,12 +196,12 @@ describe('Real WASM Interoperability Tests', () => {
         from: aliceAgent.did,
         to: [bobAgent.did],
         requester: {
-          '@id': aliceAgent.did,
+          '@id': aliceAgent.did as `did:${string}:${string}`,
           '@type': 'https://schema.org/Person',
           name: 'Alice',
         },
         principal: {
-          '@id': aliceAgent.did,
+          '@id': aliceAgent.did as `did:${string}:${string}`,
           '@type': 'https://schema.org/Person',
           name: 'Alice',
         },
@@ -212,7 +218,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
 
       const packed = await aliceAgent.pack(connectMessage);
-      const unpacked = await aliceAgent.unpack(packed);
+      const unpacked = await aliceAgent.unpack(packed.message);
       
       expect(unpacked.type).toBe('https://tap.rsvp/schema/1.0#Connect');
       expect(unpacked.body).toBeDefined();
@@ -231,15 +237,18 @@ describe('Real WASM Interoperability Tests', () => {
 
       const packed = await aliceAgent.pack(message);
       
+      // Parse the JWS from the packed message result
+      const jws = JSON.parse(packed.message);
+      
       // Check message format  
-      if (packed.payload && packed.signatures) {
+      if (jws.payload && jws.signatures) {
         // JWS format
-        expect(packed.signatures[0]).toHaveProperty('protected');
-        expect(packed.signatures[0]).toHaveProperty('signature');
+        expect(jws.signatures[0]).toHaveProperty('protected');
+        expect(jws.signatures[0]).toHaveProperty('signature');
         
         // Decode protected header
         const protectedHeader = JSON.parse(
-          Buffer.from(packed.signatures[0].protected, 'base64url').toString()
+          Buffer.from(jws.signatures[0].protected, 'base64url').toString()
         );
         
         // Should specify algorithm
@@ -255,16 +264,19 @@ describe('Real WASM Interoperability Tests', () => {
         to: [bobAgent.did],
         amount: '100.00',
         asset: 'USD',
-        originator: { '@id': aliceAgent.did, '@type': 'https://schema.org/Person', name: 'Alice' },
-        beneficiary: { '@id': bobAgent.did, '@type': 'https://schema.org/Person', name: 'Bob' },
+        originator: { '@id': aliceAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Alice' },
+        beneficiary: { '@id': bobAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Bob' },
       });
 
       const authPacked = await aliceAgent.pack(authMessage);
       
+      // Parse the JWS from the packed message result
+      const authJws = JSON.parse(authPacked.message);
+      
       // JWS always reveals sender through signature
-      if (authPacked.signatures) {
+      if (authJws.signatures) {
         const protectedHeader = JSON.parse(
-          Buffer.from(authPacked.signatures[0].protected, 'base64url').toString()
+          Buffer.from(authJws.signatures[0].protected, 'base64url').toString()
         );
         
         // Sender's key ID should be in the protected header
@@ -292,7 +304,7 @@ describe('Real WASM Interoperability Tests', () => {
       
       const packed = await ed25519Agent.pack(message);
       // For JWS, same agent unpacks since it's signed, not encrypted
-      const unpacked = await ed25519Agent.unpack(packed);
+      const unpacked = await ed25519Agent.unpack(packed.message);
       
       expect((unpacked.body as any).content).toBe('Cross key-type test');
       
@@ -318,7 +330,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
       
       const packed = await originalAgent.pack(testMessage);
-      const unpacked = await importedAgent.unpack(packed);
+      const unpacked = await importedAgent.unpack(packed.message);
       
       expect((unpacked.body as any).response_requested).toBe(true);
       
@@ -338,14 +350,14 @@ describe('Real WASM Interoperability Tests', () => {
         to: [bobAgent.did],
         amount: '100.00',
         asset: 'USD',
-        originator: { '@id': aliceAgent.did, '@type': 'https://schema.org/Person', name: 'Alice' },
-        beneficiary: { '@id': bobAgent.did, '@type': 'https://schema.org/Person', name: 'Bob' },
+        originator: { '@id': aliceAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Alice' },
+        beneficiary: { '@id': bobAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Bob' },
         thid: threadId,
         pthid: parentThreadId,
       });
       
       const packed1 = await aliceAgent.pack(initialMessage);
-      const unpacked1 = await aliceAgent.unpack(packed1);
+      const unpacked1 = await aliceAgent.unpack(packed1.message);
       
       expect(unpacked1.thid).toBe(threadId);
       expect(unpacked1.pthid).toBe(parentThreadId);
@@ -360,7 +372,7 @@ describe('Real WASM Interoperability Tests', () => {
       });
       
       const packed2 = await bobAgent.pack(responseMessage);
-      const unpacked2 = await bobAgent.unpack(packed2);
+      const unpacked2 = await bobAgent.unpack(packed2.message);
       
       expect(unpacked2.thid).toBe(threadId);
     });
@@ -379,7 +391,7 @@ describe('Real WASM Interoperability Tests', () => {
 
       // Should still pack/unpack unknown message types
       const packed = await aliceAgent.pack(invalidMessage);
-      const unpacked = await aliceAgent.unpack(packed);
+      const unpacked = await aliceAgent.unpack(packed.message);
       
       expect(unpacked.type).toBe('https://example.com/unknown/message/type');
       expect(unpacked.body).toEqual({ test: 'unknown' });
@@ -400,15 +412,15 @@ describe('Real WASM Interoperability Tests', () => {
         to: [bobAgent.did],
         amount: '100.00',
         asset: 'USD',
-        originator: { '@id': aliceAgent.did, '@type': 'https://schema.org/Person', name: 'Alice' },
-        beneficiary: { '@id': bobAgent.did, '@type': 'https://schema.org/Person', name: 'Bob' },
+        originator: { '@id': aliceAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Alice' },
+        beneficiary: { '@id': bobAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Bob' },
       });
       
       const packed = await aliceAgent.pack(message);
       
       // For JWS (signed) messages, signature verification may fail if Charlie isn't the recipient
       // However, current implementation allows unpacking by same agent
-      const unpacked = await aliceAgent.unpack(packed);
+      const unpacked = await aliceAgent.unpack(packed.message);
       expect(unpacked.to).toContain(bobAgent.did);
       expect(unpacked.to).not.toContain(charlieAgent.did);
       
@@ -427,12 +439,12 @@ describe('Real WASM Interoperability Tests', () => {
           to: [bobAgent.did],
           amount: `${i * 10}.00`,
           asset: 'USD',
-          originator: { '@id': aliceAgent.did, '@type': 'https://schema.org/Person', name: 'Alice' },
-          beneficiary: { '@id': bobAgent.did, '@type': 'https://schema.org/Person', name: 'Bob' },
+          originator: { '@id': aliceAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Alice' },
+          beneficiary: { '@id': bobAgent.did as `did:${string}:${string}`, '@type': 'https://schema.org/Person', name: 'Bob' },
         });
         
         const packed = await aliceAgent.pack(message);
-        const unpacked = await aliceAgent.unpack(packed);
+        const unpacked = await aliceAgent.unpack(packed.message);
         
         expect((unpacked.body as any).amount).toBe(`${i * 10}.00`);
       }

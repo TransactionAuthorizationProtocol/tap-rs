@@ -85,7 +85,7 @@ describe('Simple TapAgent Test', () => {
       amount: '100.0',
       asset: 'USD',
       originator: {
-        '@id': agent.did,
+        '@id': agent.did as `did:${string}:${string}`,
         '@type': 'https://schema.org/Person',
         name: 'Alice'
       },
@@ -98,11 +98,16 @@ describe('Simple TapAgent Test', () => {
     
     const packed = await agent.pack(message);
     
-    // Now returns JWS object directly
-    expect(packed).toHaveProperty('payload');
-    expect(packed).toHaveProperty('signatures');
-    expect(packed.payload).toBe('eyJpZCI6InRlc3QtdXVpZC0xMjMifQ');
-    expect(packed.signatures[0].signature).toBe('test-signature');
+    // Now returns PackedMessageResult
+    expect(packed).toHaveProperty('message');
+    expect(packed).toHaveProperty('metadata');
+    
+    // Parse the JWS from the message
+    const jws = JSON.parse(packed.message);
+    expect(jws).toHaveProperty('payload');
+    expect(jws).toHaveProperty('signatures');
+    expect(jws.payload).toBe('eyJpZCI6InRlc3QtdXVpZC0xMjMifQ');
+    expect(jws.signatures[0].signature).toBe('test-signature');
     expect(mockWasmAgent.packMessage).toHaveBeenCalled();
     
     // Check that the message was converted to WASM format

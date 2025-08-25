@@ -658,7 +658,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       message.to = [veramoEd25519.did];
 
       const packed = await tapEd25519.pack(message);
-      const unpacked = await tapEd25519.unpack(JSON.stringify(packed));
+      const unpacked = await tapEd25519.unpack(packed.message);
 
       expect(unpacked.body.content).toBe("Ed25519 compatibility test");
     });
@@ -680,7 +680,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       });
 
       const packed = await tapSecp.pack(message);
-      const unpacked = await tapSecp.unpack(JSON.stringify(packed));
+      const unpacked = await tapSecp.unpack(packed.message);
 
       expect(unpacked.body.response_requested).toBe(true);
     });
@@ -699,7 +699,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       });
 
       const packed = await tapP256.pack(message);
-      const unpacked = await tapP256.unpack(JSON.stringify(packed));
+      const unpacked = await tapP256.unpack(packed.message);
 
       expect(unpacked.body.content).toBe("P-256 test message");
     });
@@ -737,7 +737,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       });
 
       const packed1 = await tapAgent.pack(initialMessage);
-      const unpacked1 = await tapAgent.unpack(JSON.stringify(packed1));
+      const unpacked1 = await tapAgent.unpack(packed1.message);
 
       expect(unpacked1.thid).toBe(threadId);
       expect(unpacked1.pthid).toBe(parentThreadId);
@@ -757,7 +757,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       };
 
       const packed2 = await tapAgent.pack(responseMessage as DIDCommMessage);
-      const unpacked2 = await tapAgent.unpack(JSON.stringify(packed2));
+      const unpacked2 = await tapAgent.unpack(packed2.message);
 
       expect(unpacked2.thid).toBe(threadId);
       expect(unpacked2.body.transaction_id).toBe(unpacked1.id);
@@ -783,7 +783,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       };
 
       const packedPing = await tapAgent.pack(pingMessage);
-      const unpackedPing = await tapAgent.unpack(JSON.stringify(packedPing));
+      const unpackedPing = await tapAgent.unpack(packedPing.message);
 
       expect(unpackedPing.type).toBe("https://didcomm.org/trust-ping/2.0/ping");
 
@@ -802,7 +802,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       });
 
       const packedResponse = await tapAgent.pack(tapResponse);
-      const unpackedResponse = await tapAgent.unpack(JSON.stringify(packedResponse));
+      const unpackedResponse = await tapAgent.unpack(packedResponse.message);
 
       expect(unpackedResponse.type).toBe("https://tap.rsvp/schema/1.0#Payment");
       expect(unpackedResponse.thid).toBe(pingMessage.id);
@@ -837,7 +837,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         try {
           const packed = await tapAgent.pack(malformed as DIDCommMessage);
           // If packing succeeds, unpacking should also work
-          const unpacked = await tapAgent.unpack(JSON.stringify(packed));
+          const unpacked = await tapAgent.unpack(packed.message);
           expect(unpacked.type).toBe(malformed.type);
         } catch (error) {
           // Some malformed messages should throw errors
@@ -886,7 +886,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         });
 
         const packed = await tapAgent.pack(message);
-        const unpacked = await tapAgent.unpack(JSON.stringify(packed));
+        const unpacked = await tapAgent.unpack(packed.message);
 
         expect(unpacked.body.amount).toBe(`${(i + 1) * 10}.00`);
         expect(unpacked.body.beneficiary["@id"]).toBe(recipient);

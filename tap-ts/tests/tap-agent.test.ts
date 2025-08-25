@@ -220,11 +220,16 @@ describe('TapAgent', () => {
 
         const packed = await agent.pack(message);
         
-        // Now returns JWS object directly
-        expect(packed).toHaveProperty('payload');
-        expect(packed).toHaveProperty('signatures');
-        expect(packed.payload).toBe('eyJpZCI6Im1zZy0xMjMiLCJ0eXBlIjoiaHR0cHM6Ly90YXAucnN2cC9zY2hlbWEvMS4wI1RyYW5zZmVyIn0');
-        expect(packed.signatures[0].signature).toBe('mock-signature-value');
+        // Now returns PackedMessageResult
+        expect(packed).toHaveProperty('message');
+        expect(packed).toHaveProperty('metadata');
+        
+        // Parse the JWS from the message
+        const jws = JSON.parse(packed.message);
+        expect(jws).toHaveProperty('payload');
+        expect(jws).toHaveProperty('signatures');
+        expect(jws.payload).toBe('eyJpZCI6Im1zZy0xMjMiLCJ0eXBlIjoiaHR0cHM6Ly90YXAucnN2cC9zY2hlbWEvMS4wI1RyYW5zZmVyIn0');
+        expect(jws.signatures[0].signature).toBe('mock-signature-value');
         
         // Verify the message was converted to WASM format
         expect(mockWasmAgent.packMessage).toHaveBeenCalledWith(
@@ -256,8 +261,11 @@ describe('TapAgent', () => {
         const packed = await agent.pack(message, options);
         
         expect(packed).toBeDefined();
-        expect(packed).toHaveProperty('payload');
-        expect(packed).toHaveProperty('signatures');
+        expect(packed).toHaveProperty('message');
+        
+        const jws = JSON.parse(packed.message);
+        expect(jws).toHaveProperty('payload');
+        expect(jws).toHaveProperty('signatures');
         
         // Verify the message includes the custom options and is converted to WASM format
         expect(mockWasmAgent.packMessage).toHaveBeenCalledWith(
@@ -535,8 +543,13 @@ describe('TapAgent', () => {
       const packed = await agent.pack(message);
       
       expect(packed).toBeDefined();
-      expect(packed).toHaveProperty('payload');
-      expect(packed).toHaveProperty('signatures');
+      expect(packed).toHaveProperty('message');
+      expect(packed).toHaveProperty('metadata');
+      
+      // Parse the JWS to check its structure
+      const jws = JSON.parse(packed.message);
+      expect(jws).toHaveProperty('payload');
+      expect(jws).toHaveProperty('signatures');
     });
 
     it('should type-check packed message metadata', async () => {
