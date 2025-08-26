@@ -158,6 +158,19 @@ export class TapAgent {
   }
 
   /**
+   * Get the agent's nickname if configured
+   * @returns Agent nickname or undefined
+   */
+  public get nickname(): string | undefined {
+    this.ensureNotDisposed();
+    try {
+      return this.wasmAgent.nickname();
+    } catch (error) {
+      return undefined;
+    }
+  }
+
+  /**
    * Export the agent's private key
    * @returns Hex-encoded private key
    */

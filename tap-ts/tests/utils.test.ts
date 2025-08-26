@@ -13,6 +13,7 @@ import {
   createBasicMessage,
   createDIDCommMessage
 } from '../src/message-helpers.js';
+import type { DID } from '@taprsvp/types';
 
 describe('Utils with Real WASM', () => {
   describe('generatePrivateKey', () => {
@@ -85,8 +86,8 @@ describe('Utils with Real WASM', () => {
           to: [toDid],
           amount: '100.00',
           asset: 'USD',
-          originator: { '@id': fromDid as `did:${string}:${string}` },
-          beneficiary: { '@id': toDid as `did:${string}:${string}` },
+          originator: { '@id': fromDid as DID, '@type': 'https://schema.org/Organization' },
+          beneficiary: { '@id': toDid as DID, '@type': 'https://schema.org/Organization' },
         });
 
         expect(message.type).toBe('https://tap.rsvp/schema/1.0#Transfer');
@@ -97,14 +98,14 @@ describe('Utils with Real WASM', () => {
         expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
       });
 
-      it('should include optional fields when provided', () => {
-        const message = createTransferMessage({
+      it('should include optional fields when provided', async () => {
+        const message = await createTransferMessage({
           from: fromDid,
           to: [toDid],
           amount: '50.00',
           asset: 'EUR',
-          originator: { '@id': fromDid as `did:${string}:${string}` },
-          beneficiary: { '@id': toDid as `did:${string}:${string}` },
+          originator: { '@id': fromDid as DID, '@type': 'https://schema.org/Organization' },
+          beneficiary: { '@id': toDid as DID, '@type': 'https://schema.org/Organization' },
           memo: 'Test transfer',
           agents: [],
         });
@@ -115,13 +116,13 @@ describe('Utils with Real WASM', () => {
     });
 
     describe('createPaymentMessage', () => {
-      it('should create valid Payment message', () => {
-        const message = createPaymentMessage({
+      it('should create valid Payment message', async () => {
+        const message = await createPaymentMessage({
           from: fromDid,
           to: [toDid],
           amount: '25.00',
           currency: 'USD',
-          merchant: { '@id': toDid as `did:${string}:${string}` },
+          merchant: { '@id': toDid as DID, '@type': 'https://schema.org/Organization' },
         });
 
         expect(message.type).toBe('https://tap.rsvp/schema/1.0#Payment');
@@ -130,13 +131,13 @@ describe('Utils with Real WASM', () => {
         expect(message.body.merchant['@id']).toBe(toDid);
       });
 
-      it('should include invoice when provided', () => {
-        const message = createPaymentMessage({
+      it('should include invoice when provided', async () => {
+        const message = await createPaymentMessage({
           from: fromDid,
           to: [toDid],
           amount: '100.00',
           currency: 'EUR',
-          merchant: { '@id': toDid as `did:${string}:${string}` },
+          merchant: { '@id': toDid as DID, '@type': 'https://schema.org/Organization' },
           invoice: {
             invoice_number: 'INV-001',
             date: '2024-01-01',
@@ -145,37 +146,37 @@ describe('Utils with Real WASM', () => {
         });
 
         expect(message.body.invoice).toBeDefined();
-        expect(message.body.invoice?.invoice_number).toBe('INV-001');
+        expect((message.body.invoice as any)?.invoice_number).toBe('INV-001');
       });
     });
 
     describe('createAuthorizeMessage', () => {
-      it('should create valid Authorize message', () => {
-        const message = createAuthorizeMessage({
+      it('should create valid Authorize message', async () => {
+        const message = await createAuthorizeMessage({
           from: fromDid,
           to: [toDid],
           transaction_id: 'tx-123',
         });
 
         expect(message.type).toBe('https://tap.rsvp/schema/1.0#Authorize');
-        expect(message.body.transaction_id).toBe('tx-123');
+        expect((message.body as any).transaction_id).toBe('tx-123');
       });
 
-      it('should include settlement address when provided', () => {
-        const message = createAuthorizeMessage({
+      it('should include settlement address when provided', async () => {
+        const message = await createAuthorizeMessage({
           from: fromDid,
           to: [toDid],
           transaction_id: 'tx-456',
           settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
         });
 
-        expect(message.body.settlement_address).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7');
+        expect(message.body.settlementAddress).toBe('0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7');
       });
     });
 
     describe('createRejectMessage', () => {
-      it('should create valid Reject message', () => {
-        const message = createRejectMessage({
+      it('should create valid Reject message', async () => {
+        const message = await createRejectMessage({
           from: fromDid,
           to: [toDid],
           transaction_id: 'tx-789',
@@ -183,14 +184,14 @@ describe('Utils with Real WASM', () => {
         });
 
         expect(message.type).toBe('https://tap.rsvp/schema/1.0#Reject');
-        expect(message.body.transaction_id).toBe('tx-789');
+        expect((message.body as any).transaction_id).toBe('tx-789');
         expect(message.body.reason).toBe('Insufficient funds');
       });
     });
 
     describe('createCancelMessage', () => {
-      it('should create valid Cancel message', () => {
-        const message = createCancelMessage({
+      it('should create valid Cancel message', async () => {
+        const message = await createCancelMessage({
           from: fromDid,
           to: [toDid],
           transaction_id: 'tx-abc',
@@ -198,12 +199,12 @@ describe('Utils with Real WASM', () => {
         });
 
         expect(message.type).toBe('https://tap.rsvp/schema/1.0#Cancel');
-        expect(message.body.transaction_id).toBe('tx-abc');
+        expect((message.body as any).transaction_id).toBe('tx-abc');
         expect(message.body.by).toBe(fromDid);
       });
 
-      it('should include reason when provided', () => {
-        const message = createCancelMessage({
+      it('should include reason when provided', async () => {
+        const message = await createCancelMessage({
           from: fromDid,
           to: [toDid],
           transaction_id: 'tx-def',
@@ -216,24 +217,26 @@ describe('Utils with Real WASM', () => {
     });
 
     describe('createSettleMessage', () => {
-      it('should create valid Settle message', () => {
-        const message = createSettleMessage({
+      it('should create valid Settle message', async () => {
+        const message = await createSettleMessage({
           from: fromDid,
           to: [toDid],
           transaction_id: 'tx-ghi',
+          settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
           settlement_id: 'settle-123',
         });
 
         expect(message.type).toBe('https://tap.rsvp/schema/1.0#Settle');
-        expect(message.body.transaction_id).toBe('tx-ghi');
-        expect(message.body.settlement_id).toBe('settle-123');
+        expect((message.body as any).transaction_id).toBe('tx-ghi');
+        expect(message.body.settlementId).toBe('settle-123');
       });
 
-      it('should include amount when provided', () => {
-        const message = createSettleMessage({
+      it('should include amount when provided', async () => {
+        const message = await createSettleMessage({
           from: fromDid,
           to: [toDid],
           transaction_id: 'tx-jkl',
+          settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7',
           settlement_id: 'settle-456',
           amount: '75.00',
         });
@@ -243,8 +246,8 @@ describe('Utils with Real WASM', () => {
     });
 
     describe('createBasicMessage', () => {
-      it('should create valid basic message', () => {
-        const message = createBasicMessage({
+      it('should create valid basic message', async () => {
+        const message = await createBasicMessage({
           from: fromDid,
           to: [toDid],
           content: 'Hello World',
@@ -254,8 +257,8 @@ describe('Utils with Real WASM', () => {
         expect(message.body.content).toBe('Hello World');
       });
 
-      it('should include locale when provided', () => {
-        const message = createBasicMessage({
+      it('should include locale when provided', async () => {
+        const message = await createBasicMessage({
           from: fromDid,
           to: [toDid],
           content: 'Bonjour le monde',
@@ -267,8 +270,8 @@ describe('Utils with Real WASM', () => {
     });
 
     describe('createDIDCommMessage', () => {
-      it('should create generic DIDComm message', () => {
-        const message = createDIDCommMessage({
+      it('should create generic DIDComm message', async () => {
+        const message = await createDIDCommMessage({
           type: 'custom-protocol/1.0/action',
           from: fromDid,
           to: [toDid],
@@ -283,8 +286,8 @@ describe('Utils with Real WASM', () => {
         expect(message.body.data).toEqual({ key: 'value' });
       });
 
-      it('should generate ID if not provided', () => {
-        const message = createDIDCommMessage({
+      it('should generate ID if not provided', async () => {
+        const message = await createDIDCommMessage({
           type: 'test',
           from: fromDid,
           to: [toDid],
@@ -294,8 +297,8 @@ describe('Utils with Real WASM', () => {
         expect(message.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
       });
 
-      it('should use provided ID', () => {
-        const message = createDIDCommMessage({
+      it('should use provided ID', async () => {
+        const message = await createDIDCommMessage({
           id: 'custom-id-123',
           type: 'test',
           from: fromDid,
@@ -306,9 +309,9 @@ describe('Utils with Real WASM', () => {
         expect(message.id).toBe('custom-id-123');
       });
 
-      it('should include optional fields', () => {
+      it('should include optional fields', async () => {
         const now = Date.now();
-        const message = createDIDCommMessage({
+        const message = await createDIDCommMessage({
           type: 'test',
           from: fromDid,
           to: [toDid],

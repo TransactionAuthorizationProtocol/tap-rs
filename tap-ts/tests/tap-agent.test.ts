@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TapAgent } from '../src/index.js';
-import type { DIDCommMessage, PackedMessageResult, TapAgentConfig, DIDDocument, DIDResolver } from '../src/types.js';
+import type { DIDCommMessage, PackedMessageResult, TapAgentConfig, DIDResolver } from '../src/types.js';
 
 describe('TapAgent with Real WASM', () => {
   let agent: TapAgent;
@@ -298,7 +298,7 @@ describe('TapAgent with Real WASM', () => {
       };
 
       const agentWithResolver = await TapAgent.create({ didResolver: customResolver });
-      const result = await agentWithResolver.resolveDid('did:custom:123');
+      const result = await agentWithResolver.resolveDID('did:custom:123');
       
       expect(result.didDocument?.id).toBe('did:custom:123');
       agentWithResolver.dispose();

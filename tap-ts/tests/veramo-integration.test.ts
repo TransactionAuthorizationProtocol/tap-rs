@@ -8,6 +8,7 @@ import {
   createDIDCommMessage,
 } from "../src/index.js";
 import type { DIDCommMessage } from "../src/types.js";
+import type { DID } from '@taprsvp/types';
 import { readFileSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
@@ -122,7 +123,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       createAgent<IDIDManager & IKeyManager & IMessageHandler & IResolver & IDIDComm>({
         plugins: [
           new DIDManager({
-            store: new MemoryDIDStore(),
+            store: new MemoryDIDStore() as any,
             defaultProvider: "did:key",
             providers: {
               "did:key": new KeyDIDProvider({
@@ -131,9 +132,9 @@ describe("TAP-Veramo Interoperability Tests", () => {
             },
           }),
           new KeyManager({
-            store: new MemoryKeyStore(),
+            store: new MemoryKeyStore() as any,
             kms: {
-              local: new KeyManagementSystem(new MemoryKeyStore()),
+              local: new KeyManagementSystem(new MemoryKeyStore() as any),
             },
           }),
           new DIDResolverPlugin({
@@ -181,10 +182,10 @@ describe("TAP-Veramo Interoperability Tests", () => {
 
       expect(veramoDidDoc).toBeTruthy();
       expect(tapDidDocViaVeramo).toBeTruthy();
-      expect(veramoDidDoc.didDocument?.id || veramoDidDoc.id).toBe(
+      expect(veramoDidDoc.didDocument?.id).toBe(
         veramoIdentifier.did,
       );
-      expect(tapDidDocViaVeramo.didDocument?.id || tapDidDocViaVeramo.id).toBe(
+      expect(tapDidDocViaVeramo.didDocument?.id).toBe(
         tapAgent.did,
       );
     });
@@ -203,7 +204,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         didUrl: veramoIdentifier.did,
       });
       expect(
-        veramoResolvedVeramoDid.didDocument?.id || veramoResolvedVeramoDid.id,
+        veramoResolvedVeramoDid.didDocument?.id,
       ).toBe(veramoIdentifier.did);
 
       // Veramo agent should be able to resolve TAP-created DID
@@ -211,7 +212,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         didUrl: tapAgent.did,
       });
       expect(
-        veramoResolvedTapDid.didDocument?.id || veramoResolvedTapDid.id,
+        veramoResolvedTapDid.didDocument?.id,
       ).toBe(tapAgent.did);
     });
   });
@@ -269,7 +270,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         id: "tap-jws-001",
         type: "https://didcomm.org/basicmessage/2.0/message",
         from: tapAgent.did,
-        to: [veramoRecipient.did as any],
+        to: [veramoRecipient.did as DID],
         created_time: Date.now(),
         body: {
           content: "Hello from TAP (JWS)!",
@@ -346,7 +347,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         id: "tap-test-001",
         type: "https://didcomm.org/basicmessage/2.0/message",
         from: tapAgent.did,
-        to: [veramoRecipient.did as any],
+        to: [veramoRecipient.did as DID],
         created_time: Date.now(),
         body: {
           content: "Testing TAP to Veramo",
@@ -356,32 +357,31 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Pack with TAP (will use JWS since that's what TAP currently supports)
       const tapPacked = await tapAgent.pack(tapMessage);
 
-      // Check if it's JWS or JWE (handle format differences with JSON encoding)
-      if (tapPacked.payload && tapPacked.signatures) {
-        try {
+      // Check if it's JWS or JWE by parsing the message
+      try {
+        const parsedMessage = JSON.parse(tapPacked.message);
+        if (parsedMessage.payload && parsedMessage.signatures) {
           // JWS format - Veramo should be able to unpack it
           const veramoUnpacked = await veramoAgent.unpackDIDCommMessage({
-            message: JSON.stringify(tapPacked),
+            message: tapPacked.message,
           });
           expect(veramoUnpacked.message.body.content).toBe("Testing TAP to Veramo");
           expect(veramoUnpacked.metaData.packing).toBe("jws");
-        } catch (error) {
-          // Expected failure due to key ID format differences
-          console.log("Veramo JWS unpacking error:", (error as Error).message);
-          expect((error as Error).message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
-        }
-      } else if (tapPacked.protected && tapPacked.ciphertext) {
-        try {
+        } else if (parsedMessage.protected && parsedMessage.ciphertext) {
           // JWE format - if TAP supports it
           const veramoUnpacked = await veramoAgent.unpackDIDCommMessage({
-            message: JSON.stringify(tapPacked),
+            message: tapPacked.message,
           });
           expect(veramoUnpacked.message.body.content).toBe("Testing TAP to Veramo");
           expect(["authcrypt", "anoncrypt"]).toContain(veramoUnpacked.metaData.packing);
-        } catch (error) {
-          console.log("Veramo JWE unpacking error:", (error as Error).message);
-          expect((error as Error).message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format JWS/i);
+        } else {
+          // Unknown format
+          console.log("Unknown message format");
         }
+      } catch (error) {
+        // Expected failure due to format differences or key issues
+        console.log("Veramo unpacking error:", (error as Error).message);
+        expect((error as Error).message).toMatch(/DID document.*not.*located|key.*not.*found|unable to determine message type|Incorrect format|parse/i);
       }
     });
 
@@ -419,7 +419,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
           id: "tap-ping-response-001",
           type: "https://didcomm.org/trust-ping/2.0/ping-response",
           from: tapAgent.did,
-          to: [veramoIdentifier.did as any],
+          to: [veramoIdentifier.did as DID],
           thid: veramoPing.id, // Thread reference to original ping
           created_time: Date.now(),
           body: {},
@@ -456,16 +456,16 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Create TAP Transfer message
       const transferMessage = await createTransferMessage({
         from: tapAgent.did,
-        to: [veramoRecipient.did as any],
+        to: [veramoRecipient.did as DID],
         amount: "100.50",
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         originator: {
-          "@id": tapAgent.did,
+          "@id": tapAgent.did as DID,
           "@type": "https://schema.org/Person",
           name: "Alice Smith",
         },
         beneficiary: {
-          "@id": veramoRecipient.did,
+          "@id": veramoRecipient.did as DID,
           "@type": "https://schema.org/Person",
           name: "Bob Jones",
         },
@@ -504,11 +504,11 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Create TAP Payment message
       const paymentMessage = await createPaymentMessage({
         from: tapAgent.did,
-        to: [veramoMerchant.did as any],
+        to: [veramoMerchant.did as DID],
         amount: "249.99",
         currency: "USD",
         merchant: {
-          "@id": veramoMerchant.did,
+          "@id": veramoMerchant.did as DID,
           "@type": "https://schema.org/Organization",
           name: "Example Merchant",
         },
@@ -567,14 +567,14 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // 1. TAP creates and packs a Connect message
       const connectMessage = await createConnectMessage({
         from: tapAgent.did,
-        to: [veramoCounterparty.did as any],
+        to: [veramoCounterparty.did as DID],
         requester: {
-          "@id": tapAgent.did,
+          "@id": tapAgent.did as DID,
           "@type": "https://schema.org/Person",
           name: "Connector",
         },
         principal: {
-          "@id": tapAgent.did,
+          "@id": tapAgent.did as DID,
           "@type": "https://schema.org/Person",
           name: "Connector",
         },
@@ -652,10 +652,10 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Test message exchange
       const message = await createBasicMessage({
         from: tapEd25519.did,
-        to: [veramoEd25519.did as any],
+        to: [veramoEd25519.did as DID],
         content: "Ed25519 compatibility test",
       });
-      message.to = [veramoEd25519.did as any];
+      message.to = [veramoEd25519.did as DID];
 
       const packed = await tapEd25519.pack(message);
       const unpacked = await tapEd25519.unpack(packed.message);
@@ -719,16 +719,16 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Start conversation with TAP
       const initialMessage = await createTransferMessage({
         from: tapAgent.did,
-        to: [veramoParticipant.did as any],
+        to: [veramoParticipant.did as DID],
         amount: "500.00",
         asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
         originator: {
-          "@id": tapAgent.did,
+          "@id": tapAgent.did as DID,
           "@type": "https://schema.org/Person",
           name: "Sender",
         },
         beneficiary: {
-          "@id": veramoParticipant.did,
+          "@id": veramoParticipant.did as DID,
           "@type": "https://schema.org/Person",
           name: "Receiver",
         },
@@ -777,7 +777,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
         id: "mixed-001",
         type: "https://didcomm.org/trust-ping/2.0/ping",
         from: tapAgent.did,
-        to: [veramoAgent2Identifier.did as any],
+        to: [veramoAgent2Identifier.did as DID],
         created_time: Date.now(),
         body: { response_requested: true },
       };
@@ -790,11 +790,11 @@ describe("TAP-Veramo Interoperability Tests", () => {
       // Respond with TAP-specific message
       const tapResponse = await createPaymentMessage({
         from: tapAgent.did,
-        to: [veramoAgent2Identifier.did as any],
+        to: [veramoAgent2Identifier.did as DID],
         amount: "25.00",
         currency: "USD",
         merchant: {
-          "@id": veramoAgent2Identifier.did,
+          "@id": veramoAgent2Identifier.did as DID,
           "@type": "https://schema.org/Organization",
           name: "Test Merchant",
         },
@@ -873,12 +873,12 @@ describe("TAP-Veramo Interoperability Tests", () => {
           amount: `${(i + 1) * 10}.00`,
           asset: "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
           originator: {
-            "@id": tapAgent.did,
+            "@id": tapAgent.did as DID,
             "@type": "https://schema.org/Person",
             name: "Sender",
           },
           beneficiary: {
-            "@id": recipient,
+            "@id": recipient as DID,
             "@type": "https://schema.org/Person",
             name: "Recipient",
           },
