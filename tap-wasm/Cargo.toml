@@ -30,7 +30,6 @@ tap-msg = { version = "0.5.0", path = "../tap-msg", default-features = false, fe
     "wasm",
 ] }
 web-sys = { version = "0.3.64", features = ["console"] }
-chrono = { version = "0.4", features = ["wasmbind"] }
 getrandom = { workspace = true, features = ["js"] }
 base64 = "0.22"
 ed25519-dalek = { version = "2.2", features = ["rand_core"] }
@@ -38,7 +37,9 @@ rand = "0.8"
 hex = "0.4"
 
 [features]
-default = ["console_error_panic_hook", "wee_alloc"]
+default = ["wee_alloc"]
+# Feature for improved debugging in browsers
+debug = ["console_error_panic_hook"]
 
 [dev-dependencies]
 wasm-bindgen-test = { workspace = true }
@@ -53,7 +54,7 @@ required-features = []
 
 # Optimize for size
 [profile.release]
-opt-level = "z"     # Optimize for size
-lto = true          # Enable Link Time Optimization
-codegen-units = 1   # Single codegen unit for better optimization
-strip = true        # Strip debug symbols
+opt-level = "z"   # Optimize for size
+lto = true        # Enable Link Time Optimization
+codegen-units = 1 # Single codegen unit for better optimization
+strip = true      # Strip debug symbols
