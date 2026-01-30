@@ -46,8 +46,41 @@ pub struct LocalAgentKey {
 impl LocalAgentKey {
     /// Verify a JWS against this key
     pub async fn verify_jws(&self, jws: &crate::message::Jws) -> Result<Vec<u8>> {
-        // In this simplified implementation, we'll just base64 decode the payload
-        // without verifying the signature cryptographically
+        // Find the signature that matches our key ID
+        let our_kid = crate::agent_key::AgentKey::key_id(self).to_string();
+        let signature = jws
+            .signatures
+            .iter()
+            .find(|s| s.get_kid() == Some(our_kid.clone()))
+            .ok_or_else(|| {
+                Error::Cryptography(format!("No signature found with kid: {}", our_kid))
+            })?;
+
+        // Parse the protected header to get the algorithm
+        let protected = signature.get_protected_header().map_err(|e| {
+            Error::Cryptography(format!("Failed to decode protected header: {}", e))
+        })?;
+
+        // Decode the signature from base64
+        let signature_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&signature.signature)
+            .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
+
+        // Construct the signing input: {protected}.{payload}
+        let signing_input = format!("{}.{}", signature.protected, jws.payload);
+
+        // Verify the signature using the actual cryptographic verification
+        let verified = self
+            .verify_signature(signing_input.as_bytes(), &signature_bytes, &protected)
+            .await?;
+
+        if !verified {
+            return Err(Error::Cryptography(
+                "Signature verification failed".to_string(),
+            ));
+        }
+
+        // Decode and return the payload
         let payload_bytes = base64::engine::general_purpose::STANDARD
             .decode(&jws.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;

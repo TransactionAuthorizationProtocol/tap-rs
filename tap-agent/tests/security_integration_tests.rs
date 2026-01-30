@@ -168,11 +168,7 @@ async fn test_signature_roundtrip() {
 }
 
 /// Test that tampered signature fails verification
-/// NOTE: This test is currently skipped due to a pre-existing issue in
-/// LocalAgentKey::verify_jws that doesn't properly validate signatures.
-/// This is tracked as a separate issue from the encryption security fixes.
 #[tokio::test]
-#[ignore = "Pre-existing bug: verify_jws doesn't properly validate signatures"]
 async fn test_tampered_signature_fails() {
     let key = LocalAgentKey::generate_ed25519("signer").unwrap();
     let message = b"Important message";

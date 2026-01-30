@@ -265,6 +265,42 @@ mod tests {
 
         // No environment variable cleanup needed - TestStorage handles isolation automatically
     }
+
+    #[cfg(unix)]
+    #[test]
+    #[serial]
+    fn test_key_storage_file_permissions() {
+        use crate::test_utils::TestStorage;
+        use std::os::unix::fs::PermissionsExt;
+
+        // Use TestStorage for complete isolation
+        let test_storage = TestStorage::new().unwrap();
+
+        // Create and save storage
+        let mut storage = KeyStorage::new();
+        storage.add_key(StoredKey {
+            did: "did:key:test".to_string(),
+            label: "test-key".to_string(),
+            key_type: KeyType::Ed25519,
+            private_key: "test-private-key-material".to_string(),
+            public_key: "test-public".to_string(),
+            metadata: HashMap::new(),
+        });
+
+        // Save to create the file
+        test_storage.save(&storage).unwrap();
+
+        // Verify file permissions are 0o600 (owner read/write only)
+        let metadata = fs::metadata(test_storage.path()).unwrap();
+        let permissions = metadata.permissions();
+        let mode = permissions.mode() & 0o777; // Mask to get just permission bits
+
+        assert_eq!(
+            mode, 0o600,
+            "Key storage file should have permissions 0o600 (owner read/write only), got {:o}",
+            mode
+        );
+    }
 }
 
 /// A collection of stored keys
@@ -459,12 +495,18 @@ impl KeyStorage {
     }
 
     /// Save keys to a specific path
+    ///
+    /// On Unix systems, the file is created with restrictive permissions (0o600)
+    /// to protect private key material from unauthorized access.
     pub fn save_to_path(&self, path: &Path) -> Result<()> {
         let contents = serde_json::to_string_pretty(self)
             .map_err(|e| Error::Storage(format!("Failed to serialize key storage: {}", e)))?;
 
-        fs::write(path, contents)
+        fs::write(path, &contents)
             .map_err(|e| Error::Storage(format!("Failed to write key storage file: {}", e)))?;
+
+        // Set restrictive permissions on Unix systems (owner read/write only)
+        set_secure_file_permissions(path)?;
 
         Ok(())
     }
@@ -504,6 +546,9 @@ impl KeyStorage {
         }
     }
     /// Create agent directory and save policies/metadata files
+    ///
+    /// On Unix systems, files are created with restrictive permissions (0o600)
+    /// to protect sensitive agent configuration from unauthorized access.
     pub fn create_agent_directory(
         &self,
         did: &str,
@@ -522,19 +567,34 @@ impl KeyStorage {
             ))
         })?;
 
+        // Set restrictive permissions on the agent directory (owner rwx only)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let dir_permissions = fs::Permissions::from_mode(0o700);
+            fs::set_permissions(&agent_dir, dir_permissions).map_err(|e| {
+                Error::Storage(format!(
+                    "Failed to set agent directory permissions: {}",
+                    e
+                ))
+            })?;
+        }
+
         // Save policies.json
         let policies_file = agent_dir.join("policies.json");
         let policies_json = serde_json::to_string_pretty(policies)
             .map_err(|e| Error::Storage(format!("Failed to serialize policies: {}", e)))?;
-        fs::write(&policies_file, policies_json)
+        fs::write(&policies_file, &policies_json)
             .map_err(|e| Error::Storage(format!("Failed to write policies file: {}", e)))?;
+        set_secure_file_permissions(&policies_file)?;
 
         // Save metadata.json
         let metadata_file = agent_dir.join("metadata.json");
         let metadata_json = serde_json::to_string_pretty(metadata)
             .map_err(|e| Error::Storage(format!("Failed to serialize metadata: {}", e)))?;
-        fs::write(&metadata_file, metadata_json)
+        fs::write(&metadata_file, &metadata_json)
             .map_err(|e| Error::Storage(format!("Failed to write metadata file: {}", e)))?;
+        set_secure_file_permissions(&metadata_file)?;
 
         Ok(())
     }
@@ -598,6 +658,26 @@ impl KeyStorage {
 /// Sanitize a DID for use as a directory name (same as TAP Node)
 fn sanitize_did(did: &str) -> String {
     did.replace(':', "_")
+}
+
+/// Set restrictive file permissions (owner read/write only) on Unix systems
+///
+/// This is a no-op on non-Unix systems.
+#[allow(unused_variables)]
+fn set_secure_file_permissions(path: &Path) -> Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let permissions = fs::Permissions::from_mode(0o600);
+        fs::set_permissions(path, permissions).map_err(|e| {
+            Error::Storage(format!(
+                "Failed to set secure permissions on {}: {}",
+                path.display(),
+                e
+            ))
+        })?;
+    }
+    Ok(())
 }
 
 /// Generate a JWK for a stored key
