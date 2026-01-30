@@ -51,7 +51,8 @@ async fn test_jwe_encryption_is_real() {
 #[tokio::test]
 async fn test_jwe_roundtrip_with_real_crypto() {
     let key = LocalAgentKey::generate_p256("test-key").unwrap();
-    let plaintext = b"Secret data for encryption test - this is a longer message to ensure proper encryption";
+    let plaintext =
+        b"Secret data for encryption test - this is a longer message to ensure proper encryption";
 
     // Create JWE with self as recipient
     let recipients: Vec<Arc<dyn VerificationKey>> =
@@ -145,7 +146,10 @@ async fn test_wrong_recipient_cannot_decrypt() {
 
     // Attacker should not be able to decrypt (no matching recipient)
     let result = attacker.unwrap_jwe(&jwe).await;
-    assert!(result.is_err(), "Wrong recipient must not be able to decrypt");
+    assert!(
+        result.is_err(),
+        "Wrong recipient must not be able to decrypt"
+    );
 }
 
 /// Test signature round-trip
@@ -211,10 +215,7 @@ async fn test_encrypt_large_data() {
 
     let recipients: Vec<Arc<dyn VerificationKey>> =
         vec![Arc::new(key.clone()) as Arc<dyn VerificationKey>];
-    let jwe = key
-        .create_jwe(&plaintext, &recipients, None)
-        .await
-        .unwrap();
+    let jwe = key.create_jwe(&plaintext, &recipients, None).await.unwrap();
 
     let decrypted = key.unwrap_jwe(&jwe).await.unwrap();
     assert_eq!(decrypted, plaintext);

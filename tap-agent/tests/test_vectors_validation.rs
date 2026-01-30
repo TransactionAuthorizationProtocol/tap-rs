@@ -417,7 +417,10 @@ fn validate_all_test_vectors() {
 
     // Skip test if test vectors directory doesn't exist
     if !test_vectors_dir.exists() {
-        println!("Test vectors directory not found at {:?}, skipping test", test_vectors_dir);
+        println!(
+            "Test vectors directory not found at {:?}, skipping test",
+            test_vectors_dir
+        );
         println!("To run this test, clone the TAIP test vectors repository to ../prds/taips/test-vectors");
         return;
     }

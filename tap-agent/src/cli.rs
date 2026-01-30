@@ -334,9 +334,11 @@ fn display_generated_did(generated_key: &GeneratedKey, method: &str, domain: Opt
     println!("Key Type: {:?}", generated_key.key_type);
 
     // For did:web, show where to place the DID document
-    if method == "web" && domain.is_some() {
-        println!("\nTo use this did:web, place the DID document at:");
-        println!("https://{}/.well-known/did.json", domain.unwrap());
+    if method == "web" {
+        if let Some(d) = domain {
+            println!("\nTo use this did:web, place the DID document at:");
+            println!("https://{}/.well-known/did.json", d);
+        }
     }
 
     // Display the private key

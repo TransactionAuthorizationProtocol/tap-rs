@@ -29,10 +29,10 @@ async fn test_web_resolver_malformed_path_no_panic() {
     let resolver = MultiResolver::new();
 
     let malformed_dids = vec![
-        "did:web:",           // Empty domain
-        "did:web",            // Missing trailing colon
-        "did:web::",          // Double colon, empty segment
-        "did:web:::",         // Triple colon
+        "did:web:",                  // Empty domain
+        "did:web",                   // Missing trailing colon
+        "did:web::",                 // Double colon, empty segment
+        "did:web:::",                // Triple colon
         "did:web:example.com::path", // Double colon in path
     ];
 
@@ -54,15 +54,7 @@ async fn test_key_resolver_short_did_no_panic() {
     let resolver = MultiResolver::new();
 
     let short_dids = vec![
-        "",
-        "d",
-        "di",
-        "did",
-        "did:",
-        "did:k",
-        "did:ke",
-        "did:key",
-        "did:key:",
+        "", "d", "di", "did", "did:", "did:k", "did:ke", "did:key", "did:key:",
     ];
 
     for did in short_dids {

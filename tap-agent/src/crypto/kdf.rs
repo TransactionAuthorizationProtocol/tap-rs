@@ -35,7 +35,7 @@ pub fn derive_key_ecdh_es(
     apv: &[u8],
     key_data_len: usize,
 ) -> Result<Vec<u8>> {
-    if key_data_len == 0 || key_data_len % 8 != 0 {
+    if key_data_len == 0 || !key_data_len.is_multiple_of(8) {
         return Err(Error::Cryptography(
             "key_data_len must be a positive multiple of 8".to_string(),
         ));
@@ -65,7 +65,7 @@ pub fn derive_key_ecdh_es(
     // Concat KDF with SHA-256 (produces 32 bytes per round)
     let key_data_len_bytes = key_data_len / 8;
     let hash_len = 32; // SHA-256 output size
-    let reps = (key_data_len_bytes + hash_len - 1) / hash_len;
+    let reps = key_data_len_bytes.div_ceil(hash_len);
 
     let mut derived = Vec::with_capacity(key_data_len_bytes);
 

@@ -573,10 +573,7 @@ impl KeyStorage {
             use std::os::unix::fs::PermissionsExt;
             let dir_permissions = fs::Permissions::from_mode(0o700);
             fs::set_permissions(&agent_dir, dir_permissions).map_err(|e| {
-                Error::Storage(format!(
-                    "Failed to set agent directory permissions: {}",
-                    e
-                ))
+                Error::Storage(format!("Failed to set agent directory permissions: {}", e))
             })?;
         }
 

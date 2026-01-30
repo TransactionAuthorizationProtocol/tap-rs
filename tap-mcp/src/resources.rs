@@ -149,11 +149,7 @@ impl ResourceRegistry {
         Ok(vec![ResourceContent {
             uri: format!(
                 "tap://agents{}",
-                if query.is_some() {
-                    format!("?{}", query.unwrap())
-                } else {
-                    String::new()
-                }
+                query.as_ref().map_or(String::new(), |q| format!("?{}", q))
             ),
             mime_type: Some("application/json".to_string()),
             text: Some(serde_json::to_string_pretty(&content)?),
@@ -284,11 +280,7 @@ impl ResourceRegistry {
         Ok(vec![ResourceContent {
             uri: format!(
                 "tap://messages{}",
-                if query.is_some() {
-                    format!("?{}", query.unwrap())
-                } else {
-                    String::new()
-                }
+                query.as_ref().map_or(String::new(), |q| format!("?{}", q))
             ),
             mime_type: Some("application/json".to_string()),
             text: Some(serde_json::to_string_pretty(&content)?),
@@ -511,11 +503,7 @@ impl ResourceRegistry {
         Ok(vec![ResourceContent {
             uri: format!(
                 "tap://deliveries{}",
-                if query.is_some() {
-                    format!("?{}", query.unwrap())
-                } else {
-                    String::new()
-                }
+                query.as_ref().map_or(String::new(), |q| format!("?{}", q))
             ),
             mime_type: Some("application/json".to_string()),
             text: Some(serde_json::to_string_pretty(&content)?),
@@ -686,11 +674,7 @@ impl ResourceRegistry {
         Ok(vec![ResourceContent {
             uri: format!(
                 "tap://received{}",
-                if query.is_some() {
-                    format!("?{}", query.unwrap())
-                } else {
-                    String::new()
-                }
+                query.as_ref().map_or(String::new(), |q| format!("?{}", q))
             ),
             mime_type: Some("application/json".to_string()),
             text: Some(serde_json::to_string_pretty(&content)?),
@@ -884,11 +868,7 @@ impl ResourceRegistry {
         Ok(vec![ResourceContent {
             uri: format!(
                 "tap://database-schema{}",
-                if query.is_some() {
-                    format!("?{}", query.unwrap())
-                } else {
-                    String::new()
-                }
+                query.as_ref().map_or(String::new(), |q| format!("?{}", q))
             ),
             mime_type: Some("application/json".to_string()),
             text: Some(serde_json::to_string_pretty(&content)?),

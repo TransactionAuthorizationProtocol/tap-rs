@@ -29,7 +29,7 @@ pub fn wrap_key_aes_kw(kek: &[u8; 32], plaintext_key: &[u8]) -> Result<Vec<u8>> 
             "Key to wrap must be at least 16 bytes".to_string(),
         ));
     }
-    if plaintext_key.len() % 8 != 0 {
+    if !plaintext_key.len().is_multiple_of(8) {
         return Err(Error::Cryptography(
             "Key to wrap must be multiple of 8 bytes".to_string(),
         ));
@@ -65,7 +65,7 @@ pub fn unwrap_key_aes_kw(kek: &[u8; 32], wrapped_key: &[u8]) -> Result<Vec<u8>> 
             "Wrapped key must be at least 24 bytes".to_string(),
         ));
     }
-    if wrapped_key.len() % 8 != 0 {
+    if !wrapped_key.len().is_multiple_of(8) {
         return Err(Error::Cryptography(
             "Wrapped key must be multiple of 8 bytes".to_string(),
         ));

@@ -80,8 +80,7 @@ fn test_ecdh_kdf_output_length() {
     let apv = b"Bob";
 
     // Derive 256-bit key for AES-256-KW
-    let derived =
-        derive_key_ecdh_es(&shared_secret, apu, apv, 256).expect("KDF should succeed");
+    let derived = derive_key_ecdh_es(&shared_secret, apu, apv, 256).expect("KDF should succeed");
 
     assert_eq!(
         derived.len(),
@@ -97,8 +96,8 @@ fn test_ecdh_kdf_is_context_bound() {
 
     let key1 =
         derive_key_ecdh_es(&shared_secret, b"Alice", b"Bob", 256).expect("KDF should succeed");
-    let key2 = derive_key_ecdh_es(&shared_secret, b"Alice", b"Charlie", 256)
-        .expect("KDF should succeed");
+    let key2 =
+        derive_key_ecdh_es(&shared_secret, b"Alice", b"Charlie", 256).expect("KDF should succeed");
 
     assert_ne!(
         &key1[..],

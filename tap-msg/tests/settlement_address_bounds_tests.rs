@@ -7,16 +7,7 @@ use tap_msg::settlement_address::{PayToUri, SettlementAddress};
 /// Test that PayToUri::new rejects short strings without panic
 #[test]
 fn test_payto_uri_short_string_no_panic() {
-    let short_inputs = vec![
-        "",
-        "p",
-        "pa",
-        "pay",
-        "payt",
-        "payto",
-        "payto:",
-        "payto:/",
-    ];
+    let short_inputs = vec!["", "p", "pa", "pay", "payt", "payto", "payto:", "payto:/"];
 
     for input in short_inputs {
         let result = PayToUri::new(input.to_string());
@@ -56,11 +47,11 @@ fn test_payto_uri_deserialize_invalid_method_no_panic() {
     // serde(transparent) means it deserializes directly to the inner String
 
     let invalid_json_values = vec![
-        r#""""#,              // Empty string
-        r#""short""#,         // Too short
-        r#""payto""#,         // No scheme separator
-        r#""payto:/""#,       // Incomplete scheme
-        r#""http://x/y""#,    // Wrong scheme
+        r#""""#,           // Empty string
+        r#""short""#,      // Too short
+        r#""payto""#,      // No scheme separator
+        r#""payto:/""#,    // Incomplete scheme
+        r#""http://x/y""#, // Wrong scheme
     ];
 
     for json in invalid_json_values {

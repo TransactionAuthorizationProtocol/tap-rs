@@ -155,11 +155,15 @@ impl LocalAgentKey {
         let recipient_x_b64 = recipient_jwk
             .get("x")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Cryptography("Missing x coordinate in recipient JWK".to_string()))?;
+            .ok_or_else(|| {
+                Error::Cryptography("Missing x coordinate in recipient JWK".to_string())
+            })?;
         let recipient_y_b64 = recipient_jwk
             .get("y")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Cryptography("Missing y coordinate in recipient JWK".to_string()))?;
+            .ok_or_else(|| {
+                Error::Cryptography("Missing y coordinate in recipient JWK".to_string())
+            })?;
 
         let recipient_x = base64::engine::general_purpose::STANDARD
             .decode(recipient_x_b64)
@@ -178,7 +182,9 @@ impl LocalAgentKey {
 
         let recipient_pk = P256PublicKey::from_encoded_point(&recipient_encoded_point);
         if recipient_pk.is_none().into() {
-            return Err(Error::Cryptography("Invalid recipient public key".to_string()));
+            return Err(Error::Cryptography(
+                "Invalid recipient public key".to_string(),
+            ));
         }
         let recipient_pk = recipient_pk.unwrap();
 
@@ -202,12 +208,7 @@ impl LocalAgentKey {
         let apv_bytes = base64::engine::general_purpose::STANDARD
             .decode(&protected.apv)
             .unwrap_or_default();
-        let kek = crate::crypto::derive_key_ecdh_es(
-            shared_bytes.as_slice(),
-            b"",
-            &apv_bytes,
-            256,
-        )?;
+        let kek = crate::crypto::derive_key_ecdh_es(shared_bytes.as_slice(), b"", &apv_bytes, 256)?;
 
         // 8. Wrap CEK with AES-KW
         let mut kek_array = [0u8; 32];
@@ -248,8 +249,8 @@ impl LocalAgentKey {
                     sender_kid: Some(AgentKey::key_id(self).to_string()),
                 },
             }],
-            tag: base64::engine::general_purpose::STANDARD.encode(&tag),
-            iv: base64::engine::general_purpose::STANDARD.encode(&iv_bytes),
+            tag: base64::engine::general_purpose::STANDARD.encode(tag),
+            iv: base64::engine::general_purpose::STANDARD.encode(iv_bytes),
         };
 
         Ok(jwe)
@@ -1031,9 +1032,8 @@ impl EncryptionKey for LocalAgentKey {
                     // Wrap CEK with AES-KW per RFC 3394
                     let mut kek_array = [0u8; 32];
                     kek_array.copy_from_slice(&kek);
-                    let wrapped_cek = crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?;
 
-                    wrapped_cek
+                    crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?
                 }
                 // Handle other key types
                 _ => {
@@ -1182,7 +1182,9 @@ impl DecryptionKey for LocalAgentKey {
         // 2. Decode and parse the protected header to get the EPK
         let protected_bytes = base64::engine::general_purpose::STANDARD
             .decode(&jwe.protected)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode protected header: {}", e)))?;
+            .map_err(|e| {
+                Error::Cryptography(format!("Failed to decode protected header: {}", e))
+            })?;
 
         let protected: JweProtected = serde_json::from_slice(&protected_bytes)
             .map_err(|e| Error::Cryptography(format!("Failed to parse protected header: {}", e)))?;
@@ -1237,9 +1239,10 @@ impl DecryptionKey for LocalAgentKey {
 
         // 5. Get our private key and perform ECDH
         let jwk = self.private_key_jwk()?;
-        let d_b64 = jwk.get("d").and_then(|v| v.as_str()).ok_or_else(|| {
-            Error::Cryptography("Missing private key (d) in JWK".to_string())
-        })?;
+        let d_b64 = jwk
+            .get("d")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::Cryptography("Missing private key (d) in JWK".to_string()))?;
 
         let d_bytes = base64::engine::general_purpose::STANDARD
             .decode(d_b64)
@@ -1250,10 +1253,8 @@ impl DecryptionKey for LocalAgentKey {
             .map_err(|e| Error::Cryptography(format!("Invalid private key: {}", e)))?;
 
         // Perform ECDH
-        let shared_secret = p256::ecdh::diffie_hellman(
-            secret_key.to_nonzero_scalar(),
-            epk_public_key.as_affine(),
-        );
+        let shared_secret =
+            p256::ecdh::diffie_hellman(secret_key.to_nonzero_scalar(), epk_public_key.as_affine());
         let shared_bytes = shared_secret.raw_secret_bytes();
 
         // 6. Derive KEK using Concat KDF

@@ -230,6 +230,8 @@ pub trait KeyStore: Send + Sync {
 #[derive(Debug, Default)]
 pub struct PlaintextFileKeyStore {
     /// Path to the key storage file
+    /// Note: Currently unused but reserved for future KeyStore trait implementation
+    #[allow(dead_code)]
     path: Option<std::path::PathBuf>,
 }
 
