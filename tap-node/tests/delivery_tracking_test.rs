@@ -100,9 +100,6 @@ async fn test_delivery_tracking_with_send_message() -> Result<(), Box<dyn std::e
 }
 
 /// Test external delivery tracking
-///
-/// Note: This test may fail in environments without network access.
-/// In such cases, the test verifies that the delivery failure is properly recorded.
 #[tokio::test]
 async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Error>> {
     // Create node with in-memory storage for testing
@@ -190,8 +187,7 @@ async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Err
             }
         }
         Err(e) => {
-            // In test environments without network access, external delivery fails
-            // This is expected - verify the error message indicates a delivery failure
+            // Network delivery may fail in test environments
             let error_msg = e.to_string();
             assert!(
                 error_msg.contains("Failed to deliver")
@@ -200,9 +196,7 @@ async fn test_external_delivery_tracking() -> Result<(), Box<dyn std::error::Err
                 "Unexpected error: {}",
                 error_msg
             );
-            println!(
-                "✅ External delivery tracking test passed (network unavailable, expected failure)"
-            );
+            println!("✅ External delivery tracking test passed (network unavailable)");
         }
     }
 

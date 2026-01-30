@@ -375,8 +375,7 @@ async fn test_create_transfer_tool() -> Result<()> {
         let content_text = result["content"][0]["text"].as_str().unwrap();
 
         if is_error {
-            // In test environment without network, delivery fails - this is expected
-            // The important thing is that the transfer was created and attempted
+            // Network delivery may fail in test environments
             assert!(
                 content_text.contains("Failed to send transfer message")
                     || content_text.contains("Failed to deliver"),
@@ -445,10 +444,8 @@ async fn test_authorize_tool() -> Result<()> {
     let is_error = transfer_result["isError"].as_bool().unwrap_or(false);
     let transfer_content = transfer_result["content"][0]["text"].as_str().unwrap();
 
-    // In test environment, transfer may fail due to network delivery issues
     if is_error {
-        // Transfer failed - this is expected in test environment without network
-        // The test validates that the tool handles the error gracefully
+        // Network delivery may fail in test environments
         assert!(
             transfer_content.contains("Failed to send transfer message")
                 || transfer_content.contains("Failed to deliver"),
@@ -550,9 +547,8 @@ async fn test_reject_tool() -> Result<()> {
     let is_error = transfer_result["isError"].as_bool().unwrap_or(false);
     let transfer_content = transfer_result["content"][0]["text"].as_str().unwrap();
 
-    // In test environment, transfer may fail due to network delivery issues
     if is_error {
-        // Transfer failed - this is expected in test environment without network
+        // Network delivery may fail in test environments
         assert!(
             transfer_content.contains("Failed to send transfer message")
                 || transfer_content.contains("Failed to deliver"),
@@ -651,10 +647,6 @@ async fn test_list_resources() -> Result<()> {
 
     Ok(())
 }
-
-// Note: Database schema resource test is disabled due to test environment issues
-// The resource functionality works correctly as evidenced by successful builds
-// and the fact that it's included in the list_resources test
 
 #[tokio::test]
 #[serial]
@@ -804,9 +796,8 @@ async fn test_complete_transaction_flow() -> Result<()> {
         .as_str()
         .unwrap();
 
-    // In test environment, transfer may fail due to network delivery issues
     if is_error {
-        // Transfer failed - this is expected in test environment without network
+        // Network delivery may fail in test environments
         assert!(
             transfer_content.contains("Failed to send transfer message")
                 || transfer_content.contains("Failed to deliver"),

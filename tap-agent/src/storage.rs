@@ -262,8 +262,6 @@ mod tests {
             loaded.keys.contains_key("did:key:test"),
             "Should contain the test key"
         );
-
-        // No environment variable cleanup needed - TestStorage handles isolation automatically
     }
 
     #[cfg(unix)]

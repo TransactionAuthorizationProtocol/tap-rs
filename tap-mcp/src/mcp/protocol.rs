@@ -169,7 +169,6 @@ pub struct Resource {
 }
 
 /// List resources parameters
-/// Note: Reserved for future pagination support
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListResourcesParams {

@@ -229,8 +229,6 @@ pub trait KeyStore: Send + Sync {
 /// implement a secure [`KeyStore`] backend with encryption at rest.
 #[derive(Debug, Default)]
 pub struct PlaintextFileKeyStore {
-    /// Path to the key storage file
-    /// Note: Currently unused but reserved for future KeyStore trait implementation
     #[allow(dead_code)]
     path: Option<std::path::PathBuf>,
 }
@@ -246,7 +244,3 @@ impl PlaintextFileKeyStore {
         Self { path: Some(path) }
     }
 }
-
-// Note: Full KeyStore implementation for PlaintextFileKeyStore would wrap
-// the existing KeyStorage functionality. This is left as a TODO for when
-// the KeyStore trait is fully integrated into AgentKeyManager.
