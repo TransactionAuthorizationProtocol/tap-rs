@@ -68,6 +68,12 @@
 /// Agent implementation
 pub mod agent;
 
+/// Cryptographic primitives (KDF, AES-KW)
+pub mod crypto;
+
+/// Key storage abstraction for future external key management
+pub mod key_store;
+
 /// Agent key abstraction
 pub mod agent_key;
 

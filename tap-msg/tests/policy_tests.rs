@@ -136,7 +136,7 @@ fn test_all_policy_types() {
     assert_eq!(proof_policy.purpose, None);
 
     // Create policies
-    let policies = vec![
+    let policies = [
         Policy::RequireAuthorization(auth_policy),
         Policy::RequirePresentation(presentation_policy),
         Policy::RequireProofOfControl(proof_policy),

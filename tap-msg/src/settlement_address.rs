@@ -4,7 +4,7 @@
 //! blockchain addresses (CAIP-10 format) or traditional payment system identifiers
 //! (PayTo URI format per RFC 8905).
 
-use serde::{Deserialize, Serialize};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use std::fmt;
 use std::str::FromStr;
 use thiserror::Error;
@@ -34,9 +34,19 @@ pub enum SettlementAddressError {
 /// - `payto://ach/122000247/111000025`
 /// - `payto://bic/SOGEDEFFXXX`
 /// - `payto://upi/9999999999@paytm`
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(transparent)]
 pub struct PayToUri(String);
+
+impl<'de> Deserialize<'de> for PayToUri {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        PayToUri::new(s).map_err(de::Error::custom)
+    }
+}
 
 impl PayToUri {
     /// Create a new PayTo URI, validating the format.

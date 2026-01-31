@@ -169,6 +169,7 @@ pub struct Resource {
 }
 
 /// List resources parameters
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListResourcesParams {
     #[serde(skip_serializing_if = "Option::is_none")]
