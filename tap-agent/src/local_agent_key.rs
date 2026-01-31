@@ -16,13 +16,25 @@ use crate::message::{
 use aes_gcm::{AeadInPlace, Aes256Gcm, KeyInit, Nonce};
 use async_trait::async_trait;
 use base64::Engine;
+#[cfg(feature = "crypto-ed25519")]
 use ed25519_dalek::{Signer as Ed25519Signer, Verifier, VerifyingKey};
+#[cfg(feature = "crypto-secp256k1")]
 use k256::{ecdsa::Signature as Secp256k1Signature, ecdsa::SigningKey as Secp256k1SigningKey};
+#[cfg(feature = "crypto-p256")]
 use p256::ecdh::EphemeralSecret as P256EphemeralSecret;
+#[cfg(feature = "crypto-p256")]
 use p256::elliptic_curve::sec1::{FromEncodedPoint, ToEncodedPoint};
+#[cfg(feature = "crypto-p256")]
 use p256::EncodedPoint as P256EncodedPoint;
+#[cfg(feature = "crypto-p256")]
 use p256::PublicKey as P256PublicKey;
+#[cfg(feature = "crypto-p256")]
 use p256::{ecdsa::Signature as P256Signature, ecdsa::SigningKey as P256SigningKey};
+#[cfg(any(
+    feature = "crypto-ed25519",
+    feature = "crypto-p256",
+    feature = "crypto-secp256k1"
+))]
 use rand::{rngs::OsRng, RngCore};
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -287,6 +299,7 @@ impl LocalAgentKey {
     }
 
     /// Generate a new Ed25519 key with the given key ID
+    #[cfg(feature = "crypto-ed25519")]
     pub fn generate_ed25519(_kid: &str) -> Result<Self> {
         // Generate a new Ed25519 keypair
         let mut csprng = OsRng;
@@ -305,7 +318,7 @@ impl LocalAgentKey {
         // Encode the key with multibase (base58btc with 'z' prefix)
         let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
         let did = format!("did:key:{}", multibase_encoded);
-        
+
         // Generate the proper verification method ID (did:key:z...#z...)
         let kid = format!("{}#{}", did, multibase_encoded);
 
@@ -333,6 +346,7 @@ impl LocalAgentKey {
     }
 
     /// Generate a new P-256 key with the given key ID
+    #[cfg(feature = "crypto-p256")]
     pub fn generate_p256(_kid: &str) -> Result<Self> {
         // Generate a new P-256 keypair
         let mut rng = OsRng;
@@ -353,7 +367,7 @@ impl LocalAgentKey {
         // Encode the key with multibase (base58btc with 'z' prefix)
         let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
         let did = format!("did:key:{}", multibase_encoded);
-        
+
         // Generate the proper verification method ID (did:key:z...#z...)
         let kid = format!("{}#{}", did, multibase_encoded);
 
@@ -386,6 +400,7 @@ impl LocalAgentKey {
     }
 
     /// Generate a new secp256k1 key with the given key ID
+    #[cfg(feature = "crypto-secp256k1")]
     pub fn generate_secp256k1(_kid: &str) -> Result<Self> {
         // Generate a new secp256k1 keypair
         let mut rng = OsRng;
@@ -406,7 +421,7 @@ impl LocalAgentKey {
         // Encode the key with multibase (base58btc with 'z' prefix)
         let multibase_encoded = multibase::encode(multibase::Base::Base58Btc, &prefixed_key);
         let did = format!("did:key:{}", multibase_encoded);
-        
+
         // Generate the proper verification method ID (did:key:z...#z...)
         let kid = format!("{}#{}", did, multibase_encoded);
 
@@ -490,8 +505,11 @@ impl AgentKey for LocalAgentKey {
 
     fn key_type(&self) -> &str {
         match self.key_type {
+            #[cfg(feature = "crypto-ed25519")]
             KeyType::Ed25519 => "Ed25519",
+            #[cfg(feature = "crypto-p256")]
             KeyType::P256 => "P-256",
+            #[cfg(feature = "crypto-secp256k1")]
             KeyType::Secp256k1 => "secp256k1",
         }
     }
@@ -504,6 +522,7 @@ impl SigningKey for LocalAgentKey {
         let jwk = self.private_key_jwk()?;
 
         match (kty, crv) {
+            #[cfg(feature = "crypto-ed25519")]
             (Some("OKP"), Some("Ed25519")) => {
                 // Extract the private key
                 let private_key_base64 = jwk
@@ -544,6 +563,7 @@ impl SigningKey for LocalAgentKey {
                 // Return the signature bytes
                 Ok(signature.to_vec())
             }
+            #[cfg(feature = "crypto-p256")]
             (Some("EC"), Some("P-256")) => {
                 // Extract the private key (d parameter in JWK)
                 let private_key_base64 =
@@ -570,6 +590,7 @@ impl SigningKey for LocalAgentKey {
                 let signature_bytes = signature.to_bytes();
                 Ok(signature_bytes.to_vec())
             }
+            #[cfg(feature = "crypto-secp256k1")]
             (Some("EC"), Some("secp256k1")) => {
                 // Extract the private key (d parameter in JWK)
                 let private_key_base64 =
@@ -605,7 +626,7 @@ impl SigningKey for LocalAgentKey {
             }
             // Handle unsupported key types
             _ => Err(Error::Cryptography(format!(
-                "Unsupported key type: kty={:?}, crv={:?}",
+                "Unsupported key type for signing: kty={:?}, crv={:?}",
                 kty, crv
             ))),
         }
@@ -613,8 +634,11 @@ impl SigningKey for LocalAgentKey {
 
     fn recommended_jws_alg(&self) -> JwsAlgorithm {
         match self.key_type {
+            #[cfg(feature = "crypto-ed25519")]
             KeyType::Ed25519 => JwsAlgorithm::EdDSA,
+            #[cfg(feature = "crypto-p256")]
             KeyType::P256 => JwsAlgorithm::ES256,
+            #[cfg(feature = "crypto-secp256k1")]
             KeyType::Secp256k1 => JwsAlgorithm::ES256K,
         }
     }
@@ -693,6 +717,7 @@ impl VerificationKey for LocalAgentKey {
         let jwk = self.private_key_jwk()?;
 
         match (kty, crv, protected_header.alg.as_str()) {
+            #[cfg(feature = "crypto-ed25519")]
             (Some("OKP"), Some("Ed25519"), "EdDSA") => {
                 // Extract the public key
                 let public_key_base64 = jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
@@ -742,6 +767,7 @@ impl VerificationKey for LocalAgentKey {
                     Err(_) => Ok(false),
                 }
             }
+            #[cfg(feature = "crypto-p256")]
             (Some("EC"), Some("P-256"), "ES256") => {
                 // Extract the public key coordinates
                 let x_b64 = jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
@@ -791,6 +817,7 @@ impl VerificationKey for LocalAgentKey {
                     Err(_) => Ok(false),
                 }
             }
+            #[cfg(feature = "crypto-secp256k1")]
             (Some("EC"), Some("secp256k1"), "ES256K") => {
                 // Extract the public key coordinates
                 let x_b64 = jwk.get("x").and_then(|v| v.as_str()).ok_or_else(|| {
@@ -839,7 +866,7 @@ impl VerificationKey for LocalAgentKey {
             }
             // Unsupported algorithm or key type combination
             _ => Err(Error::Cryptography(format!(
-                "Unsupported key type/algorithm combination: kty={:?}, crv={:?}, alg={}",
+                "Unsupported key type/algorithm combination for verification: kty={:?}, crv={:?}, alg={}",
                 kty, crv, protected_header.alg
             ))),
         }
@@ -909,23 +936,37 @@ impl EncryptionKey for LocalAgentKey {
         OsRng.fill_bytes(&mut iv_bytes);
 
         // 3. Generate an ephemeral key pair for ECDH
+        #[cfg(feature = "crypto-p256")]
         let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
+        #[cfg(feature = "crypto-p256")]
         let ephemeral_public_key = ephemeral_secret.public_key();
 
         // 4. Convert the public key to coordinates for the header
+        #[cfg(feature = "crypto-p256")]
         let point = ephemeral_public_key.to_encoded_point(false); // Uncompressed format
+        #[cfg(feature = "crypto-p256")]
         let x_bytes = point.x().unwrap().to_vec();
+        #[cfg(feature = "crypto-p256")]
         let y_bytes = point.y().unwrap().to_vec();
 
         // Base64 encode the coordinates for the ephemeral public key
+        #[cfg(feature = "crypto-p256")]
         let x_b64 = base64::engine::general_purpose::STANDARD.encode(&x_bytes);
+        #[cfg(feature = "crypto-p256")]
         let y_b64 = base64::engine::general_purpose::STANDARD.encode(&y_bytes);
 
         // Create the ephemeral public key structure
+        #[cfg(feature = "crypto-p256")]
         let ephemeral_key = EphemeralPublicKey::Ec {
             crv: "P-256".to_string(),
             x: x_b64,
             y: y_b64,
+        };
+        #[cfg(not(feature = "crypto-p256"))]
+        let ephemeral_key = EphemeralPublicKey::Ec {
+            crv: "P-256".to_string(),
+            x: "".to_string(),
+            y: "".to_string(),
         };
 
         // 5. Create protected header
@@ -967,88 +1008,99 @@ impl EncryptionKey for LocalAgentKey {
             let kty = recipient_jwk.get("kty").and_then(|v| v.as_str());
             let crv = recipient_jwk.get("crv").and_then(|v| v.as_str());
 
-            let encrypted_key = match (kty, crv) {
-                (Some("EC"), Some("P-256")) => {
-                    // Extract the public key coordinates
-                    let x_b64 =
-                        recipient_jwk
-                            .get("x")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| {
-                                Error::Cryptography(
-                                    "Missing x coordinate in recipient JWK".to_string(),
-                                )
+            #[cfg(feature = "crypto-p256")]
+            let encrypted_key = {
+                match (kty, crv) {
+                    (Some("EC"), Some("P-256")) => {
+                        // Extract the public key coordinates
+                        let x_b64 =
+                            recipient_jwk
+                                .get("x")
+                                .and_then(|v| v.as_str())
+                                .ok_or_else(|| {
+                                    Error::Cryptography(
+                                        "Missing x coordinate in recipient JWK".to_string(),
+                                    )
+                                })?;
+                        let y_b64 =
+                            recipient_jwk
+                                .get("y")
+                                .and_then(|v| v.as_str())
+                                .ok_or_else(|| {
+                                    Error::Cryptography(
+                                        "Missing y coordinate in recipient JWK".to_string(),
+                                    )
+                                })?;
+
+                        let x_bytes = base64::engine::general_purpose::STANDARD
+                            .decode(x_b64)
+                            .map_err(|e| {
+                                Error::Cryptography(format!("Failed to decode x coordinate: {}", e))
                             })?;
-                    let y_b64 =
-                        recipient_jwk
-                            .get("y")
-                            .and_then(|v| v.as_str())
-                            .ok_or_else(|| {
-                                Error::Cryptography(
-                                    "Missing y coordinate in recipient JWK".to_string(),
-                                )
+                        let y_bytes = base64::engine::general_purpose::STANDARD
+                            .decode(y_b64)
+                            .map_err(|e| {
+                                Error::Cryptography(format!("Failed to decode y coordinate: {}", e))
                             })?;
 
-                    let x_bytes = base64::engine::general_purpose::STANDARD
-                        .decode(x_b64)
-                        .map_err(|e| {
-                            Error::Cryptography(format!("Failed to decode x coordinate: {}", e))
-                        })?;
-                    let y_bytes = base64::engine::general_purpose::STANDARD
-                        .decode(y_b64)
-                        .map_err(|e| {
-                            Error::Cryptography(format!("Failed to decode y coordinate: {}", e))
-                        })?;
+                        // Create a P-256 encoded point from the coordinates
+                        let mut point_bytes = vec![0x04]; // Uncompressed point format
+                        point_bytes.extend_from_slice(&x_bytes);
+                        point_bytes.extend_from_slice(&y_bytes);
 
-                    // Create a P-256 encoded point from the coordinates
-                    let mut point_bytes = vec![0x04]; // Uncompressed point format
-                    point_bytes.extend_from_slice(&x_bytes);
-                    point_bytes.extend_from_slice(&y_bytes);
+                        let encoded_point =
+                            P256EncodedPoint::from_bytes(&point_bytes).map_err(|e| {
+                                Error::Cryptography(format!(
+                                    "Failed to create P-256 encoded point: {}",
+                                    e
+                                ))
+                            })?;
 
-                    let encoded_point =
-                        P256EncodedPoint::from_bytes(&point_bytes).map_err(|e| {
-                            Error::Cryptography(format!(
-                                "Failed to create P-256 encoded point: {}",
-                                e
-                            ))
-                        })?;
+                        // This checks if the point is on the curve and returns the public key
+                        let recipient_pk_opt = P256PublicKey::from_encoded_point(&encoded_point);
+                        if recipient_pk_opt.is_none().into() {
+                            return Err(Error::Cryptography(
+                                "Invalid P-256 public key".to_string(),
+                            ));
+                        }
+                        let recipient_pk = recipient_pk_opt.unwrap();
 
-                    // This checks if the point is on the curve and returns the public key
-                    let recipient_pk_opt = P256PublicKey::from_encoded_point(&encoded_point);
-                    if recipient_pk_opt.is_none().into() {
-                        return Err(Error::Cryptography("Invalid P-256 public key".to_string()));
+                        // Perform ECDH to derive a shared secret
+                        let shared_secret = ephemeral_secret.diffie_hellman(&recipient_pk);
+                        let shared_bytes = shared_secret.raw_secret_bytes();
+
+                        // Derive KEK using Concat KDF per RFC 7518
+                        // Use APV from protected header for consistency with decryption
+                        let apv_bytes = base64::engine::general_purpose::STANDARD
+                            .decode(&protected.apv)
+                            .unwrap_or_default();
+                        let kek = crate::crypto::derive_key_ecdh_es(
+                            shared_bytes.as_slice(),
+                            b"", // apu - empty for anonymous sender
+                            &apv_bytes,
+                            256, // 256 bits for AES-256-KW
+                        )?;
+
+                        // Wrap CEK with AES-KW per RFC 3394
+                        let mut kek_array = [0u8; 32];
+                        kek_array.copy_from_slice(&kek);
+
+                        Ok(crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?)
                     }
-                    let recipient_pk = recipient_pk_opt.unwrap();
-
-                    // Perform ECDH to derive a shared secret
-                    let shared_secret = ephemeral_secret.diffie_hellman(&recipient_pk);
-                    let shared_bytes = shared_secret.raw_secret_bytes();
-
-                    // Derive KEK using Concat KDF per RFC 7518
-                    // Use APV from protected header for consistency with decryption
-                    let apv_bytes = base64::engine::general_purpose::STANDARD
-                        .decode(&protected.apv)
-                        .unwrap_or_default();
-                    let kek = crate::crypto::derive_key_ecdh_es(
-                        shared_bytes.as_slice(),
-                        b"", // apu - empty for anonymous sender
-                        &apv_bytes,
-                        256, // 256 bits for AES-256-KW
-                    )?;
-
-                    // Wrap CEK with AES-KW per RFC 3394
-                    let mut kek_array = [0u8; 32];
-                    kek_array.copy_from_slice(&kek);
-
-                    crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?
-                }
-                // Handle other key types
-                _ => {
-                    return Err(Error::Cryptography(format!(
-                        "Unsupported recipient key type: kty={:?}, crv={:?}",
+                    // Handle other key types
+                    _ => Err(Error::Cryptography(format!(
+                        "Unsupported recipient key type for encryption: kty={:?}, crv={:?}",
                         kty, crv
-                    )));
+                    ))),
                 }
+            }?;
+
+            #[cfg(not(feature = "crypto-p256"))]
+            let encrypted_key: Vec<u8> = {
+                return Err(Error::Cryptography(format!(
+                    "Unsupported recipient key type for encryption: kty={:?}, crv={:?}",
+                    kty, crv
+                )));
             };
 
             // Add this recipient to the JWE
@@ -1104,44 +1156,53 @@ impl DecryptionKey for LocalAgentKey {
         }
 
         // For P-256 keys, we can attempt to decrypt
-        let cek = match (kty, crv) {
-            (Some("EC"), Some("P-256")) => {
-                // Extract the private key
-                let d_b64 = jwk.get("d").and_then(|v| v.as_str()).ok_or_else(|| {
-                    Error::Cryptography("Missing private key (d) in JWK".to_string())
-                })?;
-
-                // Decode the private key
-                let private_key = base64::engine::general_purpose::STANDARD
-                    .decode(d_b64)
-                    .map_err(|e| {
-                        Error::Cryptography(format!("Failed to decode private key: {}", e))
+        #[cfg(feature = "crypto-p256")]
+        let cek = {
+            match (kty, crv) {
+                (Some("EC"), Some("P-256")) => {
+                    // Extract the private key
+                    let d_b64 = jwk.get("d").and_then(|v| v.as_str()).ok_or_else(|| {
+                        Error::Cryptography("Missing private key (d) in JWK".to_string())
                     })?;
 
-                // Simplified approach: XOR the encrypted key with the private key
-                // In a real implementation, this would involve proper ECDH and key unwrapping
-                let mut cek = [0u8; 32];
-                for i in 0..cek.len() {
-                    cek[i] = if i < private_key.len() && i < encrypted_key.len() {
-                        private_key[i] ^ encrypted_key[i]
-                    } else if i < encrypted_key.len() {
-                        encrypted_key[i]
-                    } else if i < private_key.len() {
-                        private_key[i]
-                    } else {
-                        0
-                    };
-                }
+                    // Decode the private key
+                    let private_key = base64::engine::general_purpose::STANDARD
+                        .decode(d_b64)
+                        .map_err(|e| {
+                            Error::Cryptography(format!("Failed to decode private key: {}", e))
+                        })?;
 
-                cek
-            }
-            // We only support P-256 for now
-            _ => {
-                return Err(Error::Cryptography(format!(
+                    // Simplified approach: XOR the encrypted key with the private key
+                    // In a real implementation, this would involve proper ECDH and key unwrapping
+                    let mut cek = [0u8; 32];
+                    for i in 0..cek.len() {
+                        cek[i] = if i < private_key.len() && i < encrypted_key.len() {
+                            private_key[i] ^ encrypted_key[i]
+                        } else if i < encrypted_key.len() {
+                            encrypted_key[i]
+                        } else if i < private_key.len() {
+                            private_key[i]
+                        } else {
+                            0
+                        };
+                    }
+
+                    Ok(cek)
+                }
+                // We only support P-256 for now
+                _ => Err(Error::Cryptography(format!(
                     "Unsupported key type for decryption: kty={:?}, crv={:?}",
                     kty, crv
-                )));
+                ))),
             }
+        }?;
+
+        #[cfg(not(feature = "crypto-p256"))]
+        let cek: [u8; 32] = {
+            return Err(Error::Cryptography(format!(
+                "Unsupported key type for decryption: kty={:?}, crv={:?}",
+                kty, crv
+            )));
         };
 
         // 2. Decrypt the ciphertext with AES-GCM
@@ -1498,6 +1559,7 @@ impl VerificationKey for PublicVerificationKey {
         let crv = self.public_jwk.get("crv").and_then(|v| v.as_str());
 
         match (kty, crv, protected_header.alg.as_str()) {
+            #[cfg(feature = "crypto-ed25519")]
             (Some("OKP"), Some("Ed25519"), "EdDSA") => {
                 // Extract the public key
                 let public_key_base64 = self
@@ -1551,6 +1613,7 @@ impl VerificationKey for PublicVerificationKey {
                     Err(_) => Ok(false),
                 }
             }
+            #[cfg(feature = "crypto-p256")]
             (Some("EC"), Some("P-256"), "ES256") => {
                 // Extract the public key coordinates
                 let x_b64 = self
@@ -1608,6 +1671,7 @@ impl VerificationKey for PublicVerificationKey {
                     Err(_) => Ok(false),
                 }
             }
+            #[cfg(feature = "crypto-secp256k1")]
             (Some("EC"), Some("secp256k1"), "ES256K") => {
                 // Extract the public key coordinates
                 let x_b64 = self
@@ -1664,7 +1728,7 @@ impl VerificationKey for PublicVerificationKey {
             }
             // Unsupported algorithm or key type combination
             _ => Err(Error::Cryptography(format!(
-                "Unsupported key type/algorithm combination: kty={:?}, crv={:?}, alg={}",
+                "Unsupported key type/algorithm combination for verification: kty={:?}, crv={:?}, alg={}",
                 kty, crv, protected_header.alg
             ))),
         }

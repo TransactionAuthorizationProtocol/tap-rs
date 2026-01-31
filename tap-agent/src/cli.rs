@@ -271,15 +271,28 @@ struct GenerateDIDOptions<'a> {
 fn generate_did(options: GenerateDIDOptions) -> Result<()> {
     // Parse key type
     let key_type = match options.key_type.to_lowercase().as_str() {
+        #[cfg(feature = "crypto-ed25519")]
         "ed25519" => KeyType::Ed25519,
+        #[cfg(feature = "crypto-p256")]
         "p256" => KeyType::P256,
+        #[cfg(feature = "crypto-secp256k1")]
         "secp256k1" => KeyType::Secp256k1,
         _ => {
             eprintln!(
                 "Unsupported key type: {}. Using Ed25519 as default.",
                 options.key_type
             );
-            KeyType::Ed25519
+            #[cfg(feature = "crypto-ed25519")]
+            {
+                KeyType::Ed25519
+            }
+            #[cfg(not(feature = "crypto-ed25519"))]
+            {
+                return Err(Error::Cryptography(format!(
+                    "Unsupported key type: {}",
+                    options.key_type
+                )));
+            }
         }
     };
 
@@ -451,8 +464,11 @@ fn import_key(key_file: &PathBuf, set_as_default: bool, label: Option<&str>) -> 
 
     // Parse key type
     let key_type = match key_type_str {
+        #[cfg(feature = "crypto-ed25519")]
         "Ed25519" => KeyType::Ed25519,
+        #[cfg(feature = "crypto-p256")]
         "P256" => KeyType::P256,
+        #[cfg(feature = "crypto-secp256k1")]
         "Secp256k1" => KeyType::Secp256k1,
         _ => {
             return Err(Error::Storage(format!(
@@ -918,7 +934,7 @@ async fn pack_message_async(
     } else {
         None
     };
-    
+
     let recipient_kid = if let Some(did) = recipient_did {
         // For recipients, we don't have their keys, so use the standard format
         if did.starts_with("did:key:") {
@@ -930,7 +946,7 @@ async fn pack_message_async(
     } else {
         None
     };
-    
+
     // Create pack options
     let pack_options = PackOptions {
         security_mode,
@@ -1042,7 +1058,7 @@ async fn unpack_message_async(
             Some(format!("{}#keys-1", recipient))
         }
     };
-    
+
     // Create unpack options
     use crate::message_packing::UnpackOptions;
     let unpack_options = UnpackOptions {

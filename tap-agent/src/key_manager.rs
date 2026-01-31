@@ -1103,6 +1103,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg(feature = "crypto-p256")]
     async fn test_jwe_operations() {
         let manager = DefaultKeyManager::new();
 

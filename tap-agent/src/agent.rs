@@ -74,7 +74,6 @@ pub struct DeliveryResult {
 /// ```
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
-#[cfg(not(target_arch = "wasm32"))]
 pub trait Agent {
     /// Gets the agent's DID
     fn get_agent_did(&self) -> &str;
@@ -566,6 +565,7 @@ impl TapAgent {
     ) -> Result<(Self, String)> {
         use crate::did::{DIDKeyGenerator, GeneratedKey};
         use crate::did::{VerificationMaterial, VerificationMethod, VerificationMethodType};
+        #[cfg(feature = "crypto-ed25519")]
         use curve25519_dalek::edwards::CompressedEdwardsY;
         use multibase::{encode, Base};
 
@@ -574,6 +574,7 @@ impl TapAgent {
 
         // Generate the appropriate key and DID based on the key type
         let generated_key = match key_type {
+            #[cfg(feature = "crypto-ed25519")]
             crate::did::KeyType::Ed25519 => {
                 if private_key.len() != 32 {
                     return Err(Error::Validation(format!(
@@ -700,6 +701,7 @@ impl TapAgent {
                     did_doc,
                 }
             }
+            #[cfg(feature = "crypto-p256")]
             crate::did::KeyType::P256 => {
                 if private_key.len() != 32 {
                     return Err(Error::Validation(format!(
@@ -769,6 +771,7 @@ impl TapAgent {
                     did_doc,
                 }
             }
+            #[cfg(feature = "crypto-secp256k1")]
             crate::did::KeyType::Secp256k1 => {
                 if private_key.len() != 32 {
                     return Err(Error::Validation(format!(
@@ -1319,7 +1322,10 @@ impl crate::agent::Agent for TapAgent {
 
         // Get the appropriate key IDs
         let sender_kid = self.get_signing_kid().await?;
-        let recipient_kid = if to.len() == 1 && (security_mode == SecurityMode::AuthCrypt || security_mode == SecurityMode::AnonCrypt) {
+        let recipient_kid = if to.len() == 1
+            && (security_mode == SecurityMode::AuthCrypt
+                || security_mode == SecurityMode::AnonCrypt)
+        {
             Some(self.get_encryption_kid(to[0]).await?)
         } else {
             None
@@ -1328,7 +1334,11 @@ impl crate::agent::Agent for TapAgent {
         // Create pack options for the plaintext message
         let pack_options = PackOptions {
             security_mode,
-            sender_kid: if security_mode == SecurityMode::AnonCrypt { None } else { Some(sender_kid) },
+            sender_kid: if security_mode == SecurityMode::AnonCrypt {
+                None
+            } else {
+                Some(sender_kid)
+            },
             recipient_kid,
         };
 

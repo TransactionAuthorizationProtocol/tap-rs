@@ -40,10 +40,10 @@ import {
  * message packing/unpacking with flexible key management
  */
 export class TapAgent {
-  private wasmAgent: WasmTapAgentType;
-  private didResolver: DIDResolver | undefined;
+  private readonly wasmAgent: WasmTapAgentType;
+  private readonly didResolver: DIDResolver | undefined;
   private isDisposed = false;
-  private metrics: AgentMetrics;
+  private readonly metrics: AgentMetrics;
   private readonly createdAt: number;
 
   /**

@@ -15,7 +15,7 @@ describe('TapAgent with Real WASM', () => {
   describe('Agent Creation', () => {
     it('should create agent with default configuration', async () => {
       agent = await TapAgent.create();
-      
+
       expect(agent).toBeDefined();
       expect(agent.did).toMatch(/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/);
       // Agent is created and ready
@@ -26,16 +26,16 @@ describe('TapAgent with Real WASM', () => {
         keyType: 'P256',
         nickname: 'TestAgent',
       };
-      
+
       agent = await TapAgent.create(config);
-      
+
       expect(agent.nickname).toBe('TestAgent');
       expect(agent.did).toMatch(/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/);
     });
 
     it('should create agent with each key type', async () => {
       const keyTypes: Array<'Ed25519' | 'P256' | 'secp256k1'> = ['Ed25519', 'P256', 'secp256k1'];
-      
+
       for (const keyType of keyTypes) {
         const testAgent = await TapAgent.create({ keyType });
         expect(testAgent.did).toMatch(/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/);
@@ -48,7 +48,7 @@ describe('TapAgent with Real WASM', () => {
       const originalAgent = await TapAgent.create();
       const privateKey = originalAgent.exportPrivateKey();
       originalAgent.dispose();
-      
+
       // Create new agent from that private key
       agent = await TapAgent.fromPrivateKey(privateKey, 'Ed25519');
       expect(agent.did).toMatch(/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/);
@@ -88,7 +88,7 @@ describe('TapAgent with Real WASM', () => {
       const agentWithNickname = await TapAgent.create({ nickname: 'MyAgent' });
       expect(agentWithNickname.nickname).toBe('MyAgent');
       agentWithNickname.dispose();
-      
+
       const agentWithoutNickname = await TapAgent.create();
       expect(agentWithoutNickname.nickname).toBeUndefined();
       agentWithoutNickname.dispose();
@@ -111,11 +111,11 @@ describe('TapAgent with Real WASM', () => {
         };
 
         const packed = await agent.pack(message);
-        
+
         expect(packed).toHaveProperty('message');
         expect(packed).toHaveProperty('metadata');
         expect(packed.metadata.type).toBe('signed');
-        
+
         // Verify JWS structure
         const jws = JSON.parse(packed.message);
         expect(jws).toHaveProperty('payload');
@@ -138,7 +138,7 @@ describe('TapAgent with Real WASM', () => {
         };
 
         const packed = await agent.pack(message);
-        
+
         const jws = JSON.parse(packed.message);
         expect(jws.payload).toBeDefined();
         expect(jws.signatures.length).toBeGreaterThan(0);
@@ -180,7 +180,7 @@ describe('TapAgent with Real WASM', () => {
 
         const packed = await agent.pack(message);
         const unpacked = await agent.unpack(packed.message);
-        
+
         expect(unpacked.id).toBe(message.id);
         expect(unpacked.type).toBe(message.type);
         expect((unpacked.body as any).content).toBe('Test message');
@@ -197,7 +197,7 @@ describe('TapAgent with Real WASM', () => {
 
         const packed = await agent.pack(message);
         const jws = JSON.parse(packed.message);
-        
+
         // Should accept JWS object directly
         const unpacked = await agent.unpack(jws);
         expect(unpacked.id).toBe(message.id);
@@ -213,28 +213,28 @@ describe('TapAgent with Real WASM', () => {
           type: 'https://tap.rsvp/schema/1.0#Transfer',
           from: agent.did,
           to: [agent.did],
-          body: { 
+          body: {
             '@context': 'https://tap.rsvp/schema/1.0',
             '@type': 'Transfer',
             amount: '50.00',
             asset: 'USD',
-            originator: { '@id': agent.did as DID, '@type': 'https://schema.org/Person' },
-            beneficiary: { '@id': agent.did as DID, '@type': 'https://schema.org/Person' },
+            originator: { '@id': agent.did, '@type': 'https://schema.org/Person' },
+            beneficiary: { '@id': agent.did, '@type': 'https://schema.org/Person' },
             agents: []
           },
         };
 
         const packed = await agent.pack(message);
-        
+
         // Should pass with correct type - but let's first test basic unpacking works
         try {
           const unpacked = await agent.unpack(packed.message);
           expect(unpacked.type).toContain('Transfer');
-          
+
           // Now test with type validation
           const validatedUnpack = await agent.unpack(packed.message, { expectedType: 'Transfer' });
           expect(validatedUnpack.type).toContain('Transfer');
-          
+
           // Should fail with wrong type
           await expect(
             agent.unpack(packed.message, { expectedType: 'Payment' })
@@ -258,7 +258,7 @@ describe('TapAgent with Real WASM', () => {
         };
 
         const packed = await agent.pack(message);
-        
+
         expect(packed).toHaveProperty('message');
         expect(packed).toHaveProperty('metadata');
       });
@@ -276,7 +276,7 @@ describe('TapAgent with Real WASM', () => {
 
         const packed = await agent.pack(message);
         const unpacked = await agent.unpack(packed.message);
-        
+
         expect(unpacked.id).toBe(message.id);
         expect((unpacked.body as any).content).toBe('Unpack test');
       });
@@ -290,7 +290,7 @@ describe('TapAgent with Real WASM', () => {
 
     it('should resolve its own DID', async () => {
       const result = await agent.resolveDID(agent.did);
-      
+
       expect(result.didDocument).toBeDefined();
       expect(result.didDocument?.id).toBe(agent.did);
       expect(result.didDocument?.verificationMethod).toBeDefined();
@@ -317,7 +317,7 @@ describe('TapAgent with Real WASM', () => {
 
       const agentWithResolver = await TapAgent.create({ didResolver: customResolver });
       const result = await agentWithResolver.resolveDID('did:custom:123');
-      
+
       expect(result.didDocument?.id).toBe('did:custom:123');
       agentWithResolver.dispose();
     });
@@ -327,20 +327,20 @@ describe('TapAgent with Real WASM', () => {
     it('should properly dispose of resources', async () => {
       agent = await TapAgent.create();
       // Agent is created and ready
-      
+
       agent.dispose();
       // Agent has been disposed
-      
+
       // Should throw when trying to use disposed agent
       // Accessing disposed agent should throw
     });
 
     it('should handle multiple dispose calls gracefully', async () => {
       agent = await TapAgent.create();
-      
+
       agent.dispose();
       // Agent has been disposed
-      
+
       // Second dispose should not throw
       expect(() => agent.dispose()).not.toThrow();
     });
@@ -348,10 +348,10 @@ describe('TapAgent with Real WASM', () => {
     it('should track metrics correctly', async () => {
       agent = await TapAgent.create();
       const initialMetrics = agent.getMetrics();
-      
+
       expect(initialMetrics.messagesPacked).toBe(0);
       expect(initialMetrics.messagesUnpacked).toBe(0);
-      
+
       // Pack a message
       const message: DIDCommMessage = {
         id: 'metrics-test',
@@ -360,10 +360,13 @@ describe('TapAgent with Real WASM', () => {
         to: [agent.did],
         body: { test: true },
       };
-      
+
+      // Wait a bit to ensure timestamp changes
+      await new Promise(resolve => setTimeout(resolve, 2));
+
       const packed = await agent.pack(message);
       await agent.unpack(packed.message);
-      
+
       const updatedMetrics = agent.getMetrics();
       expect(updatedMetrics.messagesPacked).toBe(1);
       expect(updatedMetrics.messagesUnpacked).toBe(1);
@@ -397,7 +400,7 @@ describe('TapAgent with Real WASM', () => {
 
       const packed = await agent.pack(message);
       const jws = JSON.parse(packed.message);
-      
+
       expect(jws).toHaveProperty('payload');
       expect(jws).toHaveProperty('signatures');
     });
@@ -412,7 +415,7 @@ describe('TapAgent with Real WASM', () => {
       };
 
       const packed: PackedMessageResult = await agent.pack(message);
-      
+
       // TypeScript should ensure correct metadata structure
       expect(packed.metadata.type).toBe('signed');
       expect(packed.metadata.sender).toBe(agent.did);
@@ -433,7 +436,7 @@ describe('TapAgent with Real WASM', () => {
 
     it('should handle disposed agent errors consistently', async () => {
       agent.dispose();
-      
+
       await expect(agent.pack({} as any)).rejects.toThrow('Agent has been disposed');
       await expect(agent.unpack('')).rejects.toThrow('Agent has been disposed');
       expect(() => agent.exportPrivateKey()).toThrow('Agent has been disposed');
@@ -444,9 +447,9 @@ describe('TapAgent with Real WASM', () => {
       const invalidMessage = {
         body: {},
       } as any;
-      
+
       await expect(agent.pack(invalidMessage)).rejects.toThrow(/Message must have a valid id field/i);
-      
+
       // Invalid packed message
       await expect(agent.unpack('not-a-jws')).rejects.toThrow(/unpack/i);
     });

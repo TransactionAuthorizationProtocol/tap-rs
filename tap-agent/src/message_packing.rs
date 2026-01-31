@@ -332,7 +332,9 @@ impl Packable for PlainMessage {
                 } else {
                     // For anonymous encryption, we can use any available encryption key
                     // In practice, this might need to be handled differently depending on requirements
-                    return Err(Error::Validation("AnonCrypt mode requires a temporary encryption key".to_string()));
+                    return Err(Error::Validation(
+                        "AnonCrypt mode requires a temporary encryption key".to_string(),
+                    ));
                 };
 
                 // Get the recipient's verification key
@@ -564,7 +566,9 @@ where
                 key_manager.get_encryption_key(sender_kid).await?
             } else {
                 // For anonymous encryption, we can use any available encryption key
-                return Err(Error::Validation("AnonCrypt mode requires a temporary encryption key".to_string()));
+                return Err(Error::Validation(
+                    "AnonCrypt mode requires a temporary encryption key".to_string(),
+                ));
             };
 
             // Get the recipient's verification key
@@ -1064,8 +1068,11 @@ mod tests {
 
             // Check algorithm matches key type
             let expected_alg = match key_type {
+                #[cfg(feature = "crypto-ed25519")]
                 KeyType::Ed25519 => "EdDSA",
+                #[cfg(feature = "crypto-p256")]
                 KeyType::P256 => "ES256",
+                #[cfg(feature = "crypto-secp256k1")]
                 KeyType::Secp256k1 => "ES256K",
             };
             assert_eq!(protected_header.alg, expected_alg);

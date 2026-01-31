@@ -2,7 +2,7 @@
 
 use std::env;
 use std::fs;
-use tap_agent::did::{DIDKeyGenerator, KeyType};
+use tap_agent::did::{DIDGenerationOptions, DIDKeyGenerator, KeyType};
 use tap_agent::error::Result;
 use tap_agent::storage::KeyStorage;
 use tempfile::TempDir;
@@ -102,7 +102,14 @@ fn test_find_by_label() -> Result<()> {
         "signing-key",
     ));
 
-    let key2 = generator.generate_p256_did()?;
+    #[cfg(feature = "crypto-p256")]
+    let key2 = generator.generate_did(DIDGenerationOptions {
+        key_type: KeyType::P256,
+    })?;
+    #[cfg(not(feature = "crypto-p256"))]
+    let key2 = generator.generate_did(DIDGenerationOptions {
+        key_type: KeyType::Ed25519,
+    })?;
     storage.add_key(KeyStorage::from_generated_key_with_label(
         &key2,
         "encryption-key",
@@ -172,7 +179,14 @@ fn test_storage_persistence_with_labels() -> Result<()> {
             "test-key-1",
         ));
 
-        let key2 = generator.generate_p256_did()?;
+        #[cfg(feature = "crypto-p256")]
+        let key2 = generator.generate_did(DIDGenerationOptions {
+            key_type: KeyType::P256,
+        })?;
+        #[cfg(not(feature = "crypto-p256"))]
+        let key2 = generator.generate_did(DIDGenerationOptions {
+            key_type: KeyType::Ed25519,
+        })?;
         storage.add_key(KeyStorage::from_generated_key_with_label(
             &key2,
             "test-key-2",
@@ -193,7 +207,10 @@ fn test_storage_persistence_with_labels() -> Result<()> {
 
         let key2 = loaded_storage.find_by_label("test-key-2");
         assert!(key2.is_some());
+        #[cfg(feature = "crypto-p256")]
         assert_eq!(key2.unwrap().key_type, KeyType::P256);
+        #[cfg(not(feature = "crypto-p256"))]
+        assert_eq!(key2.unwrap().key_type, KeyType::Ed25519);
     }
 
     // Cleanup happens automatically when temp_dir is dropped

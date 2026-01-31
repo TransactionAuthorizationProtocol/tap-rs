@@ -188,7 +188,7 @@ export function convertFromWasmMessage(wasmMessage: WasmMessage): TAPMessageUnio
     }
     
     // Handle optional fields for both TAP and DIDComm message compatibility
-    const messageAny = message as any;
+    const messageAny = message;
     if (wasmMessage.attachments !== undefined) {
       messageAny.attachments = wasmMessage.attachments;
     }

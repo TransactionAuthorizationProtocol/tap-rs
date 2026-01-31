@@ -50,8 +50,11 @@ mod key_type_serde {
         S: Serializer,
     {
         let s = match key_type {
+            #[cfg(feature = "crypto-ed25519")]
             KeyType::Ed25519 => "Ed25519",
+            #[cfg(feature = "crypto-p256")]
             KeyType::P256 => "P256",
+            #[cfg(feature = "crypto-secp256k1")]
             KeyType::Secp256k1 => "Secp256k1",
         };
         serializer.serialize_str(s)
@@ -63,10 +66,16 @@ mod key_type_serde {
     {
         let s = String::deserialize(deserializer)?;
         match s.as_str() {
+            #[cfg(feature = "crypto-ed25519")]
             "Ed25519" => Ok(KeyType::Ed25519),
+            #[cfg(feature = "crypto-p256")]
             "P256" => Ok(KeyType::P256),
+            #[cfg(feature = "crypto-secp256k1")]
             "Secp256k1" => Ok(KeyType::Secp256k1),
-            _ => Err(serde::de::Error::custom(format!("Unknown key type: {}", s))),
+            _ => Err(serde::de::Error::custom(format!(
+                "Unknown or disabled key type: {}",
+                s
+            ))),
         }
     }
 }
@@ -210,7 +219,7 @@ mod tests {
         let agent_dir = storage.get_agent_directory("did:key:test123").unwrap();
 
         // Verify it uses TAP_HOME with sanitized DID
-        assert_eq!(agent_dir, temp_path.join("did:key:test123"));
+        assert_eq!(agent_dir, temp_path.join("did_key_test123"));
 
         // Restore env vars
         env::remove_var("TAP_HOME");
@@ -687,8 +696,9 @@ fn generate_jwk_for_key(key: &StoredKey) -> serde_json::Value {
         // For other DID methods, use #keys-1 as default
         format!("{}#keys-1", key.did)
     };
-    
+
     match key.key_type {
+        #[cfg(feature = "crypto-ed25519")]
         KeyType::Ed25519 => {
             serde_json::json!({
                 "kty": "OKP",
@@ -698,6 +708,7 @@ fn generate_jwk_for_key(key: &StoredKey) -> serde_json::Value {
                 "kid": kid
             })
         }
+        #[cfg(feature = "crypto-p256")]
         KeyType::P256 => {
             serde_json::json!({
                 "kty": "EC",
@@ -707,6 +718,7 @@ fn generate_jwk_for_key(key: &StoredKey) -> serde_json::Value {
                 "kid": kid
             })
         }
+        #[cfg(feature = "crypto-secp256k1")]
         KeyType::Secp256k1 => {
             serde_json::json!({
                 "kty": "EC",

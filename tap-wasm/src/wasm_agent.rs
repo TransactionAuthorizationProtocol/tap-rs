@@ -48,50 +48,71 @@ impl WasmTapAgent {
         private_key_hex: String,
         key_type_str: String,
     ) -> Result<WasmTapAgent, JsValue> {
+        #[cfg(feature = "debug")]
         console_error_panic_hook::set_once();
 
-        // Convert hex string to bytes
-        let private_key_bytes = hex::decode(&private_key_hex)
-            .map_err(|e| JsValue::from_str(&format!("Invalid hex private key: {}", e)))?;
+        #[cfg(any(
+            feature = "crypto-ed25519",
+            feature = "crypto-p256",
+            feature = "crypto-secp256k1"
+        ))]
+        {
+            // Convert hex string to bytes
+            let private_key_bytes = hex::decode(&private_key_hex)
+                .map_err(|e| JsValue::from_str(&format!("Invalid hex private key: {}", e)))?;
 
-        // Convert key type string to KeyType enum
-        let key_type = match key_type_str.as_str() {
-            "Ed25519" => KeyType::Ed25519,
-            "P256" => KeyType::P256,
-            "Secp256k1" => KeyType::Secp256k1,
-            _ => {
-                return Err(JsValue::from_str(&format!(
-                    "Invalid key type: {}",
-                    key_type_str
-                )))
+            // Convert key type string to KeyType enum
+            let key_type = match key_type_str.as_str() {
+                #[cfg(feature = "crypto-ed25519")]
+                "Ed25519" => KeyType::Ed25519,
+                #[cfg(feature = "crypto-p256")]
+                "P256" => KeyType::P256,
+                #[cfg(feature = "crypto-secp256k1")]
+                "Secp256k1" => KeyType::Secp256k1,
+                _ => {
+                    return Err(JsValue::from_str(&format!(
+                        "Invalid or disabled key type: {}",
+                        key_type_str
+                    )))
+                }
+            };
+
+            // Create TapAgent from private key
+            let (agent, did) = TapAgent::from_private_key(&private_key_bytes, key_type, false)
+                .await
+                .map_err(|e| {
+                    JsValue::from_str(&format!("Failed to create agent from private key: {}", e))
+                })?;
+
+            if agent.config.debug {
+                console::log_1(&JsValue::from_str(&format!(
+                    "Created WASM TAP Agent from private key with DID: {}",
+                    did
+                )));
             }
-        };
 
-        // Create TapAgent from private key
-        let (agent, did) = TapAgent::from_private_key(&private_key_bytes, key_type, false)
-            .await
-            .map_err(|e| {
-                JsValue::from_str(&format!("Failed to create agent from private key: {}", e))
-            })?;
-
-        if agent.config.debug {
-            console::log_1(&JsValue::from_str(&format!(
-                "Created WASM TAP Agent from private key with DID: {}",
-                did
-            )));
+            Ok(WasmTapAgent {
+                agent,
+                nickname: None,
+                debug: false,
+                private_key_hex: Some(private_key_hex.clone()),
+            })
         }
 
-        Ok(WasmTapAgent {
-            agent,
-            nickname: None,
-            debug: false,
-            private_key_hex: Some(private_key_hex.clone()),
-        })
+        #[cfg(not(any(
+            feature = "crypto-ed25519",
+            feature = "crypto-p256",
+            feature = "crypto-secp256k1"
+        )))]
+        {
+            Err(JsValue::from_str("No cryptographic features enabled"))
+        }
     }
 
     /// Creates a new agent with the specified configuration
     #[wasm_bindgen(constructor)]
     pub fn new(config: JsValue) -> std::result::Result<WasmTapAgent, JsValue> {
+        #[cfg(feature = "debug")]
         console_error_panic_hook::set_once();
 
         let nickname =
@@ -241,7 +262,7 @@ impl WasmTapAgent {
 
             // Create pack options
             let security_mode = SecurityMode::Signed; // Default to signed
-            
+
             // Get the actual key ID from the key manager instead of hardcoding #keys-1
             let sender_kid = {
                 let key_manager = agent.agent_key_manager();
@@ -463,5 +484,4 @@ impl WasmTapAgent {
             Ok(result.into())
         })
     }
-
 }
