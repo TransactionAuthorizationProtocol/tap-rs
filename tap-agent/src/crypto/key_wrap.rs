@@ -2,9 +2,6 @@
 //!
 //! Implements the AES Key Wrap algorithm for securely wrapping
 //! content encryption keys (CEK) using a key encryption key (KEK).
-//!
-//! This replaces the insecure XOR-based key wrapping that was
-//! previously used in the codebase.
 
 use crate::error::{Error, Result};
 use aes::Aes256;
