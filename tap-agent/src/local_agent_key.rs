@@ -146,124 +146,127 @@ impl LocalAgentKey {
 
             // 3. Generate ephemeral key pair for ECDH
             let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
-        let ephemeral_public_key = ephemeral_secret.public_key();
+            let ephemeral_public_key = ephemeral_secret.public_key();
 
-        // Convert ephemeral public key to JWK coordinates
-        let point = ephemeral_public_key.to_encoded_point(false);
-        let x_bytes = point.x().unwrap().to_vec();
-        let y_bytes = point.y().unwrap().to_vec();
-        let x_b64 = base64::engine::general_purpose::STANDARD.encode(&x_bytes);
-        let y_b64 = base64::engine::general_purpose::STANDARD.encode(&y_bytes);
+            // Convert ephemeral public key to JWK coordinates
+            let point = ephemeral_public_key.to_encoded_point(false);
+            let x_bytes = point.x().unwrap().to_vec();
+            let y_bytes = point.y().unwrap().to_vec();
+            let x_b64 = base64::engine::general_purpose::STANDARD.encode(&x_bytes);
+            let y_b64 = base64::engine::general_purpose::STANDARD.encode(&y_bytes);
 
-        let ephemeral_key = crate::message::EphemeralPublicKey::Ec {
-            crv: "P-256".to_string(),
-            x: x_b64,
-            y: y_b64,
-        };
+            let ephemeral_key = crate::message::EphemeralPublicKey::Ec {
+                crv: "P-256".to_string(),
+                x: x_b64,
+                y: y_b64,
+            };
 
-        // 4. Extract recipient public key from JWK
-        let recipient_x_b64 = recipient_jwk
-            .get("x")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::Cryptography("Missing x coordinate in recipient JWK".to_string())
+            // 4. Extract recipient public key from JWK
+            let recipient_x_b64 =
+                recipient_jwk
+                    .get("x")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        Error::Cryptography("Missing x coordinate in recipient JWK".to_string())
+                    })?;
+            let recipient_y_b64 =
+                recipient_jwk
+                    .get("y")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| {
+                        Error::Cryptography("Missing y coordinate in recipient JWK".to_string())
+                    })?;
+
+            let recipient_x = base64::engine::general_purpose::STANDARD
+                .decode(recipient_x_b64)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode x: {}", e)))?;
+            let recipient_y = base64::engine::general_purpose::STANDARD
+                .decode(recipient_y_b64)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode y: {}", e)))?;
+
+            // Reconstruct recipient public key
+            let mut recipient_point_bytes = vec![0x04]; // Uncompressed
+            recipient_point_bytes.extend_from_slice(&recipient_x);
+            recipient_point_bytes.extend_from_slice(&recipient_y);
+
+            let recipient_encoded_point = P256EncodedPoint::from_bytes(&recipient_point_bytes)
+                .map_err(|e| Error::Cryptography(format!("Invalid recipient point: {}", e)))?;
+
+            let recipient_pk = P256PublicKey::from_encoded_point(&recipient_encoded_point);
+            if recipient_pk.is_none().into() {
+                return Err(Error::Cryptography(
+                    "Invalid recipient public key".to_string(),
+                ));
+            }
+            let recipient_pk = recipient_pk.unwrap();
+
+            // 5. Perform ECDH
+            let shared_secret = ephemeral_secret.diffie_hellman(&recipient_pk);
+            let shared_bytes = shared_secret.raw_secret_bytes();
+
+            // 6. Create protected header
+            let apv_raw = Uuid::new_v4();
+            let apv_b64 = base64::engine::general_purpose::STANDARD.encode(apv_raw.as_bytes());
+
+            let protected = protected_header.unwrap_or_else(|| crate::message::JweProtected {
+                epk: ephemeral_key,
+                apv: apv_b64.clone(),
+                typ: crate::message::DIDCOMM_ENCRYPTED.to_string(),
+                enc: "A256GCM".to_string(),
+                alg: "ECDH-ES+A256KW".to_string(),
+            });
+
+            // 7. Derive KEK using Concat KDF
+            let apv_bytes = base64::engine::general_purpose::STANDARD
+                .decode(&protected.apv)
+                .unwrap_or_default();
+            let kek =
+                crate::crypto::derive_key_ecdh_es(shared_bytes.as_slice(), b"", &apv_bytes, 256)?;
+
+            // 8. Wrap CEK with AES-KW
+            let mut kek_array = [0u8; 32];
+            kek_array.copy_from_slice(&kek);
+            let wrapped_cek = crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?;
+
+            // 9. Encrypt plaintext with AES-GCM
+            let cipher = Aes256Gcm::new_from_slice(&cek)
+                .map_err(|e| Error::Cryptography(format!("Failed to create cipher: {}", e)))?;
+
+            let nonce = Nonce::from_slice(&iv_bytes);
+            let mut buffer = plaintext.to_vec();
+            let tag = cipher
+                .encrypt_in_place_detached(nonce, b"", &mut buffer)
+                .map_err(|e| Error::Cryptography(format!("Encryption failed: {:?}", e)))?;
+
+            // 10. Serialize protected header
+            let protected_json = serde_json::to_string(&protected).map_err(|e| {
+                Error::Serialization(format!("Failed to serialize protected header: {}", e))
             })?;
-        let recipient_y_b64 = recipient_jwk
-            .get("y")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                Error::Cryptography("Missing y coordinate in recipient JWK".to_string())
-            })?;
+            let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
 
-        let recipient_x = base64::engine::general_purpose::STANDARD
-            .decode(recipient_x_b64)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode x: {}", e)))?;
-        let recipient_y = base64::engine::general_purpose::STANDARD
-            .decode(recipient_y_b64)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode y: {}", e)))?;
+            // Get recipient kid from JWK if available
+            let recipient_kid = recipient_jwk
+                .get("kid")
+                .and_then(|v| v.as_str())
+                .unwrap_or("recipient-key")
+                .to_string();
 
-        // Reconstruct recipient public key
-        let mut recipient_point_bytes = vec![0x04]; // Uncompressed
-        recipient_point_bytes.extend_from_slice(&recipient_x);
-        recipient_point_bytes.extend_from_slice(&recipient_y);
+            // 11. Build JWE
+            let jwe = crate::message::Jwe {
+                ciphertext: base64::engine::general_purpose::STANDARD.encode(&buffer),
+                protected: protected_b64,
+                recipients: vec![crate::message::JweRecipient {
+                    encrypted_key: base64::engine::general_purpose::STANDARD.encode(&wrapped_cek),
+                    header: crate::message::JweHeader {
+                        kid: recipient_kid,
+                        sender_kid: Some(AgentKey::key_id(self).to_string()),
+                    },
+                }],
+                tag: base64::engine::general_purpose::STANDARD.encode(tag),
+                iv: base64::engine::general_purpose::STANDARD.encode(iv_bytes),
+            };
 
-        let recipient_encoded_point = P256EncodedPoint::from_bytes(&recipient_point_bytes)
-            .map_err(|e| Error::Cryptography(format!("Invalid recipient point: {}", e)))?;
-
-        let recipient_pk = P256PublicKey::from_encoded_point(&recipient_encoded_point);
-        if recipient_pk.is_none().into() {
-            return Err(Error::Cryptography(
-                "Invalid recipient public key".to_string(),
-            ));
-        }
-        let recipient_pk = recipient_pk.unwrap();
-
-        // 5. Perform ECDH
-        let shared_secret = ephemeral_secret.diffie_hellman(&recipient_pk);
-        let shared_bytes = shared_secret.raw_secret_bytes();
-
-        // 6. Create protected header
-        let apv_raw = Uuid::new_v4();
-        let apv_b64 = base64::engine::general_purpose::STANDARD.encode(apv_raw.as_bytes());
-
-        let protected = protected_header.unwrap_or_else(|| crate::message::JweProtected {
-            epk: ephemeral_key,
-            apv: apv_b64.clone(),
-            typ: crate::message::DIDCOMM_ENCRYPTED.to_string(),
-            enc: "A256GCM".to_string(),
-            alg: "ECDH-ES+A256KW".to_string(),
-        });
-
-        // 7. Derive KEK using Concat KDF
-        let apv_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&protected.apv)
-            .unwrap_or_default();
-        let kek = crate::crypto::derive_key_ecdh_es(shared_bytes.as_slice(), b"", &apv_bytes, 256)?;
-
-        // 8. Wrap CEK with AES-KW
-        let mut kek_array = [0u8; 32];
-        kek_array.copy_from_slice(&kek);
-        let wrapped_cek = crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?;
-
-        // 9. Encrypt plaintext with AES-GCM
-        let cipher = Aes256Gcm::new_from_slice(&cek)
-            .map_err(|e| Error::Cryptography(format!("Failed to create cipher: {}", e)))?;
-
-        let nonce = Nonce::from_slice(&iv_bytes);
-        let mut buffer = plaintext.to_vec();
-        let tag = cipher
-            .encrypt_in_place_detached(nonce, b"", &mut buffer)
-            .map_err(|e| Error::Cryptography(format!("Encryption failed: {:?}", e)))?;
-
-        // 10. Serialize protected header
-        let protected_json = serde_json::to_string(&protected).map_err(|e| {
-            Error::Serialization(format!("Failed to serialize protected header: {}", e))
-        })?;
-        let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
-
-        // Get recipient kid from JWK if available
-        let recipient_kid = recipient_jwk
-            .get("kid")
-            .and_then(|v| v.as_str())
-            .unwrap_or("recipient-key")
-            .to_string();
-
-        // 11. Build JWE
-        let jwe = crate::message::Jwe {
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(&buffer),
-            protected: protected_b64,
-            recipients: vec![crate::message::JweRecipient {
-                encrypted_key: base64::engine::general_purpose::STANDARD.encode(&wrapped_cek),
-                header: crate::message::JweHeader {
-                    kid: recipient_kid,
-                    sender_kid: Some(AgentKey::key_id(self).to_string()),
-                },
-            }],
-            tag: base64::engine::general_purpose::STANDARD.encode(tag),
-            iv: base64::engine::general_purpose::STANDARD.encode(iv_bytes),
-        };
-
-        Ok(jwe)
+            Ok(jwe)
         }
 
         #[cfg(not(feature = "crypto-p256"))]
@@ -284,10 +287,9 @@ impl LocalAgentKey {
                     kid.to_string()
                 } else {
                     // Generate default key ID based on DID method
-                    if did.starts_with("did:key:") {
+                    if let Some(key_part) = did.strip_prefix("did:key:") {
                         // For did:key, extract the multibase key from the DID and use it as fragment
                         // did:key:z6Mk... -> did:key:z6Mk...#z6Mk...
-                        let key_part = &did[8..]; // Skip "did:key:"
                         format!("{}#{}", did, key_part)
                     } else if did.starts_with("did:web:") {
                         format!("{}#keys-1", did)
@@ -1005,6 +1007,7 @@ impl EncryptionKey for LocalAgentKey {
         // 7. Process each recipient
         let mut jwe_recipients = Vec::with_capacity(recipients.len());
 
+        #[allow(clippy::never_loop)] // Loop body returns early when crypto-p256 feature is disabled
         for recipient in recipients {
             // Extract recipient's public key as JWK
             let recipient_jwk = recipient.public_key_jwk()?;
@@ -1105,10 +1108,10 @@ impl EncryptionKey for LocalAgentKey {
 
             #[cfg(not(feature = "crypto-p256"))]
             let encrypted_key: Vec<u8> = {
-                return Err(Error::Cryptography(format!(
-                    "Unsupported recipient key type for encryption: kty={:?}, crv={:?}",
-                    kty, crv
-                )));
+                let _ = (kty, crv);
+                return Err(Error::Cryptography(
+                    "P-256 encryption not available - enable crypto-p256 feature".to_string(),
+                ));
             };
 
             // Add this recipient to the JWE
@@ -1152,220 +1155,150 @@ impl DecryptionKey for LocalAgentKey {
         aad: Option<&[u8]>,
         _sender_key: Option<&dyn VerificationKey>,
     ) -> Result<Vec<u8>> {
-        // 1. Derive the content encryption key (CEK) from encrypted_key
-        // This would normally involve proper ECDH key agreement and key unwrapping
-        // For now, we'll use a simplified approach that mirrors the encryption logic
-
-        let (kty, crv) = self.key_type_and_curve()?;
-        let jwk = self.private_key_jwk()?;
-
-        if encrypted_key.is_empty() {
-            return Err(Error::Cryptography("Empty encrypted key".to_string()));
-        }
-
-        // For P-256 keys, we can attempt to decrypt
-        #[cfg(feature = "crypto-p256")]
-        let cek = {
-            match (kty, crv) {
-                (Some("EC"), Some("P-256")) => {
-                    // Extract the private key
-                    let d_b64 = jwk.get("d").and_then(|v| v.as_str()).ok_or_else(|| {
-                        Error::Cryptography("Missing private key (d) in JWK".to_string())
-                    })?;
-
-                    // Decode the private key
-                    let private_key = base64::engine::general_purpose::STANDARD
-                        .decode(d_b64)
-                        .map_err(|e| {
-                            Error::Cryptography(format!("Failed to decode private key: {}", e))
-                        })?;
-
-                    // Simplified approach: XOR the encrypted key with the private key
-                    // In a real implementation, this would involve proper ECDH and key unwrapping
-                    let mut cek = [0u8; 32];
-                    for i in 0..cek.len() {
-                        cek[i] = if i < private_key.len() && i < encrypted_key.len() {
-                            private_key[i] ^ encrypted_key[i]
-                        } else if i < encrypted_key.len() {
-                            encrypted_key[i]
-                        } else if i < private_key.len() {
-                            private_key[i]
-                        } else {
-                            0
-                        };
-                    }
-
-                    Ok(cek)
-                }
-                // We only support P-256 for now
-                _ => Err(Error::Cryptography(format!(
-                    "Unsupported key type for decryption: kty={:?}, crv={:?}",
-                    kty, crv
-                ))),
-            }
-        }?;
-
-        #[cfg(not(feature = "crypto-p256"))]
-        let cek: [u8; 32] = {
-            return Err(Error::Cryptography(format!(
-                "Unsupported key type for decryption: kty={:?}, crv={:?}",
-                kty, crv
-            )));
-        };
-
-        // 2. Decrypt the ciphertext with AES-GCM
-        let cipher = Aes256Gcm::new_from_slice(&cek)
-            .map_err(|e| Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e)))?;
-
-        // Create a nonce from the IV
-        let nonce = Nonce::from_slice(iv);
-
-        // Create a padded tag array
-        let mut padded_tag = [0u8; 16];
-        let copy_len = std::cmp::min(tag.len(), 16);
-        padded_tag[..copy_len].copy_from_slice(&tag[..copy_len]);
-
-        // Create the Tag instance
-        let tag_array = aes_gcm::Tag::from_slice(&padded_tag);
-
-        // Decrypt the ciphertext
-        let mut buffer = ciphertext.to_vec();
-        let aad_bytes = aad.unwrap_or(b"");
-
-        cipher
-            .decrypt_in_place_detached(nonce, aad_bytes, &mut buffer, tag_array)
-            .map_err(|e| Error::Cryptography(format!("AES-GCM decryption failed: {:?}", e)))?;
-
-        Ok(buffer)
+        // The decrypt() trait method does not receive the ephemeral public key (EPK)
+        // required for ECDH-ES+A256KW key agreement. Use unwrap_jwe() instead, which
+        // parses the full JWE structure including the EPK from the protected header.
+        let _ = (ciphertext, encrypted_key, iv, tag, aad);
+        Err(Error::Cryptography(
+            "decrypt() is not supported for ECDH-ES+A256KW keys; use unwrap_jwe() instead"
+                .to_string(),
+        ))
     }
 
     async fn unwrap_jwe(&self, jwe: &Jwe) -> Result<Vec<u8>> {
         #[cfg(feature = "crypto-p256")]
         {
-        // 1. Find the recipient that matches our key ID
-        let recipient = jwe
-            .recipients
-            .iter()
-            .find(|r| r.header.kid == crate::agent_key::AgentKey::key_id(self))
-            .ok_or_else(|| {
-                Error::Cryptography(format!(
-                    "No matching recipient found for key ID: {}",
-                    crate::agent_key::AgentKey::key_id(self)
-                ))
-            })?;
+            // 1. Find the recipient that matches our key ID
+            let recipient = jwe
+                .recipients
+                .iter()
+                .find(|r| r.header.kid == crate::agent_key::AgentKey::key_id(self))
+                .ok_or_else(|| {
+                    Error::Cryptography(format!(
+                        "No matching recipient found for key ID: {}",
+                        crate::agent_key::AgentKey::key_id(self)
+                    ))
+                })?;
 
-        // 2. Decode and parse the protected header to get the EPK
-        let protected_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&jwe.protected)
-            .map_err(|e| {
-                Error::Cryptography(format!("Failed to decode protected header: {}", e))
-            })?;
+            // 2. Decode and parse the protected header to get the EPK
+            let protected_bytes = base64::engine::general_purpose::STANDARD
+                .decode(&jwe.protected)
+                .map_err(|e| {
+                    Error::Cryptography(format!("Failed to decode protected header: {}", e))
+                })?;
 
-        let protected: JweProtected = serde_json::from_slice(&protected_bytes)
-            .map_err(|e| Error::Cryptography(format!("Failed to parse protected header: {}", e)))?;
+            let protected: JweProtected =
+                serde_json::from_slice(&protected_bytes).map_err(|e| {
+                    Error::Cryptography(format!("Failed to parse protected header: {}", e))
+                })?;
 
-        // 3. Decode the JWE elements
-        let ciphertext = base64::engine::general_purpose::STANDARD
-            .decode(&jwe.ciphertext)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode ciphertext: {}", e)))?;
+            // 3. Decode the JWE elements
+            let ciphertext = base64::engine::general_purpose::STANDARD
+                .decode(&jwe.ciphertext)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode ciphertext: {}", e)))?;
 
-        let wrapped_cek = base64::engine::general_purpose::STANDARD
-            .decode(&recipient.encrypted_key)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode encrypted key: {}", e)))?;
+            let wrapped_cek = base64::engine::general_purpose::STANDARD
+                .decode(&recipient.encrypted_key)
+                .map_err(|e| {
+                    Error::Cryptography(format!("Failed to decode encrypted key: {}", e))
+                })?;
 
-        let iv = base64::engine::general_purpose::STANDARD
-            .decode(&jwe.iv)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode IV: {}", e)))?;
+            let iv = base64::engine::general_purpose::STANDARD
+                .decode(&jwe.iv)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode IV: {}", e)))?;
 
-        let tag = base64::engine::general_purpose::STANDARD
-            .decode(&jwe.tag)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode tag: {}", e)))?;
+            let tag = base64::engine::general_purpose::STANDARD
+                .decode(&jwe.tag)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode tag: {}", e)))?;
 
-        // 4. Extract EPK coordinates and reconstruct the public key
-        let (epk_x_b64, epk_y_b64) = match &protected.epk {
-            EphemeralPublicKey::Ec { x, y, .. } => (x.clone(), y.clone()),
-            _ => {
-                return Err(Error::Cryptography(
-                    "Unsupported EPK type for P-256 decryption".to_string(),
-                ))
+            // 4. Extract EPK coordinates and reconstruct the public key
+            let (epk_x_b64, epk_y_b64) = match &protected.epk {
+                EphemeralPublicKey::Ec { x, y, .. } => (x.clone(), y.clone()),
+                _ => {
+                    return Err(Error::Cryptography(
+                        "Unsupported EPK type for P-256 decryption".to_string(),
+                    ))
+                }
+            };
+
+            let epk_x = base64::engine::general_purpose::STANDARD
+                .decode(&epk_x_b64)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode EPK x: {}", e)))?;
+            let epk_y = base64::engine::general_purpose::STANDARD
+                .decode(&epk_y_b64)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode EPK y: {}", e)))?;
+
+            // Reconstruct the EPK as an uncompressed point
+            let mut epk_point_bytes = vec![0x04]; // Uncompressed point format
+            epk_point_bytes.extend_from_slice(&epk_x);
+            epk_point_bytes.extend_from_slice(&epk_y);
+
+            let epk_encoded_point = P256EncodedPoint::from_bytes(&epk_point_bytes)
+                .map_err(|e| Error::Cryptography(format!("Invalid EPK point: {}", e)))?;
+
+            let epk_public_key = P256PublicKey::from_encoded_point(&epk_encoded_point);
+            if epk_public_key.is_none().into() {
+                return Err(Error::Cryptography("Invalid EPK public key".to_string()));
             }
-        };
+            let epk_public_key = epk_public_key.unwrap();
 
-        let epk_x = base64::engine::general_purpose::STANDARD
-            .decode(&epk_x_b64)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode EPK x: {}", e)))?;
-        let epk_y = base64::engine::general_purpose::STANDARD
-            .decode(&epk_y_b64)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode EPK y: {}", e)))?;
+            // 5. Get our private key and perform ECDH
+            let jwk = self.private_key_jwk()?;
+            let d_b64 = jwk
+                .get("d")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| Error::Cryptography("Missing private key (d) in JWK".to_string()))?;
 
-        // Reconstruct the EPK as an uncompressed point
-        let mut epk_point_bytes = vec![0x04]; // Uncompressed point format
-        epk_point_bytes.extend_from_slice(&epk_x);
-        epk_point_bytes.extend_from_slice(&epk_y);
+            let d_bytes = base64::engine::general_purpose::STANDARD
+                .decode(d_b64)
+                .map_err(|e| Error::Cryptography(format!("Failed to decode private key: {}", e)))?;
 
-        let epk_encoded_point = P256EncodedPoint::from_bytes(&epk_point_bytes)
-            .map_err(|e| Error::Cryptography(format!("Invalid EPK point: {}", e)))?;
+            // Create our secret key from the d value
+            let secret_key = p256::SecretKey::from_bytes((&d_bytes[..]).into())
+                .map_err(|e| Error::Cryptography(format!("Invalid private key: {}", e)))?;
 
-        let epk_public_key = P256PublicKey::from_encoded_point(&epk_encoded_point);
-        if epk_public_key.is_none().into() {
-            return Err(Error::Cryptography("Invalid EPK public key".to_string()));
-        }
-        let epk_public_key = epk_public_key.unwrap();
+            // Perform ECDH
+            let shared_secret = p256::ecdh::diffie_hellman(
+                secret_key.to_nonzero_scalar(),
+                epk_public_key.as_affine(),
+            );
+            let shared_bytes = shared_secret.raw_secret_bytes();
 
-        // 5. Get our private key and perform ECDH
-        let jwk = self.private_key_jwk()?;
-        let d_b64 = jwk
-            .get("d")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::Cryptography("Missing private key (d) in JWK".to_string()))?;
+            // 6. Derive KEK using Concat KDF
+            let apv = base64::engine::general_purpose::STANDARD
+                .decode(&protected.apv)
+                .unwrap_or_default();
 
-        let d_bytes = base64::engine::general_purpose::STANDARD
-            .decode(d_b64)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode private key: {}", e)))?;
+            let kek = crate::crypto::derive_key_ecdh_es(
+                shared_bytes.as_slice(),
+                b"", // apu - empty for anonymous sender
+                &apv,
+                256,
+            )?;
 
-        // Create our secret key from the d value
-        let secret_key = p256::SecretKey::from_bytes((&d_bytes[..]).into())
-            .map_err(|e| Error::Cryptography(format!("Invalid private key: {}", e)))?;
+            // 7. Unwrap CEK using AES-KW
+            let mut kek_array = [0u8; 32];
+            kek_array.copy_from_slice(&kek);
+            let cek = crate::crypto::unwrap_key_aes_kw(&kek_array, &wrapped_cek)?;
 
-        // Perform ECDH
-        let shared_secret =
-            p256::ecdh::diffie_hellman(secret_key.to_nonzero_scalar(), epk_public_key.as_affine());
-        let shared_bytes = shared_secret.raw_secret_bytes();
+            // 8. Decrypt ciphertext with AES-GCM using the CEK
+            let cipher = Aes256Gcm::new_from_slice(&cek).map_err(|e| {
+                Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e))
+            })?;
 
-        // 6. Derive KEK using Concat KDF
-        let apv = base64::engine::general_purpose::STANDARD
-            .decode(&protected.apv)
-            .unwrap_or_default();
+            let nonce = Nonce::from_slice(&iv);
 
-        let kek = crate::crypto::derive_key_ecdh_es(
-            shared_bytes.as_slice(),
-            b"", // apu - empty for anonymous sender
-            &apv,
-            256,
-        )?;
+            let mut padded_tag = [0u8; 16];
+            let copy_len = std::cmp::min(tag.len(), 16);
+            padded_tag[..copy_len].copy_from_slice(&tag[..copy_len]);
+            let tag_array = aes_gcm::Tag::from_slice(&padded_tag);
 
-        // 7. Unwrap CEK using AES-KW
-        let mut kek_array = [0u8; 32];
-        kek_array.copy_from_slice(&kek);
-        let cek = crate::crypto::unwrap_key_aes_kw(&kek_array, &wrapped_cek)?;
+            let mut buffer = ciphertext.to_vec();
+            cipher
+                .decrypt_in_place_detached(nonce, b"", &mut buffer, tag_array)
+                .map_err(|e| Error::Cryptography(format!("AES-GCM decryption failed: {:?}", e)))?;
 
-        // 8. Decrypt ciphertext with AES-GCM using the CEK
-        let cipher = Aes256Gcm::new_from_slice(&cek)
-            .map_err(|e| Error::Cryptography(format!("Failed to create AES-GCM cipher: {}", e)))?;
-
-        let nonce = Nonce::from_slice(&iv);
-
-        let mut padded_tag = [0u8; 16];
-        let copy_len = std::cmp::min(tag.len(), 16);
-        padded_tag[..copy_len].copy_from_slice(&tag[..copy_len]);
-        let tag_array = aes_gcm::Tag::from_slice(&padded_tag);
-
-        let mut buffer = ciphertext.to_vec();
-        cipher
-            .decrypt_in_place_detached(nonce, b"", &mut buffer, tag_array)
-            .map_err(|e| Error::Cryptography(format!("AES-GCM decryption failed: {:?}", e)))?;
-
-        Ok(buffer)
+            Ok(buffer)
         }
 
         #[cfg(not(feature = "crypto-p256"))]

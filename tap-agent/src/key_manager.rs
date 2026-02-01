@@ -649,15 +649,57 @@ impl KeyManager for DefaultKeyManager {
     }
 
     /// Verify a JWS
-    async fn verify_jws(&self, jws: &str, _expected_kid: Option<&str>) -> Result<Vec<u8>> {
+    async fn verify_jws(&self, jws: &str, expected_kid: Option<&str>) -> Result<Vec<u8>> {
         // Parse the JWS
         let jws: crate::message::Jws = serde_json::from_str(jws)
             .map_err(|e| Error::Serialization(format!("Failed to parse JWS: {}", e)))?;
 
-        // For tests, we can simplify this implementation and skip cryptographic verification
-        // since we removed the crypto dependency
+        // Find the signature to verify
+        let signature = if let Some(kid) = expected_kid {
+            jws.signatures
+                .iter()
+                .find(|s| s.get_kid().as_deref() == Some(kid))
+                .ok_or_else(|| {
+                    Error::Cryptography(format!("No signature found with kid: {}", kid))
+                })?
+        } else {
+            jws.signatures
+                .first()
+                .ok_or_else(|| Error::Cryptography("No signatures in JWS".to_string()))?
+        };
 
-        // Decode the payload directly without verification in this simplified version
+        // Get the protected header
+        let protected = signature.get_protected_header().map_err(|e| {
+            Error::Cryptography(format!("Failed to decode protected header: {}", e))
+        })?;
+
+        // Get the verification key using kid from protected header
+        let kid = signature
+            .get_kid()
+            .ok_or_else(|| Error::Cryptography("No kid found in JWS signature".to_string()))?;
+        let verification_key = KeyManager::resolve_verification_key(self, &kid).await?;
+
+        // Decode the signature
+        let signature_bytes = base64::engine::general_purpose::STANDARD
+            .decode(&signature.signature)
+            .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
+
+        // Create the signing input (protected.payload)
+        let signing_input = format!("{}.{}", signature.protected, jws.payload);
+
+        // Verify the signature
+        let verified = verification_key
+            .verify_signature(signing_input.as_bytes(), &signature_bytes, &protected)
+            .await
+            .map_err(|e| Error::Cryptography(e.to_string()))?;
+
+        if !verified {
+            return Err(Error::Cryptography(
+                "Signature verification failed".to_string(),
+            ));
+        }
+
+        // Decode the payload
         let payload_bytes = base64::engine::general_purpose::STANDARD
             .decode(&jws.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
@@ -673,64 +715,59 @@ impl KeyManager for DefaultKeyManager {
         plaintext: &[u8],
         protected_header: Option<crate::message::JweProtected>,
     ) -> Result<String> {
-        // For testing purposes, create a simple encoded JWE structure
-        // that just stores the plaintext with base64 encoding
-        let ciphertext = base64::engine::general_purpose::STANDARD.encode(plaintext);
+        // Get the encryption key
+        let encryption_key = KeyManager::get_encryption_key(self, sender_kid).await?;
 
-        // Create a simple ephemeral key for the header
-        let ephemeral_key = crate::message::EphemeralPublicKey::Ec {
-            crv: "P-256".to_string(),
-            x: "test".to_string(),
-            y: "test".to_string(),
-        };
+        // Resolve the recipient's verification key
+        let recipient_key = KeyManager::resolve_verification_key(self, recipient_kid).await?;
 
-        // Create a simplified protected header
-        let protected = protected_header.unwrap_or_else(|| crate::message::JweProtected {
-            epk: ephemeral_key,
-            apv: "test".to_string(),
-            typ: crate::message::DIDCOMM_ENCRYPTED.to_string(),
-            enc: "A256GCM".to_string(),
-            alg: "ECDH-ES+A256KW".to_string(),
-        });
-
-        // Serialize and encode the protected header
-        let protected_json = serde_json::to_string(&protected).map_err(|e| {
-            Error::Serialization(format!("Failed to serialize protected header: {}", e))
-        })?;
-        let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
-
-        // Create the JWE
-        let jwe = crate::message::Jwe {
-            ciphertext,
-            protected: protected_b64,
-            recipients: vec![crate::message::JweRecipient {
-                encrypted_key: "test".to_string(),
-                header: crate::message::JweHeader {
-                    kid: recipient_kid.to_string(),
-                    sender_kid: Some(sender_kid.to_string()),
-                },
-            }],
-            tag: "test".to_string(),
-            iv: "test".to_string(),
-        };
+        // Encrypt the plaintext
+        let jwe = encryption_key
+            .create_jwe(plaintext, &[recipient_key], protected_header)
+            .await
+            .map_err(|e| Error::Cryptography(e.to_string()))?;
 
         // Serialize the JWE
         serde_json::to_string(&jwe).map_err(|e| Error::Serialization(e.to_string()))
     }
 
     /// Decrypt a JWE
-    async fn decrypt_jwe(&self, jwe: &str, _expected_kid: Option<&str>) -> Result<Vec<u8>> {
+    async fn decrypt_jwe(&self, jwe: &str, expected_kid: Option<&str>) -> Result<Vec<u8>> {
         // Parse the JWE
         let jwe: crate::message::Jwe = serde_json::from_str(jwe)
             .map_err(|e| Error::Serialization(format!("Failed to parse JWE: {}", e)))?;
 
-        // In this simplified implementation, just decode the ciphertext
-        // since we're storing the plaintext directly encoded as the ciphertext
-        let plaintext = base64::engine::general_purpose::STANDARD
-            .decode(&jwe.ciphertext)
-            .map_err(|e| Error::Cryptography(format!("Failed to decode ciphertext: {}", e)))?;
+        if let Some(kid) = expected_kid {
+            // Verify recipient exists
+            jwe.recipients
+                .iter()
+                .find(|r| r.header.kid == kid)
+                .ok_or_else(|| {
+                    Error::Cryptography(format!("No recipient found with kid: {}", kid))
+                })?;
 
-        Ok(plaintext)
+            // Get the decryption key and unwrap JWE
+            let decryption_key = KeyManager::get_decryption_key(self, kid).await?;
+            decryption_key
+                .unwrap_jwe(&jwe)
+                .await
+                .map_err(|e| Error::Cryptography(e.to_string()))
+        } else {
+            // Try each recipient
+            for recipient in &jwe.recipients {
+                if let Ok(decryption_key) =
+                    KeyManager::get_decryption_key(self, &recipient.header.kid).await
+                {
+                    if let Ok(plaintext) = decryption_key.unwrap_jwe(&jwe).await {
+                        return Ok(plaintext);
+                    }
+                }
+            }
+
+            Err(Error::Cryptography(
+                "Failed to decrypt JWE for any recipient".to_string(),
+            ))
+        }
     }
 }
 
@@ -1089,7 +1126,9 @@ mod tests {
         };
 
         let key = manager.generate_key(options).unwrap();
-        let kid = format!("{}#keys-1", key.did);
+        // For did:key, the kid is did:key:z6Mk...#z6Mk...
+        let key_part = &key.did["did:key:".len()..];
+        let kid = format!("{}#{}", key.did, key_part);
 
         // Test data
         let test_data = b"Hello, world!";
@@ -1097,8 +1136,12 @@ mod tests {
         // Sign
         let jws = manager.sign_jws(&kid, test_data, None).await.unwrap();
 
-        // Verify
+        // Verify with expected kid
         let payload = manager.verify_jws(&jws, Some(&kid)).await.unwrap();
+        assert_eq!(payload, test_data);
+
+        // Verify without expected kid (uses first signature)
+        let payload = manager.verify_jws(&jws, None).await.unwrap();
         assert_eq!(payload, test_data);
     }
 
@@ -1113,10 +1156,12 @@ mod tests {
         };
 
         let sender_key = manager.generate_key(options.clone()).unwrap();
-        let sender_kid = format!("{}#keys-1", sender_key.did);
+        let sender_part = &sender_key.did["did:key:".len()..];
+        let sender_kid = format!("{}#{}", sender_key.did, sender_part);
 
         let recipient_key = manager.generate_key(options).unwrap();
-        let recipient_kid = format!("{}#keys-1", recipient_key.did);
+        let recipient_part = &recipient_key.did["did:key:".len()..];
+        let recipient_kid = format!("{}#{}", recipient_key.did, recipient_part);
 
         // Test data
         let test_data = b"Hello, world!";

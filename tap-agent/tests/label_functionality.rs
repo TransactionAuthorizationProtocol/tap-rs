@@ -219,6 +219,7 @@ fn test_storage_persistence_with_labels() -> Result<()> {
 }
 
 #[test]
+#[cfg(feature = "crypto-p256")]
 fn test_backward_compatibility() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
     env::set_var("TAP_HOME", temp_dir.path());

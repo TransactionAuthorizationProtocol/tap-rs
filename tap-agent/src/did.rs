@@ -329,11 +329,7 @@ impl WasmDIDMethodResolver for KeyResolver {
         // Create the DID Document with the Ed25519 public key
         let ed25519_public_key = &key_bytes[2..];
 
-        let ed_vm_id = format!(
-            "{}
-#{}",
-            did_key, key_id
-        );
+        let ed_vm_id = format!("{}#{}", did_key, key_id);
 
         // Create the Ed25519 verification method
         let ed_verification_method = VerificationMethod {
@@ -357,11 +353,7 @@ impl WasmDIDMethodResolver for KeyResolver {
             let x25519_multibase = encode(Base::Base58Btc, x25519_bytes);
 
             // Create the X25519 verification method ID
-            let x25519_vm_id = format!(
-                "{}
-#{}",
-                did_key, x25519_multibase
-            );
+            let x25519_vm_id = format!("{}#{}", did_key, x25519_multibase);
 
             // Create the X25519 verification method
             let x25519_verification_method = VerificationMethod {
@@ -427,11 +419,7 @@ impl DIDMethodResolver for KeyResolver {
         // Create the DID Document with the Ed25519 public key
         let ed25519_public_key = &key_bytes[2..];
 
-        let ed_vm_id = format!(
-            "{}
-#{}",
-            did_key, key_id
-        );
+        let ed_vm_id = format!("{}#{}", did_key, key_id);
 
         // Create the Ed25519 verification method
         let ed_verification_method = VerificationMethod {
@@ -456,11 +444,7 @@ impl DIDMethodResolver for KeyResolver {
             let x25519_multibase = encode(Base::Base58Btc, x25519_bytes);
 
             // Create the X25519 verification method ID
-            let x25519_vm_id = format!(
-                "{}
-#{}",
-                did_key, x25519_multibase
-            );
+            let x25519_vm_id = format!("{}#{}", did_key, x25519_multibase);
 
             // Create the X25519 verification method
             let x25519_verification_method = VerificationMethod {
@@ -575,11 +559,7 @@ impl WasmDIDMethodResolver for WebResolver {
 
         // Create a minimal DID document for did:web
         let verification_method = VerificationMethod {
-            id: format!(
-                "{}
-#keys-1",
-                did
-            ),
+            id: format!("{}#keys-1", did),
             type_: VerificationMethodType::Ed25519VerificationKey2018,
             controller: did.to_string(),
             verification_material: VerificationMaterial::Multibase {
@@ -629,18 +609,10 @@ impl DIDMethodResolver for WebResolver {
             let path_segments: Vec<&str> = domain_path.split(':').collect();
             let domain = path_segments[0];
             let path = path_segments[1..].join("/");
-            format!(
-                "https://{}
-/{}/did.json",
-                domain, path
-            )
+            format!("https://{}/{}/did.json", domain, path)
         } else {
             // Standard case: did:web:example.com
-            format!(
-                "https://{}
-/.well-known/did.json",
-                domain_path
-            )
+            format!("https://{}/.well-known/did.json", domain_path)
         };
 
         // Attempt to fetch and parse the DID document
@@ -1120,26 +1092,14 @@ impl DIDKeyGenerator {
                 .unwrap_or_else(|| {
                     // Fallback: extract the multibase part and construct the ID
                     let multibase = key.did.strip_prefix("did:key:").unwrap_or("");
-                    format!(
-                        "{}
-#{}",
-                        key.did, multibase
-                    )
+                    format!("{}#{}", key.did, multibase)
                 })
         } else if key.did.starts_with("did:web:") {
             // For did:web, use #keys-1
-            format!(
-                "{}
-#keys-1",
-                key.did
-            )
+            format!("{}#keys-1", key.did)
         } else {
             // For other DID methods, use a generic pattern
-            format!(
-                "{}
-#key-1",
-                key.did
-            )
+            format!("{}#key-1", key.did)
         };
 
         match key.key_type {
@@ -1328,11 +1288,7 @@ impl DIDKeyGenerator {
             .verification_method
             .iter()
             .map(|vm| {
-                let id = format!(
-                    "{}
-#keys-1",
-                    did
-                );
+                let id = format!("{}#keys-1", did);
                 VerificationMethod {
                     id: id.clone(),
                     type_: vm.type_.clone(),
@@ -1387,11 +1343,7 @@ impl DIDKeyGenerator {
         let multibase_encoded = encode(Base::Base58Btc, prefixed_public_key);
 
         // Create the verification method ID
-        let vm_id = format!(
-            "{}
-#{}",
-            did, multibase_encoded
-        );
+        let vm_id = format!("{}#{}", did, multibase_encoded);
 
         // Create the verification method
         let verification_method = VerificationMethod {
@@ -1419,11 +1371,7 @@ impl DIDKeyGenerator {
                 let x25519_multibase = encode(Base::Base58Btc, &x25519_prefixed);
 
                 // Create the X25519 verification method ID
-                let x25519_vm_id = format!(
-                    "{}
-#{}",
-                    did, x25519_multibase
-                );
+                let x25519_vm_id = format!("{}#{}", did, x25519_multibase);
 
                 // Create the X25519 verification method
                 let x25519_verification_method = VerificationMethod {
