@@ -215,8 +215,9 @@ mod tests {
         // Create a storage instance
         let storage = KeyStorage::new();
 
-        // Get agent directory
-        let agent_dir = storage.get_agent_directory("did:key:test123").unwrap();
+        // Get agent directory (function expects pre-sanitized DID)
+        let sanitized = sanitize_did("did:key:test123");
+        let agent_dir = storage.get_agent_directory(&sanitized).unwrap();
 
         // Verify it uses TAP_HOME with sanitized DID
         assert_eq!(agent_dir, temp_path.join("did_key_test123"));
