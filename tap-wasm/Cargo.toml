@@ -38,7 +38,7 @@ rand = "0.8"
 hex = "0.4"
 
 [features]
-default = ["wee_alloc", "crypto-ed25519"]
+default = ["wee_alloc", "crypto-ed25519", "crypto-p256", "crypto-secp256k1"]
 # Feature for improved debugging in browsers
 debug = ["console_error_panic_hook"]
 
