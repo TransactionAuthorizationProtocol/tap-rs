@@ -915,17 +915,15 @@ async fn pack_message_async(
         // Try to get the actual key ID from the key manager
         if let Ok(key) = key_manager.get_generated_key(s) {
             // Get the first authentication method ID from the DID document
-            if let Some(auth_method_id) = key.did_doc.authentication.first() {
-                Some(auth_method_id.clone())
-            } else if let Some(vm) = key.did_doc.verification_method.first() {
-                Some(vm.id.clone())
-            } else {
-                None
-            }
+            key.did_doc.authentication.first().cloned().or_else(|| {
+                key.did_doc
+                    .verification_method
+                    .first()
+                    .map(|vm| vm.id.clone())
+            })
         } else {
             // Fallback to the DID-based format for did:key
-            if s.starts_with("did:key:") {
-                let key_part = &s[8..]; // Skip "did:key:"
+            if let Some(key_part) = s.strip_prefix("did:key:") {
                 Some(format!("{}#{}", s, key_part))
             } else {
                 Some(format!("{}#keys-1", s))
@@ -937,8 +935,7 @@ async fn pack_message_async(
 
     let recipient_kid = if let Some(did) = recipient_did {
         // For recipients, we don't have their keys, so use the standard format
-        if did.starts_with("did:key:") {
-            let key_part = &did[8..]; // Skip "did:key:"
+        if let Some(key_part) = did.strip_prefix("did:key:") {
             Some(format!("{}#{}", did, key_part))
         } else {
             Some(format!("{}#keys-1", did))
@@ -1042,17 +1039,15 @@ async fn unpack_message_async(
     // Get the actual key ID for the recipient
     let expected_recipient_kid = if let Ok(key) = key_manager.get_generated_key(&recipient) {
         // Get the first authentication method ID from the DID document
-        if let Some(auth_method_id) = key.did_doc.authentication.first() {
-            Some(auth_method_id.clone())
-        } else if let Some(vm) = key.did_doc.verification_method.first() {
-            Some(vm.id.clone())
-        } else {
-            None
-        }
+        key.did_doc.authentication.first().cloned().or_else(|| {
+            key.did_doc
+                .verification_method
+                .first()
+                .map(|vm| vm.id.clone())
+        })
     } else {
         // Fallback to the DID-based format for did:key
-        if recipient.starts_with("did:key:") {
-            let key_part = &recipient[8..]; // Skip "did:key:"
+        if let Some(key_part) = recipient.strip_prefix("did:key:") {
             Some(format!("{}#{}", recipient, key_part))
         } else {
             Some(format!("{}#keys-1", recipient))

@@ -1,5 +1,4 @@
 use js_sys::{Array, Reflect};
-use serde_wasm_bindgen;
 use std::collections::HashMap;
 use tap_msg::didcomm::PlainMessage;
 use wasm_bindgen::prelude::*;
