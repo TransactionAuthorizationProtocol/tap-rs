@@ -61,10 +61,8 @@
   <div id="output" class="output"></div>
   
   <script type="module">
-    import init, { 
-      WasmTapAgent, 
-      TapNode,
-      MessageType, 
+    import init, {
+      WasmTapAgent,
       generate_uuid_v4
     } from '../pkg/tap_wasm.js';
 
@@ -96,34 +94,30 @@
           log('Please create an agent first.');
           return;
         }
-        
-        // Create a new message using the agent
-        message = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-        
-        // Set the transfer message body
-        const body = {
-          asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
-          originator: {
-            '@id': "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+
+        // Create a plain message object for pack_message
+        message = {
+          id: generate_uuid_v4(),
+          type: 'https://tap.rsvp/schema/1.0#Transfer',
+          from: agent.get_did(),
+          to: [agent.get_did()],
+          body: {
+            asset: "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+            originator: {
+              '@id': "did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK"
+            },
+            beneficiary: {
+              '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL"
+            },
+            amount: "100.0",
+            agents: [],
+            memo: "Test transfer"
           },
-          beneficiary: {
-            '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL"
-          },
-          amount: "100.0",
-          agents: [],
-          memo: "Test transfer"
+          created_time: Math.floor(Date.now() / 1000)
         };
-        
-        // Update the message body
-        message.body = body;
-        
+
         log('Created transfer message:');
-        log(prettyPrint({
-          id: message.id,
-          type: message.type,
-          from: message.from,
-          body: message.body
-        }));
+        log(prettyPrint(message));
       } catch (error) {
         log('Error creating message: ' + error);
       }
@@ -167,12 +161,6 @@
         
         log('Message packed successfully:');
         log(prettyPrint({
-          originalMessage: {
-            id: message.id,
-            type: message.type,
-            from: message.from,
-            body: message.body
-          },
           packedMessage: packedResult.message.substring(0, 100) + '...',
           metadata: packedResult.metadata
         }));
