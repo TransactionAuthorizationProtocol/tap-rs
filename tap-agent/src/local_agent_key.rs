@@ -134,19 +134,18 @@ impl LocalAgentKey {
         recipient_jwk: &Value,
         protected_header: Option<JweProtected>,
     ) -> Result<Jwe> {
-        use p256::elliptic_curve::sec1::FromEncodedPoint;
-        use p256::{EncodedPoint as P256EncodedPoint, PublicKey as P256PublicKey};
+        #[cfg(feature = "crypto-p256")]
+        {
+            // 1. Generate random CEK (Content Encryption Key)
+            let mut cek = [0u8; 32];
+            OsRng.fill_bytes(&mut cek);
 
-        // 1. Generate random CEK (Content Encryption Key)
-        let mut cek = [0u8; 32];
-        OsRng.fill_bytes(&mut cek);
+            // 2. Generate random IV for AES-GCM
+            let mut iv_bytes = [0u8; 12];
+            OsRng.fill_bytes(&mut iv_bytes);
 
-        // 2. Generate random IV for AES-GCM
-        let mut iv_bytes = [0u8; 12];
-        OsRng.fill_bytes(&mut iv_bytes);
-
-        // 3. Generate ephemeral key pair for ECDH
-        let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
+            // 3. Generate ephemeral key pair for ECDH
+            let ephemeral_secret = P256EphemeralSecret::random(&mut OsRng);
         let ephemeral_public_key = ephemeral_secret.public_key();
 
         // Convert ephemeral public key to JWK coordinates
@@ -265,6 +264,15 @@ impl LocalAgentKey {
         };
 
         Ok(jwe)
+        }
+
+        #[cfg(not(feature = "crypto-p256"))]
+        {
+            let _ = (plaintext, recipient_jwk, protected_header);
+            Err(Error::Cryptography(
+                "P-256 encryption not available - enable crypto-p256 feature".to_string(),
+            ))
+        }
     }
 
     /// Create a new LocalAgentKey from a Secret and key type
@@ -1232,9 +1240,8 @@ impl DecryptionKey for LocalAgentKey {
     }
 
     async fn unwrap_jwe(&self, jwe: &Jwe) -> Result<Vec<u8>> {
-        use p256::elliptic_curve::sec1::FromEncodedPoint;
-        use p256::{EncodedPoint as P256EncodedPoint, PublicKey as P256PublicKey};
-
+        #[cfg(feature = "crypto-p256")]
+        {
         // 1. Find the recipient that matches our key ID
         let recipient = jwe
             .recipients
@@ -1359,6 +1366,15 @@ impl DecryptionKey for LocalAgentKey {
             .map_err(|e| Error::Cryptography(format!("AES-GCM decryption failed: {:?}", e)))?;
 
         Ok(buffer)
+        }
+
+        #[cfg(not(feature = "crypto-p256"))]
+        {
+            let _ = jwe;
+            Err(Error::Cryptography(
+                "P-256 decryption not available - enable crypto-p256 feature".to_string(),
+            ))
+        }
     }
 }
 
