@@ -1122,12 +1122,13 @@ impl DIDKeyGenerator {
                 id: key.did.clone(),
                 type_: SecretType::JsonWebKey2020,
                 secret_material: SecretMaterial::JWK {
+                    // public_key is uncompressed [0x04 || x(32) || y(32)], skip the 0x04 prefix
                     private_key_jwk: serde_json::json!({
                         "kty": "EC",
                         "kid": kid,
                         "crv": "P-256",
-                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
-                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[1..33]),
+                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[33..65]),
                         "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
                     }),
                 },
@@ -1137,12 +1138,13 @@ impl DIDKeyGenerator {
                 id: key.did.clone(),
                 type_: SecretType::JsonWebKey2020,
                 secret_material: SecretMaterial::JWK {
+                    // public_key is uncompressed [0x04 || x(32) || y(32)], skip the 0x04 prefix
                     private_key_jwk: serde_json::json!({
                         "kty": "EC",
                         "kid": kid,
                         "crv": "secp256k1",
-                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
-                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[1..33]),
+                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[33..65]),
                         "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
                     }),
                 },

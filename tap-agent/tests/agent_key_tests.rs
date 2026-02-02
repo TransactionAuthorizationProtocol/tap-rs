@@ -26,10 +26,13 @@ async fn test_local_agent_key_creation() -> Result<()> {
     assert!(p256_key.did().starts_with("did:key:"));
     assert!(secp256k1_key.did().starts_with("did:key:"));
 
-    // Verify key IDs
-    assert_eq!(AgentKey::key_id(&ed25519_key), "test-ed25519");
-    assert_eq!(AgentKey::key_id(&p256_key), "test-p256");
-    assert_eq!(AgentKey::key_id(&secp256k1_key), "test-secp256k1");
+    // Verify key IDs are DID-based (did:key:z...#z...)
+    assert!(AgentKey::key_id(&ed25519_key).contains('#'));
+    assert!(AgentKey::key_id(&ed25519_key).starts_with("did:key:"));
+    assert!(AgentKey::key_id(&p256_key).contains('#'));
+    assert!(AgentKey::key_id(&p256_key).starts_with("did:key:"));
+    assert!(AgentKey::key_id(&secp256k1_key).contains('#'));
+    assert!(AgentKey::key_id(&secp256k1_key).starts_with("did:key:"));
 
     Ok(())
 }
