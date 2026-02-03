@@ -19,12 +19,7 @@ export default defineConfig({
       formats: ['es'],
     },
     rollupOptions: {
-      external: ['tap-wasm'],
-      output: {
-        globals: {
-          'tap-wasm': 'TapWasm',
-        },
-      },
+      external: [],
     },
     target: 'es2022',
     minify: 'terser',

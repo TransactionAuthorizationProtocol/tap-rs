@@ -60,8 +60,7 @@
     "prepublishOnly": "npm run clean && npm run prepare:publish && npm run test"
   },
   "dependencies": {
-    "@taprsvp/types": "^1.9.0",
-    "tap-wasm": "file:../tap-wasm/pkg"
+    "@taprsvp/types": "^1.9.0"
   },
   "devDependencies": {
     "@types/node": "^24.3.0",
