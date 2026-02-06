@@ -136,6 +136,7 @@ fn load_and_display_keys(storage_path: &Path) -> Result<()> {
 }
 
 /// Generate keys of different types
+#[allow(clippy::vec_init_then_push)]
 fn generate_multiple_key_types(storage_path: &PathBuf) -> Result<()> {
     println!("=== Generating Multiple Key Types ===");
 
@@ -143,15 +144,20 @@ fn generate_multiple_key_types(storage_path: &PathBuf) -> Result<()> {
     let mut storage =
         KeyStorage::load_from_path(storage_path).unwrap_or_else(|_| KeyStorage::new());
 
-    // Generate one key of each type
-    let key_types = vec![
-        (KeyType::Ed25519, "Ed25519 - Fast and secure"),
-        (KeyType::P256, "P256 - NIST standard"),
-        (
-            KeyType::Secp256k1,
-            "Secp256k1 - Bitcoin/Ethereum compatible",
-        ),
-    ];
+    // Generate one key of each type (using push with #[cfg] conditionals)
+    let mut key_types = vec![];
+
+    #[cfg(feature = "crypto-ed25519")]
+    key_types.push((KeyType::Ed25519, "Ed25519 - Fast and secure"));
+
+    #[cfg(feature = "crypto-p256")]
+    key_types.push((KeyType::P256, "P256 - NIST standard"));
+
+    #[cfg(feature = "crypto-secp256k1")]
+    key_types.push((
+        KeyType::Secp256k1,
+        "Secp256k1 - Bitcoin/Ethereum compatible",
+    ));
 
     for (key_type, description) in key_types {
         println!("\nGenerating {} key...", description);

@@ -21,6 +21,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "crypto-p256")]
     fn test_p256_key_generation() {
         let key_manager = DefaultKeyManager::new();
         let options = DIDGenerationOptions {
@@ -33,6 +34,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "crypto-secp256k1")]
     fn test_secp256k1_key_generation() {
         let key_manager = DefaultKeyManager::new();
         let options = DIDGenerationOptions {

@@ -25,6 +25,9 @@ Cargo.lock
 **/dist/
 **/node_modules/
 
+# TypeScript WASM bundled files
+tap-ts/wasm/
+
 # Environment variables
 .env
 .env.local

@@ -40,13 +40,12 @@ pub fn js_to_tap_message(js_message: &JsValue) -> Result<PlainMessage, String> {
 
     // Extract body
     let body = if let Ok(body_js) = Reflect::get(js_message, &JsValue::from_str("body")) {
-        let body_str = js_sys::JSON::stringify(&body_js)
-            .map_err(|_| "Failed to stringify body".to_string())?
-            .as_string()
-            .ok_or_else(|| "Body is not a string".to_string())?;
-
-        serde_json::from_str(&body_str)
-            .map_err(|e| format!("Failed to parse body as JSON: {}", e))?
+        if body_js.is_null() || body_js.is_undefined() {
+            serde_json::json!({})
+        } else {
+            serde_wasm_bindgen::from_value(body_js)
+                .map_err(|e| format!("Failed to deserialize body: {}", e))?
+        }
     } else {
         serde_json::json!({})
     };

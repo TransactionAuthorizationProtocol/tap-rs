@@ -16,8 +16,13 @@ jobs:
         with:
           node-version: '18'
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
       - name: Run cargo tests
         run: cargo test --workspace --all-targets --release
+      - name: Build tap-wasm package
+        working-directory: tap-wasm
+        run: wasm-pack build --target web --out-dir pkg
       - name: Install Node dependencies
         working-directory: tap-ts
         run: npm ci

@@ -20,7 +20,7 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 - **[tap-node](./tap-node/README.md)**: TAP node orchestration with per-agent storage isolation, multi-recipient message delivery, and Travel Rule processor
 - **[tap-http](./tap-http/README.md)**: HTTP DIDComm server implementation
 - **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
-- **[tap-ts](./tap-ts/README.md)**: TypeScript/WASM wrapper for browser and Node.js environments
+- **[tap-ts](./tap-ts/README.md)**: TypeScript SDK with full DIDComm v2 support (npm: @taprsvp/agent)
 - **[tap-mcp](./tap-mcp/README.md)**: Model Context Protocol server for AI/LLM integration
 
 ## Overview
@@ -368,7 +368,50 @@ tap-agent-cli keys view did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 tap-agent-cli keys set-default did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
 ```
 
-For TypeScript and WebAssembly bindings, see the [tap-ts README](./tap-ts/README.md).
+### TypeScript/JavaScript SDK
+
+For browser and Node.js applications, use the @taprsvp/agent npm package:
+
+```bash
+npm install @taprsvp/agent
+```
+
+```typescript
+import { TapAgent } from '@taprsvp/agent';
+
+// Create an agent
+const agent = await TapAgent.create({ keyType: 'Ed25519' });
+console.log('Agent DID:', agent.did);
+
+// Create and send a transfer
+const transfer = await agent.createMessage('Transfer', {
+  amount: '100.00',
+  asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+  originator: {
+    '@id': agent.did,
+    '@type': 'https://schema.org/Person',
+    name: 'Alice Smith'
+  },
+  beneficiary: {
+    '@id': recipientDid,
+    '@type': 'https://schema.org/Person',
+    name: 'Bob Jones'
+  },
+  agents: []  // Add any agents involved in the transaction
+});
+
+const packed = await agent.pack(transfer);
+// Send packed.message over your transport...
+```
+
+The TypeScript SDK provides:
+- 🔐 Full DIDComm v2 support with Veramo compatibility
+- 🚀 Lightweight: 3.72KB gzipped + 272KB WASM
+- 🔑 Multiple key types (Ed25519, P-256, secp256k1)
+- 🌐 Browser and Node.js support
+- 📦 Zero runtime dependencies
+
+See the [tap-ts README](./tap-ts/README.md) for complete documentation.
 
 ## Common Use Cases
 

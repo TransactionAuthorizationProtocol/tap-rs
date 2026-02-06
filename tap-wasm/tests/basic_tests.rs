@@ -1,46 +1,57 @@
 #![cfg(target_arch = "wasm32")]
 
-use tap_wasm::{Message, MessageType};
+use js_sys::Object;
+use tap_wasm::{generate_uuid_v4, WasmTapAgent};
+use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
 
-#[wasm_bindgen_test]
-fn test_message_creation() {
-    let message_id = "msg_test_123";
-    let message = Message::new(
-        message_id.to_string(),
-        "Transfer".to_string(),
-        "1.0".to_string(),
-    );
+// MessageType enum test removed - no longer part of WASM API
 
-    assert_eq!(message.id(), message_id);
-    assert_eq!(message.message_type(), "Transfer");
-    assert_eq!(message.version(), "1.0");
+#[wasm_bindgen_test]
+fn test_uuid_generation() {
+    let uuid1 = generate_uuid_v4();
+    let uuid2 = generate_uuid_v4();
+
+    // UUIDs should be different
+    assert_ne!(uuid1, uuid2);
+
+    // UUIDs should have proper format (36 characters with dashes)
+    assert_eq!(uuid1.len(), 36);
+    assert_eq!(uuid2.len(), 36);
 }
 
 #[wasm_bindgen_test]
-fn test_message_properties() {
-    let message_id = "msg_test_456";
-    let mut message = Message::new(
-        message_id.to_string(),
-        "Transfer".to_string(),
-        "1.0".to_string(),
-    );
+fn test_wasm_tap_agent_creation() {
+    let config = Object::new();
+    js_sys::Reflect::set(
+        &config,
+        &JsValue::from_str("debug"),
+        &JsValue::from_bool(true),
+    )
+    .unwrap();
+    js_sys::Reflect::set(
+        &config,
+        &JsValue::from_str("nickname"),
+        &JsValue::from_str("test-agent"),
+    )
+    .unwrap();
 
-    // Set properties
-    message.set_from_did(Some("did:example:sender".to_string()));
-    message.set_to_did(Some("did:example:recipient".to_string()));
+    let agent_result = WasmTapAgent::new(config.into());
+    assert!(agent_result.is_ok());
 
-    // Check properties
-    assert_eq!(message.from_did(), Some("did:example:sender".to_string()));
-    assert_eq!(message.to_did(), Some("did:example:recipient".to_string()));
+    let agent = agent_result.unwrap();
+    let did = agent.get_did();
 
-    // Update properties
-    message.set_message_type("Authorize".to_string());
-    message.set_version("1.1".to_string());
+    // DID should not be empty
+    assert!(!did.is_empty());
 
-    // Check updated properties
-    assert_eq!(message.message_type(), "Authorize");
-    assert_eq!(message.version(), "1.1");
+    // Should have nickname
+    let nickname = agent.nickname();
+    assert_eq!(nickname, Some("test-agent".to_string()));
 }
+
+// TapNode test removed - no longer part of WASM API
+
+// Message creation test removed - TypeScript handles message creation

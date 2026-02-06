@@ -58,7 +58,7 @@
     
     <script type="module">
         // Import the WASM module
-        import init, { WasmTapAgent, TapNode, MessageType, generate_uuid_v4 } from './tap_wasm.js';
+        import init, { WasmTapAgent, generate_uuid_v4 } from '../pkg/tap_wasm.js';
         
         // Initialize the WASM module
         init().then(() => {
@@ -96,26 +96,19 @@
                 }
                 
                 try {
-                    transferMessage = agent.createMessage('https://tap.rsvp/schema/1.0#Transfer');
-                    
-                    // Set some example fields
-                    transferMessage.body = {
-                        asset: 'eth:1:0x123456789abcdef',
-                        amount: '1.0',
-                        originator: {
-                            '@id': 'did:example:originator',
-                            role: 'originator'
+                    transferMessage = {
+                        id: generate_uuid_v4(),
+                        type: 'https://tap.rsvp/schema/1.0#Transfer',
+                        from: agent.get_did(),
+                        to: [agent.get_did()],
+                        body: {
+                            asset: 'eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7',
+                            amount: '1.0',
+                            originator: { '@id': agent.get_did() },
+                            beneficiary: { '@id': agent.get_did() },
+                            agents: []
                         },
-                        beneficiary: {
-                            '@id': 'did:example:beneficiary',
-                            role: 'beneficiary'
-                        },
-                        agents: [
-                            {
-                                '@id': agent.get_did(),
-                                role: 'agent'
-                            }
-                        ]
+                        created_time: Math.floor(Date.now() / 1000)
                     };
                     
                     document.getElementById('output').textContent = `// Transfer message created:\n${JSON.stringify(transferMessage, null, 2)}`;

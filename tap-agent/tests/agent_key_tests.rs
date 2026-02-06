@@ -5,6 +5,11 @@ use tap_agent::{
 };
 
 #[tokio::test]
+#[cfg(all(
+    feature = "crypto-ed25519",
+    feature = "crypto-p256",
+    feature = "crypto-secp256k1"
+))]
 async fn test_local_agent_key_creation() -> Result<()> {
     // Test creating keys for different types
     let ed25519_key = LocalAgentKey::generate_ed25519("test-ed25519")?;
@@ -21,15 +26,23 @@ async fn test_local_agent_key_creation() -> Result<()> {
     assert!(p256_key.did().starts_with("did:key:"));
     assert!(secp256k1_key.did().starts_with("did:key:"));
 
-    // Verify key IDs
-    assert_eq!(AgentKey::key_id(&ed25519_key), "test-ed25519");
-    assert_eq!(AgentKey::key_id(&p256_key), "test-p256");
-    assert_eq!(AgentKey::key_id(&secp256k1_key), "test-secp256k1");
+    // Verify key IDs are DID-based (did:key:z...#z...)
+    assert!(AgentKey::key_id(&ed25519_key).contains('#'));
+    assert!(AgentKey::key_id(&ed25519_key).starts_with("did:key:"));
+    assert!(AgentKey::key_id(&p256_key).contains('#'));
+    assert!(AgentKey::key_id(&p256_key).starts_with("did:key:"));
+    assert!(AgentKey::key_id(&secp256k1_key).contains('#'));
+    assert!(AgentKey::key_id(&secp256k1_key).starts_with("did:key:"));
 
     Ok(())
 }
 
 #[tokio::test]
+#[cfg(all(
+    feature = "crypto-ed25519",
+    feature = "crypto-p256",
+    feature = "crypto-secp256k1"
+))]
 async fn test_sign_and_verify() -> Result<()> {
     // Test each key type
     let test_data = b"test message to sign";
@@ -94,6 +107,7 @@ async fn test_jws_creation_and_verification() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(feature = "crypto-p256")]
 async fn test_encrypt_and_decrypt() -> Result<()> {
     let key = LocalAgentKey::generate_p256("test-enc-key")?;
     let plaintext = b"secret message for encryption";
@@ -112,6 +126,11 @@ async fn test_encrypt_and_decrypt() -> Result<()> {
 }
 
 #[tokio::test]
+#[cfg(all(
+    feature = "crypto-ed25519",
+    feature = "crypto-p256",
+    feature = "crypto-secp256k1"
+))]
 async fn test_recommended_algorithms() -> Result<()> {
     // Ed25519 should recommend EdDSA
     let ed25519_key = LocalAgentKey::generate_ed25519("test-ed25519")?;

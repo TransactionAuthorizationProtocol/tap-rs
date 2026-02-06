@@ -218,6 +218,7 @@ async fn test_from_private_key_ed25519() {
 }
 
 #[tokio::test]
+#[cfg(feature = "crypto-p256")]
 #[ignore = "P-256 key signature verification needs to be fixed"]
 async fn test_from_private_key_p256() {
     use p256::ecdsa::SigningKey as P256SigningKey;
