@@ -1525,10 +1525,7 @@ impl SyncDIDResolver for MultiResolver {
 use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
-use js_sys::{Function, Promise};
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-use wasm_bindgen_futures::JsFuture;
+use js_sys::Function;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -1543,7 +1540,6 @@ extern "C" {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct JsDIDResolver {
-    method: String,
     resolve_fn: Function,
 }
 
@@ -1552,10 +1548,7 @@ pub struct JsDIDResolver {
 impl JsDIDResolver {
     #[wasm_bindgen(constructor)]
     pub fn new(resolve_fn: Function) -> Self {
-        Self {
-            method: "".to_string(),
-            resolve_fn,
-        }
+        Self { resolve_fn }
     }
 
     #[wasm_bindgen]
@@ -1579,6 +1572,7 @@ impl JsDIDResolver {
 #[derive(Debug)]
 pub struct JsDIDMethodResolver {
     method: String,
+    #[allow(dead_code)] // Reserved for future async JS resolver implementation
     resolve_fn: Function,
 }
 

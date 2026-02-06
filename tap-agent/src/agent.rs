@@ -875,25 +875,6 @@ impl TapAgent {
         }
     }
 
-    /// Internal method to process a PlainMessage
-    async fn process_message_internal(&self, message: PlainMessage) -> Result<()> {
-        // This is where actual message processing logic would go
-        // For now, just log that we processed it
-        debug!(
-            "Processing message: {} of type {}",
-            message.id, message.type_
-        );
-
-        // TODO: Add actual message processing logic here
-        // This could include:
-        // - Validating the message against policies
-        // - Updating internal state
-        // - Triggering workflows
-        // - Generating responses
-
-        Ok(())
-    }
-
     /// Determine the appropriate security mode for a message type
     ///
     /// This method implements TAP protocol rules for which security modes
@@ -1450,11 +1431,14 @@ impl crate::agent::Agent for TapAgent {
         };
 
         // Decrypt the message
-        let plain_message =
+        let plain_message: PlainMessage<Value> =
             crate::message::Jwe::unpack(&jwe, &*self.key_manager, unpack_options).await?;
 
-        // Process the decrypted message
-        self.process_message_internal(plain_message).await
+        debug!(
+            "Processed encrypted message: {} of type {}",
+            plain_message.id, plain_message.type_
+        );
+        Ok(())
     }
 
     async fn receive_plain_message(&self, message: PlainMessage) -> Result<()> {
@@ -1463,7 +1447,7 @@ impl crate::agent::Agent for TapAgent {
         debug!("Message ID: {}", message.id);
         debug!("Message Type: {}", message.type_);
 
-        self.process_message_internal(message).await
+        Ok(())
     }
 
     async fn receive_message(&self, raw_message: &str) -> Result<PlainMessage> {
