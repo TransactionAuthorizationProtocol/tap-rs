@@ -1,3 +1,5 @@
+#![allow(dead_code)] // wasm_bindgen_test functions are not detected as tests by clippy
+
 use js_sys::{Array, Object, Promise, Reflect};
 use tap_wasm::WasmTapAgent;
 use wasm_bindgen::{JsCast, JsValue};

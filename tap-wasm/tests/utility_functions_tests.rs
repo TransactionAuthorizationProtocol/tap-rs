@@ -1,3 +1,5 @@
+#![allow(dead_code)] // wasm_bindgen_test functions are not detected as tests by clippy
+
 use tap_wasm::{generate_private_key, generate_uuid, generate_uuid_v4};
 use wasm_bindgen_test::*;
 

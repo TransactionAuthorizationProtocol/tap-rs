@@ -15,12 +15,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Code Quality
 
 ### Before Committing
-Always run these commands before committing:
+Always run the exact same checks that CI runs before committing. All checks must pass with no warnings or errors:
+
 ```bash
-cargo fmt --all
-cargo clippy --all --all-targets
-cargo test --all
+# 1. Format check (CI: rustfmt)
+cargo fmt --all --check
+
+# 2. Clippy with release profile (CI: cargo clippy)
+cargo clippy --workspace --all-targets --release
+
+# 3. Tests with release profile (CI: cargo test)
+cargo test --workspace --all-targets --release
+
+# 4. TypeScript tests (CI: npm test)
+cd tap-ts && npm ci && npm test
 ```
+
+If formatting fails, run `cargo fmt --all` to fix it automatically.
 
 ### Comments
 - Keep comments concise and in the present tense
@@ -67,11 +78,12 @@ Good:
 - Messages defined in @tap-msg/src/message/ may have a transaction_id. This is not meant to be serialized directly but maps to a `thid` in the parent didcomm message or the `id` if an Initiator like a Transfer, Payment or Connect.
 
 ## Workflow Guidelines
-- Always run the tests in ci before finishing a task
+- Always run the full CI checks (see "Before Committing" section) before finishing a task
 - When starting a new feature always create a new branch using the feat/xxx convention
 - Always use TDD by writing tests first
 - Confirm with the user that the tests are correct and commit them before implementing them
-- Once the user tells you push to github and create a new pr using the `gh` tool, but always run the same ci tools first before pushing
+- Once the user tells you push to github and create a new pr using the `gh` tool, but always run the same CI checks first before pushing
+- If tests fail with database errors, clean up test databases: `rm -rf /tmp/test-tap`
 
 # Planning
 

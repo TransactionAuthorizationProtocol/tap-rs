@@ -1,8 +1,5 @@
 use tap_agent::{
-    agent_key::{AgentKey, JwsAlgorithm},
-    error::Result,
-    key_manager::KeyManagerBuilder,
-    KeyManager,
+    agent_key::JwsAlgorithm, error::Result, key_manager::KeyManagerBuilder, KeyManager,
 };
 
 #[tokio::test]

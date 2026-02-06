@@ -1005,23 +1005,27 @@ impl EncryptionKey for LocalAgentKey {
             .map_err(|e| Error::Cryptography(format!("AES-GCM encryption failed: {}", e)))?;
 
         // 7. Process each recipient
-        let mut jwe_recipients = Vec::with_capacity(recipients.len());
+        #[cfg(not(feature = "crypto-p256"))]
+        {
+            let _ = recipients; // Suppress unused variable warning
+            return Err(Error::Cryptography(
+                "P-256 encryption not available - enable crypto-p256 feature".to_string(),
+            ));
+        }
 
-        #[allow(clippy::never_loop)] // Loop body returns early when crypto-p256 feature is disabled
-        for recipient in recipients {
-            // Extract recipient's public key as JWK
-            let recipient_jwk = recipient.public_key_jwk()?;
+        #[cfg(feature = "crypto-p256")]
+        let jwe_recipients = {
+            let mut recipients_vec = Vec::with_capacity(recipients.len());
 
-            // For a real implementation, we would go through proper ECDH-ES+A256KW
-            // For now, we'll simulate the encrypted key with a simple approach
+            for recipient in recipients {
+                // Extract recipient's public key as JWK
+                let recipient_jwk = recipient.public_key_jwk()?;
 
-            // Extract key type and curve
-            let kty = recipient_jwk.get("kty").and_then(|v| v.as_str());
-            let crv = recipient_jwk.get("crv").and_then(|v| v.as_str());
+                // Extract key type and curve
+                let kty = recipient_jwk.get("kty").and_then(|v| v.as_str());
+                let crv = recipient_jwk.get("crv").and_then(|v| v.as_str());
 
-            #[cfg(feature = "crypto-p256")]
-            let encrypted_key = {
-                match (kty, crv) {
+                let encrypted_key = match (kty, crv) {
                     (Some("EC"), Some("P-256")) => {
                         // Extract the public key coordinates
                         let x_b64 =
@@ -1096,33 +1100,29 @@ impl EncryptionKey for LocalAgentKey {
                         let mut kek_array = [0u8; 32];
                         kek_array.copy_from_slice(&kek);
 
-                        Ok(crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?)
+                        crate::crypto::wrap_key_aes_kw(&kek_array, &cek)?
                     }
                     // Handle other key types
-                    _ => Err(Error::Cryptography(format!(
-                        "Unsupported recipient key type for encryption: kty={:?}, crv={:?}",
-                        kty, crv
-                    ))),
-                }
-            }?;
+                    _ => {
+                        return Err(Error::Cryptography(format!(
+                            "Unsupported recipient key type for encryption: kty={:?}, crv={:?}",
+                            kty, crv
+                        )));
+                    }
+                };
 
-            #[cfg(not(feature = "crypto-p256"))]
-            let encrypted_key: Vec<u8> = {
-                let _ = (kty, crv);
-                return Err(Error::Cryptography(
-                    "P-256 encryption not available - enable crypto-p256 feature".to_string(),
-                ));
-            };
+                // Add this recipient to the JWE
+                recipients_vec.push(JweRecipient {
+                    encrypted_key: base64::engine::general_purpose::STANDARD.encode(encrypted_key),
+                    header: JweHeader {
+                        kid: (**recipient).key_id().to_string(),
+                        sender_kid: Some(crate::agent_key::AgentKey::key_id(self).to_string()),
+                    },
+                });
+            }
 
-            // Add this recipient to the JWE
-            jwe_recipients.push(JweRecipient {
-                encrypted_key: base64::engine::general_purpose::STANDARD.encode(encrypted_key),
-                header: JweHeader {
-                    kid: (**recipient).key_id().to_string(),
-                    sender_kid: Some(crate::agent_key::AgentKey::key_id(self).to_string()),
-                },
-            });
-        }
+            recipients_vec
+        };
 
         // 8. Serialize and encode the protected header
         let protected_json = serde_json::to_string(&protected).map_err(|e| {

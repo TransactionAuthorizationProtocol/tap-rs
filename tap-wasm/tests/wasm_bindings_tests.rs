@@ -1,7 +1,8 @@
+#![allow(dead_code)] // wasm_bindgen_test functions are not detected as tests by clippy
+
 use js_sys::{Object, Reflect};
-use tap_wasm::{generate_private_key, generate_uuid, WasmTapAgent};
+use tap_wasm::{generate_private_key, WasmTapAgent};
 use wasm_bindgen::JsValue;
-use wasm_bindgen_futures::JsFuture;
 use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
