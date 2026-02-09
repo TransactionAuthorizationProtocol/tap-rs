@@ -15,17 +15,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Code Quality
 
 ### Before Committing
-Always run the exact same checks that CI runs before committing. All checks must pass with no warnings or errors:
+Always run the exact same checks that CI runs before committing. All checks must pass with no warnings or errors.
+
+**IMPORTANT:** CI uses `actions-rust-lang/setup-rust-toolchain@v1` which sets `RUSTFLAGS="-D warnings"`, treating all warnings as errors. Always check `.github/workflows/ci.yml` for the exact commands if issues arise.
 
 ```bash
 # 1. Format check (CI: rustfmt)
 cargo fmt --all --check
 
-# 2. Clippy with release profile (CI: cargo clippy)
-cargo clippy --workspace --all-targets --release
+# 2. Clippy with warnings as errors (CI: cargo clippy)
+RUSTFLAGS="-D warnings" cargo clippy --workspace --all-targets --release
 
-# 3. Tests with release profile (CI: cargo test)
-cargo test --workspace --all-targets --release
+# 3. Tests with warnings as errors (CI: cargo test)
+RUSTFLAGS="-D warnings" cargo test --workspace --all-targets --release
 
 # 4. TypeScript tests (CI: npm test)
 cd tap-ts && npm ci && npm test
