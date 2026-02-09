@@ -1004,18 +1004,18 @@ impl EncryptionKey for LocalAgentKey {
             .encrypt_in_place_detached(nonce, b"", &mut buffer)
             .map_err(|e| Error::Cryptography(format!("AES-GCM encryption failed: {}", e)))?;
 
-        // 7. Process each recipient
+        // 7. Process each recipient and create JWE
         #[cfg(not(feature = "crypto-p256"))]
         {
-            let _ = recipients; // Suppress unused variable warning
+            let _ = (recipients, protected, buffer, tag, iv_bytes); // Suppress unused variable warnings
             return Err(Error::Cryptography(
                 "P-256 encryption not available - enable crypto-p256 feature".to_string(),
             ));
         }
 
         #[cfg(feature = "crypto-p256")]
-        let jwe_recipients = {
-            let mut recipients_vec = Vec::with_capacity(recipients.len());
+        {
+            let mut jwe_recipients = Vec::with_capacity(recipients.len());
 
             for recipient in recipients {
                 // Extract recipient's public key as JWK
@@ -1112,7 +1112,7 @@ impl EncryptionKey for LocalAgentKey {
                 };
 
                 // Add this recipient to the JWE
-                recipients_vec.push(JweRecipient {
+                jwe_recipients.push(JweRecipient {
                     encrypted_key: base64::engine::general_purpose::STANDARD.encode(encrypted_key),
                     header: JweHeader {
                         kid: (**recipient).key_id().to_string(),
@@ -1121,26 +1121,24 @@ impl EncryptionKey for LocalAgentKey {
                 });
             }
 
-            recipients_vec
-        };
+            // 8. Serialize and encode the protected header
+            let protected_json = serde_json::to_string(&protected).map_err(|e| {
+                Error::Serialization(format!("Failed to serialize protected header: {}", e))
+            })?;
 
-        // 8. Serialize and encode the protected header
-        let protected_json = serde_json::to_string(&protected).map_err(|e| {
-            Error::Serialization(format!("Failed to serialize protected header: {}", e))
-        })?;
+            let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
 
-        let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
+            // 9. Create the JWE
+            let jwe = Jwe {
+                ciphertext: base64::engine::general_purpose::STANDARD.encode(buffer),
+                protected: protected_b64,
+                recipients: jwe_recipients,
+                tag: base64::engine::general_purpose::STANDARD.encode(tag),
+                iv: base64::engine::general_purpose::STANDARD.encode(iv_bytes),
+            };
 
-        // 9. Create the JWE
-        let jwe = Jwe {
-            ciphertext: base64::engine::general_purpose::STANDARD.encode(buffer),
-            protected: protected_b64,
-            recipients: jwe_recipients,
-            tag: base64::engine::general_purpose::STANDARD.encode(tag),
-            iv: base64::engine::general_purpose::STANDARD.encode(iv_bytes),
-        };
-
-        Ok(jwe)
+            Ok(jwe)
+        }
     }
 }
 

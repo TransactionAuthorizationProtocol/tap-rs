@@ -8,6 +8,7 @@
 //! It also provides functionality to generate new DIDs with different cryptographic curves.
 
 use crate::key_manager::{Secret, SecretMaterial, SecretType};
+#[cfg(not(target_arch = "wasm32"))]
 use async_trait::async_trait;
 use base64::Engine;
 #[cfg(feature = "crypto-ed25519")]
@@ -29,8 +30,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, RwLock};
-use tracing::{debug, warn};
+use tracing::debug;
+#[cfg(not(target_arch = "wasm32"))]
+use tracing::warn;
 
 use crate::error::{Error, Result};
 

@@ -8,18 +8,22 @@ use crate::key_manager::KeyManager; // Add KeyManager trait
 use crate::message::SecurityMode;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::message_packing::{PackOptions, Packable, UnpackOptions, Unpackable};
+#[cfg(not(target_arch = "wasm32"))]
 use async_trait::async_trait;
 #[cfg(feature = "native")]
 use reqwest::Client;
 #[cfg(target_arch = "wasm32")]
 use serde::de::DeserializeOwned;
+#[cfg(not(target_arch = "wasm32"))]
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(feature = "native")]
 use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
 use tap_msg::didcomm::{PlainMessage, PlainMessageExt};
 use tap_msg::TapMessageBody;
+#[cfg(not(target_arch = "wasm32"))]
 use tracing::{debug, error, info, warn};
 
 /// Type alias for enhanced agent information: (DID, policies, metadata)
