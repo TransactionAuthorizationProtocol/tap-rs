@@ -1,40 +1,23 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { 
-  TapAgent, 
-  createTransferMessage, 
-  createPaymentMessage, 
+import {
+  TapAgent,
+  createTransferMessage,
+  createPaymentMessage,
   createConnectMessage,
   createAuthorizeMessage,
   createBasicMessage,
-  createDIDCommMessage 
+  createDIDCommMessage
 } from '../src/index.js';
 // import { generatePrivateKey } from '../src/utils.js';
 import type { DIDCommMessage } from '../src/types.js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import init from 'tap-wasm';
-
-// Get the path to the WASM binary
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const wasmPath = join(__dirname, '../../tap-wasm/pkg/tap_wasm_bg.wasm');
 
 describe('Real WASM Interoperability Tests', () => {
   let aliceAgent: TapAgent;
   let bobAgent: TapAgent;
 
   beforeAll(async () => {
-    // Initialize the WASM module with the binary file for Node.js environment
-    try {
-      const wasmBinary = readFileSync(wasmPath);
-      await init(wasmBinary);
-    } catch (error) {
-      console.error('Failed to initialize WASM:', error);
-      throw error;
-    }
-    
     // Create real agents with actual WASM
+    // TapAgent.create() handles WASM initialization internally
     aliceAgent = await TapAgent.create({ keyType: 'Ed25519' });
     bobAgent = await TapAgent.create({ keyType: 'Ed25519' });
   });

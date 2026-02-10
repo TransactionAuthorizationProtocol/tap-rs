@@ -1,29 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { TapAgent, createTransferMessage, createAuthorizeMessage, createDIDCommMessage } from '../src/index.js';
 import type { DIDCommMessage } from '../src/types.js';
-import { readFileSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-// Import the real WASM module for true integration testing
-import init from 'tap-wasm';
-
-// Get the path to the WASM binary
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const wasmPath = join(__dirname, '../../tap-wasm/pkg/tap_wasm_bg.wasm');
 
 describe('Integration Tests', () => {
   const createdAgents: TapAgent[] = [];
 
   beforeEach(async () => {
-    // Initialize the WASM module with the binary file for Node.js environment
-    try {
-      const wasmBinary = readFileSync(wasmPath);
-      await init(wasmBinary);
-    } catch (error) {
-      console.error('Failed to initialize WASM:', error);
-      throw error;
-    }
+    // WASM initialization is handled internally by TapAgent.create()
   });
 
   afterEach(() => {

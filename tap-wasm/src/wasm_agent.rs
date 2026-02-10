@@ -48,8 +48,7 @@ impl WasmTapAgent {
         private_key_hex: String,
         key_type_str: String,
     ) -> Result<WasmTapAgent, JsValue> {
-        #[cfg(feature = "debug")]
-        console_error_panic_hook::set_once();
+        // Panic hook is set up in lib.rs start() function
 
         #[cfg(any(
             feature = "crypto-ed25519",
@@ -112,8 +111,7 @@ impl WasmTapAgent {
     /// Creates a new agent with the specified configuration
     #[wasm_bindgen(constructor)]
     pub fn new(config: JsValue) -> std::result::Result<WasmTapAgent, JsValue> {
-        #[cfg(feature = "debug")]
-        console_error_panic_hook::set_once();
+        // Panic hook is set up in lib.rs start() function
 
         let nickname =
             if let Ok(nickname_prop) = Reflect::get(&config, &JsValue::from_str("nickname")) {

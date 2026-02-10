@@ -6,6 +6,9 @@ node_modules/
 dist/
 build/
 
+# Generated WASM files (copied from tap-wasm/pkg during build)
+wasm/
+
 # TypeScript
 *.tsbuildinfo
 

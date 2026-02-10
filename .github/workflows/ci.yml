@@ -23,6 +23,12 @@ jobs:
       - name: Build tap-wasm package
         working-directory: tap-wasm
         run: wasm-pack build --target web --out-dir pkg
+      - name: Copy WASM files to tap-ts
+        run: |
+          mkdir -p tap-ts/wasm
+          cp tap-wasm/pkg/tap_wasm*.js tap-ts/wasm/
+          cp tap-wasm/pkg/tap_wasm*.wasm tap-ts/wasm/
+          cp tap-wasm/pkg/tap_wasm*.d.ts tap-ts/wasm/
       - name: Install Node dependencies
         working-directory: tap-ts
         run: npm ci
