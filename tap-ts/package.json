@@ -43,7 +43,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=16"
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsc --project tsconfig.build.json && vite build",
