@@ -6,8 +6,38 @@ let wasmModule: any = null;
 let wasmExports: any = null;
 
 /**
+ * Helper to load WASM binary from file system (Node.js only)
+ */
+async function loadWasmBinaryFromPaths(paths: string[]): Promise<Buffer | undefined> {
+  const { readFileSync } = await import('fs');
+
+  for (const wasmPath of paths) {
+    try {
+      return readFileSync(wasmPath);
+    } catch {
+      // Try next path
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Helper to get the directory name for the current module
+ */
+async function getModuleDir(): Promise<string> {
+  try {
+    const { fileURLToPath } = await import('url');
+    const { dirname } = await import('path');
+    const __filename = fileURLToPath(import.meta.url);
+    return dirname(__filename);
+  } catch {
+    return process.cwd();
+  }
+}
+
+/**
  * Initialize the WASM module
- * In production, loads from bundled wasm directory (with inlined base64 WASM)
+ * In production, loads from bundled wasm directory
  * In development, falls back to tap-wasm package
  */
 export async function initWasm(): Promise<any> {
@@ -15,12 +45,32 @@ export async function initWasm(): Promise<any> {
     return wasmModule;
   }
 
+  const isNodeJs = typeof window === 'undefined';
+
   try {
     // Try bundled WASM first (production / npm install path)
-    // The bundled JS has the WASM binary inlined as base64, so init() works without arguments
     const bundledModule = await import('../wasm/tap_wasm.js');
     const init = bundledModule.default;
-    wasmModule = await init();
+
+    if (isNodeJs) {
+      // In Node.js, we need to pass the WASM binary since fetch() with import.meta.url doesn't work
+      const { join } = await import('path');
+      const __dirname = await getModuleDir();
+
+      const possiblePaths = [
+        join(__dirname, '../wasm/tap_wasm_bg.wasm'),
+        join(process.cwd(), 'wasm/tap_wasm_bg.wasm'),
+      ];
+
+      const wasmBinary = await loadWasmBinaryFromPaths(possiblePaths);
+      if (!wasmBinary) {
+        throw new Error('Could not find bundled WASM file');
+      }
+      wasmModule = await init(wasmBinary);
+    } else {
+      // In browser, init() can fetch the WASM file itself
+      wasmModule = await init();
+    }
     wasmExports = bundledModule;
   } catch (bundledError) {
     // Fall back to development path (tap-wasm package)
@@ -28,23 +78,13 @@ export async function initWasm(): Promise<any> {
       const tapWasmModule = await import('tap-wasm');
       const init = tapWasmModule.default;
 
-      if (typeof window !== 'undefined') {
+      if (!isNodeJs) {
         // Browser environment
         wasmModule = await init();
       } else {
         // Node.js environment - provide WASM binary
-        const { readFileSync } = await import('fs');
         const { join } = await import('path');
-        const { fileURLToPath } = await import('url');
-        const { dirname } = await import('path');
-
-        let __dirname: string;
-        try {
-          const __filename = fileURLToPath(import.meta.url);
-          __dirname = dirname(__filename);
-        } catch {
-          __dirname = process.cwd();
-        }
+        const __dirname = await getModuleDir();
 
         const possiblePaths = [
           join(__dirname, '../../tap-wasm/pkg/tap_wasm_bg.wasm'),
@@ -53,16 +93,7 @@ export async function initWasm(): Promise<any> {
           join(process.cwd(), 'node_modules/tap-wasm/tap_wasm_bg.wasm'),
         ];
 
-        let wasmBinary: Buffer | undefined;
-        for (const wasmPath of possiblePaths) {
-          try {
-            wasmBinary = readFileSync(wasmPath);
-            break;
-          } catch {
-            // Try next path
-          }
-        }
-
+        const wasmBinary = await loadWasmBinaryFromPaths(possiblePaths);
         if (!wasmBinary) {
           throw new Error('Could not find WASM file in any of the expected locations');
         }
