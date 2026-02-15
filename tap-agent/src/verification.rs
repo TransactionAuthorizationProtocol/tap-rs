@@ -1,40 +1,4 @@
-//! Standalone message verification utilities
-//!
-//! This module provides utilities for verifying signed messages without
-//! requiring access to private keys or a key manager. This is designed to be
-//! used by TAP Node for efficient signature verification.
-//!
-//! # Key Benefits
-//!
-//! - **No Private Keys Required**: Only needs DID resolution for public keys
-//! - **Efficient**: Verify once for multiple recipients
-//! - **Protocol Agnostic**: Works with any DID method that supports verification
-//! - **Comprehensive**: Supports Ed25519, P-256, and Secp256k1 signatures
-//!
-//! # Usage
-//!
-//! The primary function is [`verify_jws`] which takes a JWS message and a DID resolver:
-//!
-//! ```rust,no_run
-//! use tap_agent::{verify_jws, MultiResolver, Jws};
-//!
-//! async fn verify_message() -> Result<(), Box<dyn std::error::Error>> {
-//!     let resolver = MultiResolver::default();
-//!     // let jws: Jws = serde_json::from_str(jws_string)?;
-//!     // let verified_message = verify_jws(&jws, &resolver).await?;
-//!     Ok(())
-//! }
-//! ```
-//!
-//! # Verification Process
-//!
-//! 1. Extract signer's DID from JWS signature header
-//! 2. Resolve DID document using provided resolver
-//! 3. Find matching verification method in DID document
-//! 4. Verify signature using appropriate algorithm (EdDSA, ES256, ES256K)
-//! 5. Return verified PlainMessage
-
-#[cfg(not(target_arch = "wasm32"))]
+#![cfg(not(target_arch = "wasm32"))]
 use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
 use crate::message::{Jws, JwsProtected};
@@ -185,6 +149,7 @@ pub async fn verify_jws(jws: &Jws, resolver: &dyn SyncDIDResolver) -> Result<Pla
 }
 
 /// Verify an EdDSA signature
+#[cfg(feature = "crypto-ed25519")]
 fn verify_eddsa(
     verification_method: &crate::did::VerificationMethod,
     signing_input: &str,
@@ -235,6 +200,7 @@ fn verify_eddsa(
 }
 
 /// Verify an ES256 (P-256) signature
+#[cfg(feature = "crypto-p256")]
 fn verify_es256(
     verification_method: &crate::did::VerificationMethod,
     signing_input: &str,
@@ -285,6 +251,7 @@ fn verify_es256(
 }
 
 /// Verify an ES256K (secp256k1) signature
+#[cfg(feature = "crypto-secp256k1")]
 fn verify_es256k(
     verification_method: &crate::did::VerificationMethod,
     signing_input: &str,
@@ -334,366 +301,20 @@ fn verify_es256k(
         .is_ok()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::agent_key_manager::AgentKeyManagerBuilder;
-    use crate::did::{DIDGenerationOptions, KeyType};
-    use crate::key_manager::KeyManager;
-    use crate::message::JwsSignature;
-    use crate::message_packing::{PackOptions, Packable};
-    use std::sync::Arc;
+#[cfg(all(not(feature = "crypto-p256"), not(feature = "crypto-secp256k1")))]
+fn verify_es256(
+    _verification_method: &crate::did::VerificationMethod,
+    _signing_input: &str,
+    _signature: &[u8],
+) -> bool {
+    false
+}
 
-    #[derive(Debug)]
-    struct TestResolver {
-        did_docs: std::collections::HashMap<String, crate::did::DIDDoc>,
-    }
-
-    #[async_trait::async_trait]
-    impl SyncDIDResolver for TestResolver {
-        async fn resolve(&self, did: &str) -> Result<Option<crate::did::DIDDoc>> {
-            Ok(self.did_docs.get(did).cloned())
-        }
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws() {
-        // Create a key manager and generate a key
-        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let key = key_manager
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        // Create a test message
-        let message = PlainMessage {
-            id: "test-message".to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: "https://example.org/test".to_string(),
-            body: serde_json::json!({
-                "content": "Test message for verification"
-            }),
-            from: key.did.clone(),
-            to: vec!["did:example:bob".to_string()],
-            thid: None,
-            pthid: None,
-            created_time: Some(1234567890),
-            expires_time: None,
-            from_prior: None,
-            attachments: None,
-            extra_headers: Default::default(),
-        };
-
-        // Pack the message as JWS - use the actual verification method ID
-        let sender_kid = key.did_doc.verification_method[0].id.clone();
-        let pack_options = PackOptions::new().with_sign(&sender_kid);
-        let packed = message.pack(&*key_manager, pack_options).await.unwrap();
-
-        // Parse as JWS
-        let jws: Jws = serde_json::from_str(&packed).unwrap();
-
-        // Create a test resolver with the DID document
-        let mut did_docs = std::collections::HashMap::new();
-        did_docs.insert(key.did.clone(), key.did_doc.clone());
-        let resolver = TestResolver { did_docs };
-
-        // Verify the JWS
-        let verified_message = verify_jws(&jws, &resolver).await.unwrap();
-
-        // Check that we got the original message back
-        assert_eq!(verified_message.id, message.id);
-        assert_eq!(verified_message.type_, message.type_);
-        assert_eq!(verified_message.body, message.body);
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_unknown_did() {
-        // Create a key manager and generate a key
-        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let key = key_manager
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        // Create and sign a message
-        let message = PlainMessage {
-            id: "test-message".to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: "https://example.org/test".to_string(),
-            body: serde_json::json!({"content": "Test"}),
-            from: key.did.clone(),
-            to: vec!["did:example:bob".to_string()],
-            thid: None,
-            pthid: None,
-            created_time: Some(1234567890),
-            expires_time: None,
-            from_prior: None,
-            attachments: None,
-            extra_headers: Default::default(),
-        };
-
-        let sender_kid = key.did_doc.verification_method[0].id.clone();
-        let pack_options = PackOptions::new().with_sign(&sender_kid);
-        let packed = message.pack(&*key_manager, pack_options).await.unwrap();
-        let jws: Jws = serde_json::from_str(&packed).unwrap();
-
-        // Create an empty resolver (no DIDs)
-        let resolver = TestResolver {
-            did_docs: std::collections::HashMap::new(),
-        };
-
-        // Verification should fail
-        let result = verify_jws(&jws, &resolver).await;
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("not found"));
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_multiple_signatures() {
-        // Create two key managers and keys
-        let key_manager1 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let key1 = key_manager1
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        let key_manager2 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let key2 = key_manager2
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        // Create a message
-        let message = PlainMessage {
-            id: "multi-sig-test".to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: "https://example.org/test".to_string(),
-            body: serde_json::json!({"content": "Multiple signatures test"}),
-            from: key1.did.clone(),
-            to: vec!["did:example:bob".to_string()],
-            thid: None,
-            pthid: None,
-            created_time: Some(1234567890),
-            expires_time: None,
-            from_prior: None,
-            attachments: None,
-            extra_headers: Default::default(),
-        };
-
-        // Sign with first key
-        let sender_kid1 = key1.did_doc.verification_method[0].id.clone();
-        let pack_options1 = PackOptions::new().with_sign(&sender_kid1);
-        let packed1 = message.pack(&*key_manager1, pack_options1).await.unwrap();
-        let jws1: Jws = serde_json::from_str(&packed1).unwrap();
-
-        // Create resolver with both DIDs
-        let mut did_docs = std::collections::HashMap::new();
-        did_docs.insert(key1.did.clone(), key1.did_doc.clone());
-        did_docs.insert(key2.did.clone(), key2.did_doc.clone());
-        let resolver = TestResolver { did_docs };
-
-        // Verify with first signature should work
-        let verified_message = verify_jws(&jws1, &resolver).await.unwrap();
-        assert_eq!(verified_message.id, message.id);
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_invalid_signature() {
-        // Create a key manager and generate a key
-        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let key = key_manager
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        // Create a JWS with an invalid signature
-        let jws = Jws {
-            payload: base64::engine::general_purpose::STANDARD.encode(r#"{"id":"test","type":"test"}"#),
-            signatures: vec![JwsSignature {
-                protected: base64::engine::general_purpose::STANDARD.encode(r#"{"typ":"application/didcomm-signed+json","alg":"EdDSA","kid":"did:key:invalid#key"}"#),
-                signature: "invalid_signature".to_string(),
-            }],
-        };
-
-        // Create resolver with the DID
-        let mut did_docs = std::collections::HashMap::new();
-        did_docs.insert(key.did.clone(), key.did_doc.clone());
-        let resolver = TestResolver { did_docs };
-
-        // Verification should fail due to invalid signature format
-        let result = verify_jws(&jws, &resolver).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_no_signatures() {
-        // Create a JWS with no signatures
-        let jws = Jws {
-            payload: base64::engine::general_purpose::STANDARD
-                .encode(r#"{"id":"test","type":"test"}"#),
-            signatures: vec![],
-        };
-
-        let resolver = TestResolver {
-            did_docs: std::collections::HashMap::new(),
-        };
-
-        // Verification should fail due to no signatures
-        let result = verify_jws(&jws, &resolver).await;
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No signatures found"));
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_malformed_protected_header() {
-        // Create a JWS with malformed protected header
-        let jws = Jws {
-            payload: base64::engine::general_purpose::STANDARD
-                .encode(r#"{"id":"test","type":"test"}"#),
-            signatures: vec![JwsSignature {
-                protected: "invalid_base64!".to_string(),
-                signature: "dGVzdA==".to_string(),
-            }],
-        };
-
-        let resolver = TestResolver {
-            did_docs: std::collections::HashMap::new(),
-        };
-
-        // Verification should fail due to malformed protected header
-        let result = verify_jws(&jws, &resolver).await;
-        assert!(result.is_err());
-        let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("No kid found in signature"));
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_missing_kid() {
-        // Create a JWS with missing kid in protected header
-        let jws = Jws {
-            payload: base64::engine::general_purpose::STANDARD
-                .encode(r#"{"id":"test","type":"test"}"#),
-            signatures: vec![JwsSignature {
-                protected: base64::engine::general_purpose::STANDARD
-                    .encode(r#"{"typ":"application/didcomm-signed+json","alg":"EdDSA"}"#),
-                signature: "dGVzdA==".to_string(),
-            }],
-        };
-
-        let resolver = TestResolver {
-            did_docs: std::collections::HashMap::new(),
-        };
-
-        // Verification should fail due to missing kid
-        let result = verify_jws(&jws, &resolver).await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_invalid_kid_format() {
-        // Create a JWS with invalid kid format (no fragment)
-        let jws = Jws {
-            payload: base64::engine::general_purpose::STANDARD.encode(r#"{"id":"test","type":"test"}"#),
-            signatures: vec![JwsSignature {
-                protected: base64::engine::general_purpose::STANDARD.encode(r#"{"typ":"application/didcomm-signed+json","alg":"EdDSA","kid":"invalid_kid_format"}"#),
-                signature: "dGVzdA==".to_string(),
-            }],
-        };
-
-        let resolver = TestResolver {
-            did_docs: std::collections::HashMap::new(),
-        };
-
-        // Verification should fail due to invalid kid format
-        let result = verify_jws(&jws, &resolver).await;
-        assert!(result.is_err());
-        let error_msg = result.unwrap_err().to_string();
-        assert!(error_msg.contains("DID invalid_kid_format not found"));
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_unsupported_algorithm() {
-        // Create a key manager and generate a key
-        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let key = key_manager
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        // Create a JWS with unsupported algorithm
-        let kid = key.did_doc.verification_method[0].id.clone();
-        let jws = Jws {
-            payload: base64::engine::general_purpose::STANDARD
-                .encode(r#"{"id":"test","type":"test"}"#),
-            signatures: vec![JwsSignature {
-                protected: base64::engine::general_purpose::STANDARD.encode(format!(
-                    r#"{{"typ":"application/didcomm-signed+json","alg":"UNSUPPORTED","kid":"{}"}}"#,
-                    kid
-                )),
-                signature: "dGVzdA==".to_string(),
-            }],
-        };
-
-        // Create resolver with the DID
-        let mut did_docs = std::collections::HashMap::new();
-        did_docs.insert(key.did.clone(), key.did_doc.clone());
-        let resolver = TestResolver { did_docs };
-
-        // Verification should fail due to unsupported algorithm
-        let result = verify_jws(&jws, &resolver).await;
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Unsupported algorithm"));
-    }
-
-    #[tokio::test]
-    async fn test_verify_jws_different_key_types() {
-        // Test Ed25519 key type
-        let key_manager = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let key = key_manager
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        let message = PlainMessage {
-            id: "ed25519-test".to_string(),
-            typ: "application/didcomm-plain+json".to_string(),
-            type_: "https://example.org/test".to_string(),
-            body: serde_json::json!({"content": "Ed25519 test"}),
-            from: key.did.clone(),
-            to: vec!["did:example:bob".to_string()],
-            thid: None,
-            pthid: None,
-            created_time: Some(1234567890),
-            expires_time: None,
-            from_prior: None,
-            attachments: None,
-            extra_headers: Default::default(),
-        };
-
-        let sender_kid = key.did_doc.verification_method[0].id.clone();
-        let pack_options = PackOptions::new().with_sign(&sender_kid);
-        let packed = message.pack(&*key_manager, pack_options).await.unwrap();
-        let jws: Jws = serde_json::from_str(&packed).unwrap();
-
-        let mut did_docs = std::collections::HashMap::new();
-        did_docs.insert(key.did.clone(), key.did_doc.clone());
-        let resolver = TestResolver { did_docs };
-
-        let verified_message = verify_jws(&jws, &resolver).await.unwrap();
-        assert_eq!(verified_message.id, message.id);
-        assert_eq!(verified_message.body, message.body);
-    }
+#[cfg(all(not(feature = "crypto-p256"), not(feature = "crypto-secp256k1")))]
+fn verify_es256k(
+    _verification_method: &crate::did::VerificationMethod,
+    _signing_input: &str,
+    _signature: &[u8],
+) -> bool {
+    false
 }

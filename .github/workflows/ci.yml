@@ -14,10 +14,21 @@ jobs:
           submodules: recursive
       - uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
       - name: Run cargo tests
         run: cargo test --workspace --all-targets --release
+      - name: Build tap-wasm package
+        working-directory: tap-wasm
+        run: wasm-pack build --target web --out-dir pkg
+      - name: Copy WASM files to tap-ts
+        run: |
+          mkdir -p tap-ts/wasm
+          cp tap-wasm/pkg/tap_wasm*.js tap-ts/wasm/
+          cp tap-wasm/pkg/tap_wasm*.wasm tap-ts/wasm/
+          cp tap-wasm/pkg/tap_wasm*.d.ts tap-ts/wasm/
       - name: Install Node dependencies
         working-directory: tap-ts
         run: npm ci

@@ -1,333 +1,492 @@
-# @taprsvp/tap-agent
+# @taprsvp/agent
 
-TypeScript wrapper for TAP-WASM library implementing the Transaction Authorization Protocol (TAP).
+A lightweight TypeScript/JavaScript SDK for the Transaction Authorization Protocol (TAP), providing full DIDComm v2 compatibility with WASM-powered cryptography.
+
+[![npm version](https://badge.fury.io/js/%40taprsvp%2Fagent.svg)](https://www.npmjs.com/package/@taprsvp/agent)
+[![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+## Features
+
+- 🔐 **Full DIDComm v2 Support** - Compatible with Veramo and other DIDComm implementations
+- 🚀 **Lightweight** - Only 3.72KB gzipped TypeScript + 272KB WASM
+- 🔑 **Multiple Key Types** - Ed25519, P-256, and secp256k1
+- 📦 **Zero Dependencies** - Only requires `@taprsvp/types` for TypeScript types
+- 🌐 **Browser & Node.js** - Works in both environments
+- ⚡ **High Performance** - WASM-powered cryptography
+- 🛡️ **TAP Compliant** - Supports all TAP message types and specifications
 
 ## Installation
 
 ```bash
-npm install @taprsvp/tap-agent
+npm install @taprsvp/agent
 ```
 
-## Features
-
-- **Type-Safe API**: Fully typed using TypeScript interfaces with modern Agent/Party separation
-- **Agent Management**: Create and manage TAP agents with automatic key generation
-- **Message Creation**: Simplified API for creating different message types using TAIP-compliant structures
-- **Message Packing**: Pack messages for secure transmission
-- **Message Unpacking**: Unpack and verify received messages
-- **TAP Flows**: Helper methods for common message flows (transfer, payment, connection)
-- **Fluent Message API**: Chain method calls for easy message creation
-- **DID Resolution**: Integrated DID resolver support for various DID methods
-- **Key Management**: Based on the underlying Rust tap-agent implementation
-- **WASM Integration**: Uses the core tap-agent code via WebAssembly for efficiency and code sharing
-- **CLI Tools**: Command-line utilities for DID generation and management
-- **Zero Configuration**: Automatic DID generation for quick setup
-- **TAIP Compliance**: Implements TAIP-5 (Agent) and TAIP-6 (Party) specifications
-
-## Core Concepts
-
-### Agent vs Party (TAIP-5/TAIP-6)
-
-This library implements the modern TAP specification with proper separation between Agents and Parties:
-
-- **Party**: A real-world entity (legal or natural person) involved in a transaction
-  - Examples: Individual users, companies, organizations
-  - Identified by any DID or IRI
-  - Contains optional metadata like country codes, LEI codes, etc.
-
-- **Agent**: A service that executes transactions on behalf of one or more parties
-  - Examples: Exchanges, custodial wallets, DeFi protocols, bridges
-  - Identified by any DID or IRI
-  - Must have a `role` field (e.g., "SettlementAddress", "Exchange")
-  - Must specify which party/parties it acts `for`
-  - Can have policies that define operational constraints
+## Quick Start
 
 ```typescript
-// Party example (real-world entity)
-const party: Party = {
-  '@id': 'did:example:alice',
-  'https://schema.org/addressCountry': 'US'
-};
+import { TapAgent } from '@taprsvp/agent';
 
-// Agent example (service acting for a party)
-const agent: Agent = {
-  '@id': 'did:web:exchange.example.com',
-  role: 'SettlementAddress',
-  for: 'did:example:alice', // Acts for Alice
-  policies: [/* optional policies */]
-};
-```
+// Create a new agent with auto-generated keys
+const agent = await TapAgent.create({ keyType: 'Ed25519' });
 
-## Usage
+console.log('Agent DID:', agent.did);
 
-### Creating an Agent
+// Create a TAP Transfer message using @taprsvp/types
+import { createTransferMessage } from '@taprsvp/agent';
+import type { Transfer } from '@taprsvp/types';
 
-```typescript
-import { TAPAgent, Agent, Party } from '@taprsvp/tap-agent';
-
-// Create an agent (a new DID will be generated automatically)
-// IMPORTANT: Always use the static create() method which properly initializes WASM
-const agent = await TAPAgent.create({
-  nickname: "My Agent",
-  debug: true
-});
-
-// The agent now has a valid DID automatically
-console.log(`Agent DID: ${agent.did}`); // e.g., did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK
-
-// INCORRECT USAGE - DO NOT USE THE CONSTRUCTOR DIRECTLY
-// const agent = new TAPAgent({ nickname: "My Agent" }); // Will cause errors when WASM isn't initialized!
-```
-
-### Creating and Sending Messages
-
-```typescript
-// Create a transfer message using Agent and Party types (TAIP-5/TAIP-6)
-const transfer = agent.transfer({
-  asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
-  amount: "100.0",
+const transfer: Transfer = createTransferMessage({
+  from: agent.did,
+  to: ['did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL'],
+  amount: '100.00',
+  asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
   originator: {
-    '@id': agent.did // Party - real-world entity
+    '@id': agent.did,
+    '@type': 'https://schema.org/Person',
+    name: 'Alice Smith',
+    email: 'alice@example.com'
   },
   beneficiary: {
-    '@id': "did:key:z6MkrJVSYwmQgxBBCnZWuYpKSJ4qWRhWGsc9hhsVf43yirpL" // Party - real-world entity
+    '@id': 'did:key:z6Mkk7yqnGF3YwTrLpqrW6PGsKci7dNqh1CjnvMbzrMerSeL',
+    '@type': 'https://schema.org/Person',
+    name: 'Bob Jones'
   },
-  agents: [{
-    '@id': "did:web:exchange.example.com",
-    role: "SettlementAddress", // Agent role (TAIP-5)
-    for: agent.did // Which party this agent acts for
-  }]
+  agents: []  // Agents involved in the transaction
 });
 
-// Pack the message for transmission
-const packedResult = await transfer.pack();
-console.log("Packed message:", packedResult.message);
+// Pack the message for secure transmission
+const packed = await agent.pack(transfer);
+console.log('Packed message ready for transmission');
 
-// In a real application, you would send this packed message to the recipient
-// ...
-
-// The recipient would create their agent with the async factory method
-const recipientAgent = await TAPAgent.create({
-  nickname: "Recipient Agent",
-  debug: true
-});
-
-// The recipient would then unpack the message
-const unpackedMessage = await recipientAgent.unpackMessage(packedResult.message);
-console.log("Unpacked message:", unpackedMessage);
-
-// Create a response to the transfer
-const authorization = recipientAgent.authorize({
-  reason: "Transfer authorized",
-  settlementAddress: "eip155:1:0x742d35Cc6634C0532925a3b844Bc454e4438f44e"
-});
-
-// Set the thread ID to link it to the original message
-authorization.setThreadId(unpackedMessage.id);
-
-// Pack the authorization message for sending back
-const packedAuthorization = await authorization.pack();
+// Unpack received messages
+const unpacked = await agent.unpack(receivedMessage);
+console.log('Received:', unpacked);
 ```
 
-## Message Types
+## API Reference
 
-The library supports all standard TAP message types with proper Agent/Party separation (TAIP-5/TAIP-6):
+### TapAgent
 
-### Transfer Messages
+#### Static Methods
+
+##### `TapAgent.create(options?: TapAgentOptions): Promise<TapAgent>`
+
+Creates a new TAP agent with auto-generated keys.
 
 ```typescript
-const transfer = agent.transfer({
-  asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
-  amount: "100.0",
+const agent = await TapAgent.create({
+  keyType: 'Ed25519', // or 'P256' or 'secp256k1'
+  resolver: customResolver // optional DID resolver
+});
+```
+
+##### `TapAgent.fromPrivateKey(privateKey: string, options?: TapAgentOptions): Promise<TapAgent>`
+
+Creates a TAP agent from an existing private key.
+
+```typescript
+import { generatePrivateKey } from '@taprsvp/agent';
+
+const privateKey = await generatePrivateKey('Ed25519');
+const agent = await TapAgent.fromPrivateKey(privateKey, {
+  keyType: 'Ed25519'
+});
+```
+
+#### Instance Properties
+
+- `did: string` - The agent's DID (Decentralized Identifier)
+
+#### Instance Methods
+
+##### `pack(message: DIDCommMessage): Promise<PackedMessage>`
+
+Packs a DIDComm message for secure transmission.
+
+```typescript
+const packed = await agent.pack(message);
+// packed.message contains the JWS signed message
+```
+
+##### `unpack(packedMessage: string): Promise<DIDCommMessage>`
+
+Unpacks a received DIDComm message.
+
+```typescript
+const message = await agent.unpack(packedMessage);
+```
+
+##### `generateUUID(): Promise<string>`
+
+Generates a UUID for message IDs.
+
+```typescript
+const messageId = await agent.generateUUID();
+```
+
+##### `exportPrivateKey(): string`
+
+Exports the agent's private key as a hex string.
+
+```typescript
+const privateKey = agent.exportPrivateKey();
+// Store securely for later use
+```
+
+##### `resolve(did: string): Promise<DIDDocument | null>`
+
+Resolves a DID to its DID Document.
+
+```typescript
+const didDoc = await agent.resolve('did:key:z6Mkk...');
+```
+
+##### `dispose(): void`
+
+Cleans up WASM resources.
+
+```typescript
+agent.dispose();
+```
+
+### Utility Functions
+
+#### `generatePrivateKey(keyType?: KeyType): Promise<string>`
+
+Generates a new private key.
+
+```typescript
+import { generatePrivateKey } from '@taprsvp/agent';
+
+const privateKey = await generatePrivateKey('Ed25519');
+```
+
+#### `generateUUID(): Promise<string>`
+
+Generates a UUID v4.
+
+```typescript
+import { generateUUID } from '@taprsvp/agent';
+
+const uuid = await generateUUID();
+```
+
+#### `isValidDID(did: string): boolean`
+
+Validates a DID format.
+
+```typescript
+import { isValidDID } from '@taprsvp/agent';
+
+if (isValidDID('did:key:z6Mkk...')) {
+  // Valid DID
+}
+```
+
+#### `isValidPrivateKey(key: string): boolean`
+
+Validates a private key format.
+
+```typescript
+import { isValidPrivateKey } from '@taprsvp/agent';
+
+if (isValidPrivateKey(privateKeyHex)) {
+  // Valid private key
+}
+```
+
+## Creating TAP Messages
+
+Create TAP-compliant messages using helper functions and types from `@taprsvp/types`:
+
+### Transfer
+```typescript
+import { createTransferMessage } from '@taprsvp/agent';
+import type { Transfer } from '@taprsvp/types';
+
+const transfer: Transfer = createTransferMessage({
+  from: originatorDid,
+  to: [beneficiaryDid],
+  amount: '100.00',
+  asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
   originator: {
-    '@id': agent.did // Party (real-world entity)
+    '@id': originatorDid,
+    '@type': 'https://schema.org/Person',
+    name: 'Alice Smith'
   },
   beneficiary: {
-    '@id': recipientDid // Party (real-world entity)
+    '@id': beneficiaryDid,
+    '@type': 'https://schema.org/Organization',
+    name: 'Example Corp',
+    leiCode: '969500KN90DZLPGW6898'
   },
-  memo: "Payment for services",
-  agents: [{
-    '@id': "did:web:exchange.example.com",
-    role: "SettlementAddress", // Agent role (TAIP-5)
-    for: agent.did // Which party this agent acts for
-  }]
+  memo: 'Payment for services',
+  agents: [  // Optional agents involved in the transaction
+    {
+      '@id': agentDid,
+      role: 'SettlementAddress',
+      for: originatorDid
+    }
+  ]
 });
 ```
 
-### Payment Messages
-
+### Payment
 ```typescript
-const payment = agent.payment({
-  asset: "eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f",
-  amount: "50.0",
+import { createPaymentMessage } from '@taprsvp/agent';
+import type { Payment } from '@taprsvp/types';
+
+const payment: Payment = createPaymentMessage({
+  from: merchantDid,
+  to: [customerDid],
+  amount: '50.00',
+  currency: 'USD',
   merchant: {
-    '@id': agent.did // Party (merchant entity)
+    '@id': merchantDid,
+    '@type': 'https://schema.org/Organization',
+    name: 'Example Merchant',
+    mcc: '5812',  // Restaurant
+    url: 'https://merchant.example.com'
   },
-  customer: {
-    '@id': customerDid // Party (customer entity)
-  },
-  invoice: "INV-12345",
-  expiry: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
-  agents: [{
-    '@id': "did:web:payment-processor.example.com",
-    role: "Exchange", // Agent role (TAIP-5)
-    for: agent.did // Acts for the merchant
-  }]
-});
-```
-
-### Connect Messages
-
-```typescript
-const connect = agent.connect({
-  agent: {
-    '@id': "did:web:connector.example.com",
-    role: "connector", // Agent role (TAIP-5)
-    for: agent.did // Acts for this party
-  },
-  for: "https://tap.company/services/compliance",
-  constraints: {
-    supportedAssets: ["eip155:1/erc20:0x6b175474e89094c44da98b954eedeac495271d0f"],
-    minimumAmount: "10.0",
-    maximumAmount: "10000.0"
+  invoice: {
+    invoiceNumber: 'INV-001',
+    items: [{ description: 'Product', quantity: 1, unitPrice: '50.00' }],
+    total: '50.00'
   }
 });
 ```
 
-### Other Message Types
-
-The library also supports these message types:
-
-- `authorize` - Authorize a transfer or payment
-- `reject` - Reject a transfer or payment
-- `settle` - Confirm settlement of a transfer
-- `cancel` - Cancel a transfer or payment
-- `revert` - Request reversion of a settlement
-
-## Message Handling
-
-Register handlers for different message types:
-
+### Connect
 ```typescript
-// Register a handler for transfer messages
-// Note: Make sure to register handlers AFTER agent creation is complete
-agent.onMessage("Transfer", async (message) => {
-  console.log("Received transfer message:", message);
+const connect = await agent.createMessage('Connect', {
+  constraints: {
+    asset_types: ['eip155:1/erc20:*'],
+    currency_types: ['USD', 'EUR'],
+    transaction_limits: {
+      min_amount: '10.00',
+      max_amount: '10000.00'
+    }
+  }
+});
+```
 
-  // Process the message and return a response
-  const response = agent.authorize({
-    reason: "Transfer authorized",
-    settlementAddress: "0x123..."
-  });
-
-  // Link the response to the original message
-  response.setThreadId(message.id);
-
-  return response.toJSON();
+### Authorize / Reject / Settle
+```typescript
+// Authorize a transaction
+const authorize = await agent.createMessage('Authorize', {
+  transaction_id: 'transfer-123',
+  settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7'
 });
 
-// Process a received message
-const result = await agent.processMessage(receivedMessage);
-```
-
-## Type Definitions
-
-The library exports comprehensive TypeScript types for all TAP concepts:
-
-```typescript
-import {
-  TAPAgent,
-  Agent,
-  Party,
-  TapParticipant,
-  TAPMessage,
-  Transfer,
-  Payment,
-  Connect,
-  DID,
-  Asset
-} from '@taprsvp/tap-agent';
-```
-
-### Key Types
-
-- `Agent`: Service executing transactions (TAIP-5)
-- `Party`: Real-world entity (TAIP-6)
-- `TapParticipant`: Base interface for Agent and Party
-- `TAPMessage`: Generic message structure
-- `Transfer`, `Payment`, `Connect`: Specific message body types
-- `DID`: DID string type
-- `Asset`: Asset identifier string type
-
-## Advanced Usage
-
-### Accessing the WASM Agent
-
-For advanced use cases, you can access the underlying WASM agent:
-
-```typescript
-const wasmAgent = agent.getWasmAgent();
-// Now you can use the WASM agent directly for operations
-// not covered by the TypeScript wrapper
-```
-
-## Development
-
-### Prerequisites
-
-- Node.js (v16+)
-- [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) - Required for building the WASM module
-
-### Building
-
-```bash
-# Install dependencies
-npm install
-
-# Build the project
-npm run build
-```
-
-This will:
-1. Build the WASM module from the Rust source
-2. Copy the WASM files to the package
-3. Compile the TypeScript code
-
-### Testing
-
-```bash
-# Run tests
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-```
-
-#### Testing Considerations
-
-When writing tests, remember that WASM initialization requires special handling:
-
-```typescript
-import { TAPAgent } from '../agent';
-import { beforeEach, describe, expect, it } from 'vitest';
-
-describe('TAPAgent', () => {
-  let agent: TAPAgent;
-
-  beforeEach(async () => {
-    // IMPORTANT: Always use the async create() method in tests
-    agent = await TAPAgent.create({ nickname: "Test Agent" });
-  });
-
-  it('should have a valid DID', () => {
-    expect(agent.did).toBeDefined();
-    expect(agent.did).toMatch(/^did:key:/);
-  });
-
-  // More tests...
+// Reject a transaction
+const reject = await agent.createMessage('Reject', {
+  transaction_id: 'transfer-123',
+  reason: 'Insufficient funds'
 });
+
+// Settle a transaction
+const settle = await agent.createMessage('Settle', {
+  transaction_id: 'transfer-123',
+  settlement_id: 'eip155:1:0x123...abc'
+});
+```
+
+## DIDComm Standard Messages
+
+The SDK also supports standard DIDComm messages:
+
+### BasicMessage
+```typescript
+const message = await agent.createMessage('BasicMessage', {
+  content: 'Hello, World!'
+});
+```
+
+### TrustPing
+```typescript
+const ping = await agent.createMessage('TrustPing', {
+  response_requested: true
+});
+```
+
+### TrustPingResponse
+```typescript
+const pingResponse = await agent.createMessage('TrustPingResponse', {}, {
+  thid: originalPingId // Reference to original ping
+});
+```
+
+## Threading
+
+Support for message threading to maintain conversation context:
+
+```typescript
+const initialMessage = await agent.createMessage('Transfer', transferData, {
+  thid: 'conversation-123',  // Thread ID
+  pthid: 'parent-thread-456'  // Parent thread ID
+});
+
+// Continue the conversation
+const response = await agent.createMessage('Authorize', authData, {
+  thid: 'conversation-123'  // Same thread ID
+});
+```
+
+## Custom DID Resolver
+
+Provide a custom DID resolver for advanced use cases:
+
+```typescript
+const customResolver = async (did: string): Promise<DIDDocument | null> => {
+  // Your resolution logic here
+  return didDocument;
+};
+
+const agent = await TapAgent.create({
+  keyType: 'Ed25519',
+  resolver: customResolver
+});
+```
+
+## Browser Usage
+
+The SDK works seamlessly in browsers:
+
+```html
+<script type="module">
+  import { TapAgent } from '@taprsvp/agent';
+  
+  const agent = await TapAgent.create();
+  console.log('Agent DID:', agent.did);
+</script>
+```
+
+## Node.js Usage
+
+Full support for Node.js environments:
+
+```javascript
+import { TapAgent } from '@taprsvp/agent';
+
+async function main() {
+  const agent = await TapAgent.create();
+  console.log('Agent DID:', agent.did);
+}
+
+main();
+```
+
+## TypeScript Support
+
+Full TypeScript support with comprehensive type definitions:
+
+```typescript
+import { TapAgent, DIDCommMessage, KeyType } from '@taprsvp/agent';
+import type { Transfer, Payment } from '@taprsvp/types';
+
+const agent = await TapAgent.create({ keyType: 'Ed25519' as KeyType });
+
+const transfer: DIDCommMessage<Transfer> = await agent.createMessage('Transfer', {
+  // TypeScript will provide full type checking here
+  amount: '100.00',
+  asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+  originator: { '@id': agent.did },
+  beneficiary: { '@id': recipientDid }
+});
+```
+
+## Interoperability
+
+The SDK is fully compatible with:
+
+- ✅ Veramo DIDComm implementation
+- ✅ DIDComm v2 specification
+- ✅ did:key method
+- ✅ JWS message format
+- ✅ Standard DIDComm message types
+
+## Performance
+
+- TypeScript bundle: **3.72KB gzipped**
+- WASM module: **272KB gzipped**
+- Message operations: **< 10ms** typical
+- Key generation: **< 5ms** typical
+
+## Security
+
+- 🔐 Private keys never leave the WASM module
+- 🔑 Secure key generation using cryptographically secure random
+- ✅ Standard cryptographic algorithms (Ed25519, P-256, secp256k1)
+- 📦 Minimal attack surface with zero runtime dependencies
+
+## Examples
+
+### Key Management
+
+```typescript
+import { TapAgent, generatePrivateKey } from '@taprsvp/agent';
+
+// Generate and store a private key
+const privateKey = await generatePrivateKey('Ed25519');
+localStorage.setItem('tapAgent.privateKey', privateKey);
+
+// Later, restore the agent
+const storedKey = localStorage.getItem('tapAgent.privateKey');
+if (storedKey) {
+  const agent = await TapAgent.fromPrivateKey(storedKey, { keyType: 'Ed25519' });
+}
+```
+
+### Message Exchange
+
+```typescript
+// Alice creates and sends a transfer
+const alice = await TapAgent.create();
+const transfer = await alice.createMessage('Transfer', {
+  amount: '100.00',
+  asset: 'eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+  originator: {
+    '@id': alice.did,
+    '@type': 'https://schema.org/Person',
+    name: 'Alice Smith'
+  },
+  beneficiary: {
+    '@id': bobDid,
+    '@type': 'https://schema.org/Person',
+    name: 'Bob Jones'
+  },
+  agents: []  // Add any agents here if needed
+});
+transfer.to = [bobDid];
+const packed = await alice.pack(transfer);
+
+// Send packed.message to Bob...
+
+// Bob receives and processes the transfer
+const bob = await TapAgent.create();
+const received = await bob.unpack(packed.message);
+console.log('Received transfer for:', received.body.amount);
+
+// Bob authorizes the transfer
+const authorize = await bob.createMessage('Authorize', {
+  transaction_id: received.id,
+  settlement_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb7'
+}, {
+  thid: received.id,
+  to: [alice.did]
+});
+const authPacked = await bob.pack(authorize);
 ```
 
 ## License
 
-MIT
+Apache-2.0
+
+## Contributing
+
+Contributions are welcome! Please see our [contributing guidelines](https://github.com/notabene-id/tap-rs/blob/main/CONTRIBUTING.md).
+
+## Support
+
+For issues and questions, please use the [GitHub issue tracker](https://github.com/notabene-id/tap-rs/issues).

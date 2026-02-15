@@ -1,3 +1,5 @@
+#![cfg(feature = "crypto-p256")]
+
 use base64::Engine;
 use p256::ecdh::EphemeralSecret;
 use p256::elliptic_curve::sec1::ToEncodedPoint;

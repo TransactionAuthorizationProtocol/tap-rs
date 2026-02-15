@@ -166,8 +166,11 @@ impl AgentKeyManager {
                         let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
 
                         match (kty, crv) {
+                            #[cfg(feature = "crypto-ed25519")]
                             (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            #[cfg(feature = "crypto-p256")]
                             (Some("EC"), Some("P-256")) => KeyType::P256,
+                            #[cfg(feature = "crypto-secp256k1")]
                             (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
                             _ => KeyType::Ed25519, // Default
                         }
@@ -559,8 +562,11 @@ impl KeyManager for AgentKeyManager {
                         let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                         let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
                         match (kty, crv) {
+                            #[cfg(feature = "crypto-ed25519")]
                             (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            #[cfg(feature = "crypto-p256")]
                             (Some("EC"), Some("P-256")) => KeyType::P256,
+                            #[cfg(feature = "crypto-secp256k1")]
                             (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
                             _ => KeyType::Ed25519, // Default
                         }
@@ -606,8 +612,11 @@ impl KeyManager for AgentKeyManager {
                         let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                         let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
                         match (kty, crv) {
+                            #[cfg(feature = "crypto-ed25519")]
                             (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            #[cfg(feature = "crypto-p256")]
                             (Some("EC"), Some("P-256")) => KeyType::P256,
+                            #[cfg(feature = "crypto-secp256k1")]
                             (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
                             _ => KeyType::Ed25519, // Default
                         }
@@ -655,8 +664,11 @@ impl KeyManager for AgentKeyManager {
                         let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
                         let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
                         match (kty, crv) {
+                            #[cfg(feature = "crypto-ed25519")]
                             (Some("OKP"), Some("Ed25519")) => KeyType::Ed25519,
+                            #[cfg(feature = "crypto-p256")]
                             (Some("EC"), Some("P-256")) => KeyType::P256,
+                            #[cfg(feature = "crypto-secp256k1")]
                             (Some("EC"), Some("secp256k1")) => KeyType::Secp256k1,
                             _ => KeyType::Ed25519, // Default
                         }

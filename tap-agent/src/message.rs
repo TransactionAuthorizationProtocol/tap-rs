@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 /// Defines the level of protection applied to messages:
 /// - `Plain`: No encryption or signing (insecure, only for testing)
 /// - `Signed`: Message is signed but not encrypted (integrity protected)
-/// - `AuthCrypt`: Message is authenticated and encrypted (confidentiality + integrity)
+/// - `AuthCrypt`: Message is authenticated and encrypted (confidentiality + integrity, sender revealed)
+/// - `AnonCrypt`: Message is anonymously encrypted (confidentiality only, sender hidden)
 /// - `Any`: Accept any security mode when unpacking (only used for receiving)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SecurityMode {
@@ -20,8 +21,10 @@ pub enum SecurityMode {
     Plain,
     /// Signed - message is signed but not encrypted
     Signed,
-    /// Authenticated and Encrypted - message is both signed and encrypted
+    /// Authenticated and Encrypted - message is both signed and encrypted (sender revealed)
     AuthCrypt,
+    /// Anonymous Encrypted - message is encrypted but not signed (sender hidden)
+    AnonCrypt,
     /// Any security mode - used for unpacking when any mode is acceptable
     Any,
 }

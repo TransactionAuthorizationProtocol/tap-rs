@@ -8,20 +8,33 @@
 //! It also provides functionality to generate new DIDs with different cryptographic curves.
 
 use crate::key_manager::{Secret, SecretMaterial, SecretType};
+#[cfg(not(target_arch = "wasm32"))]
 use async_trait::async_trait;
 use base64::Engine;
+#[cfg(feature = "crypto-ed25519")]
 use curve25519_dalek::edwards::CompressedEdwardsY;
+#[cfg(feature = "crypto-ed25519")]
 use ed25519_dalek::{SigningKey as Ed25519SigningKey, VerifyingKey as Ed25519VerifyingKey};
+#[cfg(feature = "crypto-secp256k1")]
 use k256::ecdsa::SigningKey as Secp256k1SigningKey;
 use multibase::{decode, encode, Base};
+#[cfg(feature = "crypto-p256")]
 use p256::ecdsa::SigningKey as P256SigningKey;
+#[cfg(any(
+    feature = "crypto-ed25519",
+    feature = "crypto-p256",
+    feature = "crypto-secp256k1"
+))]
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fmt::Debug;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::{Arc, RwLock};
-use tracing::{debug, warn};
+use tracing::debug;
+#[cfg(not(target_arch = "wasm32"))]
+use tracing::warn;
 
 use crate::error::{Error, Result};
 
@@ -136,10 +149,13 @@ pub enum VerificationMaterial {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyType {
     /// Ed25519 key type (EdDSA)
+    #[cfg(feature = "crypto-ed25519")]
     Ed25519,
     /// P-256 key type (ECDSA secp256r1)
+    #[cfg(feature = "crypto-p256")]
     P256,
     /// Secp256k1 key type (ECDSA secp256k1)
+    #[cfg(feature = "crypto-secp256k1")]
     Secp256k1,
 }
 
@@ -168,7 +184,10 @@ pub struct DIDGenerationOptions {
 impl Default for DIDGenerationOptions {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "crypto-ed25519")]
             key_type: KeyType::Ed25519,
+            #[cfg(not(feature = "crypto-ed25519"))]
+            key_type: KeyType::P256, // Fallback if ed25519 is not enabled
         }
     }
 }
@@ -241,6 +260,7 @@ impl KeyResolver {
     ///
     /// This follows the conversion process described in RFC 7748
     /// https://datatracker.ietf.org/doc/html/rfc7748#section-5
+    #[cfg(feature = "crypto-ed25519")]
     fn ed25519_to_x25519(ed25519_pubkey: &[u8]) -> Option<[u8; 32]> {
         // The Ed25519 public key should be 32 bytes
         if ed25519_pubkey.len() != 32 {
@@ -254,7 +274,7 @@ impl KeyResolver {
         let edwards_y = match CompressedEdwardsY::try_from(ed25519_pubkey) {
             Ok(point) => point,
             Err(e) => {
-                debug!("Error converting to CompressedEdwardsY: {:?}", e);
+                debug!("Error converting to Compressed EdwardsY: {:?}", e);
                 return None;
             }
         };
@@ -329,6 +349,7 @@ impl WasmDIDMethodResolver for KeyResolver {
         let mut verification_methods = vec![ed_verification_method.clone()];
         let mut key_agreement = Vec::new();
 
+        #[cfg(feature = "crypto-ed25519")]
         if let Some(x25519_key) = Self::ed25519_to_x25519(ed25519_public_key) {
             // Encode the X25519 public key in multibase format
             let mut x25519_bytes = vec![0xEC, 0x01]; // Prefix for X25519
@@ -418,6 +439,7 @@ impl DIDMethodResolver for KeyResolver {
         let mut verification_methods = vec![ed_verification_method.clone()];
         let mut key_agreement = Vec::new();
 
+        #[cfg(feature = "crypto-ed25519")]
         if let Some(x25519_key) = Self::ed25519_to_x25519(ed25519_public_key) {
             debug!("Successfully converted Ed25519 to X25519!");
             // Encode the X25519 public key in multibase format
@@ -987,7 +1009,9 @@ impl DIDMethodResolver for WebResolver {
                                                 .unwrap_or("Unknown");
 
                                             web_sys::console::log_1(&JsValue::from_str(&format!(
-                                                "[{}] ID: {}\nType: {}\nEndpoint: {}",
+                                                "[{}] ID: {}
+Type: {}
+Endpoint: {}",
                                                 i + 1,
                                                 id,
                                                 type_value,
@@ -1083,6 +1107,7 @@ impl DIDKeyGenerator {
         };
 
         match key.key_type {
+            #[cfg(feature = "crypto-ed25519")]
             KeyType::Ed25519 => Secret {
                 id: key.did.clone(),
                 type_: SecretType::JsonWebKey2020,
@@ -1096,30 +1121,34 @@ impl DIDKeyGenerator {
                     }),
                 },
             },
+            #[cfg(feature = "crypto-p256")]
             KeyType::P256 => Secret {
                 id: key.did.clone(),
                 type_: SecretType::JsonWebKey2020,
                 secret_material: SecretMaterial::JWK {
+                    // public_key is uncompressed [0x04 || x(32) || y(32)], skip the 0x04 prefix
                     private_key_jwk: serde_json::json!({
                         "kty": "EC",
                         "kid": kid,
                         "crv": "P-256",
-                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
-                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[1..33]),
+                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[33..65]),
                         "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
                     }),
                 },
             },
+            #[cfg(feature = "crypto-secp256k1")]
             KeyType::Secp256k1 => Secret {
                 id: key.did.clone(),
                 type_: SecretType::JsonWebKey2020,
                 secret_material: SecretMaterial::JWK {
+                    // public_key is uncompressed [0x04 || x(32) || y(32)], skip the 0x04 prefix
                     private_key_jwk: serde_json::json!({
                         "kty": "EC",
                         "kid": kid,
                         "crv": "secp256k1",
-                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[0..32]),
-                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[32..64]),
+                        "x": base64::engine::general_purpose::STANDARD.encode(&key.public_key[1..33]),
+                        "y": base64::engine::general_purpose::STANDARD.encode(&key.public_key[33..65]),
                         "d": base64::engine::general_purpose::STANDARD.encode(&key.private_key)
                     }),
                 },
@@ -1130,13 +1159,17 @@ impl DIDKeyGenerator {
     /// Generate a did:key identifier with the specified key type
     pub fn generate_did(&self, options: DIDGenerationOptions) -> Result<GeneratedKey> {
         match options.key_type {
+            #[cfg(feature = "crypto-ed25519")]
             KeyType::Ed25519 => self.generate_ed25519_did(),
+            #[cfg(feature = "crypto-p256")]
             KeyType::P256 => self.generate_p256_did(),
+            #[cfg(feature = "crypto-secp256k1")]
             KeyType::Secp256k1 => self.generate_secp256k1_did(),
         }
     }
 
     /// Generate a did:key identifier with an Ed25519 key
+    #[cfg(feature = "crypto-ed25519")]
     pub fn generate_ed25519_did(&self) -> Result<GeneratedKey> {
         // Generate a new Ed25519 keypair
         let mut csprng = OsRng;
@@ -1170,6 +1203,7 @@ impl DIDKeyGenerator {
     }
 
     /// Generate a did:key identifier with a P-256 key
+    #[cfg(feature = "crypto-p256")]
     pub fn generate_p256_did(&self) -> Result<GeneratedKey> {
         // Generate a new P-256 keypair
         let mut rng = OsRng;
@@ -1206,6 +1240,7 @@ impl DIDKeyGenerator {
     }
 
     /// Generate a did:key identifier with a Secp256k1 key
+    #[cfg(feature = "crypto-secp256k1")]
     pub fn generate_secp256k1_did(&self) -> Result<GeneratedKey> {
         // Generate a new Secp256k1 keypair
         let mut rng = OsRng;
@@ -1302,8 +1337,11 @@ impl DIDKeyGenerator {
     ) -> Result<DIDDoc> {
         // Determine verification method type based on key type
         let verification_method_type = match key_type {
+            #[cfg(feature = "crypto-ed25519")]
             KeyType::Ed25519 => VerificationMethodType::Ed25519VerificationKey2018,
+            #[cfg(feature = "crypto-p256")]
             KeyType::P256 => VerificationMethodType::EcdsaSecp256k1VerificationKey2019, // Using Secp256k1 type as P256 isn't available
+            #[cfg(feature = "crypto-secp256k1")]
             KeyType::Secp256k1 => VerificationMethodType::EcdsaSecp256k1VerificationKey2019,
         };
 
@@ -1327,6 +1365,7 @@ impl DIDKeyGenerator {
         let mut verification_methods = vec![verification_method.clone()];
         let mut key_agreement = Vec::new();
 
+        #[cfg(feature = "crypto-ed25519")]
         if key_type == KeyType::Ed25519 {
             // Only Ed25519 keys have an X25519 key agreement method
             if let Some(x25519_bytes) = self.ed25519_to_x25519(&prefixed_public_key[2..]) {
@@ -1375,6 +1414,7 @@ impl DIDKeyGenerator {
     ///
     /// This follows the conversion process described in RFC 7748
     /// https://datatracker.ietf.org/doc/html/rfc7748#section-5
+    #[cfg(feature = "crypto-ed25519")]
     fn ed25519_to_x25519(&self, ed25519_pubkey: &[u8]) -> Option<[u8; 32]> {
         // The Ed25519 public key should be 32 bytes
         if ed25519_pubkey.len() != 32 {
@@ -1489,10 +1529,7 @@ impl SyncDIDResolver for MultiResolver {
 use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
-use js_sys::{Function, Promise};
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm"))]
-use wasm_bindgen_futures::JsFuture;
+use js_sys::Function;
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
@@ -1507,7 +1544,6 @@ extern "C" {
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub struct JsDIDResolver {
-    method: String,
     resolve_fn: Function,
 }
 
@@ -1516,10 +1552,7 @@ pub struct JsDIDResolver {
 impl JsDIDResolver {
     #[wasm_bindgen(constructor)]
     pub fn new(resolve_fn: Function) -> Self {
-        Self {
-            method: "".to_string(),
-            resolve_fn,
-        }
+        Self { resolve_fn }
     }
 
     #[wasm_bindgen]
@@ -1543,6 +1576,7 @@ impl JsDIDResolver {
 #[derive(Debug)]
 pub struct JsDIDMethodResolver {
     method: String,
+    #[allow(dead_code)] // Reserved for future async JS resolver implementation
     resolve_fn: Function,
 }
 
@@ -1711,6 +1745,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "crypto-p256")]
     fn test_did_key_generator_p256() {
         let generator = DIDKeyGenerator::new();
 
@@ -1754,6 +1789,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "crypto-secp256k1")]
     fn test_did_key_generator_secp256k1() {
         let generator = DIDKeyGenerator::new();
 

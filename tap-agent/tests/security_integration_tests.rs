@@ -1,6 +1,9 @@
 //! Security integration tests for TAP Agent
 //!
 //! These tests verify that the cryptographic implementation is secure end-to-end.
+//! Requires crypto-p256 feature.
+
+#![cfg(feature = "crypto-p256")]
 
 use base64::Engine;
 use std::sync::Arc;

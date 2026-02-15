@@ -20,28 +20,45 @@ serde-wasm-bindgen = "0.4"
 serde_json = "1.0.96"
 uuid = { workspace = true }
 console_error_panic_hook = { version = "0.1.7", optional = true }
+wee_alloc = { version = "0.4.5", optional = true }
 tap-caip = { version = "0.5.0", path = "../tap-caip" }
 # Add tap-agent with wasm feature enabled and default features disabled
 tap-agent = { version = "0.5.0", path = "../tap-agent", default-features = false, features = [
     "wasm",
+    "crypto-ed25519",
 ] }
 tap-msg = { version = "0.5.0", path = "../tap-msg", default-features = false, features = [
     "wasm",
 ] }
 web-sys = { version = "0.3.64", features = ["console"] }
-chrono = { version = "0.4", features = ["wasmbind"] }
 getrandom = { workspace = true, features = ["js"] }
 base64 = "0.22"
 ed25519-dalek = { version = "2.2", features = ["rand_core"] }
 rand = "0.8"
+hex = "0.4"
 
 [features]
-default = ["console_error_panic_hook"]
+default = ["wee_alloc", "console_error_panic_hook", "crypto-ed25519", "crypto-p256", "crypto-secp256k1"]
+
+# Optional crypto backends
+crypto-ed25519 = ["tap-agent/crypto-ed25519"]
+crypto-p256 = ["tap-agent/crypto-p256"]
+crypto-secp256k1 = ["tap-agent/crypto-secp256k1"]
 
 [dev-dependencies]
 wasm-bindgen-test = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
 criterion = "0.6"
 
 [[bench]]
 name = "wasm_binding_benchmark"
 harness = false
+required-features = []
+
+# Optimize for size
+[profile.release]
+opt-level = "z"   # Optimize for size
+lto = true        # Enable Link Time Optimization
+codegen-units = 1 # Single codegen unit for better optimization
+strip = true      # Strip debug symbols

@@ -8,18 +8,22 @@ use crate::key_manager::KeyManager; // Add KeyManager trait
 use crate::message::SecurityMode;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::message_packing::{PackOptions, Packable, UnpackOptions, Unpackable};
+#[cfg(not(target_arch = "wasm32"))]
 use async_trait::async_trait;
 #[cfg(feature = "native")]
 use reqwest::Client;
 #[cfg(target_arch = "wasm32")]
 use serde::de::DeserializeOwned;
+#[cfg(not(target_arch = "wasm32"))]
 use serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 #[cfg(feature = "native")]
 use std::time::Duration;
+#[cfg(not(target_arch = "wasm32"))]
 use tap_msg::didcomm::{PlainMessage, PlainMessageExt};
 use tap_msg::TapMessageBody;
+#[cfg(not(target_arch = "wasm32"))]
 use tracing::{debug, error, info, warn};
 
 /// Type alias for enhanced agent information: (DID, policies, metadata)
@@ -74,7 +78,6 @@ pub struct DeliveryResult {
 /// ```
 #[cfg(not(target_arch = "wasm32"))]
 #[async_trait]
-#[cfg(not(target_arch = "wasm32"))]
 pub trait Agent {
     /// Gets the agent's DID
     fn get_agent_did(&self) -> &str;
@@ -566,6 +569,7 @@ impl TapAgent {
     ) -> Result<(Self, String)> {
         use crate::did::{DIDKeyGenerator, GeneratedKey};
         use crate::did::{VerificationMaterial, VerificationMethod, VerificationMethodType};
+        #[cfg(feature = "crypto-ed25519")]
         use curve25519_dalek::edwards::CompressedEdwardsY;
         use multibase::{encode, Base};
 
@@ -574,6 +578,7 @@ impl TapAgent {
 
         // Generate the appropriate key and DID based on the key type
         let generated_key = match key_type {
+            #[cfg(feature = "crypto-ed25519")]
             crate::did::KeyType::Ed25519 => {
                 if private_key.len() != 32 {
                     return Err(Error::Validation(format!(
@@ -700,6 +705,7 @@ impl TapAgent {
                     did_doc,
                 }
             }
+            #[cfg(feature = "crypto-p256")]
             crate::did::KeyType::P256 => {
                 if private_key.len() != 32 {
                     return Err(Error::Validation(format!(
@@ -769,6 +775,7 @@ impl TapAgent {
                     did_doc,
                 }
             }
+            #[cfg(feature = "crypto-secp256k1")]
             crate::did::KeyType::Secp256k1 => {
                 if private_key.len() != 32 {
                     return Err(Error::Validation(format!(
@@ -872,25 +879,6 @@ impl TapAgent {
         }
     }
 
-    /// Internal method to process a PlainMessage
-    async fn process_message_internal(&self, message: PlainMessage) -> Result<()> {
-        // This is where actual message processing logic would go
-        // For now, just log that we processed it
-        debug!(
-            "Processing message: {} of type {}",
-            message.id, message.type_
-        );
-
-        // TODO: Add actual message processing logic here
-        // This could include:
-        // - Validating the message against policies
-        // - Updating internal state
-        // - Triggering workflows
-        // - Generating responses
-
-        Ok(())
-    }
-
     /// Determine the appropriate security mode for a message type
     ///
     /// This method implements TAP protocol rules for which security modes
@@ -909,11 +897,10 @@ impl TapAgent {
     fn determine_security_mode<T: TapMessageBody>(&self) -> SecurityMode {
         // If security mode is explicitly configured, use that
         if let Some(ref mode) = self.config.security_mode {
-            if mode.to_uppercase() == "AUTHCRYPT" {
-                return SecurityMode::AuthCrypt;
-            } else {
-                // Default to Signed for any other value
-                return SecurityMode::Signed;
+            match mode.to_uppercase().as_str() {
+                "AUTHCRYPT" => return SecurityMode::AuthCrypt,
+                "ANONCRYPT" => return SecurityMode::AnonCrypt,
+                _ => return SecurityMode::Signed,
             }
         }
 
@@ -1320,7 +1307,10 @@ impl crate::agent::Agent for TapAgent {
 
         // Get the appropriate key IDs
         let sender_kid = self.get_signing_kid().await?;
-        let recipient_kid = if to.len() == 1 && security_mode == SecurityMode::AuthCrypt {
+        let recipient_kid = if to.len() == 1
+            && (security_mode == SecurityMode::AuthCrypt
+                || security_mode == SecurityMode::AnonCrypt)
+        {
             Some(self.get_encryption_kid(to[0]).await?)
         } else {
             None
@@ -1329,7 +1319,11 @@ impl crate::agent::Agent for TapAgent {
         // Create pack options for the plaintext message
         let pack_options = PackOptions {
             security_mode,
-            sender_kid: Some(sender_kid),
+            sender_kid: if security_mode == SecurityMode::AnonCrypt {
+                None
+            } else {
+                Some(sender_kid)
+            },
             recipient_kid,
         };
 
@@ -1433,19 +1427,22 @@ impl crate::agent::Agent for TapAgent {
         // Get our encryption key ID
         let our_kid = self.get_signing_kid().await.ok();
 
-        // Create unpack options
+        // Create unpack options (accept both AuthCrypt and AnonCrypt)
         let unpack_options = UnpackOptions {
-            expected_security_mode: SecurityMode::AuthCrypt,
+            expected_security_mode: SecurityMode::Any,
             expected_recipient_kid: our_kid,
             require_signature: false,
         };
 
         // Decrypt the message
-        let plain_message =
+        let plain_message: PlainMessage<Value> =
             crate::message::Jwe::unpack(&jwe, &*self.key_manager, unpack_options).await?;
 
-        // Process the decrypted message
-        self.process_message_internal(plain_message).await
+        debug!(
+            "Processed encrypted message: {} of type {}",
+            plain_message.id, plain_message.type_
+        );
+        Ok(())
     }
 
     async fn receive_plain_message(&self, message: PlainMessage) -> Result<()> {
@@ -1454,7 +1451,7 @@ impl crate::agent::Agent for TapAgent {
         debug!("Message ID: {}", message.id);
         debug!("Message Type: {}", message.type_);
 
-        self.process_message_internal(message).await
+        Ok(())
     }
 
     async fn receive_message(&self, raw_message: &str) -> Result<PlainMessage> {
@@ -1537,9 +1534,9 @@ impl crate::agent::Agent for TapAgent {
             // Get our encryption key ID
             let our_kid = self.get_signing_kid().await.ok();
 
-            // Create unpack options
+            // Create unpack options (accept both AuthCrypt and AnonCrypt for encrypted messages)
             let unpack_options = UnpackOptions {
-                expected_security_mode: SecurityMode::AuthCrypt,
+                expected_security_mode: SecurityMode::Any,
                 expected_recipient_kid: our_kid,
                 require_signature: false,
             };
