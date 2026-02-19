@@ -2,6 +2,13 @@
 //!
 //! This module implements a state machine for managing transaction lifecycle,
 //! including automatic state transitions and Settle message generation.
+//!
+//! ## Sub-modules
+//!
+//! - [`fsm`]: Formal finite state machine with explicit states, transitions,
+//!   and decision points for the full transaction lifecycle.
+
+pub mod fsm;
 
 use crate::agent::AgentRegistry;
 use crate::error::{Error, Result};
