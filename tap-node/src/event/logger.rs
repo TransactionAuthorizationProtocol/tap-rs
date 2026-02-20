@@ -325,6 +325,20 @@ impl EventLogger {
                     timestamp, customer_id, agent_did, update_type
                 )
             }
+            NodeEvent::DecisionRequired {
+                transaction_id,
+                transaction_state,
+                pending_agents,
+                ..
+            } => {
+                format!(
+                    "[{}] DECISION REQUIRED: tx={}, state={}, pending_agents={}",
+                    timestamp,
+                    transaction_id,
+                    transaction_state,
+                    pending_agents.join(", ")
+                )
+            }
         }
     }
 
@@ -466,6 +480,20 @@ impl EventLogger {
                     "customer_id": customer_id,
                     "agent_did": agent_did,
                     "update_type": update_type,
+                }),
+            ),
+            NodeEvent::DecisionRequired {
+                transaction_id,
+                transaction_state,
+                decision,
+                pending_agents,
+            } => (
+                "decision_required",
+                json!({
+                    "transaction_id": transaction_id,
+                    "transaction_state": transaction_state,
+                    "decision": decision,
+                    "pending_agents": pending_agents,
                 }),
             ),
         };
