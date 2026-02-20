@@ -81,9 +81,11 @@
 //! per-agent authorization status via [`AgentState`]. The transaction advances
 //! to `ReadyToSettle` only when **all** agents reach `Authorized`.
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::Arc;
 
 // ---------------------------------------------------------------------------
 // Transaction States
@@ -789,6 +791,110 @@ impl TransactionFsm {
                 vec![]
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Decision handler configuration
+// ---------------------------------------------------------------------------
+
+/// Controls how the node handles decision points during transaction
+/// processing.
+///
+/// This enum is set on [`NodeConfig`] and determines which
+/// [`DecisionHandler`] implementation the `StandardTransactionProcessor`
+/// uses at runtime.
+#[derive(Debug, Clone, Default)]
+pub enum DecisionMode {
+    /// Automatically approve all decisions — the node will immediately
+    /// send Authorize messages for registered agents and Settle when all
+    /// agents have authorized. This is the current default behavior and
+    /// is suitable for testing or fully-automated deployments.
+    #[default]
+    AutoApprove,
+
+    /// Publish each decision as a [`NodeEvent::DecisionRequired`] on the
+    /// event bus. No automatic action is taken — an external subscriber
+    /// (compliance engine, human operator UI, business rules engine) must
+    /// listen for these events and call back into the node to advance the
+    /// transaction.
+    EventBus,
+
+    /// Use a custom decision handler provided by the caller.
+    Custom(Arc<dyn DecisionHandler>),
+}
+
+// ---------------------------------------------------------------------------
+// Decision handler trait
+// ---------------------------------------------------------------------------
+
+/// Trait for handling FSM decision points.
+///
+/// When the FSM reaches a state that requires an external decision
+/// (e.g., whether to authorize a new transfer), the
+/// `StandardTransactionProcessor` calls the configured `DecisionHandler`.
+///
+/// Implementations can auto-approve, publish to an event bus, call out
+/// to a compliance API, present a UI to a human operator, etc.
+#[async_trait]
+pub trait DecisionHandler: Send + Sync + fmt::Debug {
+    /// Called when the FSM produces a [`Decision`].
+    ///
+    /// The handler receives the full [`TransactionContext`] (current state,
+    /// per-agent status) and the [`Decision`] describing what needs to be
+    /// resolved.
+    ///
+    /// Implementations that auto-resolve should return the same `Decision`
+    /// back. Implementations that defer to external systems should publish
+    /// the decision and return it for auditing.
+    async fn handle_decision(&self, ctx: &TransactionContext, decision: &Decision);
+}
+
+// ---------------------------------------------------------------------------
+// Built-in: AutoApproveHandler
+// ---------------------------------------------------------------------------
+
+/// Decision handler that automatically approves all decisions.
+///
+/// - `AuthorizationRequired` → queues Authorize messages for all registered
+///   agents (the actual sending is done by the processor, not this handler)
+/// - `SettlementRequired` → allows the processor to send Settle
+/// - `PolicySatisfactionRequired` → logged, no action (policies are not
+///   auto-satisfiable)
+///
+/// This preserves the existing tap-node behavior where registered agents
+/// are auto-authorized and settlement is automatic.
+#[derive(Debug)]
+pub struct AutoApproveHandler;
+
+#[async_trait]
+impl DecisionHandler for AutoApproveHandler {
+    async fn handle_decision(&self, _ctx: &TransactionContext, decision: &Decision) {
+        log::debug!("AutoApproveHandler: auto-resolving {}", decision);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Built-in: LogOnlyHandler
+// ---------------------------------------------------------------------------
+
+/// Decision handler that only logs decisions without taking action.
+///
+/// Useful for monitoring/observability when an external system handles
+/// decisions through the event bus channel subscription instead of the
+/// `DecisionHandler` trait.
+#[derive(Debug)]
+pub struct LogOnlyHandler;
+
+#[async_trait]
+impl DecisionHandler for LogOnlyHandler {
+    async fn handle_decision(&self, ctx: &TransactionContext, decision: &Decision) {
+        log::info!(
+            "Decision required for transaction {} (state={}): {}",
+            ctx.transaction_id,
+            ctx.state,
+            decision
+        );
     }
 }
 

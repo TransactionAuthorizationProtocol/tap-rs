@@ -189,6 +189,15 @@ pub struct NodeConfig {
     /// Custom TAP root directory (defaults to ~/.tap)
     #[cfg(feature = "storage")]
     pub tap_root: Option<std::path::PathBuf>,
+    /// How the node handles FSM decision points.
+    ///
+    /// - `AutoApprove` (default): Automatically authorize and settle —
+    ///   preserves the existing behavior.
+    /// - `EventBus`: Publish `NodeEvent::DecisionRequired` events for
+    ///   external systems to handle. No automatic action is taken.
+    /// - `Custom(handler)`: Delegate to a caller-provided
+    ///   [`DecisionHandler`](state_machine::fsm::DecisionHandler).
+    pub decision_mode: state_machine::fsm::DecisionMode,
 }
 
 /// # The TAP Node
@@ -378,11 +387,12 @@ impl TapNode {
         let transaction_audit_handler = Arc::new(event::handlers::TransactionAuditHandler::new());
         self.event_bus.subscribe(transaction_audit_handler).await;
 
-        // Create state processor
+        // Create state processor with configured decision mode
         let state_processor = Arc::new(state_machine::StandardTransactionProcessor::new(
             storage_arc.clone(),
             self.event_bus.clone(),
             self.agents.clone(),
+            self.config.decision_mode.clone(),
         ));
 
         self.storage = Some(storage_arc);
@@ -1910,11 +1920,12 @@ impl TapNode {
         let transaction_audit_handler = Arc::new(event::handlers::TransactionAuditHandler::new());
         self.event_bus.subscribe(transaction_audit_handler).await;
 
-        // Create state processor
+        // Create state processor with configured decision mode
         let state_processor = Arc::new(state_machine::StandardTransactionProcessor::new(
             storage_arc.clone(),
             self.event_bus.clone(),
             self.agents.clone(),
+            self.config.decision_mode.clone(),
         ));
 
         self.storage = Some(storage_arc);

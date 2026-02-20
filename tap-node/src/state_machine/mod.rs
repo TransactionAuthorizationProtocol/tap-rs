@@ -15,6 +15,11 @@ use crate::error::{Error, Result};
 use crate::event::EventBus;
 use crate::storage::Storage;
 use async_trait::async_trait;
+use dashmap::DashMap;
+use fsm::{
+    AutoApproveHandler, Decision, DecisionHandler, DecisionMode, FsmEvent, LogOnlyHandler,
+    TransactionContext, TransactionFsm,
+};
 use std::sync::Arc;
 use tap_agent::Agent;
 use tap_msg::didcomm::PlainMessage;
@@ -28,103 +33,185 @@ pub trait TransactionStateProcessor: Send + Sync {
 }
 
 /// Standard transaction state processor
+///
+/// Routes incoming TAP messages through the FSM and delegates decisions
+/// to the configured [`DecisionHandler`].
 pub struct StandardTransactionProcessor {
     storage: Arc<Storage>,
     event_bus: Arc<EventBus>,
     agents: Arc<AgentRegistry>,
+    /// In-memory FSM contexts keyed by transaction ID.
+    contexts: DashMap<String, TransactionContext>,
+    /// Handler for FSM decision points.
+    decision_handler: Arc<dyn DecisionHandler>,
+    /// Whether to auto-act on decisions (send Authorize/Settle messages).
+    auto_act: bool,
 }
 
 impl StandardTransactionProcessor {
-    /// Create a new standard transaction processor
+    /// Create a new standard transaction processor with the given decision mode.
     pub fn new(
         storage: Arc<Storage>,
         event_bus: Arc<EventBus>,
         agents: Arc<AgentRegistry>,
+        decision_mode: DecisionMode,
     ) -> Self {
+        let (decision_handler, auto_act): (Arc<dyn DecisionHandler>, bool) = match decision_mode {
+            DecisionMode::AutoApprove => (Arc::new(AutoApproveHandler), true),
+            DecisionMode::EventBus => (Arc::new(LogOnlyHandler), false),
+            DecisionMode::Custom(handler) => (handler, false),
+        };
+
         Self {
             storage,
             event_bus,
             agents,
+            contexts: DashMap::new(),
+            decision_handler,
+            auto_act,
         }
     }
 
-    /// Extract agents from a Transfer or Payment message
-    /// Note: This only extracts actual agents (compliance, etc.), not the primary parties
-    /// (originator/beneficiary for Transfer, customer/merchant for Payment)
-    async fn extract_agents_from_message(
+    /// Extract agents from a Transfer or Payment message.
+    /// Returns (agent_did, role) pairs for agents only (not primary parties).
+    fn extract_agents_from_tap_message(tap_message: &TapMessage) -> Vec<(String, String)> {
+        let agents_list = match tap_message {
+            TapMessage::Transfer(t) => &t.agents,
+            TapMessage::Payment(p) => &p.agents,
+            _ => return Vec::new(),
+        };
+        agents_list
+            .iter()
+            .map(|a| {
+                let role = match a.role.as_deref() {
+                    Some("compliance") => "compliance",
+                    _ => "other",
+                };
+                (a.id.clone(), role.to_string())
+            })
+            .collect()
+    }
+
+    /// Get or create the FSM context for a transaction.
+    fn get_or_create_context(
         &self,
-        message: &PlainMessage,
-    ) -> Result<Vec<(String, String)>> {
-        let tap_message = TapMessage::from_plain_message(message)
-            .map_err(|e| Error::InvalidPlainMessage(e.to_string()))?;
-
-        let mut agents = Vec::new();
-
-        match tap_message {
-            TapMessage::Transfer(transfer) => {
-                // Only add agents from the agents field, not the primary parties
-                for agent in &transfer.agents {
-                    let role_str = match agent.role.as_deref() {
-                        Some("compliance") => "compliance",
-                        _ => "other",
-                    };
-                    agents.push((agent.id.clone(), role_str.to_string()));
-                }
-            }
-            TapMessage::Payment(payment) => {
-                // Only add agents from the agents field, not the primary parties
-                for agent in &payment.agents {
-                    let role_str = match agent.role.as_deref() {
-                        Some("compliance") => "compliance",
-                        _ => "other",
-                    };
-                    agents.push((agent.id.clone(), role_str.to_string()));
-                }
-            }
-            _ => {
-                // Not a Transfer or Payment
-                return Ok(agents);
-            }
-        }
-
-        Ok(agents)
+        transaction_id: &str,
+        agent_dids: Vec<String>,
+    ) -> TransactionContext {
+        self.contexts
+            .entry(transaction_id.to_string())
+            .or_insert_with(|| TransactionContext::new(transaction_id.to_string(), agent_dids))
+            .clone()
     }
 
-    /// Automatically send Authorize message for incoming Transfer or Payment messages
+    /// Persist the FSM context back to the in-memory map.
+    fn save_context(&self, ctx: &TransactionContext) {
+        self.contexts
+            .insert(ctx.transaction_id.clone(), ctx.clone());
+    }
+
+    /// Convert a TapMessage + PlainMessage into an FsmEvent.
+    fn to_fsm_event(tap_message: &TapMessage, plain: &PlainMessage) -> Option<FsmEvent> {
+        match tap_message {
+            TapMessage::Transfer(_) | TapMessage::Payment(_) => {
+                let agent_dids: Vec<String> = Self::extract_agents_from_tap_message(tap_message)
+                    .into_iter()
+                    .map(|(did, _)| did)
+                    .collect();
+                Some(FsmEvent::TransactionReceived { agent_dids })
+            }
+            TapMessage::Authorize(auth) => Some(FsmEvent::AuthorizeReceived {
+                agent_did: plain.from.clone(),
+                settlement_address: auth.settlement_address.clone(),
+                expiry: auth.expiry.clone(),
+            }),
+            TapMessage::Reject(reject) => Some(FsmEvent::RejectReceived {
+                agent_did: plain.from.clone(),
+                reason: reject.reason.clone(),
+            }),
+            TapMessage::Cancel(cancel) => Some(FsmEvent::CancelReceived {
+                by_did: plain.from.clone(),
+                reason: cancel.reason.clone(),
+            }),
+            TapMessage::Settle(settle) => Some(FsmEvent::SettleReceived {
+                settlement_id: settle.settlement_id.clone(),
+                amount: settle.amount.clone(),
+            }),
+            TapMessage::Revert(revert) => Some(FsmEvent::RevertReceived {
+                by_did: plain.from.clone(),
+                reason: revert.reason.clone(),
+            }),
+            TapMessage::AddAgents(add) => Some(FsmEvent::AgentsAdded {
+                agent_dids: add.agents.iter().map(|a| a.id.clone()).collect(),
+            }),
+            TapMessage::UpdatePolicies(_) => Some(FsmEvent::PoliciesReceived {
+                from_did: plain.from.clone(),
+            }),
+            TapMessage::Presentation(_) => Some(FsmEvent::PresentationReceived {
+                from_did: plain.from.clone(),
+            }),
+            _ => None,
+        }
+    }
+
+    /// Get the transaction_id that a TAP message references.
+    fn transaction_id_for(tap_message: &TapMessage, plain: &PlainMessage) -> String {
+        match tap_message {
+            TapMessage::Transfer(_) | TapMessage::Payment(_) => plain.id.clone(),
+            TapMessage::Authorize(a) => a.transaction_id.clone(),
+            TapMessage::Reject(r) => r.transaction_id.clone(),
+            TapMessage::Cancel(c) => c.transaction_id.clone(),
+            TapMessage::Settle(s) => s.transaction_id.clone(),
+            TapMessage::Revert(r) => r.transaction_id.clone(),
+            TapMessage::AddAgents(a) => a.transaction_id.clone(),
+            TapMessage::UpdatePolicies(u) => u.transaction_id.clone(),
+            // Presentation uses pthid/thid for threading
+            _ => plain.thid.clone().unwrap_or_default(),
+        }
+    }
+
+    /// Publish a decision to the event bus.
+    async fn publish_decision(&self, ctx: &TransactionContext, decision: &Decision) {
+        let decision_json = serde_json::to_value(decision).unwrap_or_default();
+        self.event_bus
+            .publish_decision_required(
+                ctx.transaction_id.clone(),
+                ctx.state.to_string(),
+                decision_json,
+                ctx.pending_agents(),
+            )
+            .await;
+    }
+
+    // ---- Auto-act methods (only called in AutoApprove mode) ----
+
+    /// Automatically send Authorize for our registered agents.
     async fn auto_authorize_transaction(&self, message: &PlainMessage) -> Result<()> {
         let tap_message = TapMessage::from_plain_message(message)
             .map_err(|e| Error::InvalidPlainMessage(e.to_string()))?;
 
-        // Only auto-authorize Transfer and Payment messages
         let transaction_id = match &tap_message {
             TapMessage::Transfer(transfer) => &transfer.transaction_id,
             TapMessage::Payment(payment) => &payment.transaction_id,
-            _ => return Ok(()), // Not a transaction message
+            _ => return Ok(()),
         };
 
-        // Find agents in our registry that are involved in this transaction
         let our_agents = self.agents.get_all_dids();
-        let transaction_agents = self.extract_agents_from_message(message).await?;
+        let transaction_agents = Self::extract_agents_from_tap_message(&tap_message);
 
-        // Check if any of our agents are involved in this transaction
         for (agent_did, _role) in transaction_agents {
             if our_agents.contains(&agent_did) {
-                // Get the agent from registry
                 if let Ok(agent) = self.agents.get_agent(&agent_did).await {
-                    // Create an Authorize message using the Authorizable trait
                     use tap_msg::message::tap_message_trait::Authorizable;
                     let authorize_message = match &tap_message {
                         TapMessage::Transfer(transfer) => {
                             transfer.authorize(&agent_did, None, None)
                         }
                         TapMessage::Payment(payment) => payment.authorize(&agent_did, None, None),
-                        _ => continue, // Should not happen due to earlier check
+                        _ => continue,
                     };
 
-                    // Convert to body for sending
                     let auth_body = authorize_message.body;
-
-                    // Send to the original sender
                     let recipients_list = vec![message.from.as_str()];
 
                     log::info!(
@@ -148,9 +235,8 @@ impl StandardTransactionProcessor {
         Ok(())
     }
 
-    /// Check if we should send a Settle message
+    /// Check if all agents authorized and send Settle if so.
     async fn check_and_send_settle(&self, transaction_id: &str) -> Result<()> {
-        // Get the transaction
         let transaction = self
             .storage
             .get_transaction_by_id(transaction_id)
@@ -158,7 +244,6 @@ impl StandardTransactionProcessor {
             .map_err(|e| Error::Storage(e.to_string()))?
             .ok_or_else(|| Error::Storage(format!("Transaction {} not found", transaction_id)))?;
 
-        // Check if we're the sender (originator)
         let our_agents = self.agents.get_all_dids();
         let is_sender = transaction
             .from_did
@@ -167,10 +252,9 @@ impl StandardTransactionProcessor {
             .unwrap_or(false);
 
         if !is_sender {
-            return Ok(()); // Only sender sends Settle
+            return Ok(());
         }
 
-        // Check if all agents have authorized
         let all_authorized = self
             .storage
             .are_all_agents_authorized(transaction_id)
@@ -178,21 +262,18 @@ impl StandardTransactionProcessor {
             .map_err(|e| Error::Storage(e.to_string()))?;
 
         if !all_authorized {
-            return Ok(()); // Not all agents have authorized yet
+            return Ok(());
         }
 
-        // Check if transaction is already in 'confirmed' status
         if transaction.status.to_string() == "confirmed" {
-            return Ok(()); // Already settled
+            return Ok(());
         }
 
-        // Create and send Settle message
         log::info!(
             "All agents authorized for transaction {}, sending Settle message",
             transaction_id
         );
 
-        // Get the sender agent
         let sender_did = transaction
             .from_did
             .as_ref()
@@ -204,11 +285,8 @@ impl StandardTransactionProcessor {
             .await
             .map_err(|e| Error::Agent(e.to_string()))?;
 
-        // Create Settle message using the Transaction trait's settle() method
-        // This is the proper way to create settlement messages using the TAP framework
         let settlement_id = format!("settle_{}", transaction_id);
 
-        // Parse the original transaction message to use the Transaction trait
         let transaction_message: PlainMessage =
             serde_json::from_value(transaction.message_json.clone()).map_err(|e| {
                 Error::Serialization(format!("Failed to parse transaction message: {}", e))
@@ -217,14 +295,9 @@ impl StandardTransactionProcessor {
         let tap_message = TapMessage::from_plain_message(&transaction_message)
             .map_err(|e| Error::InvalidPlainMessage(e.to_string()))?;
 
-        // Use the Transaction trait to create the Settle message
         use tap_msg::message::tap_message_trait::Transaction;
 
-        // Send Settle message only to agents (not primary parties)
-        // Get all agents for this transaction
-        let agents = self
-            .extract_agents_from_message(&transaction_message)
-            .await?;
+        let agents = Self::extract_agents_from_tap_message(&tap_message);
 
         if agents.is_empty() {
             log::debug!(
@@ -234,10 +307,8 @@ impl StandardTransactionProcessor {
             return Ok(());
         }
 
-        // Send settle message to all agents
         for (agent_did, _role) in agents {
             if agent_did != *sender_did {
-                // Use the Transaction trait to create a proper Settle message for this agent
                 let settle_message = match &tap_message {
                     TapMessage::Transfer(transfer) => {
                         transfer.settle(sender_did, &settlement_id, None)
@@ -254,10 +325,7 @@ impl StandardTransactionProcessor {
                     }
                 };
 
-                // Convert to body for sending
                 let settle_body = settle_message.body;
-
-                // Send message using the Agent trait's send_message method for proper signing
                 let recipients_list = vec![agent_did.as_str()];
                 let _ = agent
                     .send_message(&settle_body, recipients_list, true)
@@ -269,13 +337,11 @@ impl StandardTransactionProcessor {
             }
         }
 
-        // Update transaction status to 'confirmed'
         self.storage
             .update_transaction_status(transaction_id, "confirmed")
             .await
             .map_err(|e| Error::Storage(e.to_string()))?;
 
-        // Emit state change event
         self.event_bus
             .publish_transaction_state_changed(
                 transaction_id.to_string(),
@@ -295,21 +361,22 @@ impl TransactionStateProcessor for StandardTransactionProcessor {
         let tap_message = TapMessage::from_plain_message(message)
             .map_err(|e| Error::InvalidPlainMessage(e.to_string()))?;
 
-        match tap_message {
+        let transaction_id = Self::transaction_id_for(&tap_message, message);
+
+        // Convert message to FSM event
+        let fsm_event = Self::to_fsm_event(&tap_message, message);
+
+        // --- Storage operations (always run regardless of decision mode) ---
+        match &tap_message {
             TapMessage::Transfer(_) | TapMessage::Payment(_) => {
-                // First, store the transaction itself
-                let transaction_id = &message.id;
                 if let Err(e) = self.storage.insert_transaction(message).await {
                     log::warn!("Failed to insert transaction {}: {}", transaction_id, e);
                 }
-
-                // Extract and store agents for new transaction
-                let agents = self.extract_agents_from_message(message).await?;
-
-                for (agent_did, role) in agents {
+                let agents = Self::extract_agents_from_tap_message(&tap_message);
+                for (agent_did, role) in &agents {
                     if let Err(e) = self
                         .storage
-                        .insert_transaction_agent(transaction_id, &agent_did, &role)
+                        .insert_transaction_agent(&transaction_id, agent_did, role)
                         .await
                     {
                         log::warn!(
@@ -320,219 +387,144 @@ impl TransactionStateProcessor for StandardTransactionProcessor {
                         );
                     }
                 }
-
-                // Automatically send Authorize messages for our agents involved in this transaction
-                if let Err(e) = self.auto_authorize_transaction(message).await {
-                    log::warn!(
-                        "Failed to auto-authorize transaction {}: {}",
-                        transaction_id,
-                        e
-                    );
-                }
             }
-            TapMessage::Authorize(auth) => {
-                let transaction_id = &auth.transaction_id;
-                let agent_did = &message.from;
-
-                // Update agent status to 'authorized'
+            TapMessage::Authorize(_) => {
                 if let Err(e) = self
                     .storage
-                    .update_transaction_agent_status(transaction_id, agent_did, "authorized")
+                    .update_transaction_agent_status(&transaction_id, &message.from, "authorized")
                     .await
                 {
                     log::warn!(
                         "Failed to update agent {} status for transaction {}: {}",
-                        agent_did,
+                        message.from,
                         transaction_id,
                         e
                     );
-                } else {
-                    // Emit state change event
-                    self.event_bus
-                        .publish_transaction_state_changed(
-                            transaction_id.clone(),
-                            "pending".to_string(),
-                            "pending".to_string(), // Individual agent authorized, but transaction still pending
-                            Some(agent_did.clone()),
-                        )
-                        .await;
-
-                    // Check if we should send Settle
-                    if let Err(e) = self.check_and_send_settle(transaction_id).await {
-                        log::warn!(
-                            "Failed to check/send settle for transaction {}: {}",
-                            transaction_id,
-                            e
-                        );
-                    }
                 }
             }
-            TapMessage::Cancel(cancel) => {
-                let transaction_id = &cancel.transaction_id;
-                let agent_did = &message.from;
-
-                // Update agent status to 'cancelled'
-                if let Err(e) = self
+            TapMessage::Reject(_) => {
+                let _ = self
                     .storage
-                    .update_transaction_agent_status(transaction_id, agent_did, "cancelled")
-                    .await
-                {
-                    log::warn!(
-                        "Failed to update agent {} status for transaction {}: {}",
-                        agent_did,
-                        transaction_id,
-                        e
-                    );
-                }
-
-                // Update transaction status to 'cancelled'
-                if let Err(e) = self
+                    .update_transaction_agent_status(&transaction_id, &message.from, "rejected")
+                    .await;
+                let _ = self
                     .storage
-                    .update_transaction_status(transaction_id, "cancelled")
-                    .await
-                {
-                    log::warn!(
-                        "Failed to update transaction {} status: {}",
-                        transaction_id,
-                        e
-                    );
-                } else {
-                    // Emit state change event
-                    self.event_bus
-                        .publish_transaction_state_changed(
-                            transaction_id.clone(),
-                            "pending".to_string(),
-                            "cancelled".to_string(),
-                            Some(agent_did.clone()),
-                        )
-                        .await;
-                }
+                    .update_transaction_status(&transaction_id, "failed")
+                    .await;
             }
-            TapMessage::Reject(reject) => {
-                let transaction_id = &reject.transaction_id;
-                let agent_did = &message.from;
-
-                // Update agent status to 'rejected'
-                if let Err(e) = self
+            TapMessage::Cancel(_) => {
+                let _ = self
                     .storage
-                    .update_transaction_agent_status(transaction_id, agent_did, "rejected")
-                    .await
-                {
-                    log::warn!(
-                        "Failed to update agent {} status for transaction {}: {}",
-                        agent_did,
-                        transaction_id,
-                        e
-                    );
-                }
-
-                // Update transaction status to 'failed'
-                if let Err(e) = self
+                    .update_transaction_agent_status(&transaction_id, &message.from, "cancelled")
+                    .await;
+                let _ = self
                     .storage
-                    .update_transaction_status(transaction_id, "failed")
-                    .await
-                {
-                    log::warn!(
-                        "Failed to update transaction {} status: {}",
-                        transaction_id,
-                        e
-                    );
-                } else {
-                    // Emit state change event
-                    self.event_bus
-                        .publish_transaction_state_changed(
-                            transaction_id.clone(),
-                            "pending".to_string(),
-                            "failed".to_string(),
-                            Some(agent_did.clone()),
-                        )
-                        .await;
-                }
+                    .update_transaction_status(&transaction_id, "cancelled")
+                    .await;
             }
-            TapMessage::Settle(settle) => {
-                let transaction_id = &settle.transaction_id;
-
-                // Update transaction status to 'confirmed'
-                if let Err(e) = self
+            TapMessage::Settle(_) => {
+                let _ = self
                     .storage
-                    .update_transaction_status(transaction_id, "confirmed")
-                    .await
-                {
-                    log::warn!(
-                        "Failed to update transaction {} status: {}",
-                        transaction_id,
-                        e
-                    );
-                } else {
-                    // Emit state change event
-                    self.event_bus
-                        .publish_transaction_state_changed(
-                            transaction_id.clone(),
-                            "pending".to_string(),
-                            "confirmed".to_string(),
-                            Some(message.from.clone()),
-                        )
-                        .await;
-                }
+                    .update_transaction_status(&transaction_id, "confirmed")
+                    .await;
             }
-            TapMessage::Revert(revert) => {
-                let transaction_id = &revert.transaction_id;
-
-                // Update transaction status to 'reverted'
-                if let Err(e) = self
+            TapMessage::Revert(_) => {
+                let _ = self
                     .storage
-                    .update_transaction_status(transaction_id, "reverted")
-                    .await
-                {
-                    log::warn!(
-                        "Failed to update transaction {} status: {}",
-                        transaction_id,
-                        e
-                    );
-                } else {
-                    // Emit state change event
-                    self.event_bus
-                        .publish_transaction_state_changed(
-                            transaction_id.clone(),
-                            "confirmed".to_string(),
-                            "reverted".to_string(),
-                            Some(message.from.clone()),
-                        )
-                        .await;
-                }
+                    .update_transaction_status(&transaction_id, "reverted")
+                    .await;
             }
             TapMessage::AddAgents(add) => {
-                // Update agents based on TAIP-5
-                let transaction_id = &add.transaction_id;
-
                 for agent in &add.agents {
                     let role_str = match agent.role.as_deref() {
                         Some("compliance") => "compliance",
                         _ => "other",
                     };
-
-                    if let Err(e) = self
+                    let _ = self
                         .storage
-                        .insert_transaction_agent(transaction_id, &agent.id, role_str)
-                        .await
-                    {
-                        log::warn!(
-                            "Failed to add agent {} to transaction {}: {}",
-                            agent.id,
-                            transaction_id,
-                            e
-                        );
-                    }
+                        .insert_transaction_agent(&transaction_id, &agent.id, role_str)
+                        .await;
                 }
             }
-            TapMessage::UpdatePolicies(_) => {
-                // Update policies based on TAIP-7
-                // This would update transaction metadata, but we don't have a specific
-                // field for policies in our current schema, so we'll skip for now
-                log::debug!("UpdatePolicies message received, but policy storage not implemented");
-            }
-            _ => {
-                // Other message types don't affect transaction state
+            _ => {}
+        }
+
+        // --- FSM transition ---
+        if let Some(event) = fsm_event {
+            let agent_dids: Vec<String> = Self::extract_agents_from_tap_message(&tap_message)
+                .into_iter()
+                .map(|(did, _)| did)
+                .collect();
+
+            let mut ctx = self.get_or_create_context(&transaction_id, agent_dids);
+            let old_state = ctx.state.to_string();
+
+            match TransactionFsm::apply(&mut ctx, event) {
+                Ok(transition) => {
+                    let new_state = transition.to_state.to_string();
+
+                    // Persist FSM context
+                    self.save_context(&ctx);
+
+                    // Publish state change if it actually changed
+                    if old_state != new_state {
+                        self.event_bus
+                            .publish_transaction_state_changed(
+                                transaction_id.clone(),
+                                old_state,
+                                new_state,
+                                Some(message.from.clone()),
+                            )
+                            .await;
+                    }
+
+                    // Handle decision if one was produced
+                    if let Some(ref decision) = transition.decision {
+                        // Always notify the decision handler
+                        self.decision_handler.handle_decision(&ctx, decision).await;
+
+                        // Always publish to event bus for observability
+                        self.publish_decision(&ctx, decision).await;
+
+                        // Auto-act if configured
+                        if self.auto_act {
+                            match decision {
+                                Decision::AuthorizationRequired { .. } => {
+                                    if let Err(e) = self.auto_authorize_transaction(message).await {
+                                        log::warn!(
+                                            "Failed to auto-authorize transaction {}: {}",
+                                            transaction_id,
+                                            e
+                                        );
+                                    }
+                                }
+                                Decision::SettlementRequired { transaction_id } => {
+                                    if let Err(e) = self.check_and_send_settle(transaction_id).await
+                                    {
+                                        log::warn!(
+                                            "Failed to check/send settle for transaction {}: {}",
+                                            transaction_id,
+                                            e
+                                        );
+                                    }
+                                }
+                                Decision::PolicySatisfactionRequired { .. } => {
+                                    log::debug!(
+                                        "Policy satisfaction required for transaction {} — no auto-action available",
+                                        transaction_id
+                                    );
+                                }
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    log::warn!(
+                        "FSM transition error for transaction {}: {}",
+                        transaction_id,
+                        e
+                    );
+                }
             }
         }
 
