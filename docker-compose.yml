@@ -1,0 +1,21 @@
+services:
+  tap-http:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tap-http
+    ports:
+      - "8000:8000"
+    volumes:
+      - tap-data:/data/tap
+    environment:
+      - TAP_HTTP_HOST=0.0.0.0
+      - TAP_HTTP_PORT=8000
+      - TAP_ROOT=/data/tap
+      - TAP_LOGS_DIR=/data/tap/logs
+      - TAP_STRUCTURED_LOGS=true
+    restart: unless-stopped
+
+volumes:
+  tap-data:
+    driver: local

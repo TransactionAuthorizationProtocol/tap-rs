@@ -1,0 +1,17 @@
+target/
+.git/
+.github/
+.gitignore
+*.md
+!README.md
+docs/
+prds/
+examples/
+tap-ts/
+tap-wasm/
+tap-mcp/
+*.log
+*.db
+.env
+.vscode/
+.idea/
