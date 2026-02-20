@@ -443,6 +443,30 @@ pub enum NodeEvent {
         /// The type of update (created, updated, verified)
         update_type: String,
     },
+
+    /// A transaction reached a decision point that requires external input.
+    ///
+    /// This event is published when the node's `DecisionMode` is set to
+    /// `EventBus`. External systems should subscribe to this event and
+    /// call back into the node (via sending appropriate TAP messages) to
+    /// advance the transaction.
+    ///
+    /// # Parameters
+    ///
+    /// - `transaction_id`: The transaction requiring a decision
+    /// - `transaction_state`: Current FSM state as a string
+    /// - `decision`: The decision type as a serialized JSON value
+    /// - `pending_agents`: DIDs of agents that still need to act
+    DecisionRequired {
+        /// The transaction requiring a decision
+        transaction_id: String,
+        /// Current FSM state
+        transaction_state: String,
+        /// The decision type and details (serialized Decision)
+        decision: Value,
+        /// DIDs of agents that still need to act
+        pending_agents: Vec<String>,
+    },
 }
 
 /// Event subscriber trait for receiving node events
@@ -693,6 +717,23 @@ impl EventBus {
             old_state,
             new_state,
             agent_did,
+        };
+        self.publish_event(event).await;
+    }
+
+    /// Publish a decision required event
+    pub async fn publish_decision_required(
+        &self,
+        transaction_id: String,
+        transaction_state: String,
+        decision: serde_json::Value,
+        pending_agents: Vec<String>,
+    ) {
+        let event = NodeEvent::DecisionRequired {
+            transaction_id,
+            transaction_state,
+            decision,
+            pending_agents,
         };
         self.publish_event(event).await;
     }

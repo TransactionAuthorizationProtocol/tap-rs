@@ -383,6 +383,98 @@ tap-http --use-stored-key --agent-did did:key:z6Mk...
 tap-http --logs-dir /var/log/tap --structured-logs
 ```
 
+## Docker
+
+The easiest way to run `tap-http` is with Docker. All persistent state (keys, databases, logs) is stored in a single volume at `/data/tap`.
+
+### Quick Start
+
+```bash
+# Build and run with docker compose
+docker compose up -d
+
+# View logs
+docker compose logs -f tap-http
+
+# Stop
+docker compose down
+```
+
+### Build the Image Manually
+
+```bash
+docker build -t tap-http .
+```
+
+### Run with Docker
+
+```bash
+# Run with a named volume for persistent storage
+docker run -d \
+  --name tap-http \
+  -p 8000:8000 \
+  -v tap-data:/data/tap \
+  tap-http
+
+# Run with a host directory for easy inspection of data
+docker run -d \
+  --name tap-http \
+  -p 8000:8000 \
+  -v ./tap-data:/data/tap \
+  tap-http
+
+# Pass additional CLI flags
+docker run -d \
+  --name tap-http \
+  -p 8000:8000 \
+  -v tap-data:/data/tap \
+  tap-http --verbose --structured-logs
+```
+
+### Persistent Storage
+
+The container stores all state under `/data/tap`, which maps to:
+
+| Path | Contents |
+|------|----------|
+| `/data/tap/keys.json` | Agent key store |
+| `/data/tap/logs/` | Event log files |
+| `/data/tap/<did>/transactions.db` | Per-agent SQLite databases |
+
+Back up this volume to preserve keys and transaction history across container recreations.
+
+### Environment Variables
+
+Configure the container with environment variables via `docker compose` or `docker run -e`:
+
+```bash
+docker run -d \
+  --name tap-http \
+  -p 9000:9000 \
+  -v tap-data:/data/tap \
+  -e TAP_HTTP_PORT=9000 \
+  -e TAP_STRUCTURED_LOGS=true \
+  -e TAP_AGENT_DID=did:key:z6Mk... \
+  -e TAP_AGENT_KEY=<base64-private-key> \
+  tap-http
+```
+
+See the full list of environment variables in the [Environment Variables](#environment-variables-for-tap-http) section below.
+
+### Inspecting Data
+
+```bash
+# Access the SQLite database from the host
+docker run --rm -v tap-data:/data alpine ls -la /data/tap/
+
+# Query the database directly
+docker exec tap-http sqlite3 /data/tap/*/transactions.db \
+  "SELECT message_id, message_type, direction FROM messages LIMIT 10;"
+
+# Tail event logs
+docker exec tap-http tail -f /data/tap/logs/tap-http.log
+```
+
 ## Command Line Options for tap-http
 
 After installation, you can use the `tap-http` command to run a TAP HTTP server:

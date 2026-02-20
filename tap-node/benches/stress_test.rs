@@ -67,6 +67,7 @@ fn stress_test(c: &mut Criterion) {
         agent_did: None,
         #[cfg(feature = "storage")]
         tap_root: None,
+        decision_mode: Default::default(),
     };
 
     // For testing, we'll create some DIDs that don't rely on external resolvers

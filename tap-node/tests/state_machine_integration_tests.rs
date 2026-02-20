@@ -15,6 +15,7 @@ use tap_msg::message::{Agent, Party, Payment, Transfer};
 use tap_node::agent::AgentRegistry;
 use tap_node::event::EventBus;
 use tap_node::message::{PlainMessageProcessor, StateMachineIntegrationProcessor};
+use tap_node::state_machine::fsm::DecisionMode;
 use tap_node::state_machine::{StandardTransactionProcessor, TransactionStateProcessor};
 use tap_node::storage::Storage;
 
@@ -57,6 +58,7 @@ async fn test_complete_state_machine_integration() {
         storage.clone(),
         event_bus.clone(),
         agents.clone(),
+        DecisionMode::AutoApprove,
     ));
 
     // Create integration processor
@@ -126,6 +128,7 @@ async fn test_automatic_authorization() {
         storage.clone(),
         event_bus.clone(),
         agents.clone(),
+        DecisionMode::AutoApprove,
     ));
 
     // Create a Payment message
@@ -191,6 +194,7 @@ async fn test_processing_pipeline_order() {
         storage.clone(),
         event_bus.clone(),
         agents.clone(),
+        DecisionMode::AutoApprove,
     ));
 
     // Create a composite processor with the right order:
@@ -265,6 +269,7 @@ async fn test_invalid_message_filtering() {
         storage.clone(),
         event_bus.clone(),
         agents.clone(),
+        DecisionMode::AutoApprove,
     ));
 
     // Create a composite processor
