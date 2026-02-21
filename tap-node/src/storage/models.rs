@@ -473,6 +473,104 @@ pub struct CustomerRelationship {
     pub created_at: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecisionStatus {
+    Pending,
+    Delivered,
+    Resolved,
+    Expired,
+}
+
+impl fmt::Display for DecisionStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DecisionStatus::Pending => write!(f, "pending"),
+            DecisionStatus::Delivered => write!(f, "delivered"),
+            DecisionStatus::Resolved => write!(f, "resolved"),
+            DecisionStatus::Expired => write!(f, "expired"),
+        }
+    }
+}
+
+impl TryFrom<&str> for DecisionStatus {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "pending" => Ok(DecisionStatus::Pending),
+            "delivered" => Ok(DecisionStatus::Delivered),
+            "resolved" => Ok(DecisionStatus::Resolved),
+            "expired" => Ok(DecisionStatus::Expired),
+            _ => Err(format!("Invalid decision status: {}", value)),
+        }
+    }
+}
+
+impl FromStr for DecisionStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecisionType {
+    AuthorizationRequired,
+    PolicySatisfactionRequired,
+    SettlementRequired,
+}
+
+impl fmt::Display for DecisionType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DecisionType::AuthorizationRequired => write!(f, "authorization_required"),
+            DecisionType::PolicySatisfactionRequired => {
+                write!(f, "policy_satisfaction_required")
+            }
+            DecisionType::SettlementRequired => write!(f, "settlement_required"),
+        }
+    }
+}
+
+impl TryFrom<&str> for DecisionType {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "authorization_required" => Ok(DecisionType::AuthorizationRequired),
+            "policy_satisfaction_required" => Ok(DecisionType::PolicySatisfactionRequired),
+            "settlement_required" => Ok(DecisionType::SettlementRequired),
+            _ => Err(format!("Invalid decision type: {}", value)),
+        }
+    }
+}
+
+impl FromStr for DecisionType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DecisionLogEntry {
+    pub id: i64,
+    pub transaction_id: String,
+    pub agent_did: String,
+    pub decision_type: DecisionType,
+    pub context_json: serde_json::Value,
+    pub status: DecisionStatus,
+    pub resolution: Option<String>,
+    pub resolution_detail: Option<serde_json::Value>,
+    pub created_at: String,
+    pub delivered_at: Option<String>,
+    pub resolved_at: Option<String>,
+}
+
 // Implement NameHashable for Customer
 impl NameHashable for Customer {}
 

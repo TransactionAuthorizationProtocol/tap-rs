@@ -124,6 +124,12 @@
 
 #[cfg(feature = "storage")]
 pub mod customer_handler;
+#[cfg(feature = "storage")]
+pub mod decision_expiration_handler;
+#[cfg(feature = "storage")]
+pub mod decision_log_handler;
+#[cfg(feature = "storage")]
+pub mod decision_state_handler;
 pub mod handlers;
 pub mod logger;
 pub mod trust_ping_handler;

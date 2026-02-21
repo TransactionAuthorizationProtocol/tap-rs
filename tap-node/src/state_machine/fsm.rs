@@ -166,6 +166,24 @@ impl fmt::Display for TransactionState {
     }
 }
 
+impl std::str::FromStr for TransactionState {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "received" => Ok(TransactionState::Received),
+            "policy_required" => Ok(TransactionState::PolicyRequired),
+            "partially_authorized" => Ok(TransactionState::PartiallyAuthorized),
+            "ready_to_settle" => Ok(TransactionState::ReadyToSettle),
+            "settled" => Ok(TransactionState::Settled),
+            "rejected" => Ok(TransactionState::Rejected),
+            "cancelled" => Ok(TransactionState::Cancelled),
+            "reverted" => Ok(TransactionState::Reverted),
+            _ => Err(format!("Invalid transaction state: {}", s)),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Per-Agent States
 // ---------------------------------------------------------------------------

@@ -36,6 +36,9 @@ base64 = { workspace = true }
 multibase = { workspace = true }
 dirs = "6.0"
 
+tap-mcp = { version = "0.5.0", path = "../tap-mcp" }
+tracing-subscriber = "0.3"
+
 [dev-dependencies]
 mockito = "1.0"
 tokio-test = { workspace = true }

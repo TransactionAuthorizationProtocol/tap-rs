@@ -93,7 +93,7 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
-TAP-MCP provides 34 comprehensive tools covering the complete TAP transaction lifecycle:
+TAP-MCP provides 36 comprehensive tools covering the complete TAP transaction lifecycle:
 
 ### Agent Management
 
@@ -576,6 +576,51 @@ Views the raw content of a received message. Shows the complete raw message as r
   "received_id": 42
 }
 ```
+
+### Decision Management
+
+#### `tap_list_pending_decisions`
+Lists pending decisions from the `decision_log` table. Use this to poll for decisions that require action when tap-http is running in poll mode (`--decision-mode poll`).
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "status": "pending",
+  "since_id": 0,
+  "limit": 50
+}
+```
+
+Returns:
+```json
+{
+  "decisions": [
+    {
+      "id": 1,
+      "transaction_id": "tx-12345",
+      "agent_did": "did:key:z6Mk...",
+      "decision_type": "authorization_required",
+      "status": "pending",
+      "context": { "transaction_state": "received", "pending_agents": ["did:key:z6Mk..."] },
+      "created_at": "2024-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### `tap_resolve_decision`
+Resolves a pending decision by marking it as resolved in the database. Note: this only updates the decision log — to actually send the TAP message, call the corresponding action tool (e.g., `tap_authorize`).
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "decision_id": 1,
+  "action": "authorize",
+  "detail": "Approved by compliance team"
+}
+```
+
+**Auto-resolution**: When action tools (`tap_authorize`, `tap_reject`, `tap_settle`, `tap_cancel`, `tap_revert`) succeed, matching pending decisions are automatically resolved. This means you typically only need to call the action tool — you don't need to explicitly call `tap_resolve_decision` afterwards.
 
 ## Available Resources
 

@@ -1888,6 +1888,14 @@ impl TapNode {
         &self.config
     }
 
+    /// Set the decision mode at runtime.
+    ///
+    /// Call this after `init_storage()` but before processing any messages
+    /// to configure how the FSM handles decision points.
+    pub fn set_decision_mode(&mut self, mode: state_machine::fsm::DecisionMode) {
+        self.config.decision_mode = mode;
+    }
+
     /// Get a reference to the storage (if available)
     #[cfg(feature = "storage")]
     pub fn storage(&self) -> Option<&Arc<storage::Storage>> {
