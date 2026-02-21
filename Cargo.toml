@@ -7,7 +7,7 @@ members = [
     "tap-node",
     "tap-http",
     "tap-wasm",
-    "tap-mcp", "tap-ivms101",
+    "tap-mcp", "tap-ivms101", "tap-cli",
 ]
 resolver = "2"
 

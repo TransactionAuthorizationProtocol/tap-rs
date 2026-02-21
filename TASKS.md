@@ -84,3 +84,73 @@
 - [ ] Publish to npm as @taprsvp/agent
 - [x] Update main README
 - [x] Create release notes
+
+## TAP CLI - Command-Line Interface for TAP Agent Operations
+[PRD](prds/cli.md)
+
+### Phase 1: Project Scaffold & Core Integration
+
+- [x] Write tests for CLI argument parsing and global flags
+- [x] Write tests for TapIntegration initialization from CLI args
+- [x] Create tap-cli crate with Cargo.toml, add to workspace
+- [x] Implement main.rs with global flags (--agent-did, --tap-root, --debug, --format)
+- [x] Implement TapIntegration setup (reuse pattern from tap-mcp)
+- [x] Implement output formatting layer (JSON and text modes)
+
+### Phase 2: Agent Management Commands
+
+- [x] Write tests for `agent create` and `agent list` commands
+- [x] Implement `agent create` subcommand
+- [x] Implement `agent list` subcommand
+
+### Phase 3: Transaction Creation Commands
+
+- [x] Write tests for `transfer` command
+- [x] Write tests for `payment` command
+- [x] Write tests for `connect` command
+- [x] Write tests for `escrow` and `capture` commands
+- [x] Implement `transfer` subcommand
+- [x] Implement `payment` subcommand
+- [x] Implement `connect` subcommand
+- [x] Implement `escrow` subcommand
+- [x] Implement `capture` subcommand
+
+### Phase 4: Transaction Action Commands
+
+- [x] Write tests for `authorize`, `reject`, `cancel` commands
+- [x] Write tests for `settle` and `revert` commands
+- [x] Implement `authorize` subcommand
+- [x] Implement `reject` subcommand
+- [x] Implement `cancel` subcommand
+- [x] Implement `settle` subcommand
+- [x] Implement `revert` subcommand
+
+### Phase 5: Query Commands
+
+- [x] Write tests for `transaction list` command
+- [x] Write tests for `delivery list` command
+- [x] Write tests for `received list/pending/view` commands
+- [x] Implement `transaction list` subcommand
+- [x] Implement `delivery list` subcommand
+- [x] Implement `received list`, `received pending`, `received view` subcommands
+
+### Phase 6: Customer Management Commands
+
+- [x] Write tests for customer CRUD commands
+- [x] Implement `customer list` subcommand
+- [x] Implement `customer create` subcommand
+- [x] Implement `customer details` subcommand
+- [x] Implement `customer update` subcommand
+- [x] Implement `customer ivms101` subcommand
+
+### Phase 7: Communication & DID Commands
+
+- [x] Write tests for `ping` and `message` commands
+- [x] Implement `ping` subcommand
+- [x] Implement `message` subcommand
+- [x] Integrate existing DID commands from tap-agent-cli (`did generate`, `did lookup`, `did keys`)
+
+### Phase 8: CI Validation & Polish
+
+- [x] Run cargo fmt, clippy, and tests with CI flags
+- [x] Fix any warnings or errors
