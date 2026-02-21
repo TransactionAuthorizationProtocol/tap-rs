@@ -65,7 +65,7 @@
 use crate::config::TapHttpConfig;
 use crate::error::{Error, Result};
 use crate::event::{EventBus, EventLogger};
-use crate::handler::{handle_didcomm, handle_health_check};
+use crate::handler::{handle_didcomm, handle_health_check, handle_well_known_did};
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -183,9 +183,20 @@ impl TapHttpServer {
             .and(with_event_bus(event_bus.clone()))
             .and_then(handle_health_check);
 
+        // Well-known DID document endpoint: /.well-known/did.json
+        let well_known_route = warp::path(".well-known")
+            .and(warp::path("did.json"))
+            .and(warp::path::end())
+            .and(warp::get())
+            .and(warp::header::optional::<String>("host"))
+            .and(with_node(node.clone()))
+            .and(with_event_bus(event_bus.clone()))
+            .and_then(handle_well_known_did);
+
         // Combine all routes
         let routes = didcomm_route
             .or(health_route)
+            .or(well_known_route)
             .with(warp::log("tap_http"))
             .recover(handle_rejection);
 
