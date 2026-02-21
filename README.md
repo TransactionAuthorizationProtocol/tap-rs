@@ -19,6 +19,7 @@ TAP-RS is organized as a Rust workspace with multiple crates:
 - **[tap-ivms101](./tap-ivms101/README.md)**: Complete IVMS 101.2023 implementation for Travel Rule compliance
 - **[tap-node](./tap-node/README.md)**: TAP node orchestration with per-agent storage isolation, multi-recipient message delivery, and Travel Rule processor
 - **[tap-http](./tap-http/README.md)**: HTTP DIDComm server implementation
+- **[tap-cli](./tap-cli/README.md)**: Command-line interface for TAP Agent operations
 - **[tap-wasm](./tap-wasm/README.md)**: WebAssembly bindings with DIDComm SecretsResolver integration
 - **[tap-ts](./tap-ts/README.md)**: TypeScript SDK with full DIDComm v2 support (npm: @taprsvp/agent)
 - **[tap-mcp](./tap-mcp/README.md)**: Model Context Protocol server for AI/LLM integration
@@ -74,16 +75,42 @@ TAP-RS includes several useful command-line tools that can be installed from cra
 
 ```bash
 # Install tools from crates.io
-cargo install tap-agent tap-http
+cargo install tap-agent tap-http tap-cli
 
 # Or install from the repository
 cargo install --path tap-rs/tap-agent
 cargo install --path tap-rs/tap-http
+cargo install --path tap-rs/tap-cli
 ```
 
 Available command-line tools:
 
-1. **tap-agent-cli**: Manage DIDs and keys for TAP protocol
+1. **tap-cli**: Full-featured CLI for TAP Agent operations
+   ```bash
+   # Create an agent (auto-generates a DID)
+   tap-cli agent create --label "my-vasp"
+
+   # Generate a DID and save it
+   tap-cli did generate --save --label "primary"
+
+   # Create a transfer
+   tap-cli transaction transfer \
+     --asset eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7 \
+     --amount 100.0 \
+     --originator did:key:z6MkOriginator... \
+     --beneficiary did:key:z6MkBeneficiary...
+
+   # Authorize a transaction
+   tap-cli action authorize --transaction-id <TX_ID>
+
+   # Manage customers and generate IVMS101 data
+   tap-cli customer create --customer-id did:key:z6Mk... --profile '{"@type":"Person","name":"Alice"}'
+   tap-cli customer ivms101 --customer-id did:key:z6Mk...
+   ```
+
+   See the [tap-cli README](./tap-cli/README.md) for full documentation.
+
+2. **tap-agent-cli**: Low-level DID and key management plus DIDComm message packing
    ```bash
    # Generate a new did:key with Ed25519
    tap-agent-cli generate
@@ -104,13 +131,13 @@ Available command-line tools:
    tap-agent-cli unpack --input packed.json --output unpacked.json --key did:key:z6Mk...
    ```
 
-2. **tap-http**: Run a TAP HTTP server for DIDComm messaging
+3. **tap-http**: Run a TAP HTTP server for DIDComm messaging
    ```bash
    # Start a server with default settings
    tap-http
    ```
 
-3. **tap-payment-simulator**: Test TAP payment flows against a server
+4. **tap-payment-simulator**: Test TAP payment flows against a server
    ```bash
    # Send a test payment flow to a server
    tap-payment-simulator --url http://localhost:8000/didcomm --did <server-agent-did>
@@ -468,6 +495,7 @@ cargo clippy
 # Install command-line tools
 cargo install --path tap-agent
 cargo install --path tap-http
+cargo install --path tap-cli
 ```
 
 ## CLI Tools Reference

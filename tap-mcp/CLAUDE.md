@@ -216,3 +216,8 @@ To use with Claude Code or other MCP-compatible AI assistants:
    - "Generate IVMS101 data for customer Y"
 
 The MCP server translates natural language requests into proper TAP operations and returns structured results.
+
+## Related Tools
+
+- [tap-cli](../tap-cli/README.md) — Terminal CLI alternative; use when scripting or working outside an AI assistant
+- [tap-http](../tap-http/README.md) — HTTP server for DIDComm message transport
