@@ -600,7 +600,7 @@ if let Some(storage) = node.storage() {
 
 ### Database Schema
 
-The storage system maintains six tables:
+The storage system maintains seven tables:
 
 #### `transactions` Table
 Business logic for Transfer and Payment messages:
@@ -658,6 +658,26 @@ TAIP-9 compliant relationship tracking:
 - Related identifier
 - Proof of relationship (JSON)
 - Confirmation timestamp
+
+#### `decision_log` Table
+Durable decision tracking for external decision systems:
+- Decision ID (auto-incrementing primary key)
+- Transaction ID and agent DID
+- Decision type (`authorization_required`, `policy_satisfaction_required`, `settlement_required`)
+- Context JSON (transaction state, pending agents, etc.)
+- Status (`pending`, `delivered`, `resolved`, `expired`)
+- Resolution action and detail
+- Timestamps (created, delivered, resolved)
+
+The decision log is used by tap-http's poll mode (`--decision-mode poll`) and exec mode (`--decision-exec`) to durably track decisions requiring external input. Decisions are automatically resolved when the corresponding action tool succeeds, and expired when a transaction reaches a terminal state.
+
+#### Event Handlers
+
+The event system includes decision-related handlers:
+
+- **`DecisionStateHandler`**: Listens for `TransactionStateChanged` events and manages decision lifecycle — expires decisions on terminal states, resolves decisions when actions are observed (e.g., `authorization_required` → resolved when state reaches `ready_to_settle`)
+- **`DecisionLogHandler`**: Implements the `DecisionHandler` trait to write decisions to the `decision_log` table, enabling poll-based decision architectures
+- **`DecisionExpirationHandler`**: Legacy handler for expiring decisions on terminal states
 
 ### Disabling Storage
 

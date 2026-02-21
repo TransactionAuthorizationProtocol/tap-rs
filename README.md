@@ -133,8 +133,14 @@ Available command-line tools:
 
 3. **tap-http**: Run a TAP HTTP server for DIDComm messaging
    ```bash
-   # Start a server with default settings
+   # Start a server with default settings (auto-approve all decisions)
    tap-http
+
+   # Start with poll mode (decisions logged to DB for external systems)
+   tap-http --decision-mode poll
+
+   # Start with external decision executable
+   tap-http --decision-exec /path/to/decision-handler
    ```
 
 4. **tap-payment-simulator**: Test TAP payment flows against a server
@@ -158,6 +164,7 @@ See individual tool READMEs for detailed usage instructions.
 - **Command-line Tools**: Utilities for DID generation, resolution, and key management
 - **Modular Agent Architecture**: Flexible identity and cryptography primitives
 - **High-Performance Message Routing**: Efficient node implementation for high-throughput environments
+- **External Decision Support**: Pluggable decision modes (auto, poll, exec) for authorization, settlement, and policy decisions
 - **HTTP and WebSocket Transport**: Multiple communication options with robust error handling
 - **WASM Compatibility**: Run in browsers and Node.js via WebAssembly
 - **TypeScript API**: Developer-friendly TypeScript wrapper for web integrations

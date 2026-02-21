@@ -5,6 +5,7 @@ mod agent_tools;
 mod communication_tools;
 mod customer_tools;
 mod database_tools;
+pub mod decision_tools;
 mod delivery_tools;
 mod policy_tools;
 mod received_tools;
@@ -24,6 +25,7 @@ pub use agent_tools::*;
 pub use communication_tools::*;
 pub use customer_tools::*;
 pub use database_tools::*;
+pub use decision_tools::*;
 pub use delivery_tools::*;
 pub use policy_tools::*;
 pub use received_tools::*;
@@ -207,6 +209,16 @@ impl ToolRegistry {
         tools.insert(
             "tap_update_policies".to_string(),
             Box::new(UpdatePoliciesTool::new(tap_integration.clone())),
+        );
+
+        // Decision tools
+        tools.insert(
+            "tap_list_pending_decisions".to_string(),
+            Box::new(ListPendingDecisionsTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_resolve_decision".to_string(),
+            Box::new(ResolveDecisionTool::new(tap_integration.clone())),
         );
 
         debug!("Initialized tool registry with {} tools", tools.len());

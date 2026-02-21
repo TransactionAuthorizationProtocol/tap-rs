@@ -154,3 +154,92 @@
 
 - [x] Run cargo fmt, clippy, and tests with CI flags
 - [x] Fix any warnings or errors
+
+## External Decision Executable for tap-http
+[PRD](prds/external-decision.md)
+
+### Phase 1: Decision Log Storage (tap-node)
+
+- [x] Write tests for decision_log insert, update status, list pending, and expire operations
+- [x] Create migration `008_create_decision_log.sql` with table, indexes, and status constraints
+- [x] Add `DecisionLogEntry` model to `models.rs`
+- [x] Implement `insert_decision()` in `db.rs`
+- [x] Implement `update_decision_status()` in `db.rs`
+- [x] Implement `list_pending_decisions()` in `db.rs`
+- [x] Implement `expire_decisions_for_transaction()` in `db.rs`
+
+### Phase 2: Decision Expiration Handler (tap-node)
+
+- [x] Write tests for automatic expiration when transactions reach terminal states
+- [x] Implement `DecisionExpirationHandler` as an `EventSubscriber` that listens for `TransactionStateChanged` to terminal states and expires pending decisions
+
+### Phase 3: Decision MCP Tools (tap-mcp)
+
+- [x] Write tests for `tap_list_pending_decisions` tool
+- [x] Write tests for `tap_resolve_decision` tool
+- [x] Implement `tap_list_pending_decisions` tool in `tools/decision_tools.rs`
+- [x] Implement `tap_resolve_decision` tool (marks resolved + executes action via TapNode)
+- [x] Register both tools in `ToolRegistry`
+
+### Phase 4: JSON-RPC Protocol Types (tap-http)
+
+- [x] Write tests for serialization/deserialization of decision protocol messages (tap/decision, tap/event, tap/initialize)
+- [x] Define protocol message types for stdin/stdout communication (decision requests, event notifications, initialization handshake)
+
+### Phase 5: External Decision Manager (tap-http)
+
+- [x] Write tests for `ExternalDecisionManager` implementing `DecisionHandler` (writes to decision_log, sends via stdin)
+- [x] Write tests for process lifecycle (spawn, detect exit, restart with backoff)
+- [x] Write tests for stdout reader (parse JSON-RPC tool calls, route to ToolRegistry)
+- [x] Write tests for decision replay on process reconnect
+- [x] Implement `ExternalDecisionManager` struct with child process management
+- [x] Implement `DecisionHandler` trait — insert into decision_log and send over stdin
+- [x] Implement `EventSubscriber` trait — forward events when in "all" mode
+- [x] Implement stdout reader task — parse JSON-RPC requests, dispatch to `ToolRegistry`
+- [x] Implement stdin writer — send decisions, events, and initialization messages
+- [x] Implement process health monitoring and restart with exponential backoff
+- [x] Implement decision replay on reconnect (query pending/delivered, send in order)
+- [x] Implement graceful shutdown (EOF on stdin, SIGTERM, SIGKILL timeout)
+
+### Phase 6: tap-http Integration
+
+- [x] Write tests for CLI flag parsing (--decision-exec, --decision-exec-args, --decision-subscribe)
+- [x] Add CLI flags and environment variables to `main.rs`
+- [x] Wire `ExternalDecisionManager` into `NodeConfig.decision_mode` when --decision-exec is set
+- [x] Subscribe `ExternalDecisionManager` to event bus
+- [x] Disable `auto_act` when external decision executable is configured
+- [x] Forward child process stderr to tap-http log output
+
+### Phase 7: Integration Testing
+
+- [x] Create a mock external executable (auto-approve script) for testing
+- [x] Write integration test: decision flow end-to-end (receive transfer → decision → authorize)
+- [x] Write integration test: process crash and catch-up (kill process, accumulate decisions, restart, verify replay)
+- [x] Write integration test: decision expiration (decision pending → transaction rejected → decision expired)
+- [x] Write integration test: external process uses tool calls to act (tap_authorize via stdout)
+
+### Phase 8: CI Validation
+
+- [x] Run cargo fmt, clippy, and tests with CI flags
+- [x] Fix any warnings or errors
+
+### Phase 9: Poll Mode & Auto-Resolve
+
+- [x] Add `resolve_decisions_for_transaction()` to Storage in tap-node
+- [x] Create `DecisionLogHandler` in tap-node (implements `DecisionHandler`, writes to decision_log)
+- [x] Rename `DecisionExpirationHandler` to `DecisionStateHandler`, add resolution on state changes
+- [x] Add auto-resolve to `tap_authorize` tool (resolve `authorization_required` decisions)
+- [x] Add auto-resolve to `tap_reject` tool (expire all pending decisions)
+- [x] Add auto-resolve to `tap_settle` tool (resolve `settlement_required` decisions)
+- [x] Add auto-resolve to `tap_cancel` tool (expire all pending decisions)
+- [x] Add auto-resolve to `tap_revert` tool (expire all pending decisions)
+- [x] Add `--decision-mode` CLI flag to tap-http (`auto`, `poll`)
+- [x] Wire poll mode in tap-http main.rs (DecisionLogHandler + DecisionStateHandler)
+- [x] Run cargo fmt, clippy, and tests with CI flags
+
+### Phase 10: Documentation
+
+- [x] Update tap-http README with decision modes and configuration
+- [x] Update tap-mcp README with decision tools and auto-resolve
+- [x] Update tap-node README with decision log and DecisionLogHandler
+- [x] Update main README with decision support overview
