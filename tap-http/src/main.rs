@@ -31,6 +31,7 @@ struct Args {
     structured_logs: bool,
     db_path: Option<String>,
     tap_root: Option<String>,
+    enable_web_did: bool,
 }
 
 impl Args {
@@ -94,6 +95,8 @@ impl Args {
             tap_root: args
                 .opt_value_from_str("--tap-root")?
                 .or_else(|| env::var("TAP_ROOT").ok()),
+            enable_web_did: args.contains("--enable-web-did")
+                || env::var("TAP_ENABLE_WEB_DID").is_ok(),
         };
 
         // Check for any remaining arguments (which would be invalid)
@@ -125,6 +128,7 @@ fn print_help() {
     println!("    --structured-logs            Use structured JSON logging [default: true]");
     println!("    --db-path <PATH>             Path to the database file [default: ~/.tap/<did>/transactions.db]");
     println!("    --tap-root <DIR>             Custom TAP root directory [default: ~/.tap]");
+    println!("    --enable-web-did             Enable /.well-known/did.json endpoint for did:web hosting");
     println!("    -v, --verbose                Enable verbose logging");
     println!("    --help                       Print help information");
     println!("    --version                    Print version information");
@@ -140,6 +144,7 @@ fn print_help() {
     println!("    TAP_STRUCTURED_LOGS          Use structured JSON logging");
     println!("    TAP_NODE_DB_PATH             Path to the database file");
     println!("    TAP_ROOT                     Custom TAP root directory");
+    println!("    TAP_ENABLE_WEB_DID           Enable /.well-known/did.json endpoint");
     println!();
     println!("NOTES:");
     println!("    - If no agent DID and key are provided, the server will:");
@@ -250,6 +255,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         rate_limit: None,
         tls: None,
         event_logger: None,
+        enable_web_did: args.enable_web_did,
     };
 
     // Configure event logging - use TAP root-based default if not specified
@@ -276,6 +282,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     info!("  Port: {}", config.port);
     info!("  DIDComm endpoint: {}", config.didcomm_endpoint);
     info!("  Request timeout: {} seconds", config.request_timeout_secs);
+    info!("  Web DID hosting: {}", config.enable_web_did);
     info!("  Agent DID: {}", agent_did);
     debug!("  Event logging: {}", log_path.to_string_lossy());
     debug!("  Structured logs: {}", args.structured_logs);
