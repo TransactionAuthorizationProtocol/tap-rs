@@ -180,3 +180,9 @@ Benchmark performance with:
 ```bash
 cargo bench -p tap-node --bench stress_test
 ```
+
+## Related Tools
+
+- [tap-cli](../tap-cli/README.md) — Command-line interface that wraps tap-node for terminal use
+- [tap-mcp](../tap-mcp/README.md) — MCP server exposing tap-node to AI assistants
+- [tap-http](../tap-http/README.md) — HTTP server using tap-node for DIDComm transport

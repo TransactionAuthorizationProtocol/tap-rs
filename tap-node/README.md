@@ -755,6 +755,12 @@ cargo run --example websocket_message_flow --features websocket
 cargo run --example travel_rule_flow --features native
 ```
 
+## Related Tools
+
+- [tap-cli](../tap-cli/README.md) — Command-line interface for interacting with tap-node from the terminal
+- [tap-mcp](../tap-mcp/README.md) — Model Context Protocol server for AI assistant integration
+- [tap-http](../tap-http/README.md) — HTTP server for DIDComm transport
+
 ## License
 
 This crate is licensed under the terms of the MIT license.

@@ -1161,6 +1161,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ## Related Projects
 
 - [TAP-RS](https://github.com/notabene-id/tap-rs) - Core TAP implementation in Rust
+- [tap-cli](../tap-cli/README.md) - Command-line interface for TAP Agent operations (terminal alternative to tap-mcp)
 - [Model Context Protocol](https://github.com/anthropics/mcp) - MCP specification and tools
 - [Claude Desktop](https://claude.ai) - AI assistant with MCP support
 
