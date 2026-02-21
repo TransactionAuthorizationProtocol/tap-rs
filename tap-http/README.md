@@ -15,6 +15,7 @@ HTTP DIDComm server implementation for the Transaction Authorization Protocol (T
 - **Comprehensive Error Handling**: Structured error responses with appropriate HTTP status codes
 - **Payment Flow Simulator**: Included CLI tool for simulating TAP payment flows
 - **Persistent Storage**: SQLite database using async SQLx for message audit trail and transaction tracking
+- **Web DID Hosting**: Optional `/.well-known/did.json` endpoint for hosting `did:web` DID documents (enabled via `--enable-web-did`)
 
 ## Usage
 
@@ -114,6 +115,58 @@ Content-Type: application/json
 }
 ```
 
+### GET /.well-known/did.json (opt-in)
+
+When the server is started with `--enable-web-did`, it serves a [did:web](https://w3c-ccg.github.io/did-method-web/) DID document at the standard well-known path. This allows the server to act as a `did:web` identity — other agents can resolve `did:web:yourdomain.com` by fetching `https://yourdomain.com/.well-known/did.json`.
+
+The endpoint derives the `did:web` DID from the HTTP `Host` header, so a single server can respond correctly when reached via different hostnames.
+
+**How it works:**
+
+1. A request arrives at `GET /.well-known/did.json`.
+2. The `Host` header is validated and mapped to a `did:web` DID (e.g. `example.com` → `did:web:example.com`).
+3. If an agent for that DID already exists in the node, its DID document is returned.
+4. Otherwise, a new agent with fresh Ed25519 keys is created, registered, and its DID document is returned. The document includes a `DIDCommMessaging` service endpoint pointing to the server's `/didcomm` path.
+
+```bash
+# Start the server with web DID hosting enabled
+tap-http --enable-web-did
+
+# Resolve the DID document
+curl https://yourdomain.com/.well-known/did.json
+```
+
+Example response:
+
+```json
+{
+  "@context": [
+    "https://www.w3.org/ns/did/v1",
+    "https://w3id.org/security/suites/ed25519-2018/v1"
+  ],
+  "id": "did:web:yourdomain.com",
+  "verificationMethod": [
+    {
+      "id": "did:web:yourdomain.com#key-0",
+      "type": "Ed25519VerificationKey2018",
+      "controller": "did:web:yourdomain.com",
+      "publicKeyMultibase": "z6Mk..."
+    }
+  ],
+  "authentication": ["did:web:yourdomain.com#key-0"],
+  "keyAgreement": ["did:web:yourdomain.com#key-1"],
+  "service": [
+    {
+      "id": "did:web:yourdomain.com#didcomm",
+      "type": "DIDCommMessaging",
+      "serviceEndpoint": "https://yourdomain.com/didcomm"
+    }
+  ]
+}
+```
+
+This endpoint is **disabled by default**. Enable it with the `--enable-web-did` flag or by setting the `TAP_ENABLE_WEB_DID` environment variable.
+
 ## Response Formats and Status Codes
 
 ### Success Response
@@ -200,6 +253,9 @@ pub struct TapHttpConfig {
     
     /// CORS configuration for cross-origin requests.
     pub cors: Option<CorsConfig>,
+
+    /// Enable /.well-known/did.json endpoint for did:web hosting.
+    pub enable_web_did: bool,
 }
 ```
 
@@ -498,6 +554,7 @@ OPTIONS:
     --rate-limit <RATE>          Rate limit in requests per minute [default: 60]
     --tls-cert <PATH>            Path to TLS certificate file
     --tls-key <PATH>             Path to TLS private key file
+    --enable-web-did             Enable /.well-known/did.json endpoint for did:web hosting
     -v, --verbose                Enable verbose logging
     --help                       Print help information
     --version                    Print version information
@@ -532,6 +589,9 @@ export TAP_NODE_DB_PATH=/var/lib/tap/tap-http.db
 export TAP_RATE_LIMIT=100
 export TAP_TLS_CERT=/path/to/cert.pem
 export TAP_TLS_KEY=/path/to/key.pem
+
+# Web DID hosting
+export TAP_ENABLE_WEB_DID=true
 
 # Run the server (will use environment variables)
 tap-http

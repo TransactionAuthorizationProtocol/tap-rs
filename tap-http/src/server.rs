@@ -183,48 +183,38 @@ impl TapHttpServer {
             .and(with_event_bus(event_bus.clone()))
             .and_then(handle_health_check);
 
-        // Well-known DID document endpoint: /.well-known/did.json
-        let well_known_route = warp::path(".well-known")
-            .and(warp::path("did.json"))
-            .and(warp::path::end())
-            .and(warp::get())
-            .and(warp::header::optional::<String>("host"))
-            .and(with_node(node.clone()))
-            .and(with_event_bus(event_bus.clone()))
-            .and_then(handle_well_known_did);
+        // Optionally add /.well-known/did.json for did:web hosting
+        let enable_web_did = self.config.enable_web_did;
 
-        // Combine all routes
+        // Build routes with or without the well-known endpoint
+        if enable_web_did {
+            info!("Web DID hosting enabled at /.well-known/did.json");
+
+            let well_known_route = warp::path(".well-known")
+                .and(warp::path("did.json"))
+                .and(warp::path::end())
+                .and(warp::get())
+                .and(warp::header::optional::<String>("host"))
+                .and(with_node(node.clone()))
+                .and(with_event_bus(event_bus.clone()))
+                .and_then(handle_well_known_did);
+
+            let routes = didcomm_route
+                .or(health_route)
+                .or(well_known_route)
+                .with(warp::log("tap_http"))
+                .recover(handle_rejection);
+
+            return self.spawn_server(routes, addr, event_bus).await;
+        }
+
+        // Combine routes without well-known endpoint
         let routes = didcomm_route
             .or(health_route)
-            .or(well_known_route)
             .with(warp::log("tap_http"))
             .recover(handle_rejection);
 
-        // Create shutdown channel
-        let (tx, rx) = oneshot::channel::<()>();
-        self.shutdown_tx = Some(tx);
-
-        // Start the server
-        info!("Starting TAP HTTP server on {}", addr);
-
-        // Publish server started event
-        self.event_bus
-            .publish_server_started(addr.to_string())
-            .await;
-
-        // Start server without TLS
-        let event_bus_clone = event_bus.clone();
-        let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(addr, async move {
-            rx.await.ok();
-            info!("Shutting down TAP HTTP server");
-            event_bus_clone.publish_server_stopped().await;
-        });
-
-        // Spawn the server task
-        tokio::spawn(server);
-
-        info!("TAP HTTP server started on {}", addr);
-        Ok(())
+        self.spawn_server(routes, addr, event_bus).await
     }
 
     /// Stops the HTTP server.
@@ -263,6 +253,39 @@ impl TapHttpServer {
     /// The event bus is used to publish and subscribe to server events.
     pub fn event_bus(&self) -> &Arc<EventBus> {
         &self.event_bus
+    }
+
+    /// Bind and spawn the warp server with the given routes.
+    async fn spawn_server<F>(
+        &mut self,
+        routes: F,
+        addr: SocketAddr,
+        event_bus: Arc<EventBus>,
+    ) -> Result<()>
+    where
+        F: Filter<Error = Infallible> + Clone + Send + Sync + 'static,
+        F::Extract: Reply,
+    {
+        let (tx, rx) = oneshot::channel::<()>();
+        self.shutdown_tx = Some(tx);
+
+        info!("Starting TAP HTTP server on {}", addr);
+
+        self.event_bus
+            .publish_server_started(addr.to_string())
+            .await;
+
+        let event_bus_clone = event_bus.clone();
+        let (_, server) = warp::serve(routes).bind_with_graceful_shutdown(addr, async move {
+            rx.await.ok();
+            info!("Shutting down TAP HTTP server");
+            event_bus_clone.publish_server_stopped().await;
+        });
+
+        tokio::spawn(server);
+
+        info!("TAP HTTP server started on {}", addr);
+        Ok(())
     }
 
     // Rate limiting functionality will be implemented in a future update
