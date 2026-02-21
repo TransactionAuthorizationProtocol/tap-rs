@@ -7,9 +7,10 @@ use tracing::{debug, info};
 
 use super::error::StorageError;
 use super::models::{
-    Customer, CustomerIdentifier, CustomerRelationship, Delivery, DeliveryStatus, DeliveryType,
-    IdentifierType, Message, MessageDirection, Received, ReceivedStatus, SchemaType, SourceType,
-    Transaction, TransactionStatus, TransactionType,
+    Customer, CustomerIdentifier, CustomerRelationship, DecisionLogEntry, DecisionStatus,
+    DecisionType, Delivery, DeliveryStatus, DeliveryType, IdentifierType, Message,
+    MessageDirection, Received, ReceivedStatus, SchemaType, SourceType, Transaction,
+    TransactionStatus, TransactionType,
 };
 
 /// Storage backend for TAP transactions and message audit trail
@@ -2449,6 +2450,285 @@ impl Storage {
 
         Ok(customers)
     }
+
+    // -----------------------------------------------------------------------
+    // Decision log operations
+    // -----------------------------------------------------------------------
+
+    /// Insert a new decision into the decision log
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The transaction requiring a decision
+    /// * `agent_did` - The DID of the agent this decision is for
+    /// * `decision_type` - The type of decision required
+    /// * `context_json` - JSON context about the decision (transaction details, etc.)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(i64)` - The ID of the created decision log entry
+    /// * `Err(StorageError)` on database error
+    pub async fn insert_decision(
+        &self,
+        transaction_id: &str,
+        agent_did: &str,
+        decision_type: DecisionType,
+        context_json: &serde_json::Value,
+    ) -> Result<i64, StorageError> {
+        debug!(
+            "Inserting decision for transaction {} agent {} type {}",
+            transaction_id, agent_did, decision_type
+        );
+
+        let context_str = serde_json::to_string(context_json)?;
+
+        let result = sqlx::query(
+            r#"
+            INSERT INTO decision_log (transaction_id, agent_did, decision_type, context_json)
+            VALUES (?1, ?2, ?3, ?4)
+            "#,
+        )
+        .bind(transaction_id)
+        .bind(agent_did)
+        .bind(decision_type.to_string())
+        .bind(&context_str)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.last_insert_rowid())
+    }
+
+    /// Update the status of a decision log entry
+    ///
+    /// # Arguments
+    ///
+    /// * `decision_id` - The ID of the decision to update
+    /// * `status` - The new status
+    /// * `resolution` - Optional resolution action (e.g., "authorize", "reject")
+    /// * `resolution_detail` - Optional JSON detail about the resolution
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` on success
+    /// * `Err(StorageError)` on database error
+    pub async fn update_decision_status(
+        &self,
+        decision_id: i64,
+        status: DecisionStatus,
+        resolution: Option<&str>,
+        resolution_detail: Option<&serde_json::Value>,
+    ) -> Result<(), StorageError> {
+        debug!("Updating decision {} status to {}", decision_id, status);
+
+        let now = chrono::Utc::now().to_rfc3339();
+        let resolution_detail_str = resolution_detail.map(|v| serde_json::to_string(v).unwrap());
+
+        let delivered_at = if status == DecisionStatus::Delivered {
+            Some(now.clone())
+        } else {
+            None
+        };
+
+        let resolved_at = if status == DecisionStatus::Resolved {
+            Some(now)
+        } else {
+            None
+        };
+
+        sqlx::query(
+            r#"
+            UPDATE decision_log
+            SET status = ?1,
+                resolution = COALESCE(?2, resolution),
+                resolution_detail = COALESCE(?3, resolution_detail),
+                delivered_at = COALESCE(?4, delivered_at),
+                resolved_at = COALESCE(?5, resolved_at)
+            WHERE id = ?6
+            "#,
+        )
+        .bind(status.to_string())
+        .bind(resolution)
+        .bind(resolution_detail_str.as_deref())
+        .bind(delivered_at)
+        .bind(resolved_at)
+        .bind(decision_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// List decisions from the decision log with optional filtering
+    ///
+    /// # Arguments
+    ///
+    /// * `agent_did` - Optional filter by agent DID
+    /// * `status` - Optional filter by status
+    /// * `since_id` - Optional minimum decision ID (for pagination/replay)
+    /// * `limit` - Maximum number of entries to return
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Vec<DecisionLogEntry>)` - Matching decision log entries ordered by id ASC
+    /// * `Err(StorageError)` on database error
+    pub async fn list_decisions(
+        &self,
+        agent_did: Option<&str>,
+        status: Option<DecisionStatus>,
+        since_id: Option<i64>,
+        limit: u32,
+    ) -> Result<Vec<DecisionLogEntry>, StorageError> {
+        let mut query = String::from(
+            "SELECT id, transaction_id, agent_did, decision_type, context_json, \
+             status, resolution, resolution_detail, created_at, delivered_at, resolved_at \
+             FROM decision_log WHERE 1=1",
+        );
+        let mut bind_values: Vec<String> = Vec::new();
+        let mut bind_i64: Option<i64> = None;
+
+        if let Some(did) = agent_did {
+            query.push_str(" AND agent_did = ?");
+            bind_values.push(did.to_string());
+        }
+
+        if let Some(s) = status {
+            query.push_str(" AND status = ?");
+            bind_values.push(s.to_string());
+        }
+
+        if let Some(id) = since_id {
+            query.push_str(" AND id > ?");
+            bind_i64 = Some(id);
+        }
+
+        query.push_str(" ORDER BY id ASC LIMIT ?");
+
+        let mut sqlx_query = sqlx::query(&query);
+
+        for value in &bind_values {
+            sqlx_query = sqlx_query.bind(value);
+        }
+
+        if let Some(id) = bind_i64 {
+            sqlx_query = sqlx_query.bind(id);
+        }
+
+        sqlx_query = sqlx_query.bind(limit);
+
+        let rows = sqlx_query.fetch_all(&self.pool).await?;
+
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(DecisionLogEntry {
+                id: row.get("id"),
+                transaction_id: row.get("transaction_id"),
+                agent_did: row.get("agent_did"),
+                decision_type: DecisionType::try_from(
+                    row.get::<String, _>("decision_type").as_str(),
+                )
+                .map_err(StorageError::InvalidTransactionType)?,
+                context_json: serde_json::from_str(&row.get::<String, _>("context_json"))?,
+                status: DecisionStatus::try_from(row.get::<String, _>("status").as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                resolution: row.get("resolution"),
+                resolution_detail: row
+                    .get::<Option<String>, _>("resolution_detail")
+                    .map(|v| serde_json::from_str(&v).unwrap()),
+                created_at: row.get("created_at"),
+                delivered_at: row.get("delivered_at"),
+                resolved_at: row.get("resolved_at"),
+            });
+        }
+
+        Ok(entries)
+    }
+
+    /// Expire all pending/delivered decisions for a transaction
+    ///
+    /// Called when a transaction reaches a terminal state (Rejected, Cancelled, Reverted)
+    /// to prevent stale decisions from being acted on.
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The transaction whose decisions should be expired
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(u64)` - Number of decisions expired
+    /// * `Err(StorageError)` on database error
+    pub async fn expire_decisions_for_transaction(
+        &self,
+        transaction_id: &str,
+    ) -> Result<u64, StorageError> {
+        debug!(
+            "Expiring pending decisions for transaction {}",
+            transaction_id
+        );
+
+        let result = sqlx::query(
+            r#"
+            UPDATE decision_log
+            SET status = 'expired'
+            WHERE transaction_id = ?1
+            AND status IN ('pending', 'delivered')
+            "#,
+        )
+        .bind(transaction_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Get a single decision by ID
+    ///
+    /// # Arguments
+    ///
+    /// * `decision_id` - The ID of the decision
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(Some(DecisionLogEntry))` if found
+    /// * `Ok(None)` if not found
+    /// * `Err(StorageError)` on database error
+    pub async fn get_decision_by_id(
+        &self,
+        decision_id: i64,
+    ) -> Result<Option<DecisionLogEntry>, StorageError> {
+        let row = sqlx::query(
+            r#"
+            SELECT id, transaction_id, agent_did, decision_type, context_json,
+                   status, resolution, resolution_detail, created_at, delivered_at, resolved_at
+            FROM decision_log WHERE id = ?1
+            "#,
+        )
+        .bind(decision_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match row {
+            Some(row) => Ok(Some(DecisionLogEntry {
+                id: row.get("id"),
+                transaction_id: row.get("transaction_id"),
+                agent_did: row.get("agent_did"),
+                decision_type: DecisionType::try_from(
+                    row.get::<String, _>("decision_type").as_str(),
+                )
+                .map_err(StorageError::InvalidTransactionType)?,
+                context_json: serde_json::from_str(&row.get::<String, _>("context_json"))?,
+                status: DecisionStatus::try_from(row.get::<String, _>("status").as_str())
+                    .map_err(StorageError::InvalidTransactionType)?,
+                resolution: row.get("resolution"),
+                resolution_detail: row
+                    .get::<Option<String>, _>("resolution_detail")
+                    .map(|v| serde_json::from_str(&v).unwrap()),
+                created_at: row.get("created_at"),
+                delivered_at: row.get("delivered_at"),
+                resolved_at: row.get("resolved_at"),
+            })),
+            None => Ok(None),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -2635,5 +2915,537 @@ mod tests {
             .unwrap();
         let all_messages_after = storage.list_messages(10, 0, None).await.unwrap();
         assert_eq!(all_messages_after.len(), 2); // Should still be 2, not 3
+    }
+
+    // -----------------------------------------------------------------------
+    // Decision log tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_insert_decision() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({
+            "transaction_state": "Received",
+            "pending_agents": ["did:key:z6MkAgent1"],
+            "transaction": {
+                "type": "transfer",
+                "asset": "eip155:1/slip44:60",
+                "amount": "100"
+            }
+        });
+
+        let id = storage
+            .insert_decision(
+                "txn-001",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        assert!(id > 0);
+
+        // Verify the entry was created with correct defaults
+        let entry = storage.get_decision_by_id(id).await.unwrap().unwrap();
+        assert_eq!(entry.transaction_id, "txn-001");
+        assert_eq!(entry.agent_did, "did:key:z6MkAgent1");
+        assert_eq!(entry.decision_type, DecisionType::AuthorizationRequired);
+        assert_eq!(entry.status, DecisionStatus::Pending);
+        assert!(entry.resolution.is_none());
+        assert!(entry.resolution_detail.is_none());
+        assert!(entry.delivered_at.is_none());
+        assert!(entry.resolved_at.is_none());
+        assert_eq!(entry.context_json["transaction"]["type"], "transfer");
+    }
+
+    #[tokio::test]
+    async fn test_insert_multiple_decision_types() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"transaction_id": "txn-002"});
+
+        let id1 = storage
+            .insert_decision(
+                "txn-002",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let id2 = storage
+            .insert_decision(
+                "txn-002",
+                "did:key:z6MkAgent1",
+                DecisionType::PolicySatisfactionRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let id3 = storage
+            .insert_decision(
+                "txn-003",
+                "did:key:z6MkAgent1",
+                DecisionType::SettlementRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        assert!(id1 < id2);
+        assert!(id2 < id3);
+
+        let e1 = storage.get_decision_by_id(id1).await.unwrap().unwrap();
+        let e2 = storage.get_decision_by_id(id2).await.unwrap().unwrap();
+        let e3 = storage.get_decision_by_id(id3).await.unwrap().unwrap();
+
+        assert_eq!(e1.decision_type, DecisionType::AuthorizationRequired);
+        assert_eq!(e2.decision_type, DecisionType::PolicySatisfactionRequired);
+        assert_eq!(e3.decision_type, DecisionType::SettlementRequired);
+    }
+
+    #[tokio::test]
+    async fn test_update_decision_status_to_delivered() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+        let id = storage
+            .insert_decision(
+                "txn-010",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Mark as delivered
+        storage
+            .update_decision_status(id, DecisionStatus::Delivered, None, None)
+            .await
+            .unwrap();
+
+        let entry = storage.get_decision_by_id(id).await.unwrap().unwrap();
+        assert_eq!(entry.status, DecisionStatus::Delivered);
+        assert!(entry.delivered_at.is_some());
+        assert!(entry.resolved_at.is_none());
+        assert!(entry.resolution.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_update_decision_status_to_resolved() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+        let id = storage
+            .insert_decision(
+                "txn-011",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // First deliver
+        storage
+            .update_decision_status(id, DecisionStatus::Delivered, None, None)
+            .await
+            .unwrap();
+
+        // Then resolve with action
+        let detail = serde_json::json!({"settlement_address": "eip155:1:0xABC"});
+        storage
+            .update_decision_status(
+                id,
+                DecisionStatus::Resolved,
+                Some("authorize"),
+                Some(&detail),
+            )
+            .await
+            .unwrap();
+
+        let entry = storage.get_decision_by_id(id).await.unwrap().unwrap();
+        assert_eq!(entry.status, DecisionStatus::Resolved);
+        assert_eq!(entry.resolution.as_deref(), Some("authorize"));
+        assert!(entry.resolved_at.is_some());
+        assert!(entry.delivered_at.is_some());
+        assert_eq!(
+            entry.resolution_detail.unwrap()["settlement_address"],
+            "eip155:1:0xABC"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_list_decisions_all() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        // Insert 3 decisions
+        storage
+            .insert_decision(
+                "txn-020",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        storage
+            .insert_decision(
+                "txn-021",
+                "did:key:z6MkAgent2",
+                DecisionType::SettlementRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        storage
+            .insert_decision(
+                "txn-022",
+                "did:key:z6MkAgent1",
+                DecisionType::PolicySatisfactionRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // List all
+        let all = storage.list_decisions(None, None, None, 100).await.unwrap();
+        assert_eq!(all.len(), 3);
+
+        // Verify ordering by id ASC
+        assert!(all[0].id < all[1].id);
+        assert!(all[1].id < all[2].id);
+    }
+
+    #[tokio::test]
+    async fn test_list_decisions_by_agent() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        storage
+            .insert_decision(
+                "txn-030",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        storage
+            .insert_decision(
+                "txn-031",
+                "did:key:z6MkAgent2",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        storage
+            .insert_decision(
+                "txn-032",
+                "did:key:z6MkAgent1",
+                DecisionType::SettlementRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        let agent1 = storage
+            .list_decisions(Some("did:key:z6MkAgent1"), None, None, 100)
+            .await
+            .unwrap();
+        assert_eq!(agent1.len(), 2);
+
+        let agent2 = storage
+            .list_decisions(Some("did:key:z6MkAgent2"), None, None, 100)
+            .await
+            .unwrap();
+        assert_eq!(agent2.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_list_decisions_by_status() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        let id1 = storage
+            .insert_decision(
+                "txn-040",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let _id2 = storage
+            .insert_decision(
+                "txn-041",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Mark first as delivered
+        storage
+            .update_decision_status(id1, DecisionStatus::Delivered, None, None)
+            .await
+            .unwrap();
+
+        let pending = storage
+            .list_decisions(None, Some(DecisionStatus::Pending), None, 100)
+            .await
+            .unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].transaction_id, "txn-041");
+
+        let delivered = storage
+            .list_decisions(None, Some(DecisionStatus::Delivered), None, 100)
+            .await
+            .unwrap();
+        assert_eq!(delivered.len(), 1);
+        assert_eq!(delivered[0].transaction_id, "txn-040");
+    }
+
+    #[tokio::test]
+    async fn test_list_decisions_since_id() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        let id1 = storage
+            .insert_decision(
+                "txn-050",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let id2 = storage
+            .insert_decision(
+                "txn-051",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let _id3 = storage
+            .insert_decision(
+                "txn-052",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Get decisions since id1 (should return id2 and id3)
+        let since = storage
+            .list_decisions(None, None, Some(id1), 100)
+            .await
+            .unwrap();
+        assert_eq!(since.len(), 2);
+        assert_eq!(since[0].id, id2);
+    }
+
+    #[tokio::test]
+    async fn test_list_decisions_with_limit() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        for i in 0..5 {
+            storage
+                .insert_decision(
+                    &format!("txn-06{}", i),
+                    "did:key:z6MkAgent1",
+                    DecisionType::AuthorizationRequired,
+                    &context,
+                )
+                .await
+                .unwrap();
+        }
+
+        let limited = storage.list_decisions(None, None, None, 3).await.unwrap();
+        assert_eq!(limited.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_expire_decisions_for_transaction() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        // Insert decisions for two transactions
+        let id1 = storage
+            .insert_decision(
+                "txn-070",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let id2 = storage
+            .insert_decision(
+                "txn-070",
+                "did:key:z6MkAgent2",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let id3 = storage
+            .insert_decision(
+                "txn-071",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Mark id2 as delivered (should still be expired)
+        storage
+            .update_decision_status(id2, DecisionStatus::Delivered, None, None)
+            .await
+            .unwrap();
+
+        // Expire decisions for txn-070
+        let expired_count = storage
+            .expire_decisions_for_transaction("txn-070")
+            .await
+            .unwrap();
+        assert_eq!(expired_count, 2);
+
+        // Verify statuses
+        let e1 = storage.get_decision_by_id(id1).await.unwrap().unwrap();
+        assert_eq!(e1.status, DecisionStatus::Expired);
+
+        let e2 = storage.get_decision_by_id(id2).await.unwrap().unwrap();
+        assert_eq!(e2.status, DecisionStatus::Expired);
+
+        // txn-071 should not be affected
+        let e3 = storage.get_decision_by_id(id3).await.unwrap().unwrap();
+        assert_eq!(e3.status, DecisionStatus::Pending);
+    }
+
+    #[tokio::test]
+    async fn test_expire_does_not_affect_resolved() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        let id1 = storage
+            .insert_decision(
+                "txn-080",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let id2 = storage
+            .insert_decision(
+                "txn-080",
+                "did:key:z6MkAgent2",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Resolve id1
+        storage
+            .update_decision_status(id1, DecisionStatus::Resolved, Some("authorize"), None)
+            .await
+            .unwrap();
+
+        // Expire txn-080
+        let expired_count = storage
+            .expire_decisions_for_transaction("txn-080")
+            .await
+            .unwrap();
+        assert_eq!(expired_count, 1); // Only id2 should be expired
+
+        let e1 = storage.get_decision_by_id(id1).await.unwrap().unwrap();
+        assert_eq!(e1.status, DecisionStatus::Resolved);
+
+        let e2 = storage.get_decision_by_id(id2).await.unwrap().unwrap();
+        assert_eq!(e2.status, DecisionStatus::Expired);
+    }
+
+    #[tokio::test]
+    async fn test_get_decision_by_id_not_found() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let result = storage.get_decision_by_id(99999).await.unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_list_decisions_combined_filters() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        let id1 = storage
+            .insert_decision(
+                "txn-090",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        storage
+            .insert_decision(
+                "txn-091",
+                "did:key:z6MkAgent2",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        storage
+            .insert_decision(
+                "txn-092",
+                "did:key:z6MkAgent1",
+                DecisionType::SettlementRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Mark first as delivered
+        storage
+            .update_decision_status(id1, DecisionStatus::Delivered, None, None)
+            .await
+            .unwrap();
+
+        // Filter by agent + status
+        let results = storage
+            .list_decisions(
+                Some("did:key:z6MkAgent1"),
+                Some(DecisionStatus::Pending),
+                None,
+                100,
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].transaction_id, "txn-092");
     }
 }
