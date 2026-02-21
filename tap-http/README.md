@@ -597,6 +597,70 @@ export TAP_ENABLE_WEB_DID=true
 tap-http
 ```
 
+## Decision Modes
+
+tap-http supports three decision modes that control how transaction authorization, settlement, and policy decisions are handled:
+
+### Auto Mode (default)
+
+All decisions are automatically approved. This is the default behavior when no decision flags are set.
+
+```bash
+tap-http
+# or explicitly:
+tap-http --decision-mode auto
+```
+
+### Poll Mode
+
+Decisions are logged to the `decision_log` table in each agent's SQLite database. An external process (e.g., a separate `tap-mcp` instance connected to an AI agent) polls for pending decisions and acts on them using standard MCP tools.
+
+```bash
+tap-http --decision-mode poll
+```
+
+The workflow:
+1. tap-http receives a Transfer message, FSM hits a decision point
+2. `DecisionLogHandler` writes the decision to the `decision_log` table (status: `pending`)
+3. An external tap-mcp process calls `tap_list_pending_decisions` to see pending decisions
+4. The external process calls `tap_authorize` (or `tap_reject`, `tap_settle`, etc.)
+5. The decision is **automatically resolved** in the `decision_log` when the action succeeds
+
+Decisions are also automatically expired when a transaction reaches a terminal state (rejected, cancelled, reverted).
+
+### Exec Mode
+
+A long-running child process is spawned and communicates via JSON-RPC 2.0 over stdin/stdout. This is activated by providing `--decision-exec`:
+
+```bash
+tap-http --decision-exec /path/to/decision-handler
+tap-http --decision-exec /path/to/handler --decision-exec-args "arg1,arg2"
+tap-http --decision-exec /path/to/handler --decision-subscribe all
+```
+
+The child process receives decision requests via stdin and can call MCP tools via stdout. See the [External Decision PRD](../prds/external-decision.md) for the full protocol specification.
+
+### Decision CLI Flags
+
+| Flag | Env Var | Default | Description |
+|---|---|---|---|
+| `-M, --decision-mode` | `TAP_DECISION_MODE` | `auto` | Decision handling: `auto`, `poll`, or `exec` (implied by `-D`) |
+| `-D, --decision-exec` | `TAP_DECISION_EXEC` | — | Path to external decision executable (implies `exec` mode) |
+| `-A, --decision-exec-args` | `TAP_DECISION_EXEC_ARGS` | — | Comma-separated arguments for the executable |
+| `-S, --decision-subscribe` | `TAP_DECISION_SUBSCRIBE` | `decisions` | Event forwarding: `decisions` or `all` |
+
+### Decision Auto-Resolution
+
+When action tools (`tap_authorize`, `tap_reject`, `tap_settle`, `tap_cancel`, `tap_revert`) are called — whether from the spawned child process or a separate tap-mcp instance — matching pending decisions are automatically resolved in the database:
+
+| Action Tool | Resolves Decision Type | Resolution |
+|---|---|---|
+| `tap_authorize` | `authorization_required` | `authorize` |
+| `tap_reject` | all pending for transaction | `reject` |
+| `tap_settle` | `settlement_required` | `settle` |
+| `tap_cancel` | all pending for transaction | `cancel` |
+| `tap_revert` | all pending for transaction | `revert` |
+
 ### TAP Payment Flow Simulator
 
 The package also includes a payment flow simulator that can be used to test the TAP HTTP server:

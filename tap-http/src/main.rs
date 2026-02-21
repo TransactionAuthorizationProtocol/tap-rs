@@ -35,6 +35,7 @@ struct Args {
     db_path: Option<String>,
     tap_root: Option<String>,
     enable_web_did: bool,
+    decision_mode: String,
     decision_exec: Option<String>,
     decision_exec_args: Vec<String>,
     decision_subscribe: String,
@@ -103,6 +104,12 @@ impl Args {
                 .or_else(|| env::var("TAP_ROOT").ok()),
             enable_web_did: args.contains("--enable-web-did")
                 || env::var("TAP_ENABLE_WEB_DID").is_ok(),
+            decision_mode: {
+                let raw: Option<String> = args.opt_value_from_str(["-M", "--decision-mode"])?;
+                raw.unwrap_or_else(|| {
+                    env::var("TAP_DECISION_MODE").unwrap_or_else(|_| "auto".to_string())
+                })
+            },
             decision_exec: args
                 .opt_value_from_str(["-D", "--decision-exec"])?
                 .or_else(|| env::var("TAP_DECISION_EXEC").ok()),
@@ -152,9 +159,12 @@ fn print_help() {
     println!("    --db-path <PATH>             Path to the database file [default: ~/.tap/<did>/transactions.db]");
     println!("    --tap-root <DIR>             Custom TAP root directory [default: ~/.tap]");
     println!("    --enable-web-did             Enable /.well-known/did.json endpoint for did:web hosting");
-    println!("    --decision-exec <PATH>       Path to external decision executable");
-    println!("    --decision-exec-args <ARGS>  Comma-separated arguments for the executable");
-    println!("    --decision-subscribe <MODE>  Event forwarding mode: decisions (default) or all");
+    println!("    -M, --decision-mode <MODE>   Decision handling: auto (default), poll, or exec (implied by -D)");
+    println!("    -D, --decision-exec <PATH>   Path to external decision executable");
+    println!("    -A, --decision-exec-args <ARGS>  Comma-separated arguments for the executable");
+    println!(
+        "    -S, --decision-subscribe <MODE>  Event forwarding mode: decisions (default) or all"
+    );
     println!("    -v, --verbose                Enable verbose logging");
     println!("    --help                       Print help information");
     println!("    --version                    Print version information");
@@ -171,6 +181,7 @@ fn print_help() {
     println!("    TAP_NODE_DB_PATH             Path to the database file");
     println!("    TAP_ROOT                     Custom TAP root directory");
     println!("    TAP_ENABLE_WEB_DID           Enable /.well-known/did.json endpoint");
+    println!("    TAP_DECISION_MODE            Decision handling: auto, poll, or exec");
     println!("    TAP_DECISION_EXEC            Path to external decision executable");
     println!("    TAP_DECISION_EXEC_ARGS       Comma-separated arguments");
     println!("    TAP_DECISION_SUBSCRIBE       Event forwarding: decisions or all");
@@ -401,10 +412,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
+    // Determine effective decision mode
+    let effective_decision_mode = if args.decision_exec.is_some() {
+        "exec".to_string()
+    } else {
+        args.decision_mode.clone()
+    };
+
     // Set up external decision manager if configured
-    let _decision_manager: Option<Arc<ExternalDecisionManager>> = if let Some(exec_path) =
-        &args.decision_exec
+    let _decision_manager: Option<Arc<ExternalDecisionManager>> = if effective_decision_mode
+        == "exec"
     {
+        let exec_path = args
+            .decision_exec
+            .as_ref()
+            .expect("--decision-exec required for exec mode");
         info!("Configuring external decision executable: {}", exec_path);
 
         let subscribe_mode: SubscribeMode = args.decision_subscribe.parse().unwrap_or_else(|e| {
@@ -465,6 +487,36 @@ async fn main() -> Result<(), Box<dyn Error>> {
     } else {
         None
     };
+
+    // Set up poll mode if configured
+    if effective_decision_mode == "poll" {
+        info!("Configuring poll decision mode (external process polls decision_log)");
+
+        let storage = node
+            .storage()
+            .expect("Storage must be initialized for poll decision mode")
+            .clone();
+
+        // Create DecisionLogHandler that writes decisions to the database
+        let decision_handler = Arc::new(
+            tap_node::event::decision_log_handler::DecisionLogHandler::new(
+                storage.clone(),
+                vec![agent_did.clone()],
+            ),
+        );
+
+        // Set decision mode to Custom with the log handler
+        node.set_decision_mode(tap_node::state_machine::fsm::DecisionMode::Custom(
+            decision_handler,
+        ));
+
+        // Subscribe DecisionStateHandler for auto-resolution on state changes
+        let state_handler =
+            Arc::new(tap_node::event::decision_state_handler::DecisionStateHandler::new(storage));
+        node.event_bus().subscribe(state_handler).await;
+
+        info!("Poll decision mode configured — decisions logged to decision_log table");
+    }
 
     // Create and start HTTP server
     let mut server = TapHttpServer::new(config, node);

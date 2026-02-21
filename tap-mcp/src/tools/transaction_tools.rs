@@ -16,7 +16,44 @@ use tap_msg::message::{
     Reject, Revert, Settle, TransactionLimits, Transfer,
 };
 use tap_node::storage::models::SchemaType;
+use tap_node::storage::DecisionType;
 use tracing::{debug, error};
+
+/// Resolve decisions in the decision_log after a successful action.
+///
+/// When an action tool (authorize, reject, settle, cancel, revert) succeeds,
+/// this function resolves matching pending/delivered decisions in the shared
+/// database. This enables poll-mode architectures where external processes
+/// act on decisions and the decision_log is automatically cleaned up.
+async fn auto_resolve_decisions(
+    tap_integration: &TapIntegration,
+    agent_did: &str,
+    transaction_id: &str,
+    action: &str,
+    decision_type: Option<DecisionType>,
+) {
+    if let Ok(storage) = tap_integration.storage_for_agent(agent_did).await {
+        match storage
+            .resolve_decisions_for_transaction(transaction_id, action, decision_type)
+            .await
+        {
+            Ok(count) => {
+                if count > 0 {
+                    debug!(
+                        "Auto-resolved {} decisions for transaction {} with action: {}",
+                        count, transaction_id, action
+                    );
+                }
+            }
+            Err(e) => {
+                debug!(
+                    "Could not auto-resolve decisions for transaction {}: {}",
+                    transaction_id, e
+                );
+            }
+        }
+    }
+}
 
 /// Tool for creating transfer transactions
 pub struct CreateTransferTool {
@@ -494,6 +531,15 @@ impl ToolHandler for AuthorizeTool {
                     packed_message.len()
                 );
 
+                auto_resolve_decisions(
+                    self.tap_integration(),
+                    &params.agent_did,
+                    &params.transaction_id,
+                    "authorize",
+                    Some(DecisionType::AuthorizationRequired),
+                )
+                .await;
+
                 let response = AuthorizeResponse {
                     transaction_id: params.transaction_id,
                     message_id: didcomm_message.id,
@@ -630,6 +676,15 @@ impl ToolHandler for RejectTool {
                     recipient_did,
                     packed_message.len()
                 );
+
+                auto_resolve_decisions(
+                    self.tap_integration(),
+                    &params.agent_did,
+                    &params.transaction_id,
+                    "reject",
+                    None, // Reject resolves all pending decisions
+                )
+                .await;
 
                 let response = RejectResponse {
                     transaction_id: params.transaction_id,
@@ -771,6 +826,15 @@ impl ToolHandler for CancelTool {
                     recipient_did,
                     packed_message.len()
                 );
+
+                auto_resolve_decisions(
+                    self.tap_integration(),
+                    &params.agent_did,
+                    &params.transaction_id,
+                    "cancel",
+                    None, // Cancel resolves all pending decisions
+                )
+                .await;
 
                 let response = CancelResponse {
                     transaction_id: params.transaction_id,
@@ -914,6 +978,15 @@ impl ToolHandler for SettleTool {
                     packed_message.len()
                 );
 
+                auto_resolve_decisions(
+                    self.tap_integration(),
+                    &params.agent_did,
+                    &params.transaction_id,
+                    "settle",
+                    Some(DecisionType::SettlementRequired),
+                )
+                .await;
+
                 let response = SettleResponse {
                     transaction_id: params.transaction_id,
                     settlement_id: params.settlement_id,
@@ -1054,6 +1127,15 @@ impl ToolHandler for RevertTool {
                     recipient_did,
                     packed_message.len()
                 );
+
+                auto_resolve_decisions(
+                    self.tap_integration(),
+                    &params.agent_did,
+                    &params.transaction_id,
+                    "revert",
+                    None, // Revert resolves all pending decisions
+                )
+                .await;
 
                 let response = RevertResponse {
                     transaction_id: params.transaction_id,

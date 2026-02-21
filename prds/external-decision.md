@@ -305,6 +305,58 @@ Two new tools added to the `ToolRegistry`:
 3. Gets all unresolved decisions with full context
 4. Acts on them via `tap_resolve_decision` or direct tool calls
 
+## Poll Mode (External MCP Process)
+
+In addition to the spawned child process mode (`--decision-exec`), tap-http supports a **poll mode** (`--decision-mode poll`) designed for architectures where a separate tap-mcp process (e.g., connected to an AI agent) makes decisions by polling the shared database.
+
+### Architecture
+
+```
+tap-http (--decision-mode poll)         tap-mcp (separate process, same --tap-root)
+──────────────────────────────          ─────────────────────────────────────────────
+receives Transfer from counterparty
+  → FSM hits decision point
+  → DecisionLogHandler writes to
+    decision_log (status: pending)
+  → waits for external resolution
+                                        AI (e.g. Claude) calls:
+                                          tap_list_pending_decisions → sees pending
+                                          tap_authorize → sends Authorize message
+                                            ↳ auto-resolves decision in DB
+  → decision_log entry now "resolved"
+  → transaction proceeds
+```
+
+### How It Works
+
+1. **`--decision-mode poll`**: Creates a `DecisionLogHandler` (implements `DecisionHandler`) that writes decisions to the `decision_log` table. No child process is spawned.
+2. **`DecisionStateHandler`** (event subscriber): Listens for `TransactionStateChanged` events. On terminal states → expires pending decisions. On action-related state changes → resolves matching decisions.
+3. **Auto-resolve at the tool level**: When action tools (`tap_authorize`, `tap_reject`, `tap_settle`, `tap_cancel`, `tap_revert`) successfully execute, they automatically resolve matching pending/delivered decisions in the same database. This works **cross-process** because it operates at the DB level, not the event bus level.
+
+### Decision Auto-Resolution Mapping
+
+When an action tool succeeds, matching decisions are automatically resolved:
+
+| Action Tool | Resolves Decision Type | Resolution |
+|---|---|---|
+| `tap_authorize` | `authorization_required` | `authorize` |
+| `tap_reject` | all pending for transaction | `reject` |
+| `tap_settle` | `settlement_required` | `settle` |
+| `tap_cancel` | all pending for transaction | `cancel` |
+| `tap_revert` | all pending for transaction | `revert` |
+
+### CLI Configuration
+
+| Flag | Env Var | Default | Description |
+|---|---|---|---|
+| `--decision-mode <MODE>` | `TAP_DECISION_MODE` | `auto` | Decision handling: `auto` (approve all), `poll` (log to DB, wait for external), `exec` (implied by --decision-exec) |
+
+When `--decision-mode poll` is set:
+- `NodeConfig.decision_mode` is set to `DecisionMode::Custom(DecisionLogHandler)`
+- `DecisionStateHandler` is subscribed to the event bus
+- No child process is spawned
+- `auto_act` is disabled (external system decides)
+
 ## Non-Goals
 
 - No WebSocket or HTTP callback transport (stdin/stdout only in v1)
@@ -315,8 +367,12 @@ Two new tools added to the `ToolRegistry`:
 
 ## Testing Strategy
 
-- Unit tests for `decision_log` storage methods (insert, update, list, expire)
+- Unit tests for `decision_log` storage methods (insert, update, list, expire, resolve)
 - Unit tests for JSON-RPC serialization/deserialization of decision protocol messages
+- Unit tests for `DecisionLogHandler` decision writing
+- Unit tests for `DecisionStateHandler` state-based resolution and expiration
+- Unit tests for auto-resolve in action tools
 - Integration tests using a mock external executable (simple shell script or Rust binary that auto-approves)
 - Integration tests for catch-up: start process, send decisions, kill process, accumulate decisions, restart, verify replay
 - Integration tests for expiration: send decision, move transaction to terminal state, verify decision expired
+- Integration tests for poll mode: decision logged → action tool called → decision auto-resolved

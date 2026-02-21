@@ -222,3 +222,24 @@
 
 - [x] Run cargo fmt, clippy, and tests with CI flags
 - [x] Fix any warnings or errors
+
+### Phase 9: Poll Mode & Auto-Resolve
+
+- [x] Add `resolve_decisions_for_transaction()` to Storage in tap-node
+- [x] Create `DecisionLogHandler` in tap-node (implements `DecisionHandler`, writes to decision_log)
+- [x] Rename `DecisionExpirationHandler` to `DecisionStateHandler`, add resolution on state changes
+- [x] Add auto-resolve to `tap_authorize` tool (resolve `authorization_required` decisions)
+- [x] Add auto-resolve to `tap_reject` tool (expire all pending decisions)
+- [x] Add auto-resolve to `tap_settle` tool (resolve `settlement_required` decisions)
+- [x] Add auto-resolve to `tap_cancel` tool (expire all pending decisions)
+- [x] Add auto-resolve to `tap_revert` tool (expire all pending decisions)
+- [x] Add `--decision-mode` CLI flag to tap-http (`auto`, `poll`)
+- [x] Wire poll mode in tap-http main.rs (DecisionLogHandler + DecisionStateHandler)
+- [x] Run cargo fmt, clippy, and tests with CI flags
+
+### Phase 10: Documentation
+
+- [x] Update tap-http README with decision modes and configuration
+- [x] Update tap-mcp README with decision tools and auto-resolve
+- [x] Update tap-node README with decision log and DecisionLogHandler
+- [x] Update main README with decision support overview

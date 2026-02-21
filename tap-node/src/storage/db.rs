@@ -2680,6 +2680,69 @@ impl Storage {
         Ok(result.rows_affected())
     }
 
+    /// Resolve pending/delivered decisions for a transaction with a specific action.
+    ///
+    /// Optionally filter by decision type. If `decision_type` is `None`, all
+    /// pending/delivered decisions for the transaction are resolved.
+    ///
+    /// # Arguments
+    ///
+    /// * `transaction_id` - The transaction whose decisions should be resolved
+    /// * `action` - The resolution action (e.g., "authorize", "reject", "settle")
+    /// * `decision_type` - Optional filter for specific decision types
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(u64)` - Number of decisions resolved
+    /// * `Err(StorageError)` on database error
+    pub async fn resolve_decisions_for_transaction(
+        &self,
+        transaction_id: &str,
+        action: &str,
+        decision_type: Option<DecisionType>,
+    ) -> Result<u64, StorageError> {
+        debug!(
+            "Resolving decisions for transaction {} with action: {}",
+            transaction_id, action
+        );
+
+        let result = if let Some(dt) = decision_type {
+            sqlx::query(
+                r#"
+                UPDATE decision_log
+                SET status = 'resolved',
+                    resolution = ?1,
+                    resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                WHERE transaction_id = ?2
+                AND decision_type = ?3
+                AND status IN ('pending', 'delivered')
+                "#,
+            )
+            .bind(action)
+            .bind(transaction_id)
+            .bind(dt.to_string())
+            .execute(&self.pool)
+            .await?
+        } else {
+            sqlx::query(
+                r#"
+                UPDATE decision_log
+                SET status = 'resolved',
+                    resolution = ?1,
+                    resolved_at = strftime('%Y-%m-%dT%H:%M:%SZ', 'now')
+                WHERE transaction_id = ?2
+                AND status IN ('pending', 'delivered')
+                "#,
+            )
+            .bind(action)
+            .bind(transaction_id)
+            .execute(&self.pool)
+            .await?
+        };
+
+        Ok(result.rows_affected())
+    }
+
     /// Get a single decision by ID
     ///
     /// # Arguments
@@ -3447,5 +3510,125 @@ mod tests {
             .unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].transaction_id, "txn-092");
+    }
+
+    #[tokio::test]
+    async fn test_resolve_decisions_for_transaction() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        // Insert auth and settlement decisions for same transaction
+        let id1 = storage
+            .insert_decision(
+                "txn-100",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let id2 = storage
+            .insert_decision(
+                "txn-100",
+                "did:key:z6MkAgent1",
+                DecisionType::SettlementRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Resolve only authorization_required decisions
+        let resolved = storage
+            .resolve_decisions_for_transaction(
+                "txn-100",
+                "authorize",
+                Some(DecisionType::AuthorizationRequired),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resolved, 1);
+
+        let e1 = storage.get_decision_by_id(id1).await.unwrap().unwrap();
+        assert_eq!(e1.status, DecisionStatus::Resolved);
+        assert_eq!(e1.resolution.as_deref(), Some("authorize"));
+
+        // Settlement decision should still be pending
+        let e2 = storage.get_decision_by_id(id2).await.unwrap().unwrap();
+        assert_eq!(e2.status, DecisionStatus::Pending);
+    }
+
+    #[tokio::test]
+    async fn test_resolve_decisions_all_types() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        let id1 = storage
+            .insert_decision(
+                "txn-101",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+        let id2 = storage
+            .insert_decision(
+                "txn-101",
+                "did:key:z6MkAgent1",
+                DecisionType::SettlementRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Resolve all decisions (no type filter)
+        let resolved = storage
+            .resolve_decisions_for_transaction("txn-101", "reject", None)
+            .await
+            .unwrap();
+        assert_eq!(resolved, 2);
+
+        let e1 = storage.get_decision_by_id(id1).await.unwrap().unwrap();
+        assert_eq!(e1.status, DecisionStatus::Resolved);
+        assert_eq!(e1.resolution.as_deref(), Some("reject"));
+
+        let e2 = storage.get_decision_by_id(id2).await.unwrap().unwrap();
+        assert_eq!(e2.status, DecisionStatus::Resolved);
+        assert_eq!(e2.resolution.as_deref(), Some("reject"));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_does_not_affect_already_resolved() {
+        let storage = Storage::new_in_memory().await.unwrap();
+
+        let context = serde_json::json!({"info": "test"});
+
+        let id1 = storage
+            .insert_decision(
+                "txn-102",
+                "did:key:z6MkAgent1",
+                DecisionType::AuthorizationRequired,
+                &context,
+            )
+            .await
+            .unwrap();
+
+        // Resolve manually first
+        storage
+            .update_decision_status(id1, DecisionStatus::Resolved, Some("authorize"), None)
+            .await
+            .unwrap();
+
+        // Try to resolve again via the bulk method
+        let resolved = storage
+            .resolve_decisions_for_transaction("txn-102", "reject", None)
+            .await
+            .unwrap();
+        assert_eq!(resolved, 0); // Already resolved, should not change
+
+        let e1 = storage.get_decision_by_id(id1).await.unwrap().unwrap();
+        assert_eq!(e1.resolution.as_deref(), Some("authorize")); // Original resolution preserved
     }
 }
