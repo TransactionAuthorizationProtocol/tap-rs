@@ -29,6 +29,11 @@ pub struct TapHttpConfig {
     /// If not provided, no event logging will be performed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub event_logger: Option<EventLoggerConfig>,
+
+    /// Enable the `/.well-known/did.json` endpoint for did:web hosting.
+    /// When enabled, the server resolves the HTTP Host header to a `did:web`
+    /// DID and serves the corresponding DID document.
+    pub enable_web_did: bool,
 }
 
 /// Configuration for rate limiting.
@@ -61,6 +66,7 @@ impl Default for TapHttpConfig {
             tls: None,
             request_timeout_secs: 30,
             event_logger: Some(EventLoggerConfig::default()),
+            enable_web_did: false,
         }
     }
 }
