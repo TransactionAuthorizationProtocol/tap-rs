@@ -227,11 +227,11 @@ async fn test_didcomm_endpoint_content_types() {
     assert_eq!(status, 500);
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(json["status"], "error");
-    // The message should indicate that no agent could process it
+    // The message should be a generic internal server error (no internal details leaked)
     let message = json["message"].as_str().unwrap_or("");
     assert!(
-        message.contains("No agent could process"),
-        "Expected 'No agent could process' but got: {}",
+        message.contains("Internal server error"),
+        "Expected 'Internal server error' but got: {}",
         message
     );
 
@@ -262,11 +262,11 @@ async fn test_didcomm_endpoint_content_types() {
     let json: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert_eq!(status, 500);
     assert_eq!(json["status"], "error");
-    // The message should indicate that no agent could process it or verification failed
+    // The message should be a generic internal server error (no internal details leaked)
     let message = json["message"].as_str().unwrap_or("");
     assert!(
-        message.contains("No agent could process") || message.contains("Verification error"),
-        "Expected processing/verification error but got: {}",
+        message.contains("Internal server error"),
+        "Expected 'Internal server error' but got: {}",
         message
     );
 

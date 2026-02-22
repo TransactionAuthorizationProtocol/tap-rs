@@ -37,6 +37,17 @@ impl QueryDatabaseTool {
         Self { tap_integration }
     }
 
+    /// Validate that a table name contains only safe identifier characters
+    fn validate_table_name(name: &str) -> bool {
+        !name.is_empty()
+            && name.len() <= 128
+            && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && name
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+    }
+
     /// Check if a query is read-only
     fn is_read_only_query(query: &str) -> bool {
         let query_upper = query.trim().to_uppercase();
@@ -139,6 +150,18 @@ impl ToolHandler for QueryDatabaseTool {
                 )));
             }
         };
+
+        // Enforce read-only mode at the database level
+        if let Err(e) = sqlx::query("PRAGMA query_only = ON")
+            .execute(&mut conn)
+            .await
+        {
+            error!("Failed to set query_only pragma: {}", e);
+            return Ok(error_text_response(format!(
+                "Failed to set read-only mode: {}",
+                e
+            )));
+        }
 
         // Execute query
         match sqlx::query(&params.query).fetch_all(&mut conn).await {
@@ -343,28 +366,52 @@ impl ToolHandler for GetDatabaseSchemaTool {
 
         let mut tables = Vec::new();
 
-        // Get list of tables
-        let table_query = if let Some(ref table_name) = params.table_name {
-            format!(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name='{}' ORDER BY name",
-                table_name
-            )
-        } else {
-            "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name".to_string()
-        };
+        // Validate table name if provided
+        if let Some(ref table_name) = params.table_name {
+            if !QueryDatabaseTool::validate_table_name(table_name) {
+                return Ok(error_text_response(
+                    "Invalid table name. Table names must contain only alphanumeric characters and underscores.".to_string(),
+                ));
+            }
+        }
 
-        let table_rows = match sqlx::query(&table_query).fetch_all(&mut conn).await {
-            Ok(rows) => rows,
-            Err(e) => {
-                error!("Failed to get tables: {}", e);
-                return Ok(error_text_response(format!("Failed to get tables: {}", e)));
+        // Get list of tables using parameterized query
+        let table_rows = if let Some(ref table_name) = params.table_name {
+            match sqlx::query(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name=?1 ORDER BY name",
+            )
+            .bind(table_name)
+            .fetch_all(&mut conn)
+            .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    error!("Failed to get tables: {}", e);
+                    return Ok(error_text_response(format!("Failed to get tables: {}", e)));
+                }
+            }
+        } else {
+            match sqlx::query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                .fetch_all(&mut conn)
+                .await
+            {
+                Ok(rows) => rows,
+                Err(e) => {
+                    error!("Failed to get tables: {}", e);
+                    return Ok(error_text_response(format!("Failed to get tables: {}", e)));
+                }
             }
         };
 
         for table_row in table_rows {
             let table_name: String = table_row.try_get("name").unwrap_or_default();
 
-            // Get columns for this table
+            // Validate table name from database as defense-in-depth
+            if !QueryDatabaseTool::validate_table_name(&table_name) {
+                continue;
+            }
+
+            // Get columns for this table (safe: table_name validated above)
             let column_query = format!("PRAGMA table_info('{}')", table_name);
             let column_rows = match sqlx::query(&column_query).fetch_all(&mut conn).await {
                 Ok(rows) => rows,

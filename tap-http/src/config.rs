@@ -34,6 +34,10 @@ pub struct TapHttpConfig {
     /// When enabled, the server resolves the HTTP Host header to a `did:web`
     /// DID and serves the corresponding DID document.
     pub enable_web_did: bool,
+
+    /// Maximum number of agents that can be auto-created via the web DID endpoint.
+    /// Prevents denial-of-service via unbounded agent creation.
+    pub max_agents: usize,
 }
 
 /// Configuration for rate limiting.
@@ -67,6 +71,7 @@ impl Default for TapHttpConfig {
             request_timeout_secs: 30,
             event_logger: Some(EventLoggerConfig::default()),
             enable_web_did: false,
+            max_agents: 100,
         }
     }
 }

@@ -290,8 +290,13 @@ impl Transfer {
             return Err(Error::Validation("Amount is required".to_string()));
         }
 
-        // Validate amount is a positive number
+        // Validate amount is a finite positive number
         match self.amount.parse::<f64>() {
+            Ok(amount) if !amount.is_finite() => {
+                return Err(Error::Validation(
+                    "Amount must be a finite number".to_string(),
+                ));
+            }
             Ok(amount) if amount <= 0.0 => {
                 return Err(Error::Validation("Amount must be positive".to_string()));
             }
