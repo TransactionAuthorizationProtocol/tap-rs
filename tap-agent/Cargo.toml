@@ -70,7 +70,7 @@ name = "agent_benchmark"
 harness = false
 
 [features]
-default = ["native", "crypto-ed25519"]
+default = ["native", "crypto-ed25519", "crypto-p256", "crypto-secp256k1"]
 native = ["reqwest"]
 test-utils = ["tempfile"]
 examples = ["tempfile"]
