@@ -463,7 +463,8 @@ impl TapNode {
         // Determine message type
         let is_encrypted =
             message.get("protected").is_some() && message.get("recipients").is_some();
-        let is_signed = message.get("payload").is_some() && message.get("signatures").is_some();
+        let is_signed = message.get("payload").is_some()
+            && (message.get("signatures").is_some() || message.get("signature").is_some());
 
         // Helper function to store received message in agent storage
         #[cfg(feature = "storage")]

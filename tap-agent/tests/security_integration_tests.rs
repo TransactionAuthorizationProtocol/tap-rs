@@ -182,14 +182,15 @@ async fn test_tampered_signature_fails() {
 
     let mut jws = key.create_jws(message, None).await.unwrap();
 
-    // Tamper with signature
-    let mut sig_bytes = base64::engine::general_purpose::STANDARD
+    // Tamper with signature (use URL_SAFE_NO_PAD since JWS now uses base64url)
+    let mut sig_bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .decode(&jws.signatures[0].signature)
         .unwrap();
     if !sig_bytes.is_empty() {
         sig_bytes[0] ^= 0xFF;
     }
-    jws.signatures[0].signature = base64::engine::general_purpose::STANDARD.encode(&sig_bytes);
+    jws.signatures[0].signature =
+        base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&sig_bytes);
 
     // Verification should fail
     let result = key.verify_jws(&jws).await;

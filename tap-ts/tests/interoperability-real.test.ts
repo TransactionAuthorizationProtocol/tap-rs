@@ -44,18 +44,14 @@ describe('Real WASM Interoperability Tests', () => {
 
       const packed = await aliceAgent.pack(message);
       
-      // Verify it's a valid JWS structure (now returns object directly)
-      // Parse the JWS from the packed message result
+      // Verify it's a valid Flattened JWS structure
       const jws = JSON.parse(packed.message);
       expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
-      
+      expect(jws).toHaveProperty('protected');
+      expect(jws).toHaveProperty('signature');
+
       // Payload should be base64url encoded
       expect(jws.payload).toMatch(/^[A-Za-z0-9_-]+$/);
-      
-      // Should have at least one signature
-      expect(jws.signatures).toBeInstanceOf(Array);
-      expect(jws.signatures.length).toBeGreaterThan(0);
     });
 
     it('should handle standard DIDComm message types', async () => {
@@ -87,7 +83,7 @@ describe('Real WASM Interoperability Tests', () => {
         
         const jws = JSON.parse(packed.message);
         expect(jws).toHaveProperty('payload');
-        expect(jws).toHaveProperty('signatures');
+        expect(jws).toHaveProperty('signature');
       }
     });
 
@@ -223,21 +219,19 @@ describe('Real WASM Interoperability Tests', () => {
       // Parse the JWS from the packed message result
       const jws = JSON.parse(packed.message);
       
-      // Check message format  
-      if (jws.payload && jws.signatures) {
-        // JWS format
-        expect(jws.signatures[0]).toHaveProperty('protected');
-        expect(jws.signatures[0]).toHaveProperty('signature');
-        
-        // Decode protected header
-        const protectedHeader = JSON.parse(
-          Buffer.from(jws.signatures[0].protected, 'base64url').toString()
-        );
-        
-        // Should specify algorithm
-        expect(protectedHeader).toHaveProperty('alg');
-        expect(['EdDSA', 'ES256', 'ES256K']).toContain(protectedHeader.alg);
-      }
+      // Check Flattened JWS format
+      expect(jws).toHaveProperty('payload');
+      expect(jws).toHaveProperty('protected');
+      expect(jws).toHaveProperty('signature');
+
+      // Decode protected header
+      const protectedHeader = JSON.parse(
+        Buffer.from(jws.protected, 'base64url').toString()
+      );
+
+      // Should specify algorithm
+      expect(protectedHeader).toHaveProperty('alg');
+      expect(['EdDSA', 'ES256', 'ES256K']).toContain(protectedHeader.alg);
     });
 
     it('should handle authenticated vs anonymous encryption', async () => {
@@ -257,14 +251,13 @@ describe('Real WASM Interoperability Tests', () => {
       const authJws = JSON.parse(authPacked.message);
       
       // JWS always reveals sender through signature
-      if (authJws.signatures) {
-        const protectedHeader = JSON.parse(
-          Buffer.from(authJws.signatures[0].protected, 'base64url').toString()
-        );
-        
-        // Sender's key ID should be in the protected header
-        expect(protectedHeader).toHaveProperty('kid');
-      }
+      expect(authJws).toHaveProperty('protected');
+      const protectedHeader2 = JSON.parse(
+        Buffer.from(authJws.protected, 'base64url').toString()
+      );
+
+      // Sender's key ID should be in the protected header
+      expect(protectedHeader2).toHaveProperty('kid');
     });
   });
 

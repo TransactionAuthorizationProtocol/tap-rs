@@ -4,8 +4,18 @@
 //! including security modes and message type identifiers.
 
 use base64::{engine::general_purpose, Engine};
-use serde::{Deserialize, Serialize};
-// Value is not used in this file
+use serde::de::{self, MapAccess, Visitor};
+use serde::ser::SerializeMap;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+/// Decode a base64-encoded string, accepting both standard base64 and base64url (with or without padding).
+pub fn base64_decode_flexible(input: &str) -> Result<Vec<u8>, base64::DecodeError> {
+    general_purpose::URL_SAFE_NO_PAD
+        .decode(input)
+        .or_else(|_| general_purpose::URL_SAFE.decode(input))
+        .or_else(|_| general_purpose::STANDARD.decode(input))
+        .or_else(|_| general_purpose::STANDARD_NO_PAD.decode(input))
+}
 
 /// Security mode for message packing and unpacking.
 ///
@@ -40,10 +50,99 @@ pub const DIDCOMM_ENCRYPTED: &str = "application/didcomm-encrypted+json";
 
 // JWS-related types
 
-#[derive(Serialize, Deserialize, Debug)]
+/// JWS (JSON Web Signature) supporting both General and Flattened serializations per RFC 7515.
+///
+/// When serializing:
+/// - Single signature: uses Flattened JWS format (`protected`, `payload`, `signature` at top level)
+/// - Multiple signatures: uses General JWS format (`payload`, `signatures` array)
+///
+/// When deserializing: accepts both formats.
+#[derive(Debug)]
 pub struct Jws {
     pub payload: String,
     pub signatures: Vec<JwsSignature>,
+}
+
+impl Serialize for Jws {
+    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+        if self.signatures.len() == 1 {
+            // Flattened JWS: { "protected", "payload", "signature" }
+            let sig = &self.signatures[0];
+            let mut map = serializer.serialize_map(Some(3))?;
+            map.serialize_entry("payload", &self.payload)?;
+            map.serialize_entry("protected", &sig.protected)?;
+            map.serialize_entry("signature", &sig.signature)?;
+            map.end()
+        } else {
+            // General JWS: { "payload", "signatures": [...] }
+            let mut map = serializer.serialize_map(Some(2))?;
+            map.serialize_entry("payload", &self.payload)?;
+            map.serialize_entry("signatures", &self.signatures)?;
+            map.end()
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for Jws {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+        struct JwsVisitor;
+
+        impl<'de> Visitor<'de> for JwsVisitor {
+            type Value = Jws;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a JWS in General or Flattened serialization")
+            }
+
+            fn visit_map<M: MapAccess<'de>>(
+                self,
+                mut map: M,
+            ) -> std::result::Result<Jws, M::Error> {
+                let mut payload: Option<String> = None;
+                let mut signatures: Option<Vec<JwsSignature>> = None;
+                // Flattened fields
+                let mut protected: Option<String> = None;
+                let mut signature: Option<String> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "payload" => payload = Some(map.next_value()?),
+                        "signatures" => signatures = Some(map.next_value()?),
+                        "protected" => protected = Some(map.next_value()?),
+                        "signature" => signature = Some(map.next_value()?),
+                        _ => {
+                            let _: serde_json::Value = map.next_value()?;
+                        }
+                    }
+                }
+
+                let payload = payload.ok_or_else(|| de::Error::missing_field("payload"))?;
+
+                // Prefer General format if "signatures" is present
+                if let Some(sigs) = signatures {
+                    Ok(Jws {
+                        payload,
+                        signatures: sigs,
+                    })
+                } else if let (Some(prot), Some(sig)) = (protected, signature) {
+                    // Flattened format
+                    Ok(Jws {
+                        payload,
+                        signatures: vec![JwsSignature {
+                            protected: prot,
+                            signature: sig,
+                        }],
+                    })
+                } else {
+                    Err(de::Error::custom(
+                        "JWS must have either 'signatures' array or 'protected'+'signature' fields",
+                    ))
+                }
+            }
+        }
+
+        deserializer.deserialize_map(JwsVisitor)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -69,8 +168,7 @@ fn default_didcomm_signed() -> String {
 impl JwsSignature {
     /// Extracts the kid (key identifier) from the protected header
     pub fn get_kid(&self) -> Option<String> {
-        // Decode the protected header and extract kid
-        if let Ok(protected_bytes) = general_purpose::STANDARD.decode(&self.protected) {
+        if let Ok(protected_bytes) = base64_decode_flexible(&self.protected) {
             if let Ok(protected) = serde_json::from_slice::<JwsProtected>(&protected_bytes) {
                 return Some(protected.kid);
             }
@@ -80,7 +178,7 @@ impl JwsSignature {
 
     /// Decodes and returns the protected header
     pub fn get_protected_header(&self) -> Result<JwsProtected, Box<dyn std::error::Error>> {
-        let protected_bytes = general_purpose::STANDARD.decode(&self.protected)?;
+        let protected_bytes = base64_decode_flexible(&self.protected)?;
         let protected = serde_json::from_slice::<JwsProtected>(&protected_bytes)?;
         Ok(protected)
     }
@@ -113,7 +211,10 @@ pub struct JweHeader {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JweProtected {
     pub epk: EphemeralPublicKey,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub apv: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub apu: String,
     #[serde(default = "default_didcomm_encrypted")]
     pub typ: String,
     pub enc: String,

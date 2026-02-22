@@ -2,7 +2,6 @@
 use crate::did::SyncDIDResolver;
 use crate::error::{Error, Result};
 use crate::message::{Jws, JwsProtected};
-use base64::Engine;
 use tap_msg::didcomm::PlainMessage;
 
 /// Verify a JWS (JSON Web Signature) message using DID resolution
@@ -76,18 +75,17 @@ pub async fn verify_jws(jws: &Jws, resolver: &dyn SyncDIDResolver) -> Result<Pla
             }
         };
 
-        // Decode the protected header
-        let protected_bytes =
-            match base64::engine::general_purpose::STANDARD.decode(&signature.protected) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    last_error = Some(Error::Cryptography(format!(
-                        "Failed to decode protected header: {}",
-                        e
-                    )));
-                    continue;
-                }
-            };
+        // Decode the protected header (accept both base64 and base64url)
+        let protected_bytes = match crate::message::base64_decode_flexible(&signature.protected) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                last_error = Some(Error::Cryptography(format!(
+                    "Failed to decode protected header: {}",
+                    e
+                )));
+                continue;
+            }
+        };
 
         // Parse the protected header
         let protected: JwsProtected = match serde_json::from_slice(&protected_bytes) {
@@ -104,18 +102,17 @@ pub async fn verify_jws(jws: &Jws, resolver: &dyn SyncDIDResolver) -> Result<Pla
         // Create the signing input (protected.payload)
         let signing_input = format!("{}.{}", signature.protected, jws.payload);
 
-        // Decode the signature
-        let signature_bytes =
-            match base64::engine::general_purpose::STANDARD.decode(&signature.signature) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    last_error = Some(Error::Cryptography(format!(
-                        "Failed to decode signature: {}",
-                        e
-                    )));
-                    continue;
-                }
-            };
+        // Decode the signature (accept both base64 and base64url)
+        let signature_bytes = match crate::message::base64_decode_flexible(&signature.signature) {
+            Ok(bytes) => bytes,
+            Err(e) => {
+                last_error = Some(Error::Cryptography(format!(
+                    "Failed to decode signature: {}",
+                    e
+                )));
+                continue;
+            }
+        };
 
         // Verify the signature based on the algorithm
         let verified = match protected.alg.as_str() {
@@ -130,8 +127,7 @@ pub async fn verify_jws(jws: &Jws, resolver: &dyn SyncDIDResolver) -> Result<Pla
 
         if verified {
             // Decode and return the payload
-            let payload_bytes = base64::engine::general_purpose::STANDARD
-                .decode(&jws.payload)
+            let payload_bytes = crate::message::base64_decode_flexible(&jws.payload)
                 .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
 
             let payload_str = String::from_utf8(payload_bytes)
