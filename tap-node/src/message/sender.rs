@@ -207,11 +207,10 @@ impl HttpPlainMessageSender {
         )
     }
 
-    /// Simple URL encoding function
+    /// URL-encode a string for safe use in URLs
     fn url_encode(&self, text: &str) -> String {
-        // Simple encoding of common URL-unsafe characters
-        // In a real implementation, you would use a proper URL encoding library
-        text.replace(':', "%3A").replace('/', "%2F")
+        use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+        utf8_percent_encode(text, NON_ALPHANUMERIC).to_string()
     }
 }
 
@@ -304,11 +303,10 @@ impl WebSocketPlainMessageSender {
         )
     }
 
-    /// Simple URL encoding function
+    /// URL-encode a string for safe use in URLs
     fn url_encode(&self, text: &str) -> String {
-        // Simple encoding of common URL-unsafe characters
-        // In a real implementation, you would use a proper URL encoding library
-        text.replace(':', "%3A").replace('/', "%2F")
+        use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
+        utf8_percent_encode(text, NON_ALPHANUMERIC).to_string()
     }
 
     /// Ensures a connection exists for the given recipient

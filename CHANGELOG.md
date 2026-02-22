@@ -5,6 +5,102 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-02-22
+
+### Added
+
+#### New Crate: tap-cli
+- Full-featured command-line interface for all TAP agent operations
+- Agent management (`agent create`, `agent list`)
+- Transaction creation for all message types (`transfer`, `payment`, `connect`, `escrow`, `capture`)
+- Transaction lifecycle actions (`authorize`, `reject`, `cancel`, `settle`, `revert`)
+- Customer management with IVMS101 data generation (`customer create`, `customer ivms101`)
+- Message delivery tracking and received message inspection
+- DID operations (`did generate`, `did lookup`, `did keys`)
+- Communication commands (`comm ping`, `comm message`)
+- JSON and text output formats with `--format` flag
+
+#### Transaction State Machine (tap-node)
+- Formal finite state machine (`TransactionFsm`) for TAP transaction lifecycle
+- 8 states: Received, PolicyRequired, PartiallyAuthorized, ReadyToSettle, Settled, Rejected, Cancelled, Reverted
+- 3 explicit decision points: AuthorizationRequired, PolicySatisfactionRequired, SettlementRequired
+- Configurable decision modes: AutoApprove, EventBus, Custom handler
+
+#### External Decision Support (tap-http, tap-node, tap-mcp)
+- `--decision-mode poll`: decisions logged to `decision_log` SQLite table for external polling
+- `--decision-exec`: spawn a long-running child process communicating via JSON-RPC 2.0 over stdin/stdout
+- `DecisionLogHandler` and `DecisionStateHandler` for durable decision management
+- Process lifecycle management with health monitoring, restart with backoff, and graceful shutdown
+- Decision replay on process reconnect for crash recovery
+- Auto-resolve: action tools (`tap_authorize`, `tap_reject`, `tap_settle`, `tap_cancel`, `tap_revert`) automatically resolve matching pending decisions
+- New MCP tools: `tap_list_pending_decisions`, `tap_resolve_decision`
+
+#### did:web Hosting (tap-http)
+- Optional `/.well-known/did.json` endpoint for serving did:web DID documents
+- Derives DID from HTTP Host header with RFC 1035 domain validation
+- Auto-creates agents with Ed25519 keys and DIDCommMessaging service endpoint
+- Enabled via `--enable-web-did` flag or `TAP_ENABLE_WEB_DID` env var
+
+#### WASM Agent v2 (tap-wasm, tap-ts)
+- Complete rewrite of WASM bindings with browser-first design
+- Real Ed25519 cryptographic key generation replacing UUID-based DID generation
+- End-to-end message signing and verification working in browser
+- TypeScript SDK (`@taprsvp/agent`) with full DIDComm v2 support
+- Pluggable DID resolver interface for JavaScript delegation
+- Multiple key types: Ed25519, P-256, secp256k1
+- Optimized bundle: 272KB WASM gzipped, 3.72KB TypeScript gzipped
+- Verified Veramo interoperability with 15+ integration tests
+
+#### Asset Exchange & Quote Messages (TAIP-18)
+- New `Exchange` message type for initiating asset exchanges between parties
+- New `Quote` message type for responding to exchange requests with pricing
+- Full validation, builders, CLI subcommands, and MCP tools for both message types
+
+#### Transfer & Payment Enhancements (TAIP-3, TAIP-14)
+- `transactionValue` and `expiry` fields on Transfer messages (TAIP-3)
+- Flexible asset pricing in Payment via `SupportedAsset` enum with Simple and Priced variants (TAIP-14)
+- `expiry`, `invoice`, and `fallbackSettlementAddresses` exposed in Payment MCP tools and CLI
+
+#### Connect Message Restructure (TAIP-15)
+- `requester`, `agents`, `agreement`, and `expiry` fields on Connect messages
+- Expanded `TransactionLimits` with per-day/week/month/year limits
+- Expanded `ConnectionConstraints` with `allowedBeneficiaries`, `allowedSettlementAddresses`, `allowedAssets`
+
+#### Agent Management CLI Commands (TAIP-5, TAIP-7)
+- `agent-mgmt add-agents` subcommand for adding agents to transactions
+- `agent-mgmt remove-agent` and `agent-mgmt replace-agent` subcommands
+- `agent-mgmt update-policies` subcommand (TAIP-7)
+
+#### Decision Management CLI Commands (tap-cli)
+- `decision list` and `decision resolve` subcommands matching tap-mcp's decision tools
+- Auto-resolve on all action commands (`authorize`, `reject`, `cancel`, `settle`, `revert`)
+- Detailed `--help` text with decision type references and auto-resolve mapping
+
+#### Docker Support (tap-http)
+- Multi-stage Dockerfile for containerized deployment
+- docker-compose.yml with persistent volume at `/data/tap`
+- Single volume for keys, databases, and logs
+
+### Changed
+- `tap-agent` default features now include all three crypto backends (`crypto-ed25519`, `crypto-p256`, `crypto-secp256k1`)
+- `Complete` message type removed per updated TAIP specifications
+- Improved installation documentation across all README files with explicit `cargo install` and `cargo add` instructions
+
+### Security
+- Replace insecure XOR-based key wrapping with AES-KW (RFC 3394)
+- Implement Concat KDF (NIST SP 800-56A) for ECDH key derivation
+- Fix `encrypt_to_jwk` to use real ECDH-ES+A256KW encryption
+- Fix `verify_jws` to perform actual cryptographic signature verification
+- Add bounds checking to prevent panics on malformed DID and PayTo URI input
+- JWE messages encrypted with old XOR method are no longer decryptable (intentional — the old method provided no security)
+
+### Breaking Changes
+- `Complete` message type removed
+- JWE encryption format changed (AES-KW replaces XOR key wrapping)
+- `AuthorizationRequired` field `url` renamed to `authorizationUrl` (from 0.5.0)
+- Connect message restructured with new `requester`, `agents`, `agreement`, `expiry` fields (TAIP-15)
+- Transfer message gains `transactionValue` and `expiry` fields (TAIP-3)
+
 ## [0.5.0] - 2025-08-14
 
 ### Added

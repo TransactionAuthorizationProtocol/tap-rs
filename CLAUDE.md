@@ -107,7 +107,14 @@ When done run the linter and formatter, then mark each individual task as done w
 - Do a full `cargo build`
 - Commit and push to GitHub, creating a new PR
 - Publish each crate one by one
-- When doing a release please review git history and add a comprehensive changelog to CHANGELOG.md
+
+### Documentation Updates (required for every minor/major release)
+- **CHANGELOG.md** (root): Add a comprehensive entry covering all changes since the last release, organized by Added/Changed/Fixed/Security/Breaking Changes
+- **tap-ts/CHANGELOG.md**: Update with TypeScript/WASM-specific changes for the release
+- **README.md** (root): Update version references, feature highlights, and Getting Started instructions
+- **Crate-level README.md files**: Update version numbers, installation instructions (`cargo install`, `cargo add`), and feature documentation for any crate that changed
+- **CLAUDE.md files**: Update build commands, feature lists, test counts, and any structural changes in both the root and crate-level CLAUDE.md files
+- Review git history (`git log`) to ensure no changes are missed in the changelog
 
 ## Security
 - IMPORTANT!! Always perform real encryption, decryption, signing and signature verification. Never use simplified placeholders. Always use well tested cryptography libraries.

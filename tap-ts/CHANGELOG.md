@@ -5,6 +5,33 @@ All notable changes to @taprsvp/agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-02-22
+
+### Added
+- Complete rewrite of WASM bindings with browser-first design
+- Real Ed25519 cryptographic key generation replacing UUID-based DID generation
+- End-to-end message signing and verification working in browser
+- Pluggable DID resolver interface for JavaScript delegation
+- Multiple key types: Ed25519, P-256, secp256k1
+- Support for new Exchange and Quote message types (TAIP-18)
+- Support for Transfer `transactionValue` and `expiry` fields (TAIP-3)
+- Support for restructured Connect message with `requester`, `agents`, `agreement`, `expiry` (TAIP-15)
+
+### Changed
+- `Complete` message type removed per updated TAIP specifications
+- Updated `@taprsvp/types` dependency to ^1.9.0
+- Connect message structure updated per TAIP-15
+
+### Security
+- Replace insecure XOR-based key wrapping with AES-KW (RFC 3394)
+- Implement Concat KDF (NIST SP 800-56A) for ECDH key derivation
+- Fix `encrypt_to_jwk` to use real ECDH-ES+A256KW encryption
+- Fix `verify_jws` to perform actual cryptographic signature verification
+
+### Breaking Changes
+- `Complete` message type removed
+- JWE encryption format changed (AES-KW replaces XOR key wrapping)
+
 ## [0.5.0] - 2024-12-19
 
 ### Added

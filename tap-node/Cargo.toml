@@ -10,10 +10,10 @@ readme = "README.md"
 
 [dependencies]
 # Internal dependencies
-tap-msg = { version = "0.5.0", path = "../tap-msg" }
-tap-agent = { version = "0.5.0", path = "../tap-agent" }
-tap-caip = { version = "0.5.0", path = "../tap-caip" }
-tap-ivms101 = { version = "0.5.0", path = "../tap-ivms101" }
+tap-msg = { version = "0.6.0", path = "../tap-msg" }
+tap-agent = { version = "0.6.0", path = "../tap-agent" }
+tap-caip = { version = "0.6.0", path = "../tap-caip" }
+tap-ivms101 = { version = "0.6.0", path = "../tap-ivms101" }
 
 # Async runtime
 tokio = { workspace = true }
@@ -51,6 +51,9 @@ base58 = "0.2"
 base64 = "0.22"                # For encoding signatures
 chrono = { workspace = true }
 log = "0.4"
+
+# URL encoding
+percent-encoding = "2.3"
 
 # HTTP client for native
 reqwest = { version = "0.12", features = ["json"], optional = true }
