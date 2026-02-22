@@ -10,11 +10,14 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tap_caip::AssetId;
+use tap_msg::message::payment::InvoiceReference;
 use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::transfer::TransactionValue;
 use tap_msg::message::{
     Agent, Authorize, Cancel, Capture, Connect, ConnectionConstraints, Escrow, Exchange, Party,
     Payment, Quote, Reject, Revert, Settle, TransactionLimits, Transfer,
 };
+use tap_msg::settlement_address::SettlementAddress;
 use tap_node::storage::models::SchemaType;
 use tap_node::storage::DecisionType;
 use tracing::{debug, error};
@@ -73,7 +76,17 @@ struct CreateTransferParams {
     #[serde(default)]
     memo: Option<String>,
     #[serde(default)]
+    expiry: Option<String>,
+    #[serde(default)]
+    transaction_value: Option<TransactionValueInfo>,
+    #[serde(default)]
     metadata: Option<Value>,
+}
+
+#[derive(Debug, Deserialize)]
+struct TransactionValueInfo {
+    amount: String,
+    currency: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -331,8 +344,11 @@ impl ToolHandler for CreateTransferTool {
             agents,
             memo: params.memo,
             settlement_id: None,
-            expiry: None,
-            transaction_value: None,
+            expiry: params.expiry,
+            transaction_value: params.transaction_value.map(|tv| TransactionValue {
+                amount: tv.amount,
+                currency: tv.currency,
+            }),
             connection_id: None,
             metadata: params
                 .metadata
@@ -1356,12 +1372,13 @@ struct CreatePaymentParams {
     #[serde(default)]
     memo: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
+    expiry: Option<String>,
+    #[serde(default)]
     invoice: Option<Value>,
     #[serde(default)]
+    #[allow(dead_code)]
     settlement_address: Option<String>,
     #[serde(default)]
-    #[allow(dead_code)]
     fallback_settlement_addresses: Option<Vec<String>>,
     #[serde(default)]
     metadata: Option<Value>,
@@ -1440,11 +1457,28 @@ impl ToolHandler for CreatePaymentTool {
         if let Some(memo) = params.memo {
             payment.memo = Some(memo);
         }
-        // Note: Payment struct doesn't have settlement_address field
-        // Settlement addresses are handled via fallback_settlement_addresses or through agents
-        if let Some(_settlement_address) = params.settlement_address {
-            // This would need to be handled through fallback_settlement_addresses field
-            // or through an agent with SettlementAddress role
+        if let Some(expiry) = params.expiry {
+            payment.expiry = Some(expiry);
+        }
+        // Wire invoice: try URL string first, then structured object
+        if let Some(invoice_val) = params.invoice {
+            if let Some(url) = invoice_val.as_str() {
+                payment.invoice = Some(InvoiceReference::Url(url.to_string()));
+            } else if invoice_val.is_object() {
+                if let Ok(inv) = serde_json::from_value(invoice_val) {
+                    payment.invoice = Some(InvoiceReference::Object(Box::new(inv)));
+                }
+            }
+        }
+        // Wire fallback settlement addresses
+        if let Some(addresses) = params.fallback_settlement_addresses {
+            let parsed: Vec<SettlementAddress> = addresses
+                .into_iter()
+                .filter_map(|a| SettlementAddress::from_string(a).ok())
+                .collect();
+            if !parsed.is_empty() {
+                payment.fallback_settlement_addresses = Some(parsed);
+            }
         }
         if let Some(metadata) = params.metadata {
             if let Some(obj) = metadata.as_object() {
@@ -1530,6 +1564,11 @@ struct CreateConnectParams {
     #[serde(default)]
     constraints: Option<ConnectionConstraintsInfo>,
     #[serde(default)]
+    expiry: Option<String>,
+    #[serde(default)]
+    agreement: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
     metadata: Option<Value>,
 }
 
@@ -1538,11 +1577,11 @@ struct ConnectionConstraintsInfo {
     #[serde(default)]
     transaction_limits: Option<TransactionLimitsInfo>,
     #[serde(default)]
-    #[allow(dead_code)]
-    asset_types: Option<Vec<String>>,
+    allowed_beneficiaries: Option<Vec<String>>,
     #[serde(default)]
-    #[allow(dead_code)]
-    currency_types: Option<Vec<String>>,
+    allowed_settlement_addresses: Option<Vec<String>>,
+    #[serde(default)]
+    allowed_assets: Option<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1626,27 +1665,31 @@ impl ToolHandler for CreateConnectTool {
                     per_year: None,
                     currency: None,
                 };
-                // Map the fields to the actual TransactionLimits struct
                 limits.per_transaction = limits_info.max_amount;
                 limits.per_day = limits_info.daily_limit;
-                // Note: Currency and other fields would need to be handled separately
                 constraints.limits = Some(limits);
             }
 
-            // Note: ConnectionConstraints doesn't have asset_types and currency_types
-            // These would need to be handled through purposes or category_purposes
+            if let Some(beneficiaries) = constraints_info.allowed_beneficiaries {
+                constraints.allowed_beneficiaries =
+                    Some(beneficiaries.into_iter().map(|b| Party::new(&b)).collect());
+            }
+            if let Some(addresses) = constraints_info.allowed_settlement_addresses {
+                constraints.allowed_settlement_addresses = Some(addresses);
+            }
+            if let Some(assets) = constraints_info.allowed_assets {
+                constraints.allowed_assets = Some(assets);
+            }
 
             connect.constraints = Some(constraints);
         }
 
-        // Add metadata if provided
-        if let Some(metadata) = params.metadata {
-            if let Some(obj) = metadata.as_object() {
-                for (_key, _value) in obj {
-                    // Note: Connect struct doesn't have direct metadata field
-                    // Metadata would be handled through the principal or agent objects
-                }
-            }
+        // Add expiry and agreement
+        if let Some(expiry) = params.expiry {
+            connect.expiry = Some(expiry);
+        }
+        if let Some(agreement) = params.agreement {
+            connect.agreement = Some(agreement);
         }
 
         // Validate the connect message

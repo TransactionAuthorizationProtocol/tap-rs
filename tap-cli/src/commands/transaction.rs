@@ -5,11 +5,14 @@ use clap::Subcommand;
 use serde::Serialize;
 use std::collections::HashMap;
 use tap_caip::AssetId;
+use tap_msg::message::payment::InvoiceReference;
 use tap_msg::message::tap_message_trait::TapMessageBody;
+use tap_msg::message::transfer::TransactionValue;
 use tap_msg::message::{
     Agent, Capture, Connect, ConnectionConstraints, Escrow, Exchange, Party, Payment, Quote,
     TransactionLimits, Transfer,
 };
+use tap_msg::settlement_address::SettlementAddress;
 use tracing::debug;
 
 #[derive(Subcommand, Debug)]
@@ -50,6 +53,12 @@ Examples:
         /// Optional memo text
         #[arg(long)]
         memo: Option<String>,
+        /// Optional ISO 8601 expiry timestamp (e.g., 2026-12-31T23:59:59Z)
+        #[arg(long)]
+        expiry: Option<String>,
+        /// Optional fiat equivalent value as "amount:currency" (e.g., "1000.00:USD") for Travel Rule
+        #[arg(long)]
+        transaction_value: Option<String>,
     },
     /// Create a new payment request (TAIP-14)
     #[command(long_about = "\
@@ -83,6 +92,15 @@ Examples:
         /// Optional memo text
         #[arg(long)]
         memo: Option<String>,
+        /// Optional ISO 8601 expiry timestamp (e.g., 2026-12-31T23:59:59Z)
+        #[arg(long)]
+        expiry: Option<String>,
+        /// Optional invoice URL
+        #[arg(long)]
+        invoice_url: Option<String>,
+        /// Optional fallback settlement addresses (comma-separated CAIP-10)
+        #[arg(long, value_delimiter = ',')]
+        fallback_addresses: Option<Vec<String>>,
     },
     /// Create a new connection request (TAIP-15)
     #[command(long_about = "\
@@ -103,9 +121,15 @@ Examples:
         /// Role in the connection (e.g., SourceAgent, DestinationAgent)
         #[arg(long)]
         role: Option<String>,
-        /// Connection constraints as JSON (e.g., max_amount, daily_limit)
+        /// Connection constraints as JSON (e.g., max_amount, daily_limit, allowed_assets)
         #[arg(long)]
         constraints: Option<String>,
+        /// Optional ISO 8601 expiry timestamp
+        #[arg(long)]
+        expiry: Option<String>,
+        /// Optional URL to terms of service or agreement
+        #[arg(long)]
+        agreement: Option<String>,
     },
     /// Create a new escrow request (TAIP-17)
     #[command(long_about = "\
@@ -278,6 +302,12 @@ struct ConstraintsInput {
     max_amount: Option<String>,
     #[serde(default)]
     daily_limit: Option<String>,
+    #[serde(default)]
+    allowed_beneficiaries: Option<Vec<String>>,
+    #[serde(default)]
+    allowed_settlement_addresses: Option<Vec<String>>,
+    #[serde(default)]
+    allowed_assets: Option<Vec<String>>,
 }
 
 pub async fn handle(
@@ -294,6 +324,8 @@ pub async fn handle(
             beneficiary,
             agents,
             memo,
+            expiry,
+            transaction_value,
         } => {
             handle_transfer(
                 agent_did,
@@ -303,6 +335,8 @@ pub async fn handle(
                 beneficiary,
                 agents.as_deref(),
                 memo.clone(),
+                expiry.clone(),
+                transaction_value.clone(),
                 format,
                 tap_integration,
             )
@@ -315,6 +349,9 @@ pub async fn handle(
             currency,
             agents,
             memo,
+            expiry,
+            invoice_url,
+            fallback_addresses,
         } => {
             handle_payment(
                 agent_did,
@@ -324,6 +361,9 @@ pub async fn handle(
                 currency.as_deref(),
                 agents.as_deref(),
                 memo.clone(),
+                expiry.clone(),
+                invoice_url.clone(),
+                fallback_addresses.clone(),
                 format,
                 tap_integration,
             )
@@ -334,6 +374,8 @@ pub async fn handle(
             for_party,
             role,
             constraints,
+            expiry,
+            agreement,
         } => {
             handle_connect(
                 agent_did,
@@ -341,6 +383,8 @@ pub async fn handle(
                 for_party,
                 role.as_deref(),
                 constraints.as_deref(),
+                expiry.clone(),
+                agreement.clone(),
                 format,
                 tap_integration,
             )
@@ -469,6 +513,8 @@ async fn handle_transfer(
     beneficiary_did: &str,
     agents_json: Option<&str>,
     memo: Option<String>,
+    expiry: Option<String>,
+    transaction_value_str: Option<String>,
     format: OutputFormat,
     tap_integration: &TapIntegration,
 ) -> Result<()> {
@@ -480,6 +526,21 @@ async fn handle_transfer(
     let beneficiary = Party::new(beneficiary_did);
     let agents = parse_agents(agents_json)?;
 
+    let transaction_value = if let Some(tv) = transaction_value_str {
+        let parts: Vec<&str> = tv.splitn(2, ':').collect();
+        if parts.len() != 2 {
+            return Err(Error::invalid_parameter(
+                "transaction-value must be in 'amount:currency' format (e.g., '1000.00:USD')",
+            ));
+        }
+        Some(TransactionValue {
+            amount: parts[0].to_string(),
+            currency: parts[1].to_string(),
+        })
+    } else {
+        None
+    };
+
     let transfer = Transfer {
         transaction_id: None,
         asset: asset_id,
@@ -489,8 +550,8 @@ async fn handle_transfer(
         agents,
         memo,
         settlement_id: None,
-        expiry: None,
-        transaction_value: None,
+        expiry,
+        transaction_value,
         connection_id: None,
         metadata: HashMap::new(),
     };
@@ -532,6 +593,9 @@ async fn handle_payment(
     currency: Option<&str>,
     agents_json: Option<&str>,
     memo: Option<String>,
+    expiry: Option<String>,
+    invoice_url: Option<String>,
+    fallback_addresses: Option<Vec<String>>,
     format: OutputFormat,
     tap_integration: &TapIntegration,
 ) -> Result<()> {
@@ -553,6 +617,21 @@ async fn handle_payment(
 
     if let Some(memo) = memo {
         payment.memo = Some(memo);
+    }
+    if let Some(expiry) = expiry {
+        payment.expiry = Some(expiry);
+    }
+    if let Some(url) = invoice_url {
+        payment.invoice = Some(InvoiceReference::Url(url));
+    }
+    if let Some(addresses) = fallback_addresses {
+        let parsed: Vec<SettlementAddress> = addresses
+            .into_iter()
+            .filter_map(|a| SettlementAddress::from_string(a).ok())
+            .collect();
+        if !parsed.is_empty() {
+            payment.fallback_settlement_addresses = Some(parsed);
+        }
     }
 
     payment
@@ -586,6 +665,8 @@ async fn handle_connect(
     for_party: &str,
     role: Option<&str>,
     constraints_json: Option<&str>,
+    expiry: Option<String>,
+    agreement: Option<String>,
     format: OutputFormat,
     tap_integration: &TapIntegration,
 ) -> Result<()> {
@@ -616,7 +697,22 @@ async fn handle_connect(
         limits.per_transaction = input.max_amount;
         limits.per_day = input.daily_limit;
         constraints.limits = Some(limits);
+
+        if let Some(beneficiaries) = input.allowed_beneficiaries {
+            constraints.allowed_beneficiaries =
+                Some(beneficiaries.into_iter().map(|b| Party::new(&b)).collect());
+        }
+        constraints.allowed_settlement_addresses = input.allowed_settlement_addresses;
+        constraints.allowed_assets = input.allowed_assets;
+
         connect.constraints = Some(constraints);
+    }
+
+    if let Some(expiry) = expiry {
+        connect.expiry = Some(expiry);
+    }
+    if let Some(agreement) = agreement {
+        connect.agreement = Some(agreement);
     }
 
     connect
