@@ -144,6 +144,35 @@ impl AgentKeyManager {
         Ok(())
     }
 
+    /// Get the raw private key bytes and key type for a DID
+    ///
+    /// Checks generated_keys first (raw bytes), falls back to extracting
+    /// from the secrets JWK "d" parameter.
+    pub fn get_private_key(&self, did: &str) -> Result<(Vec<u8>, KeyType)> {
+        // Check generated_keys first (has raw bytes)
+        if let Ok(generated_keys) = self.generated_keys.read() {
+            if let Some(key) = generated_keys.get(did) {
+                return Ok((key.private_key.clone(), key.key_type));
+            }
+        } else {
+            return Err(Error::FailedToAcquireResolverReadLock);
+        }
+
+        // Fall back to secrets (JWK format)
+        if let Ok(secrets) = self.secrets.read() {
+            if let Some(secret) = secrets.get(did) {
+                return crate::key_manager::extract_private_key_from_secret(secret);
+            }
+        } else {
+            return Err(Error::FailedToAcquireResolverReadLock);
+        }
+
+        Err(Error::KeyNotFound(format!(
+            "Private key not found for DID: {}",
+            did
+        )))
+    }
+
     /// Save keys to storage if a storage path is configured
     pub fn save_to_storage(&self) -> Result<()> {
         // Skip if no storage path is configured
@@ -397,6 +426,11 @@ impl KeyManager for AgentKeyManager {
     /// Get access to the secrets storage
     fn secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>> {
         Arc::clone(&self.secrets)
+    }
+
+    /// Get the raw private key bytes and key type for a DID
+    fn get_private_key(&self, did: &str) -> Result<(Vec<u8>, KeyType)> {
+        AgentKeyManager::get_private_key(self, did)
     }
 
     /// Generate a new key with the specified options
@@ -1016,5 +1050,113 @@ impl KeyManagerPacking for AgentKeyManager {
         KeyManager::resolve_verification_key(self, kid)
             .await
             .map_err(|e| Error::from(MessageError::KeyManager(e.to_string())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::TapAgent;
+    use crate::did::{DIDGenerationOptions, KeyType};
+    use crate::key_manager::KeyManager;
+
+    #[test]
+    fn test_get_private_key_for_generated_key() {
+        let km = AgentKeyManager::new();
+        let key = km
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        let (private_key, key_type) = km.get_private_key(&key.did).unwrap();
+        assert_eq!(private_key, key.private_key);
+        assert_eq!(key_type, KeyType::Ed25519);
+    }
+
+    #[test]
+    fn test_get_private_key_for_storage_loaded_key() {
+        // Simulate a key loaded from storage (only in secrets, not in generated_keys)
+        let km = AgentKeyManager::new();
+        let key = km
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        // Create a new key manager and load only the secret (simulating storage load)
+        let km2 = AgentKeyManager::new();
+        let secret = km.secrets().read().unwrap().get(&key.did).cloned().unwrap();
+        km2.secrets()
+            .write()
+            .unwrap()
+            .insert(key.did.clone(), secret);
+
+        // Should still be able to extract the private key from the secret
+        let (private_key, key_type) = km2.get_private_key(&key.did).unwrap();
+        assert_eq!(private_key, key.private_key);
+        assert_eq!(key_type, KeyType::Ed25519);
+    }
+
+    #[cfg(feature = "crypto-p256")]
+    #[test]
+    fn test_get_private_key_p256() {
+        let km = AgentKeyManager::new();
+        let key = km
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::P256,
+            })
+            .unwrap();
+
+        let (private_key, key_type) = km.get_private_key(&key.did).unwrap();
+        assert_eq!(private_key, key.private_key);
+        assert_eq!(key_type, KeyType::P256);
+    }
+
+    #[cfg(feature = "crypto-secp256k1")]
+    #[test]
+    fn test_get_private_key_secp256k1() {
+        let km = AgentKeyManager::new();
+        let key = km
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Secp256k1,
+            })
+            .unwrap();
+
+        let (private_key, key_type) = km.get_private_key(&key.did).unwrap();
+        assert_eq!(private_key, key.private_key);
+        assert_eq!(key_type, KeyType::Secp256k1);
+    }
+
+    #[test]
+    fn test_get_private_key_unknown_did() {
+        let km = AgentKeyManager::new();
+        let result = km.get_private_key("did:key:nonexistent");
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            Error::KeyNotFound(_) => {} // expected
+            other => panic!("Expected KeyNotFound, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_get_private_key_roundtrip() {
+        let km = AgentKeyManager::new();
+        let key = km
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        // Export
+        let (private_key, key_type) = km.get_private_key(&key.did).unwrap();
+
+        // Reimport
+        let (_agent, new_did) = TapAgent::from_private_key(&private_key, key_type, false)
+            .await
+            .unwrap();
+
+        // Same DID
+        assert_eq!(new_did, key.did);
     }
 }

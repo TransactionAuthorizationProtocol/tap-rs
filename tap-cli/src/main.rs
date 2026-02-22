@@ -59,6 +59,10 @@ struct Cli {
     #[arg(long, global = true, default_value = "json")]
     format: String,
 
+    /// Secret helper command for external key management (replaces keys.json)
+    #[arg(long, global = true, env = "TAP_SECRET_HELPER")]
+    secret_helper: Option<String>,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -270,6 +274,36 @@ async fn main() {
 }
 
 async fn resolve_agent(cli: &Cli) -> Result<(Arc<TapAgent>, String)> {
+    // If secret helper is configured, use it instead of keys.json
+    if let Some(ref helper_cmd) = cli.secret_helper {
+        use tap_agent::secret_helper::{self, SecretHelperConfig};
+
+        let config = SecretHelperConfig::from_command_string(helper_cmd)?;
+
+        if let Some(ref did) = cli.agent_did {
+            info!("Using secret helper for DID: {}", did);
+            let (agent, did) = TapAgent::from_secret_helper(&config, did, cli.debug).await?;
+            return Ok((Arc::new(agent), did));
+        }
+
+        // No --agent-did: discover DIDs from tap directory
+        let tap_root = cli.tap_root.as_ref().map(std::path::PathBuf::from);
+        let dids = secret_helper::discover_agent_dids(tap_root.as_deref())?;
+        if let Some(did) = dids.first() {
+            info!(
+                "Discovered DID {} from tap directory, using secret helper",
+                did
+            );
+            let (agent, did) = TapAgent::from_secret_helper(&config, did, cli.debug).await?;
+            return Ok((Arc::new(agent), did));
+        }
+
+        return Err(tap_agent::Error::Storage(
+            "No agent DIDs found in tap directory for secret helper".to_string(),
+        )
+        .into());
+    }
+
     if let Some(ref did) = cli.agent_did {
         info!("Using provided agent DID: {}", did);
         match TapAgent::from_stored_keys(Some(did.clone()), true).await {

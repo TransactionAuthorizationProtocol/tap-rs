@@ -51,6 +51,7 @@ web-sys = { version = "0.3", features = [
     "Response",
     "Headers",
 ], optional = true }
+hex = "0.4"
 aes-gcm = "0.10.3"
 aes = "0.8"
 aes-kw = "0.2"

@@ -110,6 +110,10 @@ pub mod oob;
 /// Payment link functionality
 pub mod payment_link;
 
+/// Secret helper for external key management
+#[cfg(not(target_arch = "wasm32"))]
+pub mod secret_helper;
+
 /// Key storage utilities
 pub mod storage;
 
@@ -132,7 +136,9 @@ pub use did::{
     VerificationMaterial, VerificationMethod, VerificationMethodType,
 };
 pub use error::{Error, Result};
-pub use key_manager::{KeyManager, Secret, SecretMaterial, SecretType};
+pub use key_manager::{
+    extract_private_key_from_secret, KeyManager, Secret, SecretMaterial, SecretType,
+};
 pub use storage::{KeyStorage, StoredKey};
 
 // Agent key re-exports
@@ -153,6 +159,10 @@ pub use payment_link::{
     PaymentLink, PaymentLinkBuilder, PaymentLinkConfig, PaymentLinkInfo,
     DEFAULT_PAYMENT_SERVICE_URL,
 };
+
+// Secret helper re-exports
+#[cfg(not(target_arch = "wasm32"))]
+pub use secret_helper::{SecretHelperConfig, SecretHelperOutput};
 
 // Native-only DID resolver re-exports
 #[cfg(not(target_arch = "wasm32"))]
