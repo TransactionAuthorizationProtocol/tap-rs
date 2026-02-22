@@ -225,8 +225,7 @@ describe("TAP-Veramo Interoperability Tests", () => {
       expect(veramoUnpacked.metaData.packing).toBe("jws");
     });
 
-    // TAP WASM currently only supports JWS (signed) packing, not JWE (encrypted)
-    it.skip("should unpack messages packed by Veramo (JWE anoncrypt)", async () => {
+    it("should unpack messages packed by Veramo (JWE anoncrypt)", async () => {
       const veramoSender = await veramoAgent.didManagerCreate({
         provider: "did:key",
         kms: "local",

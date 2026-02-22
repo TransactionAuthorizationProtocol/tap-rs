@@ -745,6 +745,7 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jwe, T> for Jwe {
         };
 
         // Try each recipient until we find one we can decrypt
+        let mut last_error = None;
         for recipient in recipients {
             // Get the recipient's key ID
             let kid = &recipient.header.kid;
@@ -752,7 +753,10 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jwe, T> for Jwe {
             // Get the decryption key
             let decryption_key = match key_manager.get_decryption_key(kid).await {
                 Ok(key) => key,
-                Err(_) => continue, // Skip if we don't have the key
+                Err(e) => {
+                    last_error = Some(format!("Key lookup failed for {}: {}", kid, e));
+                    continue;
+                }
             };
 
             // Try to decrypt
@@ -783,12 +787,19 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jwe, T> for Jwe {
                     return serde_json::from_value(plain_message.body)
                         .map_err(|e| Error::Serialization(e.to_string()));
                 }
-                Err(_) => continue, // Try next recipient
+                Err(e) => {
+                    last_error = Some(format!("Decryption failed for {}: {}", kid, e));
+                    continue;
+                }
             }
         }
 
         // If we get here, we couldn't decrypt for any recipient
-        Err(Error::Cryptography("Failed to decrypt message".to_string()))
+        Err(Error::Cryptography(format!(
+            "Failed to decrypt JWE for any of {} recipients{}",
+            packed_message.recipients.len(),
+            last_error.map(|e| format!(": {}", e)).unwrap_or_default()
+        )))
     }
 }
 

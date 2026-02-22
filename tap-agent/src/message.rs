@@ -211,7 +211,10 @@ pub struct JweHeader {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct JweProtected {
     pub epk: EphemeralPublicKey,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub apv: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub apu: String,
     #[serde(default = "default_didcomm_encrypted")]
     pub typ: String,
     pub enc: String,
