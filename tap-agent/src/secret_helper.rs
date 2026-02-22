@@ -315,13 +315,16 @@ mod tests {
         let hex_key = hex::encode(&key.private_key);
 
         // Write a mock secret helper script
-        let mut file = std::fs::File::create(&script_path).unwrap();
-        writeln!(
-            file,
-            "#!/bin/sh\necho '{{\"private_key\": \"{}\", \"key_type\": \"Ed25519\"}}'",
-            hex_key
-        )
-        .unwrap();
+        {
+            let mut file = std::fs::File::create(&script_path).unwrap();
+            writeln!(
+                file,
+                "#!/bin/sh\necho '{{\"private_key\": \"{}\", \"key_type\": \"Ed25519\"}}'",
+                hex_key
+            )
+            .unwrap();
+            file.sync_all().unwrap();
+        }
 
         // Make it executable
         #[cfg(unix)]
@@ -354,13 +357,16 @@ mod tests {
         // Create mock script
         let temp_dir = TempDir::new().unwrap();
         let script_path = temp_dir.path().join("helper.sh");
-        let mut file = std::fs::File::create(&script_path).unwrap();
-        writeln!(
-            file,
-            "#!/bin/sh\necho '{{\"private_key\": \"{}\", \"key_type\": \"Ed25519\"}}'",
-            hex_key
-        )
-        .unwrap();
+        {
+            let mut file = std::fs::File::create(&script_path).unwrap();
+            writeln!(
+                file,
+                "#!/bin/sh\necho '{{\"private_key\": \"{}\", \"key_type\": \"Ed25519\"}}'",
+                hex_key
+            )
+            .unwrap();
+            file.sync_all().unwrap();
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -398,8 +404,11 @@ mod tests {
     fn test_get_key_non_zero_exit() {
         let temp_dir = TempDir::new().unwrap();
         let script_path = temp_dir.path().join("fail.sh");
-        let mut file = std::fs::File::create(&script_path).unwrap();
-        writeln!(file, "#!/bin/sh\nexit 1").unwrap();
+        {
+            let mut file = std::fs::File::create(&script_path).unwrap();
+            writeln!(file, "#!/bin/sh\nexit 1").unwrap();
+            file.sync_all().unwrap();
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -418,8 +427,11 @@ mod tests {
     fn test_get_key_invalid_json() {
         let temp_dir = TempDir::new().unwrap();
         let script_path = temp_dir.path().join("bad-json.sh");
-        let mut file = std::fs::File::create(&script_path).unwrap();
-        writeln!(file, "#!/bin/sh\necho 'not json'").unwrap();
+        {
+            let mut file = std::fs::File::create(&script_path).unwrap();
+            writeln!(file, "#!/bin/sh\necho 'not json'").unwrap();
+            file.sync_all().unwrap();
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
