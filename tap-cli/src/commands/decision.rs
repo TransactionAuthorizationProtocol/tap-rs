@@ -10,8 +10,39 @@ use tracing::debug;
 #[derive(Subcommand, Debug)]
 pub enum DecisionCommands {
     /// List decisions from the decision log
+    #[command(long_about = "\
+List decisions from the decision log.
+
+Decisions are created when the TAP node reaches a decision point in the \
+transaction lifecycle (e.g., a transfer needs authorization, or a transaction \
+is ready for settlement). In poll mode (--decision-mode poll on tap-http), \
+decisions accumulate in the database for external systems to act on.
+
+Decision types:
+  authorization_required      A new transaction needs approval
+  policy_satisfaction_required Policies must be fulfilled before proceeding
+  settlement_required         All agents authorized, ready to settle
+
+Decision statuses:
+  pending    Written to DB, not yet acted upon
+  delivered  Sent to external process, awaiting action
+  resolved   Action taken (authorize, reject, settle, etc.)
+  expired    Transaction reached terminal state before resolution
+
+Examples:
+  # List all pending decisions
+  tap-cli decision list --status pending
+
+  # List all decisions (any status)
+  tap-cli decision list
+
+  # Paginate through decisions
+  tap-cli decision list --since-id 100 --limit 20
+
+  # List decisions for a specific agent
+  tap-cli decision list --agent-did did:key:z6Mk...")]
     List {
-        /// Agent DID for storage lookup
+        /// Agent DID for storage lookup (defaults to --agent-did global flag)
         #[arg(long)]
         agent_did: Option<String>,
         /// Filter by status: pending, delivered, resolved, expired
@@ -24,18 +55,53 @@ pub enum DecisionCommands {
         #[arg(long, default_value = "50")]
         limit: u32,
     },
-    /// Resolve a pending decision
+    /// Resolve a pending decision by specifying the action to take
+    #[command(long_about = "\
+Resolve a pending decision by specifying the action to take.
+
+This marks the decision as resolved in the decision log. Only decisions \
+with status 'pending' or 'delivered' can be resolved.
+
+Valid actions per decision type:
+  authorization_required:       authorize, reject, update_policies, defer
+  policy_satisfaction_required:  present, reject, cancel, defer
+  settlement_required:          settle, cancel, defer
+
+The 'defer' action marks the decision as delivered rather than resolved, \
+indicating you've seen it but will act later.
+
+Note: This command only updates the decision log. To actually send the \
+corresponding TAP message (e.g., Authorize), use the 'action' commands:
+  tap-cli action authorize --transaction-id <ID>
+  tap-cli action reject --transaction-id <ID> --reason <TEXT>
+  tap-cli action settle --transaction-id <ID> --settlement-id <CAIP-220>
+
+The action commands automatically resolve matching decisions when they succeed.
+
+Examples:
+  # Resolve a decision by authorizing the transaction
+  tap-cli decision resolve --decision-id 42 --action authorize
+
+  # Resolve with additional detail
+  tap-cli decision resolve --decision-id 42 --action authorize \\
+    --detail '{\"settlement_address\":\"eip155:1:0xABC\"}'
+
+  # Reject a decision
+  tap-cli decision resolve --decision-id 42 --action reject
+
+  # Defer a decision (mark as seen, act later)
+  tap-cli decision resolve --decision-id 42 --action defer")]
     Resolve {
-        /// Decision ID to resolve
+        /// Decision ID to resolve (numeric, from 'decision list' output)
         #[arg(long)]
         decision_id: i64,
         /// Action to take: authorize, reject, settle, cancel, present, defer, update_policies
         #[arg(long)]
         action: String,
-        /// Agent DID for storage lookup
+        /// Agent DID for storage lookup (defaults to --agent-did global flag)
         #[arg(long)]
         agent_did: Option<String>,
-        /// Optional JSON detail about the resolution
+        /// Optional JSON detail about the resolution (e.g., settlement_address, reason)
         #[arg(long)]
         detail: Option<String>,
     },

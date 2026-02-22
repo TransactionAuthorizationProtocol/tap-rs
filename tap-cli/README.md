@@ -266,6 +266,43 @@ tap-cli customer update \
 tap-cli customer ivms101 --customer-id did:key:z6MkCustomer...
 ```
 
+### `decision` — Decision Log Management
+
+Decisions are created when the TAP node reaches a decision point in the transaction lifecycle (e.g., authorization needed, settlement required). In poll mode, they accumulate in the database for external systems to act on.
+
+```bash
+# List all pending decisions
+tap-cli decision list --status pending
+
+# List all decisions (any status)
+tap-cli decision list
+
+# Paginate through decisions
+tap-cli decision list --since-id 100 --limit 20
+
+# Resolve a decision by authorizing the transaction
+tap-cli decision resolve --decision-id 42 --action authorize
+
+# Resolve with additional detail
+tap-cli decision resolve --decision-id 42 --action authorize \
+  --detail '{"settlement_address":"eip155:1:0xABC"}'
+
+# Reject a decision
+tap-cli decision resolve --decision-id 42 --action reject
+
+# Defer a decision (mark as seen, will act later)
+tap-cli decision resolve --decision-id 42 --action defer
+```
+
+Decision types:
+- `authorization_required` — New transaction needs approval
+- `policy_satisfaction_required` — Policies must be fulfilled
+- `settlement_required` — All agents authorized, ready to settle
+
+Decision statuses: `pending`, `delivered`, `resolved`, `expired`
+
+**Note:** The `action` commands (`authorize`, `reject`, `settle`, `cancel`, `revert`) automatically resolve matching decisions when they succeed. You can use either `decision resolve` for fine-grained control or `action` commands for the common case.
+
 ### `delivery` — Message Delivery Tracking
 
 ```bash

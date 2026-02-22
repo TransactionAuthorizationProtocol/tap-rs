@@ -140,56 +140,148 @@ impl Args {
 }
 
 fn print_help() {
-    println!("TAP HTTP Server");
-    println!("---------------");
-    println!("A HTTP server for the Transaction Authorization Protocol (TAP)");
-    println!();
-    println!("USAGE:");
-    println!("    tap-http [OPTIONS]");
-    println!();
-    println!("OPTIONS:");
-    println!("    -h, --host <HOST>            Host to bind to [default: 127.0.0.1]");
-    println!("    -p, --port <PORT>            Port to listen on [default: 8000]");
-    println!("    -e, --endpoint <ENDPOINT>    Path for the DIDComm endpoint [default: /didcomm]");
-    println!("    -t, --timeout <SECONDS>      Request timeout in seconds [default: 30]");
-    println!("    --agent-did <DID>            DID for the TAP agent (optional)");
-    println!("    --agent-key <KEY>            Private key for the TAP agent (required if agent-did is provided)");
-    println!("    --logs-dir <DIR>             Directory for event logs [default: ~/.tap/logs]");
-    println!("    --structured-logs            Use structured JSON logging [default: true]");
-    println!("    --db-path <PATH>             Path to the database file [default: ~/.tap/<did>/transactions.db]");
-    println!("    --tap-root <DIR>             Custom TAP root directory [default: ~/.tap]");
-    println!("    --enable-web-did             Enable /.well-known/did.json endpoint for did:web hosting");
-    println!("    -M, --decision-mode <MODE>   Decision handling: auto (default), poll, or exec (implied by -D)");
-    println!("    -D, --decision-exec <PATH>   Path to external decision executable");
-    println!("    -A, --decision-exec-args <ARGS>  Comma-separated arguments for the executable");
     println!(
-        "    -S, --decision-subscribe <MODE>  Event forwarding mode: decisions (default) or all"
+        "\
+TAP HTTP Server v{}
+A HTTP server for the Transaction Authorization Protocol (TAP).
+
+Receives DIDComm v2 messages over HTTP, processes them through the TAP
+transaction state machine, and routes decisions to the configured handler.
+All agent data (transactions, messages, decisions) is stored in per-agent
+SQLite databases under the TAP root directory.
+
+USAGE:
+    tap-http [OPTIONS]
+
+SERVER OPTIONS:
+    -h, --host <HOST>              Host to bind to [default: 127.0.0.1]
+    -p, --port <PORT>              Port to listen on [default: 8000]
+    -e, --endpoint <ENDPOINT>      DIDComm endpoint path [default: /didcomm]
+    -t, --timeout <SECONDS>        Request timeout in seconds [default: 30]
+    -v, --verbose                  Enable verbose logging
+    --structured-logs              Use structured JSON logging
+    --enable-web-did               Serve /.well-known/did.json for did:web hosting
+
+AGENT OPTIONS:
+    --agent-did <DID>              DID for the TAP agent (auto-generated if omitted)
+    --agent-key <KEY>              Private key for the TAP agent
+    --tap-root <DIR>               TAP root directory [default: ~/.tap]
+    --db-path <PATH>               Database file path (overrides per-agent default)
+    --logs-dir <DIR>               Event log directory [default: ~/.tap/logs]
+
+DECISION OPTIONS:
+    -M, --decision-mode <MODE>     Decision handling mode [default: auto]
+                                   Modes:
+                                     auto  - Automatically approve all decisions
+                                     poll  - Log decisions to DB, wait for external resolution
+                                     exec  - Spawn external process (implied by -D)
+    -D, --decision-exec <PATH>     Path to external decision executable
+    -A, --decision-exec-args <ARGS>  Comma-separated arguments for the executable
+    -S, --decision-subscribe <MODE>  What to forward to the executable [default: decisions]
+                                     decisions - Only decision points
+                                     all       - All events + decision points
+
+    --help                         Print this help information
+    --version                      Print version information
+
+ENVIRONMENT VARIABLES:
+    TAP_HTTP_HOST                  Host to bind to
+    TAP_HTTP_PORT                  Port to listen on
+    TAP_HTTP_DIDCOMM_ENDPOINT      DIDComm endpoint path
+    TAP_HTTP_TIMEOUT               Request timeout in seconds
+    TAP_AGENT_DID                  DID for the TAP agent
+    TAP_AGENT_KEY                  Private key for the TAP agent
+    TAP_ROOT                       TAP root directory
+    TAP_NODE_DB_PATH               Database file path
+    TAP_LOGS_DIR                   Event log directory
+    TAP_STRUCTURED_LOGS            Enable structured JSON logging (set to any value)
+    TAP_ENABLE_WEB_DID             Enable did:web endpoint (set to any value)
+    TAP_DECISION_MODE              Decision handling: auto, poll, or exec
+    TAP_DECISION_EXEC              Path to external decision executable
+    TAP_DECISION_EXEC_ARGS         Comma-separated arguments
+    TAP_DECISION_SUBSCRIBE         Event forwarding: decisions or all
+
+DECISION MODES:
+
+  Auto Mode (default):
+    All decisions are automatically approved. No external process needed.
+      tap-http --decision-mode auto
+
+  Poll Mode:
+    Decisions are logged to the decision_log table in the per-agent SQLite DB.
+    An external process (e.g., tap-mcp connected to an AI agent, or tap-cli)
+    polls the DB and resolves decisions using MCP tools or CLI commands.
+      tap-http --decision-mode poll
+
+    Workflow:
+      1. tap-http receives a Transfer and hits a decision point
+      2. Decision is written to decision_log (status: pending)
+      3. External process calls tap_list_pending_decisions (via MCP or CLI)
+      4. External process acts: tap_authorize / tap_reject / tap_settle
+      5. Action tools auto-resolve matching decisions in the shared DB
+
+  Exec Mode:
+    tap-http spawns a child process and communicates over stdin/stdout using
+    JSON-RPC 2.0. The process receives decision requests and can call back
+    using MCP tool calls.
+      tap-http --decision-exec ./my-compliance-engine
+      tap-http -D ./my-engine -A \"--config,prod.yaml\" -S all
+
+EXTERNAL DECISION EXECUTABLE PROTOCOL:
+
+  The external executable communicates via newline-delimited JSON-RPC 2.0 on
+  stdin (from tap-http) and stdout (to tap-http).
+
+  Initialization (tap-http -> executable, notification):
+    {{\"jsonrpc\":\"2.0\",\"method\":\"tap/initialize\",\"params\":{{
+      \"version\":\"0.1.0\",\"agent_dids\":[\"did:key:z6Mk...\"],
+      \"subscribe_mode\":\"decisions\",\"capabilities\":{{\"tools\":true,\"decisions\":true}}
+    }}}}
+
+  Decision request (tap-http -> executable, request with id):
+    {{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tap/decision\",\"params\":{{
+      \"decision_id\":42,\"transaction_id\":\"txn-123\",
+      \"agent_did\":\"did:key:z6Mk...\",
+      \"decision_type\":\"authorization_required\",
+      \"context\":{{\"transaction_state\":\"Received\",
+        \"transaction\":{{\"type\":\"transfer\",\"asset\":\"eip155:1/slip44:60\",
+          \"amount\":\"100\",\"originator\":\"did:key:z1...\",\"beneficiary\":\"did:key:z2...\"}}
+      }}
+    }}}}
+
+  Decision response (executable -> tap-http):
+    {{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{
+      \"action\":\"authorize\",\"detail\":{{\"settlement_address\":\"eip155:1:0xABC\"}}
+    }}}}
+
+  Valid actions per decision type:
+    authorization_required:       authorize, reject, update_policies, defer
+    policy_satisfaction_required:  present, reject, cancel, defer
+    settlement_required:          settle, cancel, defer
+
+  The executable can also call MCP tools via stdout:
+    {{\"jsonrpc\":\"2.0\",\"id\":100,\"method\":\"tools/call\",\"params\":{{
+      \"name\":\"tap_authorize\",\"arguments\":{{
+        \"agent_did\":\"did:key:z6Mk...\",\"transaction_id\":\"txn-123\"}}
+    }}}}
+
+  Available tools: tap_authorize, tap_reject, tap_settle, tap_cancel,
+  tap_revert, tap_list_pending_decisions, tap_resolve_decision, and all
+  other MCP tools from tap-mcp.
+
+  Process lifecycle:
+    - On process exit: restart with exponential backoff (1s..30s)
+    - Pending decisions replay on reconnect
+    - Graceful shutdown: EOF on stdin, then SIGTERM, then SIGKILL
+
+NOTES:
+    - If no agent DID and key are provided, the server will:
+      1. Try to load keys from ~/.tap/keys.json
+      2. Automatically create and save new keys if none exist
+    - Data is stored under ~/.tap/<did-hash>/tap.db per agent
+    - Use --tap-root to change the storage directory",
+        env!("CARGO_PKG_VERSION")
     );
-    println!("    -v, --verbose                Enable verbose logging");
-    println!("    --help                       Print help information");
-    println!("    --version                    Print version information");
-    println!();
-    println!("ENVIRONMENT VARIABLES:");
-    println!("    TAP_HTTP_HOST                Host to bind to");
-    println!("    TAP_HTTP_PORT                Port to listen on");
-    println!("    TAP_HTTP_DIDCOMM_ENDPOINT    Path for the DIDComm endpoint");
-    println!("    TAP_HTTP_TIMEOUT             Request timeout in seconds");
-    println!("    TAP_AGENT_DID                DID for the TAP agent");
-    println!("    TAP_AGENT_KEY                Private key for the TAP agent");
-    println!("    TAP_LOGS_DIR                 Directory for event logs");
-    println!("    TAP_STRUCTURED_LOGS          Use structured JSON logging");
-    println!("    TAP_NODE_DB_PATH             Path to the database file");
-    println!("    TAP_ROOT                     Custom TAP root directory");
-    println!("    TAP_ENABLE_WEB_DID           Enable /.well-known/did.json endpoint");
-    println!("    TAP_DECISION_MODE            Decision handling: auto, poll, or exec");
-    println!("    TAP_DECISION_EXEC            Path to external decision executable");
-    println!("    TAP_DECISION_EXEC_ARGS       Comma-separated arguments");
-    println!("    TAP_DECISION_SUBSCRIBE       Event forwarding: decisions or all");
-    println!();
-    println!("NOTES:");
-    println!("    - If no agent DID and key are provided, the server will:");
-    println!("      1. Try to load keys from ~/.tap/keys.json");
-    println!("      2. Automatically create and save new keys if none exist");
 }
 
 #[tokio::main]
