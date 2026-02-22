@@ -7,9 +7,9 @@ use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::{
     AddAgents, AuthorizationRequired, Authorize, BasicMessage, Cancel, Capture,
-    ConfirmRelationship, Connect, DIDCommPresentation, ErrorBody, Escrow, OutOfBand, Payment,
-    Presentation, Reject, RemoveAgent, ReplaceAgent, RequestPresentation, Revert, Settle, Transfer,
-    TrustPing, TrustPingResponse, UpdateParty, UpdatePolicies,
+    ConfirmRelationship, Connect, DIDCommPresentation, ErrorBody, Escrow, Exchange, OutOfBand,
+    Payment, Presentation, Quote, Reject, RemoveAgent, ReplaceAgent, RequestPresentation, Revert,
+    Settle, Transfer, TrustPing, TrustPingResponse, UpdateParty, UpdatePolicies,
 };
 use serde::{Deserialize, Serialize};
 
@@ -40,10 +40,14 @@ pub enum TapMessage {
     Error(ErrorBody),
     /// Escrow message (TAIP-17)
     Escrow(Escrow),
+    /// Exchange message (TAIP-18)
+    Exchange(Exchange),
     /// Out of band message (TAIP-2)
     OutOfBand(OutOfBand),
-    /// Payment message (TAIP-13)
+    /// Payment message (TAIP-14)
     Payment(Payment),
+    /// Quote message (TAIP-18)
+    Quote(Quote),
     /// Presentation message (TAIP-6)
     Presentation(Presentation),
     /// Reject message (TAIP-10)
@@ -178,6 +182,13 @@ impl TapMessage {
                 })?;
                 Ok(TapMessage::Escrow(msg))
             }
+            "https://tap.rsvp/schema/1.0#Exchange" => {
+                let msg: Exchange =
+                    serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                        Error::SerializationError(format!("Failed to parse Exchange: {}", e))
+                    })?;
+                Ok(TapMessage::Exchange(msg))
+            }
             "https://tap.rsvp/schema/1.0#OutOfBand" => {
                 let msg: OutOfBand =
                     serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
@@ -190,6 +201,12 @@ impl TapMessage {
                     Error::SerializationError(format!("Failed to parse Payment: {}", e))
                 })?;
                 Ok(TapMessage::Payment(msg))
+            }
+            "https://tap.rsvp/schema/1.0#Quote" => {
+                let msg: Quote = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                    Error::SerializationError(format!("Failed to parse Quote: {}", e))
+                })?;
+                Ok(TapMessage::Quote(msg))
             }
             "https://tap.rsvp/schema/1.0#Presentation" => {
                 let msg: Presentation =
@@ -303,8 +320,10 @@ impl TapMessage {
             }
             TapMessage::Error(_) => "https://tap.rsvp/schema/1.0#Error",
             TapMessage::Escrow(_) => "https://tap.rsvp/schema/1.0#Escrow",
+            TapMessage::Exchange(_) => "https://tap.rsvp/schema/1.0#Exchange",
             TapMessage::OutOfBand(_) => "https://tap.rsvp/schema/1.0#OutOfBand",
             TapMessage::Payment(_) => "https://tap.rsvp/schema/1.0#Payment",
+            TapMessage::Quote(_) => "https://tap.rsvp/schema/1.0#Quote",
             TapMessage::Presentation(_) => "https://tap.rsvp/schema/1.0#Presentation",
             TapMessage::Reject(_) => "https://tap.rsvp/schema/1.0#Reject",
             TapMessage::RemoveAgent(_) => "https://tap.rsvp/schema/1.0#RemoveAgent",
@@ -403,6 +422,8 @@ mod tests {
             agents: vec![],
             memo: None,
             settlement_id: None,
+            expiry: None,
+            transaction_value: None,
             connection_id: None,
             transaction_id: Some("tx-123".to_string()),
             metadata: Default::default(),

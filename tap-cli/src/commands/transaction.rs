@@ -7,8 +7,8 @@ use std::collections::HashMap;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Agent, Capture, Connect, ConnectionConstraints, Escrow, Party, Payment, TransactionLimits,
-    Transfer,
+    Agent, Capture, Connect, ConnectionConstraints, Escrow, Exchange, Party, Payment, Quote,
+    TransactionLimits, Transfer,
 };
 use tracing::debug;
 
@@ -167,6 +167,57 @@ Examples:
         /// Settlement address (CAIP-10 format)
         #[arg(long)]
         settlement_address: Option<String>,
+    },
+    /// Create a new exchange request (TAIP-18)
+    Exchange {
+        /// Source asset identifiers (comma-separated CAIP-19, DTI, or ISO 4217)
+        #[arg(long, value_delimiter = ',')]
+        from_assets: Vec<String>,
+        /// Target asset identifiers (comma-separated CAIP-19, DTI, or ISO 4217)
+        #[arg(long, value_delimiter = ',')]
+        to_assets: Vec<String>,
+        /// Amount of source asset to exchange
+        #[arg(long, conflicts_with = "to_amount")]
+        from_amount: Option<String>,
+        /// Amount of target asset desired
+        #[arg(long, conflicts_with = "from_amount")]
+        to_amount: Option<String>,
+        /// Requester DID
+        #[arg(long)]
+        requester: String,
+        /// Provider DID (optional, omit to broadcast)
+        #[arg(long)]
+        provider: Option<String>,
+        /// Agents as JSON array
+        #[arg(long)]
+        agents: Option<String>,
+    },
+    /// Respond with a quote to an exchange request (TAIP-18)
+    Quote {
+        /// Exchange transaction ID to quote against
+        #[arg(long)]
+        exchange_id: String,
+        /// Source asset identifier
+        #[arg(long)]
+        from_asset: String,
+        /// Target asset identifier
+        #[arg(long)]
+        to_asset: String,
+        /// Amount of source asset
+        #[arg(long)]
+        from_amount: String,
+        /// Amount of target asset
+        #[arg(long)]
+        to_amount: String,
+        /// Provider DID
+        #[arg(long)]
+        provider: String,
+        /// Agents as JSON array
+        #[arg(long)]
+        agents: Option<String>,
+        /// ISO 8601 expiry timestamp
+        #[arg(long)]
+        expires: String,
     },
     /// List transactions
     #[command(long_about = "\
@@ -335,6 +386,54 @@ pub async fn handle(
             )
             .await
         }
+        TransactionCommands::Exchange {
+            from_assets,
+            to_assets,
+            from_amount,
+            to_amount,
+            requester,
+            provider,
+            agents,
+        } => {
+            handle_exchange(
+                agent_did,
+                from_assets,
+                to_assets,
+                from_amount.as_deref(),
+                to_amount.as_deref(),
+                requester,
+                provider.as_deref(),
+                agents.as_deref(),
+                format,
+                tap_integration,
+            )
+            .await
+        }
+        TransactionCommands::Quote {
+            exchange_id,
+            from_asset,
+            to_asset,
+            from_amount,
+            to_amount,
+            provider,
+            agents,
+            expires,
+        } => {
+            handle_quote(
+                agent_did,
+                exchange_id,
+                from_asset,
+                to_asset,
+                from_amount,
+                to_amount,
+                provider,
+                agents.as_deref(),
+                expires,
+                format,
+                tap_integration,
+            )
+            .await
+        }
         TransactionCommands::List {
             agent_did: list_agent_did,
             msg_type,
@@ -390,6 +489,8 @@ async fn handle_transfer(
         agents,
         memo,
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: HashMap::new(),
     };
@@ -499,15 +600,21 @@ async fn handle_connect(
             purposes: None,
             category_purposes: None,
             limits: None,
+            allowed_beneficiaries: None,
+            allowed_settlement_addresses: None,
+            allowed_assets: None,
         };
 
         let mut limits = TransactionLimits {
             per_transaction: None,
-            daily: None,
+            per_day: None,
+            per_week: None,
+            per_month: None,
+            per_year: None,
             currency: None,
         };
         limits.per_transaction = input.max_amount;
-        limits.daily = input.daily_limit;
+        limits.per_day = input.daily_limit;
         constraints.limits = Some(limits);
         connect.constraints = Some(constraints);
     }
@@ -655,6 +762,127 @@ async fn handle_capture(
 
     let response = TransactionResponse {
         transaction_id: escrow_id.to_string(),
+        message_id: didcomm_message.id,
+        status: "sent".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    print_success(format, &response);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_exchange(
+    agent_did: &str,
+    from_assets: &[String],
+    to_assets: &[String],
+    from_amount: Option<&str>,
+    to_amount: Option<&str>,
+    requester_did: &str,
+    provider_did: Option<&str>,
+    agents_json: Option<&str>,
+    format: OutputFormat,
+    tap_integration: &TapIntegration,
+) -> Result<()> {
+    if from_amount.is_none() && to_amount.is_none() {
+        return Err(Error::invalid_parameter(
+            "Either --from-amount or --to-amount must be specified",
+        ));
+    }
+
+    let requester = Party::new(requester_did);
+    let agents = parse_agents(agents_json)?;
+
+    let mut exchange = if let Some(amount) = from_amount {
+        Exchange::new_from(
+            from_assets.to_vec(),
+            to_assets.to_vec(),
+            amount.to_string(),
+            requester,
+            agents,
+        )
+    } else {
+        Exchange::new_to(
+            from_assets.to_vec(),
+            to_assets.to_vec(),
+            to_amount.unwrap().to_string(),
+            requester,
+            agents,
+        )
+    };
+
+    if let Some(provider) = provider_did {
+        exchange = exchange.with_provider(Party::new(provider));
+    }
+
+    exchange
+        .validate()
+        .map_err(|e| Error::invalid_parameter(format!("Exchange validation failed: {}", e)))?;
+
+    let didcomm_message = exchange
+        .to_didcomm(agent_did)
+        .map_err(|e| Error::command_failed(format!("Failed to create DIDComm message: {}", e)))?;
+
+    tap_integration
+        .node()
+        .send_message(agent_did.to_string(), didcomm_message.clone())
+        .await
+        .map_err(|e| Error::command_failed(format!("Failed to send exchange: {}", e)))?;
+
+    let response = TransactionResponse {
+        transaction_id: didcomm_message.id.clone(),
+        message_id: didcomm_message.id,
+        status: "sent".to_string(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    };
+    print_success(format, &response);
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_quote(
+    agent_did: &str,
+    exchange_id: &str,
+    from_asset: &str,
+    to_asset: &str,
+    from_amount: &str,
+    to_amount: &str,
+    provider_did: &str,
+    agents_json: Option<&str>,
+    expires: &str,
+    format: OutputFormat,
+    tap_integration: &TapIntegration,
+) -> Result<()> {
+    let provider = Party::new(provider_did);
+    let agents = parse_agents(agents_json)?;
+
+    let quote = Quote::new(
+        from_asset.to_string(),
+        to_asset.to_string(),
+        from_amount.to_string(),
+        to_amount.to_string(),
+        provider,
+        agents,
+        expires.to_string(),
+    );
+
+    quote
+        .validate()
+        .map_err(|e| Error::invalid_parameter(format!("Quote validation failed: {}", e)))?;
+
+    let mut didcomm_message = quote
+        .to_didcomm(agent_did)
+        .map_err(|e| Error::command_failed(format!("Failed to create DIDComm message: {}", e)))?;
+
+    didcomm_message.thid = Some(exchange_id.to_string());
+
+    tap_integration
+        .node()
+        .send_message(agent_did.to_string(), didcomm_message.clone())
+        .await
+        .map_err(|e| Error::command_failed(format!("Failed to send quote: {}", e)))?;
+
+    let response = TransactionResponse {
+        transaction_id: exchange_id.to_string(),
         message_id: didcomm_message.id,
         status: "sent".to_string(),
         created_at: chrono::Utc::now().to_rfc3339(),

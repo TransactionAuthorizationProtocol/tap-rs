@@ -14,6 +14,7 @@ pub mod context;
 pub mod did_presentation;
 pub mod error;
 pub mod escrow;
+pub mod exchange;
 pub mod invoice;
 pub mod party;
 pub mod payment;
@@ -48,7 +49,8 @@ pub use cancel::Cancel;
 
 // Re-export connection types
 pub use connection::{
-    AuthorizationRequired, Connect, ConnectionConstraints, OutOfBand, TransactionLimits,
+    AuthorizationRequired, Connect, ConnectAgent, ConnectionConstraints, OutOfBand,
+    TransactionLimits,
 };
 
 // Re-export DIDComm presentation types
@@ -59,6 +61,9 @@ pub use error::ErrorBody;
 
 // Re-export escrow types
 pub use escrow::{Capture, Escrow};
+
+// Re-export exchange types
+pub use exchange::{Exchange, Quote};
 
 // Re-export invoice types
 pub use invoice::{
@@ -72,7 +77,7 @@ pub use agent::Agent;
 pub use party::Party;
 
 // Re-export payment types
-pub use payment::{Payment, PaymentBuilder};
+pub use payment::{AssetPricing, Payment, PaymentBuilder, SupportedAsset};
 
 // Re-export policy types
 pub use policy::{Policy, RequireAuthorization, RequirePresentation, RequireProofOfControl};
@@ -93,7 +98,7 @@ pub use revert::Revert;
 pub use settle::Settle;
 
 // Re-export transfer types
-pub use transfer::Transfer;
+pub use transfer::{TransactionValue, Transfer};
 
 // Re-export trust ping types
 pub use trust_ping::{TrustPing, TrustPingResponse};

@@ -57,6 +57,8 @@ async fn test_transfer_stored_in_all_agent_databases() {
         )],
         memo: None,
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: Default::default(),
     };
@@ -330,6 +332,8 @@ async fn test_outgoing_transaction_multi_storage() {
         )],
         memo: Some("Test outgoing transfer".to_string()),
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: Default::default(),
     };
@@ -485,6 +489,8 @@ async fn test_transaction_delivered_to_all_recipients() {
         )],
         memo: None,
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: Default::default(),
     };

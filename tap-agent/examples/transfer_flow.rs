@@ -163,6 +163,8 @@ fn create_transfer_message(
         amount: "100.0".to_string(),
         agents: vec![settlement_agent],
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         memo: Some("Example transfer".to_string()),
         connection_id: None,
         metadata: HashMap::new(),

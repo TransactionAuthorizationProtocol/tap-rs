@@ -143,6 +143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ],
         memo: None,
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         transaction_id: Some("transfer-001".to_string()),
         connection_id: None,
         metadata: HashMap::new(),

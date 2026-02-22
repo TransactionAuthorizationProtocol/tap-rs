@@ -52,6 +52,8 @@ fn main() {
         asset,
         amount: "100.50".to_string(),
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         memo: None,
         connection_id: None,
         metadata: HashMap::new(),

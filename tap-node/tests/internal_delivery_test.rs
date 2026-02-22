@@ -49,6 +49,8 @@ async fn test_internal_message_delivery_all_tables() -> Result<(), Box<dyn std::
         agents: vec![],
         memo: Some("Test internal transfer".to_string()),
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: Default::default(),
     };

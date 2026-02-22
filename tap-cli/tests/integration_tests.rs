@@ -127,6 +127,8 @@ async fn test_transfer_message_creation() {
         agents: vec![],
         memo: Some("Test transfer".to_string()),
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: std::collections::HashMap::new(),
     };
@@ -330,6 +332,9 @@ async fn test_connect_message_creation() {
         purposes: None,
         category_purposes: None,
         limits: None,
+        allowed_beneficiaries: None,
+        allowed_settlement_addresses: None,
+        allowed_assets: None,
     });
 
     assert!(connect.validate().is_ok());

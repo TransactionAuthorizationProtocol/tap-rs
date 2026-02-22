@@ -1180,6 +1180,136 @@ pub fn create_escrow_schema() -> Value {
     })
 }
 
+/// Schema for create_exchange tool (TAIP-18)
+pub fn create_exchange_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "from_assets": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "List of CAIP-19 asset identifiers the requester wants to exchange from"
+            },
+            "to_assets": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "List of CAIP-19 asset identifiers the requester wants to exchange to"
+            },
+            "from_amount": {
+                "type": "string",
+                "description": "Amount of the from asset to exchange (mutually exclusive with to_amount; at least one required)"
+            },
+            "to_amount": {
+                "type": "string",
+                "description": "Desired amount of the to asset (mutually exclusive with from_amount; at least one required)"
+            },
+            "requester_did": {
+                "type": "string",
+                "description": "DID of the party requesting the exchange"
+            },
+            "provider_did": {
+                "type": "string",
+                "description": "Optional DID of the preferred exchange provider"
+            },
+            "agents": {
+                "type": "array",
+                "description": "List of agents involved in the exchange",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "@id": {
+                            "type": "string",
+                            "description": "Agent DID"
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Agent role"
+                        },
+                        "for": {
+                            "type": "string",
+                            "description": "DID of party agent acts for"
+                        }
+                    },
+                    "required": ["@id", "role", "for"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["agent_did", "from_assets", "to_assets", "requester_did"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for create_quote tool (TAIP-18)
+pub fn create_quote_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "exchange_id": {
+                "type": "string",
+                "description": "ID of the exchange request this quote responds to"
+            },
+            "from_asset": {
+                "type": "string",
+                "description": "CAIP-19 asset identifier for the from side of the quote"
+            },
+            "to_asset": {
+                "type": "string",
+                "description": "CAIP-19 asset identifier for the to side of the quote"
+            },
+            "from_amount": {
+                "type": "string",
+                "description": "Amount of the from asset"
+            },
+            "to_amount": {
+                "type": "string",
+                "description": "Amount of the to asset"
+            },
+            "provider_did": {
+                "type": "string",
+                "description": "DID of the exchange provider offering this quote"
+            },
+            "agents": {
+                "type": "array",
+                "description": "List of agents involved in the quote",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "@id": {
+                            "type": "string",
+                            "description": "Agent DID"
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Agent role"
+                        },
+                        "for": {
+                            "type": "string",
+                            "description": "DID of party agent acts for"
+                        }
+                    },
+                    "required": ["@id", "role", "for"],
+                    "additionalProperties": false
+                }
+            },
+            "expires": {
+                "type": "string",
+                "description": "ISO 8601 timestamp when this quote expires"
+            }
+        },
+        "required": ["agent_did", "exchange_id", "from_asset", "to_asset", "from_amount", "to_amount", "provider_did", "expires"],
+        "additionalProperties": false
+    })
+}
+
 /// Schema for capture tool
 pub fn create_capture_schema() -> Value {
     json!({

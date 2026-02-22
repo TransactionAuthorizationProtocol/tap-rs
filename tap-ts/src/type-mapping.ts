@@ -29,7 +29,7 @@ interface WasmMessage {
  */
 const TAP_MESSAGE_TYPES = new Set<string>([
   'Transfer',
-  'Payment', 
+  'Payment',
   'Authorize',
   'Reject',
   'Settle',
@@ -38,6 +38,8 @@ const TAP_MESSAGE_TYPES = new Set<string>([
   'Connect',
   'Escrow',
   'Capture',
+  'Exchange',
+  'Quote',
   'AddAgents',
   'ReplaceAgent',
   'RemoveAgent',

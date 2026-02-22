@@ -12,8 +12,8 @@ use std::sync::Arc;
 use tap_caip::AssetId;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{
-    Agent, Authorize, Cancel, Capture, Connect, ConnectionConstraints, Escrow, Party, Payment,
-    Reject, Revert, Settle, TransactionLimits, Transfer,
+    Agent, Authorize, Cancel, Capture, Connect, ConnectionConstraints, Escrow, Exchange, Party,
+    Payment, Quote, Reject, Revert, Settle, TransactionLimits, Transfer,
 };
 use tap_node::storage::models::SchemaType;
 use tap_node::storage::DecisionType;
@@ -331,6 +331,8 @@ impl ToolHandler for CreateTransferTool {
             agents,
             memo: params.memo,
             settlement_id: None,
+            expiry: None,
+            transaction_value: None,
             connection_id: None,
             metadata: params
                 .metadata
@@ -1610,17 +1612,23 @@ impl ToolHandler for CreateConnectTool {
                 purposes: None,
                 category_purposes: None,
                 limits: None,
+                allowed_beneficiaries: None,
+                allowed_settlement_addresses: None,
+                allowed_assets: None,
             };
 
             if let Some(limits_info) = constraints_info.transaction_limits {
                 let mut limits = TransactionLimits {
                     per_transaction: None,
-                    daily: None,
+                    per_day: None,
+                    per_week: None,
+                    per_month: None,
+                    per_year: None,
                     currency: None,
                 };
                 // Map the fields to the actual TransactionLimits struct
                 limits.per_transaction = limits_info.max_amount;
-                limits.daily = limits_info.daily_limit;
+                limits.per_day = limits_info.daily_limit;
                 // Note: Currency and other fields would need to be handled separately
                 constraints.limits = Some(limits);
             }
@@ -2021,6 +2029,278 @@ impl ToolHandler for CaptureTool {
             description: "Captures escrowed funds (TAIP-17) to release them to the beneficiary"
                 .to_string(),
             input_schema: schema::create_capture_schema(),
+        }
+    }
+}
+
+/// Tool for creating Exchange messages (TAIP-18)
+pub struct CreateExchangeTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for creating an exchange request
+#[derive(Debug, Deserialize)]
+struct ExchangeParams {
+    agent_did: String,
+    from_assets: Vec<String>,
+    to_assets: Vec<String>,
+    #[serde(default)]
+    from_amount: Option<String>,
+    #[serde(default)]
+    to_amount: Option<String>,
+    requester_did: String,
+    #[serde(default)]
+    provider_did: Option<String>,
+    #[serde(default)]
+    agents: Vec<AgentInfo>,
+}
+
+/// Response for creating an exchange
+#[derive(Debug, Serialize)]
+struct ExchangeResponse {
+    transaction_id: String,
+    message_id: String,
+    status: String,
+    created_at: String,
+}
+
+impl CreateExchangeTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for CreateExchangeTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: ExchangeParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        if params.from_amount.is_none() && params.to_amount.is_none() {
+            return Ok(error_text_response(
+                "Either from_amount or to_amount must be specified".to_string(),
+            ));
+        }
+
+        let requester = Party::new(&params.requester_did);
+        let agents: Vec<Agent> = params
+            .agents
+            .iter()
+            .map(|a| Agent::new(&a.id, &a.role, &a.for_party))
+            .collect();
+
+        let mut exchange = if let Some(amount) = params.from_amount {
+            Exchange::new_from(
+                params.from_assets,
+                params.to_assets,
+                amount,
+                requester,
+                agents,
+            )
+        } else {
+            Exchange::new_to(
+                params.from_assets,
+                params.to_assets,
+                params.to_amount.unwrap(),
+                requester,
+                agents,
+            )
+        };
+
+        if let Some(provider_did) = params.provider_did {
+            exchange = exchange.with_provider(Party::new(&provider_did));
+        }
+
+        if let Err(e) = exchange.validate() {
+            return Ok(error_text_response(format!(
+                "Exchange validation failed: {}",
+                e
+            )));
+        }
+
+        let didcomm_message = match exchange.to_didcomm(&params.agent_did) {
+            Ok(msg) => msg,
+            Err(e) => {
+                return Ok(error_text_response(format!(
+                    "Failed to create DIDComm message: {}",
+                    e
+                )));
+            }
+        };
+
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(_) => {
+                let response = ExchangeResponse {
+                    transaction_id: didcomm_message.id.clone(),
+                    message_id: didcomm_message.id,
+                    status: "sent".to_string(),
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize response: {}", e))
+                })?;
+
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to send exchange: {}", e);
+                Ok(error_text_response(format!(
+                    "Failed to send exchange: {}",
+                    e
+                )))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_exchange".to_string(),
+            description: "Creates a TAP exchange request (TAIP-18) for cross-asset quotes"
+                .to_string(),
+            input_schema: schema::create_exchange_schema(),
+        }
+    }
+}
+
+/// Tool for creating Quote messages (TAIP-18)
+pub struct CreateQuoteTool {
+    tap_integration: Arc<TapIntegration>,
+}
+
+/// Parameters for creating a quote response
+#[derive(Debug, Deserialize)]
+struct QuoteParams {
+    agent_did: String,
+    exchange_id: String,
+    from_asset: String,
+    to_asset: String,
+    from_amount: String,
+    to_amount: String,
+    provider_did: String,
+    #[serde(default)]
+    agents: Vec<AgentInfo>,
+    expires: String,
+}
+
+/// Response for creating a quote
+#[derive(Debug, Serialize)]
+struct QuoteResponse {
+    exchange_id: String,
+    message_id: String,
+    status: String,
+    created_at: String,
+}
+
+impl CreateQuoteTool {
+    pub fn new(tap_integration: Arc<TapIntegration>) -> Self {
+        Self { tap_integration }
+    }
+
+    fn tap_integration(&self) -> &TapIntegration {
+        &self.tap_integration
+    }
+}
+
+#[async_trait::async_trait]
+impl ToolHandler for CreateQuoteTool {
+    async fn handle(&self, arguments: Option<Value>) -> Result<CallToolResult> {
+        let params: QuoteParams = match arguments {
+            Some(args) => serde_json::from_value(args)
+                .map_err(|e| Error::invalid_parameter(format!("Invalid parameters: {}", e)))?,
+            None => {
+                return Ok(error_text_response(
+                    "Missing required parameters".to_string(),
+                ))
+            }
+        };
+
+        let provider = Party::new(&params.provider_did);
+        let agents: Vec<Agent> = params
+            .agents
+            .iter()
+            .map(|a| Agent::new(&a.id, &a.role, &a.for_party))
+            .collect();
+
+        let quote = Quote::new(
+            params.from_asset,
+            params.to_asset,
+            params.from_amount,
+            params.to_amount,
+            provider,
+            agents,
+            params.expires,
+        );
+
+        if let Err(e) = quote.validate() {
+            return Ok(error_text_response(format!(
+                "Quote validation failed: {}",
+                e
+            )));
+        }
+
+        let didcomm_message = match quote.to_didcomm(&params.agent_did) {
+            Ok(mut msg) => {
+                msg.thid = Some(params.exchange_id.clone());
+                msg
+            }
+            Err(e) => {
+                return Ok(error_text_response(format!(
+                    "Failed to create DIDComm message: {}",
+                    e
+                )));
+            }
+        };
+
+        match self
+            .tap_integration()
+            .node()
+            .send_message(params.agent_did.clone(), didcomm_message.clone())
+            .await
+        {
+            Ok(_) => {
+                let response = QuoteResponse {
+                    exchange_id: params.exchange_id,
+                    message_id: didcomm_message.id,
+                    status: "sent".to_string(),
+                    created_at: chrono::Utc::now().to_rfc3339(),
+                };
+
+                let response_json = serde_json::to_string_pretty(&response).map_err(|e| {
+                    Error::tool_execution(format!("Failed to serialize response: {}", e))
+                })?;
+
+                Ok(success_text_response(response_json))
+            }
+            Err(e) => {
+                error!("Failed to send quote: {}", e);
+                Ok(error_text_response(format!("Failed to send quote: {}", e)))
+            }
+        }
+    }
+
+    fn get_definition(&self) -> Tool {
+        Tool {
+            name: "tap_quote".to_string(),
+            description: "Creates a TAP quote response (TAIP-18) for an exchange request"
+                .to_string(),
+            input_schema: schema::create_quote_schema(),
         }
     }
 }

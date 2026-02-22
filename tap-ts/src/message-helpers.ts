@@ -305,6 +305,102 @@ export async function createConnectMessage(params: {
 }
 
 /**
+ * Create a TAP Exchange message (TAIP-18)
+ * @param params Exchange parameters
+ * @returns TAP-compliant Exchange message
+ */
+export async function createExchangeMessage(params: {
+  from: string;
+  to: string[];
+  fromAssets: string[];
+  toAssets: string[];
+  fromAmount?: string;
+  toAmount?: string;
+  requester: Party;
+  provider?: Party;
+  agents?: Agent[];
+  policies?: unknown[];
+  thid?: string;
+  pthid?: string;
+  expires_time?: number;
+}): Promise<DIDCommMessage<unknown>> {
+  const exchangeBody: Record<string, unknown> = {
+    '@context': 'https://tap.rsvp/schema/1.0',
+    '@type': 'Exchange',
+    fromAssets: params.fromAssets,
+    toAssets: params.toAssets,
+    requester: params.requester,
+    agents: params.agents || [],
+  };
+
+  if (params.fromAmount !== undefined) exchangeBody.fromAmount = params.fromAmount;
+  if (params.toAmount !== undefined) exchangeBody.toAmount = params.toAmount;
+  if (params.provider !== undefined) exchangeBody.provider = params.provider;
+  if (params.policies !== undefined) exchangeBody.policies = params.policies;
+
+  const message: any = {
+    id: await generateUUID(),
+    type: 'https://tap.rsvp/schema/1.0#Exchange',
+    from: params.from as DID,
+    to: params.to as DID[],
+    created_time: Date.now(),
+    body: exchangeBody,
+  };
+
+  if (params.expires_time !== undefined) message.expires_time = params.expires_time;
+  if (params.thid !== undefined) message.thid = params.thid;
+  if (params.pthid !== undefined) message.pthid = params.pthid;
+
+  return message;
+}
+
+/**
+ * Create a TAP Quote message (TAIP-18)
+ * @param params Quote parameters
+ * @returns TAP-compliant Quote message
+ */
+export async function createQuoteMessage(params: {
+  from: string;
+  to: string[];
+  transaction_id: string;
+  fromAsset: string;
+  toAsset: string;
+  fromAmount: string;
+  toAmount: string;
+  provider: Party;
+  agents?: Agent[];
+  expires: string;
+  thid?: string;
+  pthid?: string;
+}): Promise<DIDCommMessage<unknown>> {
+  const quoteBody: Record<string, unknown> = {
+    '@context': 'https://tap.rsvp/schema/1.0',
+    '@type': 'Quote',
+    fromAsset: params.fromAsset,
+    toAsset: params.toAsset,
+    fromAmount: params.fromAmount,
+    toAmount: params.toAmount,
+    provider: params.provider,
+    agents: params.agents || [],
+    expires: params.expires,
+  };
+
+  const message: any = {
+    id: await generateUUID(),
+    type: 'https://tap.rsvp/schema/1.0#Quote',
+    from: params.from as DID,
+    to: params.to as DID[],
+    created_time: Date.now(),
+    thid: params.thid || params.transaction_id,
+    body: quoteBody,
+  };
+
+  if (params.pthid !== undefined) message.pthid = params.pthid;
+
+  return message;
+}
+
+/**
  * Create a DIDComm BasicMessage
  * @param params Message parameters
  * @returns DIDComm-compliant BasicMessage

@@ -67,6 +67,8 @@ mod storage_tests {
             agents: vec![],
             memo: Some("Test transfer".to_string()),
             settlement_id: None,
+            expiry: None,
+            transaction_value: None,
             connection_id: None,
             metadata: Default::default(),
         };

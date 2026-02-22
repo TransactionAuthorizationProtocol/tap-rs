@@ -79,9 +79,14 @@ fn create_payment_message(
         )],
 
         supported_assets: Some(vec![
-            AssetId::from_str("eip155:1/erc20:0xA0b86991c53D94fa4C0bCBf0C1C4DF2F15F1b7A8").unwrap(), // USDC Ethereum
-            AssetId::from_str("eip155:137/erc20:0x2791Bca1f2de4661ED88A30C2A8A6b5E7C54fD3A")
-                .unwrap(), // USDC Polygon
+            tap_msg::message::payment::SupportedAsset::Simple(
+                AssetId::from_str("eip155:1/erc20:0xA0b86991c53D94fa4C0bCBf0C1C4DF2F15F1b7A8")
+                    .unwrap(),
+            ), // USDC Ethereum
+            tap_msg::message::payment::SupportedAsset::Simple(
+                AssetId::from_str("eip155:137/erc20:0x2791Bca1f2de4661ED88A30C2A8A6b5E7C54fD3A")
+                    .unwrap(),
+            ), // USDC Polygon
         ]),
 
         fallback_settlement_addresses: Some(vec![
