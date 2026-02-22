@@ -51,6 +51,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Optimized bundle: 272KB WASM gzipped, 3.72KB TypeScript gzipped
 - Verified Veramo interoperability with 15+ integration tests
 
+#### Asset Exchange & Quote Messages (TAIP-18)
+- New `Exchange` message type for initiating asset exchanges between parties
+- New `Quote` message type for responding to exchange requests with pricing
+- Full validation, builders, CLI subcommands, and MCP tools for both message types
+
+#### Transfer & Payment Enhancements (TAIP-3, TAIP-14)
+- `transactionValue` and `expiry` fields on Transfer messages (TAIP-3)
+- Flexible asset pricing in Payment via `SupportedAsset` enum with Simple and Priced variants (TAIP-14)
+- `expiry`, `invoice`, and `fallbackSettlementAddresses` exposed in Payment MCP tools and CLI
+
+#### Connect Message Restructure (TAIP-15)
+- `requester`, `agents`, `agreement`, and `expiry` fields on Connect messages
+- Expanded `TransactionLimits` with per-day/week/month/year limits
+- Expanded `ConnectionConstraints` with `allowedBeneficiaries`, `allowedSettlementAddresses`, `allowedAssets`
+
+#### Agent Management CLI Commands (TAIP-5, TAIP-7)
+- `agent-mgmt add-agents` subcommand for adding agents to transactions
+- `agent-mgmt remove-agent` and `agent-mgmt replace-agent` subcommands
+- `agent-mgmt update-policies` subcommand (TAIP-7)
+
+#### Decision Management CLI Commands (tap-cli)
+- `decision list` and `decision resolve` subcommands matching tap-mcp's decision tools
+- Auto-resolve on all action commands (`authorize`, `reject`, `cancel`, `settle`, `revert`)
+- Detailed `--help` text with decision type references and auto-resolve mapping
+
 #### Docker Support (tap-http)
 - Multi-stage Dockerfile for containerized deployment
 - docker-compose.yml with persistent volume at `/data/tap`
@@ -73,6 +98,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `Complete` message type removed
 - JWE encryption format changed (AES-KW replaces XOR key wrapping)
 - `AuthorizationRequired` field `url` renamed to `authorizationUrl` (from 0.5.0)
+- Connect message restructured with new `requester`, `agents`, `agreement`, `expiry` fields (TAIP-15)
+- Transfer message gains `transactionValue` and `expiry` fields (TAIP-3)
 
 ## [0.5.0] - 2025-08-14
 
