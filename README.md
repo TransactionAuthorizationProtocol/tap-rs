@@ -2,11 +2,11 @@
 
 This repository contains a Rust implementation of the Transaction Authorization Protocol (TAP), a decentralized protocol for securely authorizing blockchain transactions before they are submitted on-chain. TAP-RS targets payment-related use cases, Travel Rule compliance, and secure transaction coordination.
 
-**New in v0.5.0**: 
-- PayTo URI support (RFC 8905) for traditional payment systems (IBAN, ACH, BIC, UPI)
-- Fallback settlement addresses for flexible payment options
-- Schema.org Product attributes for invoice line items
-- Enhanced Agent and Party structures with Organization fields
+**New in v0.6.0**:
+- External decision executable support for pluggable authorization workflows
+- Poll mode for decision management via MCP tools
+- `tap-cli` command-line interface for full TAP agent operations
+- `did:web` DID document hosting in `tap-http`
 
 ## Project Structure
 
@@ -52,38 +52,46 @@ This project has successfully implemented all core TAP message types and flows a
 
 ### Prerequisites
 
-- Rust 1.71.0 or later
-- Cargo
-
-### Building
-
-```bash
-# Clone the repository
-git clone https://github.com/notabene/tap-rs.git
-cd tap-rs
-
-# Build all crates
-cargo build
-
-# Run tests
-cargo test
-```
+- [Rust](https://www.rust-lang.org/tools/install) 1.71.0 or later (includes Cargo)
 
 ### Installing Command-line Tools
 
-TAP-RS includes several useful command-line tools that can be installed from crates.io or from source:
+The quickest way to get started is to install the CLI tools. No need to clone the repository.
+
+#### From crates.io (recommended)
 
 ```bash
-# Install tools from crates.io
-cargo install tap-agent tap-http tap-cli
+# Install all CLI tools at once
+cargo install tap-cli tap-http tap-agent
 
-# Or install from the repository
-cargo install --path tap-rs/tap-agent
-cargo install --path tap-rs/tap-http
-cargo install --path tap-rs/tap-cli
+# Or install only what you need:
+cargo install tap-cli    # Full-featured TAP CLI (agents, transactions, customers, DIDs)
+cargo install tap-http   # HTTP DIDComm server + payment simulator
+cargo install tap-agent  # Low-level DID/key management + message packing
+cargo install tap-mcp    # MCP server for AI/LLM integration
 ```
 
-Available command-line tools:
+#### From source
+
+```bash
+git clone https://github.com/TransactionAuthorizationProtocol/tap-rs.git
+cd tap-rs
+cargo install --path tap-cli
+cargo install --path tap-http
+cargo install --path tap-agent
+cargo install --path tap-mcp
+```
+
+#### Verify installation
+
+```bash
+tap-cli --help
+tap-http --help
+tap-agent-cli --help
+tap-mcp --help
+```
+
+### Available CLI Tools
 
 1. **tap-cli**: Full-featured CLI for TAP Agent operations
    ```bash
@@ -159,7 +167,45 @@ Available command-line tools:
    tap-payment-simulator --url http://localhost:8000/didcomm --did <server-agent-did>
    ```
 
+5. **tap-mcp**: MCP server for AI/LLM integration (Claude Desktop, etc.)
+   ```bash
+   # Run as MCP server (communicates via stdin/stdout)
+   tap-mcp
+
+   # With custom settings
+   tap-mcp --tap-root /path/to/data --debug
+   ```
+
 See individual tool READMEs for detailed usage instructions.
+
+### Using as Rust Libraries
+
+Add any TAP crate to your project:
+
+```bash
+cargo add tap-msg      # Core message types and validation
+cargo add tap-agent    # Agent identity, key management, message packing
+cargo add tap-caip     # CAIP-2/10/19 blockchain identifier parsing
+cargo add tap-node     # Node orchestration, storage, event handling
+cargo add tap-ivms101  # IVMS 101.2023 Travel Rule data structures
+```
+
+### TypeScript / JavaScript SDK
+
+```bash
+npm install @taprsvp/agent
+```
+
+See the [tap-ts README](./tap-ts/README.md) for complete documentation.
+
+### Building from Source
+
+```bash
+git clone https://github.com/TransactionAuthorizationProtocol/tap-rs.git
+cd tap-rs
+cargo build
+cargo test
+```
 
 ## Key Features
 
@@ -229,7 +275,7 @@ let message = transfer.to_didcomm_with_route(
 
 See the [tap-msg README](./tap-msg/README.md) for more detailed examples.
 
-## New in v0.5.0: Settlement Address Flexibility
+## Settlement Address Flexibility
 
 TAP-RS now supports both blockchain and traditional payment settlement addresses:
 
@@ -488,31 +534,13 @@ Comprehensive documentation for TAP-RS is available in the [docs](./docs) direct
 
 ## Build Commands
 
-The following commands are available for working with the codebase:
-
 ```bash
-# Build all crates
-cargo build
-
-# Run tests for all crates
-cargo test
-
-# Run tests for a specific crate
-cargo test --package tap-msg
-
-# Run benchmarks
-cargo bench
-
-# Format code
-cargo fmt
-
-# Lint code
-cargo clippy
-
-# Install command-line tools
-cargo install --path tap-agent
-cargo install --path tap-http
-cargo install --path tap-cli
+cargo build                    # Build all crates
+cargo test                     # Run all tests
+cargo test --package tap-msg   # Run tests for a specific crate
+cargo bench                    # Run benchmarks
+cargo fmt                      # Format code
+cargo clippy                   # Lint code
 ```
 
 ## CLI Tools Reference

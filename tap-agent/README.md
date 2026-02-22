@@ -2,6 +2,23 @@
 
 The `tap-agent` crate implements the agent functionality for the Transaction Authorization Protocol (TAP), providing a secure and extensible framework for handling TAP messages, managing cryptographic operations, and resolving decentralized identifiers (DIDs).
 
+## Installation
+
+### As a library
+
+```bash
+cargo add tap-agent
+```
+
+### As a CLI tool
+
+The `tap-agent` crate also includes the `tap-agent-cli` binary for DID generation, key management, and DIDComm message packing/unpacking:
+
+```bash
+cargo install tap-agent
+tap-agent-cli --help
+```
+
 ## Overview
 
 The TAP Agent serves as the foundation for secure communication in the TAP ecosystem, enabling entities to:
