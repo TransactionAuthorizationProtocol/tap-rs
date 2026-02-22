@@ -102,6 +102,8 @@ tap-cli transaction transfer \
 | `--beneficiary` | Yes | Beneficiary DID |
 | `--agents` | No | Agents as JSON array |
 | `--memo` | No | Optional memo |
+| `--expiry` | No | ISO 8601 expiry timestamp |
+| `--transaction-value` | No | Fiat equivalent as `amount:currency` (e.g., `1000.00:USD`) |
 
 #### `transaction payment` — TAIP-14 Payment Request
 
@@ -118,7 +120,30 @@ tap-cli transaction payment \
   --merchant did:key:z6MkMerchant... \
   --currency USD \
   --memo "Order #5678"
+
+# With expiry and invoice
+tap-cli transaction payment \
+  --amount 99.99 \
+  --merchant did:key:z6MkMerchant... \
+  --asset eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 \
+  --expiry "2026-12-31T23:59:59Z" \
+  --invoice-url "https://merchant.example.com/invoices/5678" \
+  --fallback-addresses eip155:1:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
 ```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--amount` | Yes | Payment amount |
+| `--merchant` | Yes | Merchant DID |
+| `--asset` | No* | CAIP-19 asset identifier |
+| `--currency` | No* | ISO 4217 currency code (e.g., USD) |
+| `--agents` | No | Agents as JSON array |
+| `--memo` | No | Optional memo |
+| `--expiry` | No | ISO 8601 expiry timestamp |
+| `--invoice-url` | No | Invoice URL (TAIP-16) |
+| `--fallback-addresses` | No | Comma-separated fallback settlement addresses (CAIP-10) |
+
+\* One of `--asset` or `--currency` must be specified.
 
 #### `transaction connect` — TAIP-15 Connection Request
 
@@ -128,12 +153,23 @@ tap-cli transaction connect \
   --for did:key:z6MkParty... \
   --role SourceAgent
 
-# With transaction limits
+# With transaction limits and constraints
 tap-cli transaction connect \
   --recipient did:key:z6MkRecipient... \
   --for did:key:z6MkParty... \
-  --constraints '{"max_amount":"10000","daily_limit":"50000"}'
+  --constraints '{"max_amount":"10000","daily_limit":"50000","allowed_assets":["eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"]}' \
+  --expiry "2027-01-01T00:00:00Z" \
+  --agreement "https://example.com/terms"
 ```
+
+| Flag | Required | Description |
+|------|----------|-------------|
+| `--recipient` | Yes | Recipient agent DID |
+| `--for` | Yes | Party DID this connection is for |
+| `--role` | No | Agent role (e.g., SourceAgent) |
+| `--constraints` | No | Constraints JSON (limits, allowed_beneficiaries, allowed_settlement_addresses, allowed_assets) |
+| `--expiry` | No | ISO 8601 expiry timestamp |
+| `--agreement` | No | URL to terms of service or agreement |
 
 #### `transaction escrow` — TAIP-17 Escrow Request
 
@@ -158,6 +194,37 @@ tap-cli transaction capture \
   --escrow-id <ESCROW_TRANSACTION_ID> \
   --amount 500.0 \
   --settlement-address eip155:1:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb
+```
+
+#### `transaction exchange` — TAIP-18 Exchange Request
+
+```bash
+tap-cli transaction exchange \
+  --from-assets eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 \
+  --to-assets eip155:137/erc20:0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174 \
+  --from-amount 1000.00 \
+  --requester did:key:z6MkRequester...
+
+# With a specific provider
+tap-cli transaction exchange \
+  --from-assets eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 \
+  --to-assets eip155:137/erc20:0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174 \
+  --to-amount 999.50 \
+  --requester did:key:z6MkRequester... \
+  --provider did:key:z6MkProvider...
+```
+
+#### `transaction quote` — TAIP-18 Quote Response
+
+```bash
+tap-cli transaction quote \
+  --exchange-id <EXCHANGE_TX_ID> \
+  --from-asset eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48 \
+  --to-asset eip155:137/erc20:0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174 \
+  --from-amount 1000.00 \
+  --to-amount 999.50 \
+  --provider did:key:z6MkProvider... \
+  --expires "2026-06-30T12:00:00Z"
 ```
 
 #### `transaction list` — Query Transactions
@@ -228,6 +295,33 @@ tap-cli action revert \
   --transaction-id <TX_ID> \
   --settlement-address eip155:1:0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb \
   --reason "Fraudulent transaction"
+```
+
+### `agent-mgmt` — Agent & Policy Management within Transactions
+
+Manage agents and policies on existing transactions (TAIP-5, TAIP-7).
+
+```bash
+# Add agents to a transaction
+tap-cli agent-mgmt add-agents \
+  --transaction-id <TX_ID> \
+  --agents '[{"@id":"did:key:z6MkNew...","role":"ComplianceOfficer","for":"did:key:z6MkParty..."}]'
+
+# Remove an agent from a transaction
+tap-cli agent-mgmt remove-agent \
+  --transaction-id <TX_ID> \
+  --agent-to-remove did:key:z6MkOldAgent...
+
+# Replace an agent in a transaction
+tap-cli agent-mgmt replace-agent \
+  --transaction-id <TX_ID> \
+  --original did:key:z6MkOldAgent... \
+  --new-agent '{"@id":"did:key:z6MkNewAgent...","role":"SourceAgent","for":"did:key:z6MkParty..."}'
+
+# Update transaction policies
+tap-cli agent-mgmt update-policies \
+  --transaction-id <TX_ID> \
+  --policies '[{"@type":"RequireAuthorization"}]'
 ```
 
 ### `comm` — Communication
