@@ -155,6 +155,14 @@
 - [x] Run cargo fmt, clippy, and tests with CI flags
 - [x] Fix any warnings or errors
 
+### Phase 9: Decision Management Commands
+
+- [ ] Write tests for `decision list` and `decision resolve` commands
+- [ ] Implement `decision list` subcommand
+- [ ] Implement `decision resolve` subcommand
+- [ ] Add auto-resolve to action commands (authorize, reject, cancel, settle, revert)
+- [ ] Run cargo fmt, clippy, and tests with CI flags
+
 ## External Decision Executable for tap-http
 [PRD](prds/external-decision.md)
 

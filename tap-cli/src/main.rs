@@ -83,6 +83,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::received::ReceivedCommands,
     },
+    /// Decision log management
+    Decision {
+        #[command(subcommand)]
+        cmd: commands::decision::DecisionCommands,
+    },
 }
 
 #[tokio::main]
@@ -176,6 +181,9 @@ async fn main() {
         }
         Commands::Received { ref cmd } => {
             commands::received::handle(cmd, format, &agent_did, &tap_integration).await
+        }
+        Commands::Decision { ref cmd } => {
+            commands::decision::handle(cmd, format, &agent_did, &tap_integration).await
         }
         Commands::Did { .. } => unreachable!(),
     };

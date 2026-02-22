@@ -1,6 +1,7 @@
 pub mod agent;
 pub mod communication;
 pub mod customer;
+pub mod decision;
 pub mod delivery;
 pub mod did;
 pub mod received;

@@ -1,3 +1,4 @@
+use crate::commands::decision::auto_resolve_decisions;
 use crate::error::{Error, Result};
 use crate::output::{print_success, OutputFormat};
 use crate::tap_integration::TapIntegration;
@@ -5,6 +6,7 @@ use clap::Subcommand;
 use serde::Serialize;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{Authorize, Cancel, Reject, Revert, Settle};
+use tap_node::storage::DecisionType;
 use tracing::debug;
 
 #[derive(Subcommand, Debug)]
@@ -181,6 +183,15 @@ async fn handle_authorize(
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send authorize: {}", e)))?;
 
+    auto_resolve_decisions(
+        tap_integration,
+        agent_did,
+        transaction_id,
+        "authorize",
+        Some(DecisionType::AuthorizationRequired),
+    )
+    .await;
+
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
         message_id: didcomm_message.id,
@@ -219,6 +230,8 @@ async fn handle_reject(
         .send_message(agent_did.to_string(), didcomm_message.clone())
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send reject: {}", e)))?;
+
+    auto_resolve_decisions(tap_integration, agent_did, transaction_id, "reject", None).await;
 
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
@@ -261,6 +274,8 @@ async fn handle_cancel(
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send cancel: {}", e)))?;
 
+    auto_resolve_decisions(tap_integration, agent_did, transaction_id, "cancel", None).await;
+
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
         message_id: didcomm_message.id,
@@ -302,6 +317,15 @@ async fn handle_settle(
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send settle: {}", e)))?;
 
+    auto_resolve_decisions(
+        tap_integration,
+        agent_did,
+        transaction_id,
+        "settle",
+        Some(DecisionType::SettlementRequired),
+    )
+    .await;
+
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
         message_id: didcomm_message.id,
@@ -342,6 +366,8 @@ async fn handle_revert(
         .send_message(agent_did.to_string(), didcomm_message.clone())
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send revert: {}", e)))?;
+
+    auto_resolve_decisions(tap_integration, agent_did, transaction_id, "revert", None).await;
 
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
