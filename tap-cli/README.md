@@ -4,13 +4,29 @@ Command-line interface for TAP Agent operations. `tap-cli` enables you to manage
 
 ## Installation
 
-```bash
-# Install from the repository
-cargo install --path tap-cli
+### From crates.io (recommended)
 
-# Or build and run directly
-cargo run --bin tap-cli -- --help
+```bash
+cargo install tap-cli
 ```
+
+### From source
+
+```bash
+git clone https://github.com/TransactionAuthorizationProtocol/tap-rs.git
+cd tap-rs
+cargo install --path tap-cli
+```
+
+### Verify installation
+
+```bash
+tap-cli --help
+```
+
+### Prerequisites
+
+- [Rust](https://www.rust-lang.org/tools/install) 1.71.0 or later
 
 ## Quick Start
 

@@ -6,6 +6,12 @@
 
 A complete implementation of the IVMS 101.2023 data model for the Travel Asset Protocol (TAP).
 
+## Installation
+
+```bash
+cargo add tap-ivms101
+```
+
 ## Overview
 
 This crate provides a comprehensive implementation of the interVASP Messaging Standard (IVMS) 101.2023, which is used for Travel Rule compliance in virtual asset transfers. IVMS 101 is the global standard for exchanging required originator and beneficiary information between Virtual Asset Service Providers (VASPs) to comply with FATF Recommendation 16.

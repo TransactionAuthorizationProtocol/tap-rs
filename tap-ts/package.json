@@ -1,6 +1,6 @@
 {
   "name": "@taprsvp/agent",
-  "version": "0.5.0",
+  "version": "0.6.0-SNAPSHOT",
   "type": "module",
   "description": "TypeScript wrapper for TAP WASM Agent - Browser-optimized message packing/unpacking with flexible key management",
   "keywords": [
@@ -77,7 +77,7 @@
     "@vitest/coverage-v8": "^3.2.4",
     "@vitest/ui": "^3.2.4",
     "eslint": "^9.33.0",
-    "happy-dom": "^18.0.1",
+    "happy-dom": "^20.7.0",
     "key-did-resolver": "^4.0.0",
     "tap-wasm": "file:../tap-wasm/pkg",
     "typescript": "^5.9.0",
