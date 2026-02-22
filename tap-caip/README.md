@@ -2,6 +2,12 @@
 
 Implementation of Chain Agnostic Identifier Standards for the Transaction Authorization Protocol (TAP).
 
+## Installation
+
+```bash
+cargo add tap-caip
+```
+
 ## Features
 
 - **CAIP-2**: Support for Chain IDs in namespace:reference format

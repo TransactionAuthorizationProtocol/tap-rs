@@ -23,25 +23,29 @@ Key design principles:
 
 ## Installation
 
-### Prerequisites
-
-- Rust 1.70+ with Cargo
-- SQLite 3.0+
-- TAP ecosystem components (tap-node, tap-agent, tap-msg)
-
-### Build from Source
+### From crates.io (recommended)
 
 ```bash
-# Clone the repository
-git clone https://github.com/notabene-id/tap-rs.git
-cd tap-rs/tap-mcp
-
-# Build the project
-cargo build --release
-
-# Install globally (optional)
-cargo install --path .
+cargo install tap-mcp
 ```
+
+### From source
+
+```bash
+git clone https://github.com/TransactionAuthorizationProtocol/tap-rs.git
+cd tap-rs
+cargo install --path tap-mcp
+```
+
+### Verify installation
+
+```bash
+tap-mcp --help
+```
+
+### Prerequisites
+
+- [Rust](https://www.rust-lang.org/tools/install) 1.70+ with Cargo
 
 ## Quick Start
 
@@ -820,7 +824,7 @@ tap://deliveries/123                        # Specific delivery record by ID
 ```
 
 ### `tap://database-schema`
-**New in v0.5.0** - Access to database schema information for agent storage.
+Access to database schema information for agent storage.
 
 ```
 tap://database-schema?agent_did=did:key:z6Mk...    # Complete schema for agent's database (required)
@@ -847,7 +851,7 @@ tap://schemas/Settle                   # Specific schema for Settle message type
 tap://schemas/Cancel                   # Specific schema for Cancel message type
 ```
 
-**Enhanced in v0.5.0** with individual schema lookup:
+Enhanced with individual schema lookup:
 - Access specific message schemas by name (e.g., `Transfer`, `Authorize`)
 - Search by message type URL (e.g., `https://tap.rsvp/schema/1.0#Transfer`)
 - Includes comprehensive JSON schemas for all TAIP message types

@@ -2,6 +2,47 @@
 
 HTTP DIDComm server implementation for the Transaction Authorization Protocol (TAP), providing secure message exchange via standard HTTP endpoints.
 
+## Installation
+
+### From crates.io (recommended)
+
+```bash
+cargo install tap-http
+```
+
+This installs two binaries:
+- `tap-http` - The TAP HTTP DIDComm server
+- `tap-payment-simulator` - A tool for testing TAP payment flows
+
+### From source
+
+```bash
+git clone https://github.com/TransactionAuthorizationProtocol/tap-rs.git
+cd tap-rs
+cargo install --path tap-http
+```
+
+### Verify installation
+
+```bash
+tap-http --help
+tap-payment-simulator --help
+```
+
+### Prerequisites
+
+- [Rust](https://www.rust-lang.org/tools/install) 1.71.0 or later
+
+### Quick start
+
+```bash
+# Start the server (creates an ephemeral agent automatically)
+tap-http
+
+# In another terminal, test with the payment simulator
+tap-payment-simulator --url http://localhost:8000/didcomm --did <DID printed by server>
+```
+
 ## Features
 
 - **DIDComm HTTP Endpoint**: Exposes a secure HTTP endpoint for DIDComm messaging

@@ -2,6 +2,14 @@
 
 Core message processing for the Transaction Authorization Protocol (TAP) providing secure message types and validation.
 
+## Installation
+
+Add to your `Cargo.toml`:
+
+```bash
+cargo add tap-msg
+```
+
 ## Features
 
 - **TAP Message Types**: Complete implementation of all TAP message types
@@ -120,8 +128,7 @@ payment_request.invoice = Some(InvoiceReference::Invoice(invoice));
 payment_request.validate()?;
 ```
 
-### Settlement Address Support (New in v0.5.0)
-
+### Settlement Address Support 
 TAP-RS now supports both blockchain and traditional payment system addresses:
 
 ```rust
@@ -159,8 +166,7 @@ let payment = Payment::builder()
     .build();
 ```
 
-### Enhanced Metadata (New in v0.5.0)
-
+### Enhanced Metadata 
 Agents, Parties, and LineItems now support rich schema.org metadata:
 
 ```rust
