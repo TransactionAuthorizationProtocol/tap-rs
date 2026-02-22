@@ -168,10 +168,11 @@ impl TapHttpServer {
             .trim_start_matches('/')
             .to_string();
 
-        // Create DIDComm endpoint
+        // Create DIDComm endpoint (1MB body size limit)
         let didcomm_route = warp::path(endpoint_path)
             .and(warp::post())
             .and(warp::header::optional::<String>("content-type"))
+            .and(warp::body::content_length_limit(1024 * 1024))
             .and(warp::body::bytes())
             .and(with_node(node.clone()))
             .and(with_event_bus(event_bus.clone()))
@@ -190,6 +191,7 @@ impl TapHttpServer {
         if enable_web_did {
             info!("Web DID hosting enabled at /.well-known/did.json");
 
+            let max_agents = self.config.max_agents;
             let well_known_route = warp::path(".well-known")
                 .and(warp::path("did.json"))
                 .and(warp::path::end())
@@ -197,12 +199,23 @@ impl TapHttpServer {
                 .and(warp::header::optional::<String>("host"))
                 .and(with_node(node.clone()))
                 .and(with_event_bus(event_bus.clone()))
+                .and(warp::any().map(move || max_agents))
                 .and_then(handle_well_known_did);
 
             let routes = didcomm_route
                 .or(health_route)
                 .or(well_known_route)
                 .with(warp::log("tap_http"))
+                .with(warp::reply::with::header(
+                    "X-Content-Type-Options",
+                    "nosniff",
+                ))
+                .with(warp::reply::with::header("X-Frame-Options", "DENY"))
+                .with(warp::reply::with::header("Cache-Control", "no-store"))
+                .with(warp::reply::with::header(
+                    "Content-Security-Policy",
+                    "default-src 'none'",
+                ))
                 .recover(handle_rejection);
 
             return self.spawn_server(routes, addr, event_bus).await;
@@ -212,6 +225,16 @@ impl TapHttpServer {
         let routes = didcomm_route
             .or(health_route)
             .with(warp::log("tap_http"))
+            .with(warp::reply::with::header(
+                "X-Content-Type-Options",
+                "nosniff",
+            ))
+            .with(warp::reply::with::header("X-Frame-Options", "DENY"))
+            .with(warp::reply::with::header("Cache-Control", "no-store"))
+            .with(warp::reply::with::header(
+                "Content-Security-Policy",
+                "default-src 'none'",
+            ))
             .recover(handle_rejection);
 
         self.spawn_server(routes, addr, event_bus).await

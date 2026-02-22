@@ -112,8 +112,13 @@ impl Settle {
                 ));
             }
 
-            // Validate amount is a positive number if provided
+            // Validate amount is a finite positive number if provided
             match amount.parse::<f64>() {
+                Ok(amount) if !amount.is_finite() => {
+                    return Err(Error::Validation(
+                        "Amount must be a finite number".to_string(),
+                    ));
+                }
                 Ok(amount) if amount <= 0.0 => {
                     return Err(Error::Validation("Amount must be positive".to_string()));
                 }

@@ -62,7 +62,7 @@ pub struct ExternalDecisionManager {
     tool_registry: Arc<ToolRegistry>,
     storage: Arc<Storage>,
     /// Channel for sending lines to stdin writer task
-    stdin_tx: RwLock<Option<mpsc::Sender<String>>>,
+    stdin_tx: Arc<RwLock<Option<mpsc::Sender<String>>>>,
     /// Whether the process is currently running
     is_running: AtomicBool,
     /// Pending RPC responses — maps request_id to a oneshot sender
@@ -95,7 +95,7 @@ impl ExternalDecisionManager {
             agent_dids,
             tool_registry,
             storage,
-            stdin_tx: RwLock::new(None),
+            stdin_tx: Arc::new(RwLock::new(None)),
             is_running: AtomicBool::new(false),
             pending_responses: Arc::new(Mutex::new(std::collections::HashMap::new())),
             management_handle: Mutex::new(None),
@@ -204,6 +204,7 @@ impl ExternalDecisionManager {
         let tool_registry = Arc::clone(&self.tool_registry);
         let pending_responses = Arc::clone(&self.pending_responses);
         let storage = Arc::clone(&self.storage);
+        let stdin_tx_clone = Arc::clone(&self.stdin_tx);
         let stdout_handle = tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
@@ -215,8 +216,14 @@ impl ExternalDecisionManager {
 
                 debug!("Received from external process: {}", line);
 
-                Self::handle_stdout_message(&line, &tool_registry, &pending_responses, &storage)
-                    .await;
+                Self::handle_stdout_message(
+                    &line,
+                    &tool_registry,
+                    &pending_responses,
+                    &storage,
+                    &stdin_tx_clone,
+                )
+                .await;
             }
             debug!("External process stdout closed");
         });
@@ -340,11 +347,12 @@ impl ExternalDecisionManager {
             std::collections::HashMap<i64, tokio::sync::oneshot::Sender<Value>>,
         >,
         _storage: &Storage,
+        stdin_tx: &RwLock<Option<mpsc::Sender<String>>>,
     ) {
         // Try to parse as incoming message
         match serde_json::from_str::<IncomingMessage>(line) {
             Ok(IncomingMessage::Request(req)) => {
-                Self::handle_tool_call(req, tool_registry, pending_responses).await;
+                Self::handle_tool_call(req, tool_registry, pending_responses, stdin_tx).await;
             }
             Ok(IncomingMessage::Notification(notif)) => {
                 debug!(
@@ -368,15 +376,16 @@ impl ExternalDecisionManager {
         }
     }
 
-    /// Handle a tool call from the external process
+    /// Handle a tool call from the external process and send response back via stdin
     async fn handle_tool_call(
         req: JsonRpcRequest,
         tool_registry: &ToolRegistry,
         _pending_responses: &Mutex<
             std::collections::HashMap<i64, tokio::sync::oneshot::Sender<Value>>,
         >,
+        stdin_tx: &RwLock<Option<mpsc::Sender<String>>>,
     ) {
-        match req.method.as_str() {
+        let response = match req.method.as_str() {
             "tools/call" => {
                 let params = req.params.unwrap_or(json!({}));
                 let tool_name = params["name"].as_str().unwrap_or("");
@@ -385,31 +394,45 @@ impl ExternalDecisionManager {
                 debug!("External process calling tool: {}", tool_name);
 
                 match tool_registry.call_tool(tool_name, arguments).await {
-                    Ok(result) => {
-                        let response = JsonRpcResponse::new(
-                            req.id,
-                            json!({
-                                "content": result.content.iter().map(|c| match c {
-                                    ToolContent::Text { text } => json!({"type": "text", "text": text}),
-                                    _ => json!({"type": "unknown"}),
-                                }).collect::<Vec<_>>(),
-                                "isError": result.is_error.unwrap_or(false),
-                            }),
-                        );
-                        debug!("Tool call response: {:?}", response);
-                    }
+                    Ok(result) => JsonRpcResponse::new(
+                        req.id,
+                        json!({
+                            "content": result.content.iter().map(|c| match c {
+                                ToolContent::Text { text } => json!({"type": "text", "text": text}),
+                                _ => json!({"type": "unknown"}),
+                            }).collect::<Vec<_>>(),
+                            "isError": result.is_error.unwrap_or(false),
+                        }),
+                    ),
                     Err(e) => {
                         error!("Tool call failed: {}", e);
+                        JsonRpcResponse::new(
+                            req.id,
+                            json!({
+                                "content": [{"type": "text", "text": format!("Tool call failed: {}", e)}],
+                                "isError": true,
+                            }),
+                        )
                     }
                 }
             }
             "tools/list" => {
                 let tools = tool_registry.list_tools();
-                let response = JsonRpcResponse::new(req.id, json!({ "tools": tools }));
-                debug!("Tools list response: {:?}", response);
+                JsonRpcResponse::new(req.id, json!({ "tools": tools }))
             }
             _ => {
                 warn!("Unknown method from external process: {}", req.method);
+                return;
+            }
+        };
+
+        // Send response back to external process via stdin
+        if let Ok(response_str) = serde_json::to_string(&response) {
+            let tx = stdin_tx.read().await;
+            if let Some(tx) = tx.as_ref() {
+                if let Err(e) = tx.send(response_str).await {
+                    debug!("Failed to send tool response to external process: {}", e);
+                }
             }
         }
     }

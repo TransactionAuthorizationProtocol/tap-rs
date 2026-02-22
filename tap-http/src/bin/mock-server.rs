@@ -41,7 +41,7 @@ async fn handle_request(
             // Try to parse as JSON to verify structure
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(&body_str) {
                 // Check if the message has signature information
-                if let Some(signatures) = json.get("signatures") {
+                if let Some(signatures) = json.get("signatures").or_else(|| json.get("signature")) {
                     println!("\nSignature information detected:");
                     println!("{}", serde_json::to_string_pretty(signatures).unwrap());
                 }

@@ -9,7 +9,6 @@ use crate::local_agent_key::{LocalAgentKey, PublicVerificationKey};
 use crate::message_packing::{KeyManagerPacking, MessageError};
 
 use async_trait::async_trait;
-use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -679,7 +678,40 @@ impl KeyManager for DefaultKeyManager {
             return Ok(verification_key);
         }
 
-        // In a real implementation, we would use a DID Resolver here
+        // Resolve did:key DIDs directly from the DID string (public key is embedded)
+        let did = kid.split('#').next().unwrap_or(kid);
+        if did.starts_with("did:key:") {
+            let resolver = crate::did::KeyResolver::new();
+            #[cfg(not(target_arch = "wasm32"))]
+            let did_doc_result = {
+                use crate::did::DIDMethodResolver;
+                resolver.resolve_method(did).await
+            };
+            #[cfg(target_arch = "wasm32")]
+            let did_doc_result = {
+                use crate::did::WasmDIDMethodResolver;
+                resolver.resolve_method(did)
+            };
+
+            if let Ok(Some(did_doc)) = did_doc_result {
+                if let Some(vm) = did_doc.verification_method.iter().find(|vm| vm.id == kid) {
+                    if let Ok(vk) = PublicVerificationKey::from_verification_material(
+                        kid.to_string(),
+                        &vm.verification_material,
+                    ) {
+                        let verification_key =
+                            Arc::new(vk) as Arc<dyn VerificationKey + Send + Sync>;
+
+                        if let Ok(mut verification_keys) = self.verification_keys.write() {
+                            verification_keys.insert(kid.to_string(), verification_key.clone());
+                        }
+
+                        return Ok(verification_key);
+                    }
+                }
+            }
+        }
+
         Err(Error::Cryptography(format!(
             "No verification key found with ID: {}",
             kid
@@ -737,9 +769,8 @@ impl KeyManager for DefaultKeyManager {
             .ok_or_else(|| Error::Cryptography("No kid found in JWS signature".to_string()))?;
         let verification_key = KeyManager::resolve_verification_key(self, &kid).await?;
 
-        // Decode the signature
-        let signature_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&signature.signature)
+        // Decode the signature (accept both base64 and base64url)
+        let signature_bytes = crate::message::base64_decode_flexible(&signature.signature)
             .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
 
         // Create the signing input (protected.payload)
@@ -757,9 +788,8 @@ impl KeyManager for DefaultKeyManager {
             ));
         }
 
-        // Decode the payload
-        let payload_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&jws.payload)
+        // Decode the payload (accept both base64 and base64url)
+        let payload_bytes = crate::message::base64_decode_flexible(&jws.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
 
         Ok(payload_bytes)

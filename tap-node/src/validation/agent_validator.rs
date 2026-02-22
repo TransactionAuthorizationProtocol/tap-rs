@@ -78,9 +78,10 @@ impl MessageValidator for AgentAuthorizationValidator {
         let transaction_id = match self.get_transaction_id(message).await {
             Some(id) => id,
             None => {
-                // Can't find transaction ID - this might be a new transaction
-                // or a message type we don't need to validate
-                return ValidationResult::Accept;
+                // Fail-closed: reject transaction responses without a determinable transaction ID
+                return ValidationResult::Reject(
+                    "Cannot determine transaction ID for transaction response".to_string(),
+                );
             }
         };
 

@@ -181,8 +181,9 @@ pub async fn handle_didcomm(
                 )
                 .await;
 
-            // Create error response
-            let response = json_error_response(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string());
+            // Create error response (generic message to avoid leaking internals)
+            let response =
+                json_error_response(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error");
 
             // Calculate response size and duration (approximate)
             let response_size = 200; // Approximate size
@@ -495,6 +496,7 @@ pub async fn handle_well_known_did(
     host: Option<String>,
     node: Arc<TapNode>,
     event_bus: Arc<EventBus>,
+    max_agents: usize,
 ) -> std::result::Result<impl Reply, Infallible> {
     let start_time = Instant::now();
 
@@ -508,10 +510,7 @@ pub async fn handle_well_known_did(
             Ok(d) => d,
             Err(e) => {
                 warn!("Invalid Host header for web DID: {}", e);
-                let response = json_error_response(
-                    StatusCode::BAD_REQUEST,
-                    &format!("Invalid Host header: {}", e),
-                );
+                let response = json_error_response(StatusCode::BAD_REQUEST, "Invalid Host header");
                 let duration_ms = start_time.elapsed().as_millis() as u64;
                 event_bus
                     .publish_response_sent(StatusCode::BAD_REQUEST, 200, duration_ms)
@@ -574,6 +573,25 @@ pub async fn handle_well_known_did(
                 return Ok(response);
             }
         }
+    }
+
+    // Check agent count limit before creating a new one
+    if node.agents().agent_count() >= max_agents {
+        warn!(
+            "Agent limit reached ({}/{}), refusing to create agent for {}",
+            node.agents().agent_count(),
+            max_agents,
+            did_web
+        );
+        let response = json_error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Maximum number of agents reached",
+        );
+        let duration_ms = start_time.elapsed().as_millis() as u64;
+        event_bus
+            .publish_response_sent(StatusCode::SERVICE_UNAVAILABLE, 200, duration_ms)
+            .await;
+        return Ok(response);
     }
 
     // No agent exists — create a new one
@@ -890,7 +908,9 @@ mod tests {
         let node = Arc::new(TapNode::new(config));
         let event_bus = Arc::new(crate::event::EventBus::new());
 
-        let response = handle_well_known_did(None, node, event_bus).await.unwrap();
+        let response = handle_well_known_did(None, node, event_bus, 100)
+            .await
+            .unwrap();
 
         let response_bytes = to_bytes(response.into_response().into_body())
             .await
@@ -916,6 +936,7 @@ mod tests {
             Some("<script>alert(1)</script>".to_string()),
             node,
             event_bus,
+            100,
         )
         .await
         .unwrap();
@@ -940,10 +961,14 @@ mod tests {
         let node = Arc::new(TapNode::new(config));
         let event_bus = Arc::new(crate::event::EventBus::new());
 
-        let response =
-            handle_well_known_did(Some("example.com".to_string()), node.clone(), event_bus)
-                .await
-                .unwrap();
+        let response = handle_well_known_did(
+            Some("example.com".to_string()),
+            node.clone(),
+            event_bus,
+            100,
+        )
+        .await
+        .unwrap();
 
         let response_bytes = to_bytes(response.into_response().into_body())
             .await
@@ -998,6 +1023,7 @@ mod tests {
             Some("test.example.com".to_string()),
             node.clone(),
             event_bus,
+            100,
         )
         .await
         .unwrap();
@@ -1020,10 +1046,14 @@ mod tests {
         let node = Arc::new(TapNode::new(config));
         let event_bus = Arc::new(crate::event::EventBus::new());
 
-        let response =
-            handle_well_known_did(Some("localhost:3000".to_string()), node.clone(), event_bus)
-                .await
-                .unwrap();
+        let response = handle_well_known_did(
+            Some("localhost:3000".to_string()),
+            node.clone(),
+            event_bus,
+            100,
+        )
+        .await
+        .unwrap();
 
         let response_bytes = to_bytes(response.into_response().into_body())
             .await
@@ -1057,6 +1087,7 @@ mod tests {
             Some("idempotent.example.com".to_string()),
             node.clone(),
             event_bus.clone(),
+            100,
         )
         .await
         .unwrap();
@@ -1070,6 +1101,7 @@ mod tests {
             Some("idempotent.example.com".to_string()),
             node.clone(),
             event_bus,
+            100,
         )
         .await
         .unwrap();

@@ -428,6 +428,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         tls: None,
         event_logger: None,
         enable_web_did: args.enable_web_did,
+        max_agents: 100,
     };
 
     // Configure event logging - use TAP root-based default if not specified

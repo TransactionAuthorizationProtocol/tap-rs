@@ -33,6 +33,7 @@ tempfile = { version = "3.8", optional = true }
 # Crypto backends (optional)
 ed25519-dalek = { version = "2.2", features = ["rand_core"], optional = true }
 curve25519-dalek = { version = "4.1", features = ["digest"], optional = true }
+x25519-dalek = { version = "2.0", features = ["static_secrets"], optional = true }
 p256 = { version = "0.13", features = ["ecdh", "ecdsa"], optional = true }
 k256 = { version = "0.13", features = ["ecdsa"], optional = true }
 rand = { version = "0.8", optional = true }
@@ -87,6 +88,6 @@ wasm = [
 ]
 
 # Crypto features
-crypto-ed25519 = ["dep:ed25519-dalek", "dep:curve25519-dalek", "dep:rand"]
+crypto-ed25519 = ["dep:ed25519-dalek", "dep:curve25519-dalek", "dep:x25519-dalek", "dep:rand"]
 crypto-p256 = ["dep:p256", "dep:rand"]
 crypto-secp256k1 = ["dep:k256", "dep:rand"]

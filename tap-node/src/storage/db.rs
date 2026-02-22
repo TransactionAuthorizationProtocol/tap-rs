@@ -78,23 +78,29 @@ impl Storage {
         agent_did: &str,
         tap_root: Option<PathBuf>,
     ) -> Result<Self, StorageError> {
-        let root_dir = tap_root.unwrap_or_else(|| {
-            // Check TAP_HOME first (for tests)
-            if let Ok(tap_home) = env::var("TAP_HOME") {
-                PathBuf::from(tap_home)
-            } else if let Ok(tap_root) = env::var("TAP_ROOT") {
-                PathBuf::from(tap_root)
-            } else if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
-                PathBuf::from(test_dir).join(".tap")
-            } else {
-                dirs::home_dir()
-                    .expect("Could not find home directory")
-                    .join(".tap")
+        let root_dir = match tap_root {
+            Some(root) => root,
+            None => {
+                if let Ok(tap_home) = env::var("TAP_HOME") {
+                    PathBuf::from(tap_home)
+                } else if let Ok(tap_root) = env::var("TAP_ROOT") {
+                    PathBuf::from(tap_root)
+                } else if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
+                    PathBuf::from(test_dir).join(".tap")
+                } else {
+                    dirs::home_dir()
+                        .ok_or_else(|| {
+                            StorageError::Migration(
+                                "Could not determine home directory".to_string(),
+                            )
+                        })?
+                        .join(".tap")
+                }
             }
-        });
+        };
 
-        // Sanitize the DID for use as a directory name
-        let sanitized_did = agent_did.replace(':', "_");
+        // Sanitize the DID for use as a directory name (prevent path traversal)
+        let sanitized_did = agent_did.replace([':', '/', '\\'], "_").replace("..", "_");
         let db_path = root_dir.join(&sanitized_did).join("transactions.db");
 
         Self::new(Some(db_path)).await
@@ -196,20 +202,22 @@ impl Storage {
     ///
     /// * `tap_root` - Optional custom root directory (defaults to ~/.tap)
     pub fn default_logs_dir(tap_root: Option<PathBuf>) -> PathBuf {
-        let root_dir = tap_root.unwrap_or_else(|| {
-            // Check TAP_HOME first (for tests)
-            if let Ok(tap_home) = env::var("TAP_HOME") {
-                PathBuf::from(tap_home)
-            } else if let Ok(tap_root) = env::var("TAP_ROOT") {
-                PathBuf::from(tap_root)
-            } else if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
-                PathBuf::from(test_dir).join(".tap")
-            } else {
-                dirs::home_dir()
-                    .expect("Could not find home directory")
-                    .join(".tap")
+        let root_dir = match tap_root {
+            Some(root) => root,
+            None => {
+                if let Ok(tap_home) = env::var("TAP_HOME") {
+                    PathBuf::from(tap_home)
+                } else if let Ok(tap_root) = env::var("TAP_ROOT") {
+                    PathBuf::from(tap_root)
+                } else if let Ok(test_dir) = env::var("TAP_TEST_DIR") {
+                    PathBuf::from(test_dir).join(".tap")
+                } else {
+                    dirs::home_dir()
+                        .expect("Could not determine home directory")
+                        .join(".tap")
+                }
             }
-        });
+        };
 
         root_dir.join("logs")
     }
@@ -2076,12 +2084,13 @@ impl Storage {
         .bind(&customer.address_locality)
         .bind(&customer.postal_code)
         .bind(&customer.street_address)
-        .bind(serde_json::to_string(&customer.profile).unwrap())
+        .bind(serde_json::to_string(&customer.profile)?)
         .bind(
             customer
                 .ivms101_data
                 .as_ref()
-                .map(|v| serde_json::to_string(v).unwrap()),
+                .map(serde_json::to_string)
+                .transpose()?,
         )
         .bind(&customer.verified_at)
         .bind(&customer.created_at)
@@ -2124,10 +2133,11 @@ impl Storage {
                 address_locality: row.get("address_locality"),
                 postal_code: row.get("postal_code"),
                 street_address: row.get("street_address"),
-                profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
+                profile: serde_json::from_str(&row.get::<String, _>("profile"))?,
                 ivms101_data: row
                     .get::<Option<String>, _>("ivms101_data")
-                    .map(|v| serde_json::from_str(&v).unwrap()),
+                    .map(|v| serde_json::from_str(&v))
+                    .transpose()?,
                 verified_at: row.get("verified_at"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
@@ -2200,10 +2210,11 @@ impl Storage {
                 address_locality: row.get("address_locality"),
                 postal_code: row.get("postal_code"),
                 street_address: row.get("street_address"),
-                profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
+                profile: serde_json::from_str(&row.get::<String, _>("profile"))?,
                 ivms101_data: row
                     .get::<Option<String>, _>("ivms101_data")
-                    .map(|v| serde_json::from_str(&v).unwrap()),
+                    .map(|v| serde_json::from_str(&v))
+                    .transpose()?,
                 verified_at: row.get("verified_at"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
@@ -2323,7 +2334,8 @@ impl Storage {
             relationship
                 .proof
                 .as_ref()
-                .map(|v| serde_json::to_string(v).unwrap()),
+                .map(serde_json::to_string)
+                .transpose()?,
         )
         .bind(&relationship.confirmed_at)
         .bind(&relationship.created_at)
@@ -2377,7 +2389,7 @@ impl Storage {
                 customer_id,
                 relationship_type,
                 related_identifier,
-                proof: proof.map(|v| serde_json::from_str(&v).unwrap()),
+                proof: proof.map(|v| serde_json::from_str(&v)).transpose()?,
                 confirmed_at,
                 created_at,
             });
@@ -2393,7 +2405,12 @@ impl Storage {
         query: &str,
         limit: u32,
     ) -> Result<Vec<Customer>, StorageError> {
-        let search_pattern = format!("%{}%", query);
+        // Escape LIKE metacharacters to prevent pattern injection
+        let escaped_query = query
+            .replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_");
+        let search_pattern = format!("%{}%", escaped_query);
 
         let rows = sqlx::query(
             r#"
@@ -2405,11 +2422,11 @@ impl Storage {
             LEFT JOIN customer_identifiers ci ON c.id = ci.customer_id
             WHERE c.agent_did = ?1
             AND (
-                c.given_name LIKE ?2
-                OR c.family_name LIKE ?2
-                OR c.display_name LIKE ?2
-                OR c.legal_name LIKE ?2
-                OR ci.id LIKE ?2
+                c.given_name LIKE ?2 ESCAPE '\'
+                OR c.family_name LIKE ?2 ESCAPE '\'
+                OR c.display_name LIKE ?2 ESCAPE '\'
+                OR c.legal_name LIKE ?2 ESCAPE '\'
+                OR ci.id LIKE ?2 ESCAPE '\'
             )
             ORDER BY c.updated_at DESC
             LIMIT ?3
@@ -2438,10 +2455,11 @@ impl Storage {
                 address_locality: row.get("address_locality"),
                 postal_code: row.get("postal_code"),
                 street_address: row.get("street_address"),
-                profile: serde_json::from_str(&row.get::<String, _>("profile")).unwrap(),
+                profile: serde_json::from_str(&row.get::<String, _>("profile"))?,
                 ivms101_data: row
                     .get::<Option<String>, _>("ivms101_data")
-                    .map(|v| serde_json::from_str(&v).unwrap()),
+                    .map(|v| serde_json::from_str(&v))
+                    .transpose()?,
                 verified_at: row.get("verified_at"),
                 created_at: row.get("created_at"),
                 updated_at: row.get("updated_at"),
@@ -2521,7 +2539,7 @@ impl Storage {
         debug!("Updating decision {} status to {}", decision_id, status);
 
         let now = chrono::Utc::now().to_rfc3339();
-        let resolution_detail_str = resolution_detail.map(|v| serde_json::to_string(v).unwrap());
+        let resolution_detail_str = resolution_detail.map(serde_json::to_string).transpose()?;
 
         let delivered_at = if status == DecisionStatus::Delivered {
             Some(now.clone())
@@ -2633,7 +2651,8 @@ impl Storage {
                 resolution: row.get("resolution"),
                 resolution_detail: row
                     .get::<Option<String>, _>("resolution_detail")
-                    .map(|v| serde_json::from_str(&v).unwrap()),
+                    .map(|v| serde_json::from_str(&v))
+                    .transpose()?,
                 created_at: row.get("created_at"),
                 delivered_at: row.get("delivered_at"),
                 resolved_at: row.get("resolved_at"),
@@ -2784,7 +2803,8 @@ impl Storage {
                 resolution: row.get("resolution"),
                 resolution_detail: row
                     .get::<Option<String>, _>("resolution_detail")
-                    .map(|v| serde_json::from_str(&v).unwrap()),
+                    .map(|v| serde_json::from_str(&v))
+                    .transpose()?,
                 created_at: row.get("created_at"),
                 delivered_at: row.get("delivered_at"),
                 resolved_at: row.get("resolved_at"),

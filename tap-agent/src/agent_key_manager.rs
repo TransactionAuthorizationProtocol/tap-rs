@@ -758,7 +758,42 @@ impl KeyManager for AgentKeyManager {
             return Ok(verification_key);
         }
 
-        // In a full implementation, we would use a DID Resolver here
+        // Resolve did:key DIDs directly from the DID string (public key is embedded)
+        let did = kid.split('#').next().unwrap_or(kid);
+        if did.starts_with("did:key:") {
+            let resolver = crate::did::KeyResolver::new();
+            #[cfg(not(target_arch = "wasm32"))]
+            let did_doc_result = {
+                use crate::did::DIDMethodResolver;
+                resolver.resolve_method(did).await
+            };
+            #[cfg(target_arch = "wasm32")]
+            let did_doc_result = {
+                use crate::did::WasmDIDMethodResolver;
+                resolver.resolve_method(did)
+            };
+
+            if let Ok(Some(did_doc)) = did_doc_result {
+                // Find the verification method matching the kid
+                if let Some(vm) = did_doc.verification_method.iter().find(|vm| vm.id == kid) {
+                    if let Ok(vk) = PublicVerificationKey::from_verification_material(
+                        kid.to_string(),
+                        &vm.verification_material,
+                    ) {
+                        let verification_key =
+                            Arc::new(vk) as Arc<dyn VerificationKey + Send + Sync>;
+
+                        // Cache for future lookups
+                        if let Ok(mut verification_keys) = self.verification_keys.write() {
+                            verification_keys.insert(kid.to_string(), verification_key.clone());
+                        }
+
+                        return Ok(verification_key);
+                    }
+                }
+            }
+        }
+
         Err(Error::Cryptography(format!(
             "No verification key found with ID: {}",
             kid

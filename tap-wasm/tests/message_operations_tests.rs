@@ -50,8 +50,8 @@ async fn test_pack_message_delegation() {
         "JWS should have payload field"
     );
     assert!(
-        parsed.get("signatures").is_some(),
-        "JWS should have signatures field"
+        parsed.get("signature").is_some() || parsed.get("signatures").is_some(),
+        "JWS should have signature or signatures field"
     );
 }
 
