@@ -15,6 +15,32 @@ use crate::message::{Agent, Party};
 use crate::settlement_address::SettlementAddress;
 use crate::TapMessage;
 
+/// A supported asset entry that can be either a simple asset identifier
+/// or a pricing object with amount and expiry (TAIP-14).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum SupportedAsset {
+    /// Simple asset identifier (CAIP-19 or DTI) for ~1:1 stablecoins.
+    Simple(AssetId),
+    /// Pricing object with asset, amount, and optional expiry.
+    Priced(AssetPricing),
+}
+
+/// Pricing object for supported assets (TAIP-14).
+///
+/// Specifies a specific amount of an asset or currency needed to settle a payment,
+/// with an optional expiration timestamp for the exchange rate.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetPricing {
+    /// Asset identifier (CAIP-19, DTI, or ISO 4217 currency code).
+    pub asset: String,
+    /// Decimal string of the amount needed.
+    pub amount: String,
+    /// ISO 8601 timestamp when this rate expires (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires: Option<String>,
+}
+
 /// Invoice reference that can be either a URL or an Invoice object
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -96,9 +122,10 @@ pub struct Payment {
     #[serde(rename = "currency", skip_serializing_if = "Option::is_none")]
     pub currency_code: Option<String>,
 
-    /// Supported assets for this payment (when currency_code is specified)
+    /// Supported assets for this payment (when currency_code is specified).
+    /// Can be simple asset identifiers or pricing objects with amounts.
     #[serde(rename = "supportedAssets", skip_serializing_if = "Option::is_none")]
-    pub supported_assets: Option<Vec<AssetId>>,
+    pub supported_assets: Option<Vec<SupportedAsset>>,
 
     /// Customer (payer) details.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -154,7 +181,7 @@ pub struct PaymentBuilder {
     asset: Option<AssetId>,
     amount: Option<String>,
     currency_code: Option<String>,
-    supported_assets: Option<Vec<AssetId>>,
+    supported_assets: Option<Vec<SupportedAsset>>,
     customer: Option<Party>,
     merchant: Option<Party>,
     transaction_id: Option<String>,
@@ -186,17 +213,27 @@ impl PaymentBuilder {
     }
 
     /// Set the supported assets for this payment
-    pub fn supported_assets(mut self, supported_assets: Vec<AssetId>) -> Self {
+    pub fn supported_assets(mut self, supported_assets: Vec<SupportedAsset>) -> Self {
         self.supported_assets = Some(supported_assets);
         self
     }
 
-    /// Add a supported asset for this payment
+    /// Add a simple supported asset for this payment
     pub fn add_supported_asset(mut self, asset: AssetId) -> Self {
         if let Some(assets) = &mut self.supported_assets {
-            assets.push(asset);
+            assets.push(SupportedAsset::Simple(asset));
         } else {
-            self.supported_assets = Some(vec![asset]);
+            self.supported_assets = Some(vec![SupportedAsset::Simple(asset)]);
+        }
+        self
+    }
+
+    /// Add a priced supported asset for this payment
+    pub fn add_priced_asset(mut self, pricing: AssetPricing) -> Self {
+        if let Some(assets) = &mut self.supported_assets {
+            assets.push(SupportedAsset::Priced(pricing));
+        } else {
+            self.supported_assets = Some(vec![SupportedAsset::Priced(pricing)]);
         }
         self
     }
@@ -368,7 +405,7 @@ impl Payment {
     pub fn with_currency_and_assets(
         currency_code: String,
         amount: String,
-        supported_assets: Vec<AssetId>,
+        supported_assets: Vec<SupportedAsset>,
         merchant: Party,
         agents: Vec<Agent>,
     ) -> Self {
@@ -437,13 +474,30 @@ impl Payment {
                 ));
             }
 
-            // Validate each asset ID in the supported_assets list
-            for (i, asset) in supported_assets.iter().enumerate() {
-                if asset.namespace().is_empty() || asset.reference().is_empty() {
-                    return Err(Error::Validation(format!(
-                        "Supported asset at index {} is invalid",
-                        i
-                    )));
+            for (i, supported) in supported_assets.iter().enumerate() {
+                match supported {
+                    SupportedAsset::Simple(asset) => {
+                        if asset.namespace().is_empty() || asset.reference().is_empty() {
+                            return Err(Error::Validation(format!(
+                                "Supported asset at index {} is invalid",
+                                i
+                            )));
+                        }
+                    }
+                    SupportedAsset::Priced(pricing) => {
+                        if pricing.asset.is_empty() {
+                            return Err(Error::Validation(format!(
+                                "Supported asset at index {} has empty asset identifier",
+                                i
+                            )));
+                        }
+                        if pricing.amount.is_empty() {
+                            return Err(Error::Validation(format!(
+                                "Supported asset at index {} has empty amount",
+                                i
+                            )));
+                        }
+                    }
                 }
             }
         }

@@ -126,6 +126,8 @@ fn main() -> Result<()> {
                 TapAgent_::new(&beneficiary_vasp_did, "beneficiaryVASP", beneficiary_party),
             ],
             settlement_id: None,
+            expiry: None,
+            transaction_value: None,
             memo: Some("Multi-agent transfer example with dynamic agent addition".to_string()),
             connection_id: None,
             metadata: HashMap::new(),

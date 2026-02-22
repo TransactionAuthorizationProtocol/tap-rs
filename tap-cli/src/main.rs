@@ -119,6 +119,27 @@ Auto-resolve mapping:
         #[command(subcommand)]
         cmd: commands::received::ReceivedCommands,
     },
+    /// Agent management within transactions (add, remove, replace agents, update policies)
+    #[command(
+        name = "agent-mgmt",
+        long_about = "\
+Agent management within transactions.
+
+These commands send TAP protocol messages to manage agents and policies within \
+existing transactions.
+
+Agent operations (TAIP-5):
+  add-agents       Add agents to a transaction
+  remove-agent     Remove an agent from a transaction
+  replace-agent    Replace an agent with another
+
+Policy operations (TAIP-7):
+  update-policies  Update policies for a transaction"
+    )]
+    AgentMgmt {
+        #[command(subcommand)]
+        cmd: commands::agent_management::AgentManagementCommands,
+    },
     /// Decision log management (list pending, resolve)
     #[command(long_about = "\
 Decision log management.
@@ -232,6 +253,9 @@ async fn main() {
         }
         Commands::Received { ref cmd } => {
             commands::received::handle(cmd, format, &agent_did, &tap_integration).await
+        }
+        Commands::AgentMgmt { ref cmd } => {
+            commands::agent_management::handle(cmd, format, &agent_did, &tap_integration).await
         }
         Commands::Decision { ref cmd } => {
             commands::decision::handle(cmd, format, &agent_did, &tap_integration).await

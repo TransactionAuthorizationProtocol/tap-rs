@@ -396,6 +396,8 @@ export function isTAPMessage(message: TAPMessageUnion): message is TAPMessage {
     'https://tap.rsvp/schema/1.0#Connect',
     'https://tap.rsvp/schema/1.0#Escrow',
     'https://tap.rsvp/schema/1.0#Capture',
+    'https://tap.rsvp/schema/1.0#Exchange',
+    'https://tap.rsvp/schema/1.0#Quote',
     'https://tap.rsvp/schema/1.0#AddAgents',
     'https://tap.rsvp/schema/1.0#ReplaceAgent',
     'https://tap.rsvp/schema/1.0#RemoveAgent',

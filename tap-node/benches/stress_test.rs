@@ -34,6 +34,8 @@ async fn create_test_message(
         amount: format!("{}.00", index),
         agents: vec![],
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         memo: Some(format!("Test message {}", index)),
         metadata: HashMap::new(),
         connection_id: None,

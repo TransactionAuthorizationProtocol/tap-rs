@@ -195,7 +195,7 @@ async fn test_list_tools() -> Result<()> {
 
     if let Some(result) = response.result {
         let tools = result["tools"].as_array().unwrap();
-        assert_eq!(tools.len(), 36); // All 36 tools including decision tools
+        assert_eq!(tools.len(), 38); // All 38 tools including decision and exchange tools
 
         let tool_names: Vec<&str> = tools.iter().map(|t| t["name"].as_str().unwrap()).collect();
 

@@ -710,6 +710,8 @@ fn validate_transfer_vector(test_vector: &TestVector) -> Result<TestResult, Stri
                         amount: transfer_body.amount.clone(),
                         agents,
                         settlement_id: transfer_body.settlement_id.clone(),
+                        expiry: None,
+                        transaction_value: None,
                         connection_id: None,
                         metadata: transfer_body.metadata.clone(),
                         memo: transfer_body.memo.clone(),

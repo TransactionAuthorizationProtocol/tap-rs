@@ -113,6 +113,26 @@ pub fn create_transfer_schema() -> Value {
                 "type": "string",
                 "description": "Optional transaction memo"
             },
+            "expiry": {
+                "type": "string",
+                "description": "Optional ISO 8601 expiry timestamp (e.g., 2026-12-31T23:59:59Z)"
+            },
+            "transaction_value": {
+                "type": "object",
+                "description": "Optional fiat equivalent value for compliance (TAIP-3 Travel Rule threshold)",
+                "properties": {
+                    "amount": {
+                        "type": "string",
+                        "description": "Decimal string of the fiat amount"
+                    },
+                    "currency": {
+                        "type": "string",
+                        "description": "ISO 4217 3-letter currency code (e.g., USD, EUR)"
+                    }
+                },
+                "required": ["amount", "currency"],
+                "additionalProperties": false
+            },
             "metadata": {
                 "type": "object",
                 "description": "Optional additional metadata"
@@ -997,9 +1017,12 @@ pub fn create_payment_schema() -> Value {
                 "type": "string",
                 "description": "Optional payment memo"
             },
+            "expiry": {
+                "type": "string",
+                "description": "Optional ISO 8601 expiry timestamp (e.g., 2026-12-31T23:59:59Z)"
+            },
             "invoice": {
-                "type": "object",
-                "description": "Optional invoice data"
+                "description": "Optional invoice data - either a URL string or a structured invoice object (TAIP-16)"
             },
             "settlement_address": {
                 "type": "string",
@@ -1035,55 +1058,64 @@ pub fn create_connect_schema() -> Value {
                 "type": "string",
                 "description": "The DID of the recipient to connect with"
             },
+            "for_party": {
+                "type": "string",
+                "description": "The DID of the party this connection is for"
+            },
+            "role": {
+                "type": "string",
+                "description": "Optional role (e.g., SourceAgent, DestinationAgent)"
+            },
             "constraints": {
                 "type": "object",
-                "description": "Optional connection constraints",
+                "description": "Optional connection constraints (TAIP-15)",
                 "properties": {
                     "transaction_limits": {
                         "type": "object",
                         "properties": {
                             "max_amount": {
                                 "type": "string",
-                                "description": "Maximum transaction amount"
-                            },
-                            "min_amount": {
-                                "type": "string",
-                                "description": "Minimum transaction amount"
+                                "description": "Maximum per-transaction amount"
                             },
                             "daily_limit": {
                                 "type": "string",
                                 "description": "Daily transaction limit"
-                            },
-                            "monthly_limit": {
-                                "type": "string",
-                                "description": "Monthly transaction limit"
                             }
                         },
                         "additionalProperties": false
                     },
-                    "asset_types": {
+                    "allowed_beneficiaries": {
                         "type": "array",
-                        "description": "Allowed asset types",
-                        "items": {
-                            "type": "string"
-                        }
+                        "description": "Allowed beneficiary DIDs",
+                        "items": { "type": "string" }
                     },
-                    "currency_types": {
+                    "allowed_settlement_addresses": {
                         "type": "array",
-                        "description": "Allowed currency types",
-                        "items": {
-                            "type": "string"
-                        }
+                        "description": "Allowed settlement addresses (CAIP-10 format)",
+                        "items": { "type": "string" }
+                    },
+                    "allowed_assets": {
+                        "type": "array",
+                        "description": "Allowed asset identifiers (CAIP-19 format)",
+                        "items": { "type": "string" }
                     }
                 },
                 "additionalProperties": false
+            },
+            "expiry": {
+                "type": "string",
+                "description": "Optional ISO 8601 expiry timestamp"
+            },
+            "agreement": {
+                "type": "string",
+                "description": "Optional URL to terms of service or agreement"
             },
             "metadata": {
                 "type": "object",
                 "description": "Optional additional metadata"
             }
         },
-        "required": ["agent_did", "recipient_did"],
+        "required": ["agent_did", "recipient_did", "for_party"],
         "additionalProperties": false
     })
 }
@@ -1176,6 +1208,136 @@ pub fn create_escrow_schema() -> Value {
             }
         },
         "required": ["agent_did", "amount", "originator", "beneficiary", "expiry", "agents"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for create_exchange tool (TAIP-18)
+pub fn create_exchange_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "from_assets": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "List of CAIP-19 asset identifiers the requester wants to exchange from"
+            },
+            "to_assets": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "List of CAIP-19 asset identifiers the requester wants to exchange to"
+            },
+            "from_amount": {
+                "type": "string",
+                "description": "Amount of the from asset to exchange (mutually exclusive with to_amount; at least one required)"
+            },
+            "to_amount": {
+                "type": "string",
+                "description": "Desired amount of the to asset (mutually exclusive with from_amount; at least one required)"
+            },
+            "requester_did": {
+                "type": "string",
+                "description": "DID of the party requesting the exchange"
+            },
+            "provider_did": {
+                "type": "string",
+                "description": "Optional DID of the preferred exchange provider"
+            },
+            "agents": {
+                "type": "array",
+                "description": "List of agents involved in the exchange",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "@id": {
+                            "type": "string",
+                            "description": "Agent DID"
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Agent role"
+                        },
+                        "for": {
+                            "type": "string",
+                            "description": "DID of party agent acts for"
+                        }
+                    },
+                    "required": ["@id", "role", "for"],
+                    "additionalProperties": false
+                }
+            }
+        },
+        "required": ["agent_did", "from_assets", "to_assets", "requester_did"],
+        "additionalProperties": false
+    })
+}
+
+/// Schema for create_quote tool (TAIP-18)
+pub fn create_quote_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "agent_did": {
+                "type": "string",
+                "description": "The DID of the agent that will sign and send this message"
+            },
+            "exchange_id": {
+                "type": "string",
+                "description": "ID of the exchange request this quote responds to"
+            },
+            "from_asset": {
+                "type": "string",
+                "description": "CAIP-19 asset identifier for the from side of the quote"
+            },
+            "to_asset": {
+                "type": "string",
+                "description": "CAIP-19 asset identifier for the to side of the quote"
+            },
+            "from_amount": {
+                "type": "string",
+                "description": "Amount of the from asset"
+            },
+            "to_amount": {
+                "type": "string",
+                "description": "Amount of the to asset"
+            },
+            "provider_did": {
+                "type": "string",
+                "description": "DID of the exchange provider offering this quote"
+            },
+            "agents": {
+                "type": "array",
+                "description": "List of agents involved in the quote",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "@id": {
+                            "type": "string",
+                            "description": "Agent DID"
+                        },
+                        "role": {
+                            "type": "string",
+                            "description": "Agent role"
+                        },
+                        "for": {
+                            "type": "string",
+                            "description": "DID of party agent acts for"
+                        }
+                    },
+                    "required": ["@id", "role", "for"],
+                    "additionalProperties": false
+                }
+            },
+            "expires": {
+                "type": "string",
+                "description": "ISO 8601 timestamp when this quote expires"
+            }
+        },
+        "required": ["agent_did", "exchange_id", "from_asset", "to_asset", "from_amount", "to_amount", "provider_did", "expires"],
         "additionalProperties": false
     })
 }

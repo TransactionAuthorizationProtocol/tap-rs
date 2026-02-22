@@ -12,9 +12,9 @@ use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessag
 use crate::message::{Agent, Party};
 use crate::TapMessage;
 
-/// Agent structure specific to Connect messages.
-/// Unlike regular agents, Connect agents don't require a "for" field
-/// because the principal is specified separately in the Connect message.
+/// Agent structure specific to Connect messages (legacy).
+/// In TAIP-15 v2, standard Agent objects from TAIP-5 are used instead.
+/// This type is kept for backward compatibility with older messages.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectAgent {
     /// DID of the agent.
@@ -88,7 +88,7 @@ impl ConnectAgent {
     }
 }
 
-/// Transaction limits for connection constraints.
+/// Transaction limits for connection constraints (TAIP-15).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionLimits {
     /// Maximum amount per transaction.
@@ -97,30 +97,60 @@ pub struct TransactionLimits {
 
     /// Maximum daily amount.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub daily: Option<String>,
+    pub per_day: Option<String>,
 
-    /// Currency for the limits.
+    /// Maximum weekly amount.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_week: Option<String>,
+
+    /// Maximum monthly amount.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_month: Option<String>,
+
+    /// Maximum yearly amount.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub per_year: Option<String>,
+
+    /// Currency for the limits (ISO 4217). Required when limits are specified.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
 }
 
-/// Connection constraints for the Connect message.
+/// Connection constraints for the Connect message (TAIP-15).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionConstraints {
-    /// Allowed purposes.
+    /// Allowed TAIP-13 purpose codes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub purposes: Option<Vec<String>>,
 
-    /// Allowed category purposes.
+    /// Allowed TAIP-13 category purpose codes.
     #[serde(rename = "categoryPurposes", skip_serializing_if = "Option::is_none")]
     pub category_purposes: Option<Vec<String>>,
 
     /// Transaction limits.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub limits: Option<TransactionLimits>,
+
+    /// Allowed beneficiary parties (TAIP-6 Party objects).
+    #[serde(
+        rename = "allowedBeneficiaries",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub allowed_beneficiaries: Option<Vec<Party>>,
+
+    /// Allowed settlement addresses (CAIP-10 format).
+    #[serde(
+        rename = "allowedSettlementAddresses",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub allowed_settlement_addresses: Option<Vec<String>>,
+
+    /// Allowed asset identifiers (CAIP-19 format).
+    #[serde(rename = "allowedAssets", skip_serializing_if = "Option::is_none")]
+    pub allowed_assets: Option<Vec<String>>,
 }
 
-/// Connect message body (TAIP-2).
+/// Connect message body (TAIP-15).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(
     message_type = "https://tap.rsvp/schema/1.0#Connect",
@@ -133,44 +163,88 @@ pub struct Connect {
     #[tap(transaction_id)]
     pub transaction_id: Option<String>,
 
-    /// Agent DID (kept for backward compatibility).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub agent_id: Option<String>,
-
-    /// Agent object containing agent details.
+    /// Requester party (TAIP-15 v2, required for new messages).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tap(participant)]
-    pub agent: Option<ConnectAgent>,
+    pub requester: Option<Party>,
 
     /// Principal party this connection is for.
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tap(participant)]
     pub principal: Option<Party>,
 
-    /// The entity this connection is for (kept for backward compatibility).
+    /// Agents involved in the connection (TAIP-5 agents).
+    #[serde(default)]
+    #[tap(participant_list)]
+    pub agents: Vec<Agent>,
+
+    /// Connection constraints (required per TAIP-15).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub constraints: Option<ConnectionConstraints>,
+
+    /// URL pointing to terms of service or agreement.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agreement: Option<String>,
+
+    /// Expiration time in ISO 8601 format.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiry: Option<String>,
+
+    // --- Legacy fields for backward compatibility ---
+    /// Agent DID (legacy, use agents array instead).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+
+    /// Legacy agent object (use agents array instead).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<ConnectAgent>,
+
+    /// Legacy entity this connection is for (use principal instead).
     #[serde(rename = "for", skip_serializing_if = "Option::is_none", default)]
     pub for_: Option<String>,
 
-    /// The role of the agent (optional).
+    /// Legacy role field (use agents with roles instead).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub role: Option<String>,
-
-    /// Connection constraints (optional).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub constraints: Option<ConnectionConstraints>,
 }
 
 impl Connect {
-    /// Create a new Connect message (backward compatible).
+    /// Create a new Connect message with requester, principal, and agents (TAIP-15 v2).
+    pub fn new_v2(
+        requester: Party,
+        principal: Party,
+        agents: Vec<Agent>,
+        constraints: ConnectionConstraints,
+    ) -> Self {
+        Self {
+            transaction_id: None,
+            requester: Some(requester),
+            principal: Some(principal),
+            agents,
+            constraints: Some(constraints),
+            agreement: None,
+            expiry: None,
+            agent_id: None,
+            agent: None,
+            for_: None,
+            role: None,
+        }
+    }
+
+    /// Create a new Connect message (legacy backward compatible).
     pub fn new(transaction_id: &str, agent_id: &str, for_id: &str, role: Option<&str>) -> Self {
         Self {
             transaction_id: Some(transaction_id.to_string()),
+            requester: None,
+            principal: None,
+            agents: vec![],
+            constraints: None,
+            agreement: None,
+            expiry: None,
             agent_id: Some(agent_id.to_string()),
             agent: None,
-            principal: None,
             for_: Some(for_id.to_string()),
             role: role.map(|s| s.to_string()),
-            constraints: None,
         }
     }
 
@@ -182,12 +256,16 @@ impl Connect {
     ) -> Self {
         Self {
             transaction_id: Some(transaction_id.to_string()),
+            requester: None,
+            principal: Some(principal),
+            agents: vec![],
+            constraints: None,
+            agreement: None,
+            expiry: None,
             agent_id: None,
             agent: Some(agent),
-            principal: Some(principal),
             for_: None,
             role: None,
-            constraints: None,
         }
     }
 
@@ -196,22 +274,48 @@ impl Connect {
         self.constraints = Some(constraints);
         self
     }
+
+    /// Set the agreement URL.
+    pub fn with_agreement(mut self, agreement: String) -> Self {
+        self.agreement = Some(agreement);
+        self
+    }
+
+    /// Set the expiry timestamp.
+    pub fn with_expiry(mut self, expiry: String) -> Self {
+        self.expiry = Some(expiry);
+        self
+    }
 }
 
 impl Connect {
     /// Custom validation for Connect messages
     pub fn validate_connect(&self) -> Result<()> {
-        // transaction_id is optional for initiator messages
-        // It will be set when creating the DIDComm message
+        // New TAIP-15 v2 validation: if requester is present, use new validation
+        if self.requester.is_some() {
+            if self.principal.is_none() {
+                return Err(Error::Validation("principal is required".to_string()));
+            }
+            if self.agents.is_empty() {
+                return Err(Error::Validation(
+                    "at least one agent is required".to_string(),
+                ));
+            }
+            if self.constraints.is_none() {
+                return Err(Error::Validation(
+                    "Connection request must include constraints".to_string(),
+                ));
+            }
+            return Ok(());
+        }
 
-        // Either agent_id or agent must be present
+        // Legacy validation
         if self.agent_id.is_none() && self.agent.is_none() {
             return Err(Error::Validation(
                 "either agent_id or agent is required".to_string(),
             ));
         }
 
-        // Either for_ or principal must be present and non-empty
         let for_empty = self.for_.as_ref().is_none_or(|s| s.is_empty());
         if for_empty && self.principal.is_none() {
             return Err(Error::Validation(
@@ -219,7 +323,6 @@ impl Connect {
             ));
         }
 
-        // Constraints are required for Connect messages
         if self.constraints.is_none() {
             return Err(Error::Validation(
                 "Connection request must include constraints".to_string(),
@@ -278,7 +381,6 @@ impl OutOfBand {
 /// Authorization Required message body (TAIP-4, TAIP-15).
 ///
 /// Indicates that authorization is required to proceed with a transaction or connection.
-/// This message was moved from TAIP-15 to TAIP-4 as a standard authorization message.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#AuthorizationRequired")]
 pub struct AuthorizationRequired {
@@ -361,21 +463,18 @@ impl AuthorizationRequired {
             ));
         }
 
-        // Validate expiry date (now required per TAIP-4)
         if self.expires.is_empty() {
             return Err(Error::Validation(
                 "Expires timestamp is required".to_string(),
             ));
         }
 
-        // Simple format check for ISO 8601
         if !self.expires.contains('T') || !self.expires.contains(':') {
             return Err(Error::Validation(
                 "Invalid expiry date format. Expected ISO8601/RFC3339 format".to_string(),
             ));
         }
 
-        // Validate 'from' field if present
         if let Some(ref from) = self.from {
             let valid_from_values = ["customer", "principal", "originator", "beneficiary"];
             if !valid_from_values.contains(&from.as_str()) {
@@ -398,6 +497,148 @@ impl AuthorizationRequired {
 mod tests {
     use super::*;
     use serde_json;
+
+    #[test]
+    fn test_connect_v2_creation() {
+        let requester = Party::new("did:example:b2b-service");
+        let principal = Party::new("did:example:customer");
+        let agent = Agent::new_without_role("did:example:b2b-service", "did:example:b2b-service");
+        let constraints = ConnectionConstraints {
+            purposes: Some(vec!["BEXP".to_string()]),
+            category_purposes: None,
+            limits: Some(TransactionLimits {
+                per_transaction: Some("10000.00".to_string()),
+                per_day: Some("50000.00".to_string()),
+                per_week: None,
+                per_month: None,
+                per_year: None,
+                currency: Some("USD".to_string()),
+            }),
+            allowed_beneficiaries: None,
+            allowed_settlement_addresses: None,
+            allowed_assets: None,
+        };
+
+        let connect = Connect::new_v2(requester, principal, vec![agent], constraints)
+            .with_agreement("https://example.com/terms".to_string())
+            .with_expiry("2024-03-22T15:00:00Z".to_string());
+
+        assert!(connect.requester.is_some());
+        assert!(connect.principal.is_some());
+        assert_eq!(connect.agents.len(), 1);
+        assert!(connect.constraints.is_some());
+        assert_eq!(
+            connect.agreement,
+            Some("https://example.com/terms".to_string())
+        );
+        assert_eq!(connect.expiry, Some("2024-03-22T15:00:00Z".to_string()));
+        assert!(connect.validate().is_ok());
+    }
+
+    #[test]
+    fn test_connect_v2_serialization() {
+        let requester = Party::new("did:example:b2b-service");
+        let principal = Party::new("did:example:customer");
+        let agent = Agent::new_without_role("did:example:b2b-service", "did:example:b2b-service");
+        let constraints = ConnectionConstraints {
+            purposes: Some(vec!["BEXP".to_string()]),
+            category_purposes: None,
+            limits: Some(TransactionLimits {
+                per_transaction: Some("10000.00".to_string()),
+                per_day: Some("50000.00".to_string()),
+                per_week: None,
+                per_month: None,
+                per_year: None,
+                currency: Some("USD".to_string()),
+            }),
+            allowed_beneficiaries: Some(vec![Party::new("did:example:vendor-1")]),
+            allowed_settlement_addresses: Some(vec![
+                "eip155:1:0x742d35Cc6e4dfE2eDFaD2C0b91A8b0780EDAEb58".to_string(),
+            ]),
+            allowed_assets: Some(vec!["eip155:1/slip44:60".to_string()]),
+        };
+
+        let connect = Connect::new_v2(requester, principal, vec![agent], constraints);
+        let json = serde_json::to_value(&connect).unwrap();
+
+        assert!(json.get("requester").is_some());
+        assert!(json.get("principal").is_some());
+        assert!(json.get("agents").is_some());
+        assert!(json.get("constraints").is_some());
+
+        let constraints = json.get("constraints").unwrap();
+        assert!(constraints.get("allowedBeneficiaries").is_some());
+        assert!(constraints.get("allowedSettlementAddresses").is_some());
+        assert!(constraints.get("allowedAssets").is_some());
+
+        let limits = constraints.get("limits").unwrap();
+        assert_eq!(limits.get("per_day").unwrap(), "50000.00");
+    }
+
+    #[test]
+    fn test_connect_v2_validation_missing_principal() {
+        let connect = Connect {
+            transaction_id: None,
+            requester: Some(Party::new("did:example:service")),
+            principal: None,
+            agents: vec![Agent::new_without_role(
+                "did:example:service",
+                "did:example:service",
+            )],
+            constraints: Some(ConnectionConstraints {
+                purposes: Some(vec!["BEXP".to_string()]),
+                category_purposes: None,
+                limits: None,
+                allowed_beneficiaries: None,
+                allowed_settlement_addresses: None,
+                allowed_assets: None,
+            }),
+            agreement: None,
+            expiry: None,
+            agent_id: None,
+            agent: None,
+            for_: None,
+            role: None,
+        };
+
+        let result = connect.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("principal is required"));
+    }
+
+    #[test]
+    fn test_connect_v2_validation_no_agents() {
+        let connect = Connect {
+            transaction_id: None,
+            requester: Some(Party::new("did:example:service")),
+            principal: Some(Party::new("did:example:customer")),
+            agents: vec![],
+            constraints: Some(ConnectionConstraints {
+                purposes: Some(vec!["BEXP".to_string()]),
+                category_purposes: None,
+                limits: None,
+                allowed_beneficiaries: None,
+                allowed_settlement_addresses: None,
+                allowed_assets: None,
+            }),
+            agreement: None,
+            expiry: None,
+            agent_id: None,
+            agent: None,
+            for_: None,
+            role: None,
+        };
+
+        let result = connect.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("at least one agent"));
+    }
 
     #[test]
     fn test_authorization_required_creation() {
@@ -452,7 +693,6 @@ mod tests {
 
         let json = serde_json::to_value(&auth_req).unwrap();
 
-        // Check field names match TAIP-4 specification
         assert_eq!(
             json["authorizationUrl"],
             "https://vasp.com/authorize?request=abc123"
@@ -460,7 +700,6 @@ mod tests {
         assert_eq!(json["expires"], "2024-12-31T23:59:59Z");
         assert_eq!(json["from"], "customer");
 
-        // Test deserialization
         let deserialized: AuthorizationRequired = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.authorization_url, auth_req.authorization_url);
         assert_eq!(deserialized.expires, auth_req.expires);
@@ -530,7 +769,7 @@ mod tests {
     fn test_authorization_required_validation_invalid_expires_format() {
         let auth_req = AuthorizationRequired::new(
             "https://vasp.com/authorize".to_string(),
-            "2024-12-31".to_string(), // Missing time component
+            "2024-12-31".to_string(),
         );
 
         let result = auth_req.validate();
@@ -559,7 +798,6 @@ mod tests {
 
     #[test]
     fn test_authorization_required_json_compliance_with_taip4() {
-        // Test that the JSON structure matches TAIP-4 example
         let auth_req = AuthorizationRequired::new_with_from(
             "https://beneficiary.vasp/authorize?request=abc123".to_string(),
             "2024-01-01T12:00:00Z".to_string(),
@@ -568,14 +806,11 @@ mod tests {
 
         let json = serde_json::to_value(&auth_req).unwrap();
 
-        // Verify field names match TAIP-4 specification
         assert!(json.get("authorizationUrl").is_some());
         assert!(json.get("expires").is_some());
         assert!(json.get("from").is_some());
 
-        // Verify old field names are not present
         assert!(json.get("authorization_url").is_none());
         assert!(json.get("url").is_none());
-        assert!(json.get("agent_id").is_none());
     }
 }

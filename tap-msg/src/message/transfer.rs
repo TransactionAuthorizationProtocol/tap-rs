@@ -13,6 +13,19 @@ use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessag
 use crate::message::{Agent, Party};
 use crate::TapMessage;
 
+/// Fiat equivalent value for compliance purposes (TAIP-3).
+///
+/// Used for Travel Rule threshold determination when the virtual asset
+/// is not widely traded and its fiat value cannot be easily resolved.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TransactionValue {
+    /// Decimal string representation of the fiat amount.
+    pub amount: String,
+
+    /// ISO 4217 3-letter currency code (e.g., "USD", "EUR").
+    pub currency: String,
+}
+
 /// Transfer message body (TAIP-3).
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(
@@ -50,6 +63,14 @@ pub struct Transfer {
     /// Settlement identifier (optional).
     #[serde(rename = "settlementId", skip_serializing_if = "Option::is_none")]
     pub settlement_id: Option<String>,
+
+    /// Expiration time in ISO 8601 format (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expiry: Option<String>,
+
+    /// Fiat equivalent value for compliance (optional, TAIP-3).
+    #[serde(rename = "transactionValue", skip_serializing_if = "Option::is_none")]
+    pub transaction_value: Option<TransactionValue>,
 
     /// Transaction identifier (only available after creation).
     #[serde(skip)]
@@ -107,6 +128,8 @@ pub struct TransferBuilder {
     amount: Option<String>,
     beneficiary: Option<Party>,
     settlement_id: Option<String>,
+    expiry: Option<String>,
+    transaction_value: Option<TransactionValue>,
     memo: Option<String>,
     transaction_id: Option<String>,
     agents: Vec<Agent>,
@@ -141,6 +164,18 @@ impl TransferBuilder {
     /// Set the settlement ID for this transfer
     pub fn settlement_id(mut self, settlement_id: String) -> Self {
         self.settlement_id = Some(settlement_id);
+        self
+    }
+
+    /// Set the expiry for this transfer
+    pub fn expiry(mut self, expiry: String) -> Self {
+        self.expiry = Some(expiry);
+        self
+    }
+
+    /// Set the transaction value (fiat equivalent) for this transfer
+    pub fn transaction_value(mut self, transaction_value: TransactionValue) -> Self {
+        self.transaction_value = Some(transaction_value);
         self
     }
 
@@ -192,6 +227,8 @@ impl TransferBuilder {
             amount: self.amount.expect("Amount is required"),
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
+            expiry: self.expiry,
+            transaction_value: self.transaction_value,
             memo: self.memo,
             transaction_id: self.transaction_id,
             agents: self.agents,
@@ -216,6 +253,8 @@ impl TransferBuilder {
             amount,
             beneficiary: self.beneficiary,
             settlement_id: self.settlement_id,
+            expiry: self.expiry,
+            transaction_value: self.transaction_value,
             memo: self.memo,
             agents: self.agents,
             connection_id: None,

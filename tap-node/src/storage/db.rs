@@ -2867,6 +2867,8 @@ mod tests {
             agents: vec![],
             memo: None,
             settlement_id: None,
+            expiry: None,
+            transaction_value: None,
             connection_id: None,
             metadata: Default::default(),
         };

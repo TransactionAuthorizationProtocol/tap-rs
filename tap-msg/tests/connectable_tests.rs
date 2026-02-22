@@ -168,12 +168,16 @@ fn test_multiple_connections() {
 fn create_test_connect() -> Connect {
     Connect {
         transaction_id: Some(uuid::Uuid::new_v4().to_string()),
+        requester: None,
+        principal: None,
+        agents: vec![],
+        constraints: None,
+        agreement: None,
+        expiry: None,
         agent_id: Some("did:key:z6MkpDYxrwJw5WoD1o4YVfthJJgZfxrECpW6Da6QCWagRHLx".to_string()),
         agent: None,
-        principal: None,
         for_: Some("did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK".to_string()),
         role: None,
-        constraints: None,
     }
 }
 
@@ -199,6 +203,8 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         memo: None,
         connection_id: None,
         metadata: HashMap::new(),

@@ -49,6 +49,8 @@ async fn test_automatic_customer_extraction_from_transfer() {
         agents: vec![],
         memo: None,
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         transaction_id: Some("tx-123".to_string()),
         metadata: Default::default(),

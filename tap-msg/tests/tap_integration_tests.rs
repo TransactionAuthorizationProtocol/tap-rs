@@ -420,7 +420,10 @@ fn create_test_connect() -> Connect {
 
     let transaction_limits = TransactionLimits {
         per_transaction: Some("1000.0".to_string()),
-        daily: Some("5000.0".to_string()),
+        per_day: Some("5000.0".to_string()),
+        per_week: None,
+        per_month: None,
+        per_year: None,
         currency: Some("USD".to_string()),
     };
 
@@ -428,6 +431,9 @@ fn create_test_connect() -> Connect {
         purposes: Some(vec!["trading".to_string()]),
         category_purposes: None,
         limits: Some(transaction_limits),
+        allowed_beneficiaries: None,
+        allowed_settlement_addresses: None,
+        allowed_assets: None,
     };
 
     connect.constraints = Some(constraints);
@@ -456,6 +462,8 @@ fn create_test_transfer() -> Transfer {
         amount: "100.0".to_string(),
         agents,
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         memo: None,
         connection_id: None,
         metadata: HashMap::new(),

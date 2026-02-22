@@ -103,6 +103,16 @@ Available command-line tools:
    # Authorize a transaction
    tap-cli action authorize --transaction-id <TX_ID>
 
+   # Create a payment request
+   tap-cli transaction payment --amount 99.99 --merchant did:key:z6Mk... --currency USD
+
+   # Request an exchange (TAIP-18)
+   tap-cli transaction exchange --from-assets USD --to-assets eip155:1/erc20:0x... \
+     --from-amount 1000 --requester did:key:z6Mk...
+
+   # Manage agents on a transaction (TAIP-5)
+   tap-cli agent-mgmt add-agents --transaction-id <TX_ID> --agents '[...]'
+
    # Manage customers and generate IVMS101 data
    tap-cli customer create --customer-id did:key:z6Mk... --profile '{"@type":"Person","name":"Alice"}'
    tap-cli customer ivms101 --customer-id did:key:z6Mk...
@@ -153,7 +163,7 @@ See individual tool READMEs for detailed usage instructions.
 
 ## Key Features
 
-- **Complete TAP Implementation**: Support for all TAP message types (Transfer, Authorize, Reject, Settle, Cancel, Revert, etc.)
+- **Complete TAP Implementation**: Support for all TAP message types (Transfer, Payment, Connect, Escrow, Exchange, Quote, Authorize, Reject, Settle, Cancel, Revert, AddAgents, RemoveAgent, ReplaceAgent, UpdatePolicies, and more)
 - **DIDComm v2 Integration**: Secure, encrypted messaging with authenticated signatures
 - **Chain Agnostic Identifiers**: Implementation of CAIP-2 (ChainID), CAIP-10 (AccountID), and CAIP-19 (AssetID)
 - **Settlement Address Flexibility**: Support for both blockchain (CAIP-10) and traditional payment systems (PayTo URI)

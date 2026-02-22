@@ -34,6 +34,8 @@ async fn test_tap_didcomm_round_trip() -> Result<(), Box<dyn std::error::Error>>
             Agent::new(to_did, "beneficiary", to_did),
         ],
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: HashMap::new(),
         memo: None,

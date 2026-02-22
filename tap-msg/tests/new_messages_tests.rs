@@ -126,7 +126,10 @@ fn test_connect_message() {
     // Create transaction limits
     let transaction_limits = TransactionLimits {
         per_transaction: Some("10000.00".to_string()),
-        daily: Some("50000.00".to_string()),
+        per_day: Some("50000.00".to_string()),
+        per_week: None,
+        per_month: None,
+        per_year: None,
         currency: Some("USD".to_string()),
     };
 
@@ -134,6 +137,9 @@ fn test_connect_message() {
         purposes: Some(vec!["trading".to_string()]),
         category_purposes: None,
         limits: Some(transaction_limits),
+        allowed_beneficiaries: None,
+        allowed_settlement_addresses: None,
+        allowed_assets: None,
     };
 
     // Create the Connect message
@@ -174,6 +180,9 @@ fn test_connect_message() {
         purposes: None,
         category_purposes: None,
         limits: None,
+        allowed_beneficiaries: None,
+        allowed_settlement_addresses: None,
+        allowed_assets: None,
     });
     assert!(minimal_body.validate().is_ok());
 }

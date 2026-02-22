@@ -250,6 +250,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         amount: amount.to_string(),
         agents: vec![sender_agent, recipient_agent, settlement_agent], // Include both agents plus settlement agent
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         memo: Some("Payment simulator transfer".to_string()),
         connection_id: None,
         metadata: HashMap::new(),

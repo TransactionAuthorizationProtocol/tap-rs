@@ -93,7 +93,7 @@ TAP-MCP uses stdio transport, making it compatible with MCP clients like Claude 
 
 ## Available Tools
 
-TAP-MCP provides 36 comprehensive tools covering the complete TAP transaction lifecycle:
+TAP-MCP provides 38 comprehensive tools covering the complete TAP transaction lifecycle:
 
 ### Agent Management
 
@@ -202,7 +202,167 @@ Initiate a new TAP transfer transaction (TAIP-3). Requires specifying which agen
       "for": "did:example:alice"
     }
   ],
-  "memo": "Payment for services"
+  "memo": "Payment for services",
+  "expiry": "2026-12-31T23:59:59Z",
+  "transaction_value": {
+    "amount": "100.50",
+    "currency": "USD"
+  }
+}
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `agent_did` | Yes | DID of the signing agent |
+| `asset` | Yes | CAIP-19 asset identifier |
+| `amount` | Yes | Transfer amount |
+| `originator` | Yes | Originator party (`@id` required) |
+| `beneficiary` | Yes | Beneficiary party (`@id` required) |
+| `agents` | No | Array of agents with `@id`, `role`, `for` |
+| `memo` | No | Transaction memo |
+| `expiry` | No | ISO 8601 expiry timestamp |
+| `transaction_value` | No | Fiat equivalent for Travel Rule (`amount` + `currency`) |
+| `metadata` | No | Additional metadata object |
+
+#### `tap_payment`
+Create a TAP payment request (TAIP-14). Supports crypto asset or fiat currency payments with optional invoice data.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "asset": "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  "amount": "99.99",
+  "merchant": {
+    "@id": "did:example:merchant"
+  },
+  "memo": "Order #5678",
+  "expiry": "2026-06-30T12:00:00Z",
+  "invoice": "https://merchant.example.com/invoices/5678",
+  "fallback_settlement_addresses": [
+    "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87"
+  ]
+}
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `agent_did` | Yes | DID of the signing agent |
+| `amount` | Yes | Payment amount |
+| `merchant` | Yes | Merchant party (`@id` required) |
+| `asset` | No* | CAIP-19 asset identifier |
+| `currency` | No* | ISO 4217 currency code (e.g., USD) |
+| `agents` | No | Array of agents |
+| `memo` | No | Payment memo |
+| `expiry` | No | ISO 8601 expiry timestamp |
+| `invoice` | No | Invoice URL string or structured invoice object (TAIP-16) |
+| `fallback_settlement_addresses` | No | Array of fallback settlement addresses (CAIP-10) |
+| `metadata` | No | Additional metadata object |
+
+\* One of `asset` or `currency` must be specified.
+
+#### `tap_connect`
+Create a TAP connection request (TAIP-15) to establish a relationship between parties with optional constraints.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "recipient_did": "did:example:counterparty-agent",
+  "for_party": "did:example:alice",
+  "role": "SourceAgent",
+  "constraints": {
+    "transaction_limits": {
+      "max_amount": "10000",
+      "daily_limit": "50000"
+    },
+    "allowed_beneficiaries": ["did:example:bob", "did:example:charlie"],
+    "allowed_settlement_addresses": ["eip155:1:0x742d35cc..."],
+    "allowed_assets": ["eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"]
+  },
+  "expiry": "2027-01-01T00:00:00Z",
+  "agreement": "https://example.com/terms-of-service"
+}
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `agent_did` | Yes | DID of the signing agent |
+| `recipient_did` | Yes | DID of the agent to connect with |
+| `for_party` | Yes | DID of the party this connection is for |
+| `role` | No | Agent role (e.g., SourceAgent, DestinationAgent) |
+| `constraints` | No | Connection constraints (limits, allowed parties/assets) |
+| `expiry` | No | ISO 8601 expiry timestamp |
+| `agreement` | No | URL to terms of service or agreement |
+
+#### `tap_escrow`
+Create a TAP escrow request (TAIP-17) to place funds in escrow with an escrow agent.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "asset": "eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7",
+  "amount": "1000.00",
+  "originator": { "@id": "did:example:alice" },
+  "beneficiary": { "@id": "did:example:bob" },
+  "expiry": "2026-12-31T23:59:59Z",
+  "agents": [
+    { "@id": "did:example:escrow-agent", "role": "EscrowAgent", "for": "did:example:alice" }
+  ],
+  "agreement": "https://example.com/escrow-terms"
+}
+```
+
+#### `tap_capture`
+Release escrowed funds (TAIP-17). Supports partial capture.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "escrow_id": "tx-escrow-12345",
+  "amount": "500.00",
+  "settlement_address": "eip155:1:0x742d35cc6bbf4c04623b5daa50a09de81bc4ff87"
+}
+```
+
+#### `tap_exchange`
+Create a TAP exchange request (TAIP-18) for cross-asset exchanges.
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "from_assets": ["eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"],
+  "to_assets": ["eip155:137/erc20:0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"],
+  "from_amount": "1000.00",
+  "requester_did": "did:example:alice",
+  "provider_did": "did:example:exchange-provider"
+}
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `agent_did` | Yes | DID of the signing agent |
+| `from_assets` | Yes | Source asset identifiers (CAIP-19, DTI, or ISO 4217) |
+| `to_assets` | Yes | Target asset identifiers |
+| `from_amount` | No* | Amount of source asset to exchange |
+| `to_amount` | No* | Amount of target asset desired |
+| `requester_did` | Yes | DID of the exchange requester |
+| `provider_did` | No | DID of the exchange provider (omit to broadcast) |
+| `agents` | No | Array of agents |
+
+\* One of `from_amount` or `to_amount` must be specified.
+
+#### `tap_quote`
+Respond with a quote to an exchange request (TAIP-18).
+
+```json
+{
+  "agent_did": "did:key:z6MkpGuzuD38tpgZKPfmLmmD8R6gihP9KJhuopMuVvfGzLmc",
+  "exchange_id": "tx-exchange-12345",
+  "from_asset": "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+  "to_asset": "eip155:137/erc20:0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+  "from_amount": "1000.00",
+  "to_amount": "999.50",
+  "provider_did": "did:example:exchange-provider",
+  "expires": "2026-06-30T12:00:00Z"
 }
 ```
 

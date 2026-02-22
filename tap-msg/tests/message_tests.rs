@@ -39,6 +39,8 @@ fn test_create_message() {
             ),
         ],
         settlement_id: None,
+        expiry: None,
+        transaction_value: None,
         connection_id: None,
         metadata: HashMap::new(),
         memo: None,

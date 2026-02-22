@@ -80,6 +80,8 @@ export {
   createCancelMessage,
   createSettleMessage,
   createConnectMessage,
+  createExchangeMessage,
+  createQuoteMessage,
   createBasicMessage,
   createDIDCommMessage,
 } from './message-helpers.js';
@@ -138,7 +140,7 @@ export const VERSION = '0.1.0';
 export const SUPPORTED_MESSAGE_TYPES = [
   'Transfer',
   'Payment',
-  'Authorize', 
+  'Authorize',
   'Reject',
   'Settle',
   'Cancel',
@@ -146,6 +148,8 @@ export const SUPPORTED_MESSAGE_TYPES = [
   'Connect',
   'Escrow',
   'Capture',
+  'Exchange',
+  'Quote',
   'AddAgents',
   'ReplaceAgent',
   'RemoveAgent',

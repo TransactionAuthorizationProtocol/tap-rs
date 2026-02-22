@@ -84,6 +84,14 @@ impl ToolRegistry {
             "tap_capture".to_string(),
             Box::new(CaptureTool::new(tap_integration.clone())),
         );
+        tools.insert(
+            "tap_exchange".to_string(),
+            Box::new(CreateExchangeTool::new(tap_integration.clone())),
+        );
+        tools.insert(
+            "tap_quote".to_string(),
+            Box::new(CreateQuoteTool::new(tap_integration.clone())),
+        );
 
         // Transaction action tools
         tools.insert(
