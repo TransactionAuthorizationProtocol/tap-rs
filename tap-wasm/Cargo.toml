@@ -56,6 +56,9 @@ name = "wasm_binding_benchmark"
 harness = false
 required-features = []
 
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 # Optimize for size
 [profile.release]
 opt-level = "z"   # Optimize for size

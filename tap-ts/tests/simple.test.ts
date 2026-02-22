@@ -56,20 +56,15 @@ describe('Simple Real WASM Tests', () => {
     expect(packed).toHaveProperty('message');
     expect(packed).toHaveProperty('metadata');
     
-    // Parse and verify JWS
+    // Parse and verify Flattened JWS
     const jws = JSON.parse(packed.message);
     expect(jws).toHaveProperty('payload');
-    expect(jws).toHaveProperty('signatures');
-    expect(jws.signatures.length).toBeGreaterThan(0);
-    
-    // Verify signature structure
-    const signature = jws.signatures[0];
-    expect(signature).toHaveProperty('protected');
-    expect(signature).toHaveProperty('signature');
-    
+    expect(jws).toHaveProperty('protected');
+    expect(jws).toHaveProperty('signature');
+
     // Decode and verify protected header
     const protectedHeader = JSON.parse(
-      Buffer.from(signature.protected, 'base64url').toString()
+      Buffer.from(jws.protected, 'base64url').toString()
     );
     expect(protectedHeader).toHaveProperty('alg');
     expect(protectedHeader).toHaveProperty('kid');

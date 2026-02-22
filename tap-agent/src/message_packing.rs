@@ -8,7 +8,6 @@ use crate::agent_key::VerificationKey;
 use crate::error::{Error, Result};
 use crate::message::{Jwe, Jws, SecurityMode};
 use async_trait::async_trait;
-use base64::Engine;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
@@ -646,9 +645,8 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
         key_manager: &(impl KeyManagerPacking + ?Sized),
         _options: UnpackOptions,
     ) -> Result<T> {
-        // Decode the payload
-        let payload_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&packed_message.payload)
+        // Decode the payload (accept both base64 and base64url)
+        let payload_bytes = crate::message::base64_decode_flexible(&packed_message.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode JWS payload: {}", e)))?;
 
         // Convert to string
@@ -663,9 +661,8 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
         let mut verified = false;
 
         for signature in &packed_message.signatures {
-            // Decode the protected header
-            let protected_bytes = base64::engine::general_purpose::STANDARD
-                .decode(&signature.protected)
+            // Decode the protected header (accept both base64 and base64url)
+            let protected_bytes = crate::message::base64_decode_flexible(&signature.protected)
                 .map_err(|e| {
                     Error::Cryptography(format!("Failed to decode protected header: {}", e))
                 })?;
@@ -688,9 +685,8 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<Jws, T> for Jws {
                 Err(_) => continue, // Skip key if we can't resolve it
             };
 
-            // Decode the signature
-            let signature_bytes = base64::engine::general_purpose::STANDARD
-                .decode(&signature.signature)
+            // Decode the signature (accept both base64 and base64url)
+            let signature_bytes = crate::message::base64_decode_flexible(&signature.signature)
                 .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
 
             // Create the signing input (protected.payload)
@@ -806,9 +802,13 @@ impl<T: DeserializeOwned + Send + 'static> Unpackable<String, T> for String {
     ) -> Result<T> {
         // Try to parse as JSON first
         if let Ok(value) = serde_json::from_str::<Value>(packed_message) {
-            // Check if it's a JWS (has payload and signatures fields)
-            if value.get("payload").is_some() && value.get("signatures").is_some() {
-                // Parse as JWS
+            // Check if it's a JWS (General or Flattened serialization)
+            // General: has "payload" + "signatures" array
+            // Flattened: has "payload" + "signature" + "protected"
+            if value.get("payload").is_some()
+                && (value.get("signatures").is_some() || value.get("signature").is_some())
+            {
+                // Jws custom Deserialize handles both General and Flattened formats
                 let jws: Jws = serde_json::from_str(packed_message)
                     .map_err(|e| Error::Serialization(e.to_string()))?;
 
@@ -1090,7 +1090,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_unpack_with_wrong_signature() {
-        // Create two different key managers
+        // Create a key manager and sign a message
         let key_manager1 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
         let key1 = key_manager1
             .generate_key(DIDGenerationOptions {
@@ -1098,14 +1098,6 @@ mod tests {
             })
             .unwrap();
 
-        let key_manager2 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
-        let _key2 = key_manager2
-            .generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })
-            .unwrap();
-
-        // Create and sign a message with key1
         let message = PlainMessage {
             id: "test-wrong-sig".to_string(),
             typ: "application/didcomm-plain+json".to_string(),
@@ -1124,17 +1116,74 @@ mod tests {
             extra_headers: Default::default(),
         };
 
-        // Get the actual verification method ID from the DID document
         let sender_kid = key1.did_doc.verification_method[0].id.clone();
         let pack_options = PackOptions::new().with_sign(&sender_kid);
         let packed = message.pack(&*key_manager1, pack_options).await.unwrap();
 
-        // Try to unpack with key_manager2 (should fail)
+        // Tamper with the signature to make it invalid
+        let mut jws: crate::message::Jws = serde_json::from_str(&packed).unwrap();
+        // Corrupt the signature bytes
+        jws.signatures[0].signature = "AAAA_invalid_signature_AAAA".to_string();
+        let tampered = serde_json::to_string(&jws).unwrap();
+
+        // Try to unpack tampered message (should fail verification)
         let unpack_options = UnpackOptions::new();
         let result: Result<PlainMessage> =
-            String::unpack(&packed, &*key_manager2, unpack_options).await;
+            String::unpack(&tampered, &*key_manager1, unpack_options).await;
 
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_unpack_cross_agent_with_did_key() {
+        // Verify that did:key resolution allows cross-agent verification
+        let key_manager1 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let key1 = key_manager1
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        let key_manager2 = Arc::new(AgentKeyManagerBuilder::new().build().unwrap());
+        let _key2 = key_manager2
+            .generate_key(DIDGenerationOptions {
+                key_type: KeyType::Ed25519,
+            })
+            .unwrap();
+
+        let message = PlainMessage {
+            id: "test-cross-agent".to_string(),
+            typ: "application/didcomm-plain+json".to_string(),
+            type_: "https://example.org/test".to_string(),
+            body: serde_json::json!({
+                "content": "Cross-agent verification"
+            }),
+            from: key1.did.clone(),
+            to: vec!["did:example:bob".to_string()],
+            thid: None,
+            pthid: None,
+            created_time: Some(1234567890),
+            expires_time: None,
+            from_prior: None,
+            attachments: None,
+            extra_headers: Default::default(),
+        };
+
+        let sender_kid = key1.did_doc.verification_method[0].id.clone();
+        let pack_options = PackOptions::new().with_sign(&sender_kid);
+        let packed = message.pack(&*key_manager1, pack_options).await.unwrap();
+
+        // key_manager2 can verify because did:key embeds the public key
+        let unpack_options = UnpackOptions::new();
+        let result: PlainMessage = String::unpack(&packed, &*key_manager2, unpack_options)
+            .await
+            .unwrap();
+
+        assert_eq!(result.id, "test-cross-agent");
+        assert_eq!(
+            result.body,
+            serde_json::json!({"content": "Cross-agent verification"})
+        );
     }
 
     #[tokio::test]

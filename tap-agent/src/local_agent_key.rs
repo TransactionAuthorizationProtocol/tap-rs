@@ -72,9 +72,8 @@ impl LocalAgentKey {
             Error::Cryptography(format!("Failed to decode protected header: {}", e))
         })?;
 
-        // Decode the signature from base64
-        let signature_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&signature.signature)
+        // Decode the signature (accept both base64 and base64url)
+        let signature_bytes = crate::message::base64_decode_flexible(&signature.signature)
             .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
 
         // Construct the signing input: {protected}.{payload}
@@ -91,9 +90,8 @@ impl LocalAgentKey {
             ));
         }
 
-        // Decode and return the payload
-        let payload_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&jws.payload)
+        // Decode and return the payload (accept both base64 and base64url)
+        let payload_bytes = crate::message::base64_decode_flexible(&jws.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
 
         Ok(payload_bytes)
@@ -658,8 +656,8 @@ impl SigningKey for LocalAgentKey {
         payload: &[u8],
         protected_header: Option<JwsProtected>,
     ) -> Result<Jws> {
-        // Base64 encode the payload
-        let payload_b64 = base64::engine::general_purpose::STANDARD.encode(payload);
+        // Base64URL encode the payload (no padding) per RFC 7515
+        let payload_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(payload);
 
         // Create the protected header if not provided, respecting the key type
         let protected = if let Some(mut header) = protected_header {
@@ -683,7 +681,7 @@ impl SigningKey for LocalAgentKey {
             Error::Serialization(format!("Failed to serialize protected header: {}", e))
         })?;
 
-        let protected_b64 = base64::engine::general_purpose::STANDARD.encode(protected_json);
+        let protected_b64 = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(protected_json);
 
         // Create the signing input (protected.payload)
         let signing_input = format!("{}.{}", protected_b64, payload_b64);
@@ -691,8 +689,8 @@ impl SigningKey for LocalAgentKey {
         // Sign the input
         let signature = self.sign(signing_input.as_bytes()).await?;
 
-        // Encode the signature to base64
-        let signature_value = base64::engine::general_purpose::STANDARD.encode(&signature);
+        // Base64URL encode the signature (no padding) per RFC 7515
+        let signature_value = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(&signature);
 
         // Create the JWS with signature
         let jws = Jws {
@@ -1335,9 +1333,8 @@ impl PublicVerificationKey {
             Error::Cryptography(format!("Failed to decode protected header: {}", e))
         })?;
 
-        // Decode the signature
-        let signature_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&signature.signature)
+        // Decode the signature (accept both base64 and base64url)
+        let signature_bytes = crate::message::base64_decode_flexible(&signature.signature)
             .map_err(|e| Error::Cryptography(format!("Failed to decode signature: {}", e)))?;
 
         // Create the signing input (protected.payload)
@@ -1355,9 +1352,8 @@ impl PublicVerificationKey {
             ));
         }
 
-        // Decode the payload
-        let payload_bytes = base64::engine::general_purpose::STANDARD
-            .decode(&jws.payload)
+        // Decode the payload (accept both base64 and base64url)
+        let payload_bytes = crate::message::base64_decode_flexible(&jws.payload)
             .map_err(|e| Error::Cryptography(format!("Failed to decode payload: {}", e)))?;
 
         Ok(payload_bytes)

@@ -72,11 +72,11 @@ describe('Integration Tests', () => {
       expect(packed).toHaveProperty('message');
       expect(packed).toHaveProperty('metadata');
       
-      // Parse the JWS message
+      // Parse the Flattened JWS message
       const jws = JSON.parse(packed.message);
       expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
-      expect(Array.isArray(jws.signatures)).toBe(true);
+      expect(jws).toHaveProperty('protected');
+      expect(jws).toHaveProperty('signature');
       expect(jws.payload).toMatch(/^eyJ/);
 
       // For this test, let's use the same agent to unpack (self-signed)
@@ -134,7 +134,7 @@ describe('Integration Tests', () => {
       
       const jws = JSON.parse(packedTransfer.message);
       expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
+      expect(jws).toHaveProperty('signature');
 
       // Step 3: Originator unpacks (self-signed for this test)
       // In real scenarios, proper key exchange would be needed
@@ -185,7 +185,7 @@ describe('Integration Tests', () => {
       
       const jws = JSON.parse(packed.message);
       expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
+      expect(jws).toHaveProperty('signature');
       
       // Unpack to verify the core message was preserved
       const unpacked = await agent.unpack(packed.message);
@@ -237,7 +237,7 @@ describe('Integration Tests', () => {
       
       const jws = JSON.parse(packed.message);
       expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
+      expect(jws).toHaveProperty('signature');
       
       // Verify unpacking works with large payloads
       const unpacked = await agent.unpack(packed.message);
@@ -304,7 +304,7 @@ describe('Integration Tests', () => {
         
         const jws = JSON.parse(packed.message);
         expect(jws).toHaveProperty('payload');
-        expect(jws).toHaveProperty('signatures');
+        expect(jws).toHaveProperty('signature');
       });
       
       // Verify we can unpack all messages and they contain correct content
@@ -360,7 +360,7 @@ describe('Integration Tests', () => {
       
       const jws = JSON.parse(packed.message);
       expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
+      expect(jws).toHaveProperty('signature');
 
       // Verify the typed body survives the WASM round-trip
       const unpacked = await agent.unpack(packed.message);
@@ -413,7 +413,7 @@ describe('Integration Tests', () => {
         
         const jws = JSON.parse(packed.message);
         expect(jws).toHaveProperty('payload');
-        expect(jws).toHaveProperty('signatures');
+        expect(jws).toHaveProperty('signature');
       });
 
       // Should complete operations in reasonable time (< 5 seconds for real WASM)

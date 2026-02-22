@@ -116,11 +116,11 @@ describe('TapAgent with Real WASM', () => {
         expect(packed).toHaveProperty('metadata');
         expect(packed.metadata.type).toBe('signed');
 
-        // Verify JWS structure
+        // Verify Flattened JWS structure
         const jws = JSON.parse(packed.message);
         expect(jws).toHaveProperty('payload');
-        expect(jws).toHaveProperty('signatures');
-        expect(Array.isArray(jws.signatures)).toBe(true);
+        expect(jws).toHaveProperty('protected');
+        expect(jws).toHaveProperty('signature');
       });
 
       it('should pack a Transfer message', async () => {
@@ -141,7 +141,7 @@ describe('TapAgent with Real WASM', () => {
 
         const jws = JSON.parse(packed.message);
         expect(jws.payload).toBeDefined();
-        expect(jws.signatures.length).toBeGreaterThan(0);
+        expect(jws.signature).toBeDefined();
       });
 
       it('should handle message with custom options', async () => {
@@ -402,7 +402,7 @@ describe('TapAgent with Real WASM', () => {
       const jws = JSON.parse(packed.message);
 
       expect(jws).toHaveProperty('payload');
-      expect(jws).toHaveProperty('signatures');
+      expect(jws).toHaveProperty('signature');
     });
 
     it('should type-check packed message metadata', async () => {

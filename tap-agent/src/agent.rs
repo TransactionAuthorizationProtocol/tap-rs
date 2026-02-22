@@ -1466,8 +1466,8 @@ impl crate::agent::Agent for TapAgent {
         // Check if it's an encrypted message (JWE) or signed message (JWS)
         let is_encrypted =
             json_value.get("protected").is_some() && json_value.get("recipients").is_some();
-        let is_signed =
-            json_value.get("payload").is_some() && json_value.get("signatures").is_some();
+        let is_signed = json_value.get("payload").is_some()
+            && (json_value.get("signatures").is_some() || json_value.get("signature").is_some());
 
         debug!(
             "Message type detection: encrypted={}, signed={}",
