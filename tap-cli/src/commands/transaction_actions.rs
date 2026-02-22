@@ -1,3 +1,4 @@
+use crate::commands::decision::auto_resolve_decisions;
 use crate::error::{Error, Result};
 use crate::output::{print_success, OutputFormat};
 use crate::tap_integration::TapIntegration;
@@ -5,32 +6,62 @@ use clap::Subcommand;
 use serde::Serialize;
 use tap_msg::message::tap_message_trait::TapMessageBody;
 use tap_msg::message::{Authorize, Cancel, Reject, Revert, Settle};
+use tap_node::storage::DecisionType;
 use tracing::debug;
 
 #[derive(Subcommand, Debug)]
 pub enum ActionCommands {
     /// Authorize a transaction (TAIP-4)
+    #[command(long_about = "\
+Authorize a transaction (TAIP-4).
+
+Sends an Authorize message for the given transaction. Optionally includes a \
+settlement address (CAIP-10 format) indicating where funds should be sent, \
+and an expiry timestamp after which the authorization is no longer valid.
+
+Auto-resolves 'authorization_required' decisions for this transaction.
+
+Examples:
+  tap-cli action authorize --transaction-id <ID>
+  tap-cli action authorize --transaction-id <ID> \\
+    --settlement-address eip155:1:0x742d35Cc... --expiry 2026-06-30T12:00:00Z")]
     Authorize {
         /// Transaction ID to authorize
         #[arg(long)]
         transaction_id: String,
-        /// Settlement address (CAIP-10)
+        /// Settlement address where funds should be sent (CAIP-10 format, e.g., eip155:1:0x...)
         #[arg(long)]
         settlement_address: Option<String>,
-        /// Expiry timestamp (ISO 8601)
+        /// Authorization expiry timestamp (ISO 8601, e.g., 2026-06-30T12:00:00Z)
         #[arg(long)]
         expiry: Option<String>,
     },
     /// Reject a transaction (TAIP-4)
+    #[command(long_about = "\
+Reject a transaction (TAIP-4).
+
+Sends a Reject message with a reason. This moves the transaction to a terminal \
+'Rejected' state. All pending decisions for this transaction are expired.
+
+Examples:
+  tap-cli action reject --transaction-id <ID> --reason \"AML policy violation\"")]
     Reject {
         /// Transaction ID to reject
         #[arg(long)]
         transaction_id: String,
-        /// Rejection reason
+        /// Rejection reason (required, describes why the transaction was rejected)
         #[arg(long)]
         reason: String,
     },
     /// Cancel a transaction (TAIP-5)
+    #[command(long_about = "\
+Cancel a transaction (TAIP-5).
+
+Sends a Cancel message on behalf of a party. This moves the transaction to a \
+terminal 'Cancelled' state. All pending decisions for this transaction are expired.
+
+Examples:
+  tap-cli action cancel --transaction-id <ID> --by did:key:z6Mk... --reason \"Customer request\"")]
     Cancel {
         /// Transaction ID to cancel
         #[arg(long)]
@@ -43,26 +74,48 @@ pub enum ActionCommands {
         reason: Option<String>,
     },
     /// Settle a transaction (TAIP-6)
+    #[command(long_about = "\
+Settle a transaction (TAIP-6).
+
+Sends a Settle message with the on-chain settlement identifier. The settlement-id \
+should be a CAIP-220 transaction identifier or transaction hash. Optionally specify \
+an amount if the settled amount differs from the original.
+
+Auto-resolves 'settlement_required' decisions for this transaction.
+
+Examples:
+  tap-cli action settle --transaction-id <ID> --settlement-id eip155:1:0xabcdef...
+  tap-cli action settle --transaction-id <ID> --settlement-id eip155:1:0xabcdef... --amount 75.0")]
     Settle {
         /// Transaction ID to settle
         #[arg(long)]
         transaction_id: String,
-        /// Settlement identifier (CAIP-220 or tx hash)
+        /// On-chain settlement identifier (CAIP-220 or transaction hash)
         #[arg(long)]
         settlement_id: String,
-        /// Settled amount (if different from original)
+        /// Settled amount (if different from original transaction amount)
         #[arg(long)]
         amount: Option<String>,
     },
     /// Revert a settled transaction (TAIP-12)
+    #[command(long_about = "\
+Revert a previously settled transaction (TAIP-12).
+
+Sends a Revert message requesting that funds be returned to the specified \
+settlement address. Requires a reason for the revert. All pending decisions \
+for this transaction are expired.
+
+Examples:
+  tap-cli action revert --transaction-id <ID> \\
+    --settlement-address eip155:1:0x742d35Cc... --reason \"Fraudulent transaction\"")]
     Revert {
         /// Transaction ID to revert
         #[arg(long)]
         transaction_id: String,
-        /// Settlement address for revert (CAIP-10)
+        /// Settlement address for the revert (CAIP-10 format, where reverted funds should go)
         #[arg(long)]
         settlement_address: String,
-        /// Revert reason
+        /// Reason for the revert
         #[arg(long)]
         reason: String,
     },
@@ -181,6 +234,15 @@ async fn handle_authorize(
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send authorize: {}", e)))?;
 
+    auto_resolve_decisions(
+        tap_integration,
+        agent_did,
+        transaction_id,
+        "authorize",
+        Some(DecisionType::AuthorizationRequired),
+    )
+    .await;
+
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
         message_id: didcomm_message.id,
@@ -219,6 +281,8 @@ async fn handle_reject(
         .send_message(agent_did.to_string(), didcomm_message.clone())
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send reject: {}", e)))?;
+
+    auto_resolve_decisions(tap_integration, agent_did, transaction_id, "reject", None).await;
 
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
@@ -261,6 +325,8 @@ async fn handle_cancel(
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send cancel: {}", e)))?;
 
+    auto_resolve_decisions(tap_integration, agent_did, transaction_id, "cancel", None).await;
+
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
         message_id: didcomm_message.id,
@@ -302,6 +368,15 @@ async fn handle_settle(
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send settle: {}", e)))?;
 
+    auto_resolve_decisions(
+        tap_integration,
+        agent_did,
+        transaction_id,
+        "settle",
+        Some(DecisionType::SettlementRequired),
+    )
+    .await;
+
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),
         message_id: didcomm_message.id,
@@ -342,6 +417,8 @@ async fn handle_revert(
         .send_message(agent_did.to_string(), didcomm_message.clone())
         .await
         .map_err(|e| Error::command_failed(format!("Failed to send revert: {}", e)))?;
+
+    auto_resolve_decisions(tap_integration, agent_did, transaction_id, "revert", None).await;
 
     let response = ActionResponse {
         transaction_id: transaction_id.to_string(),

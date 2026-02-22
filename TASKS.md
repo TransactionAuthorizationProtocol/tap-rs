@@ -155,6 +155,16 @@
 - [x] Run cargo fmt, clippy, and tests with CI flags
 - [x] Fix any warnings or errors
 
+### Phase 9: Decision Management Commands
+
+- [x] Write tests for `decision list` and `decision resolve` commands
+- [x] Implement `decision list` subcommand
+- [x] Implement `decision resolve` subcommand
+- [x] Add auto-resolve to action commands (authorize, reject, cancel, settle, revert)
+- [x] Add detailed help text to tap-cli and tap-http for agent discoverability
+- [x] Update README with decision commands documentation
+- [x] Run cargo fmt, clippy, and tests with CI flags
+
 ## External Decision Executable for tap-http
 [PRD](prds/external-decision.md)
 

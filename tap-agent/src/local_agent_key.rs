@@ -10,9 +10,9 @@ use crate::agent_key::{
 use crate::did::{KeyType, VerificationMaterial};
 use crate::error::{Error, Result};
 use crate::key_manager::{Secret, SecretMaterial};
-use crate::message::{
-    EphemeralPublicKey, Jwe, JweHeader, JweProtected, JweRecipient, Jws, JwsProtected, JwsSignature,
-};
+use crate::message::{EphemeralPublicKey, Jwe, JweProtected, Jws, JwsProtected, JwsSignature};
+#[cfg(feature = "crypto-p256")]
+use crate::message::{JweHeader, JweRecipient};
 use aes_gcm::{AeadInPlace, Aes256Gcm, KeyInit, Nonce};
 use async_trait::async_trait;
 use base64::Engine;

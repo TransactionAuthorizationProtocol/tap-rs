@@ -15,65 +15,113 @@ use tracing::debug;
 #[derive(Subcommand, Debug)]
 pub enum TransactionCommands {
     /// Create a new transfer transaction (TAIP-3)
+    #[command(long_about = "\
+Create a new VASP-to-VASP transfer transaction (TAIP-3).
+
+Initiates a transfer of a crypto asset between an originator and beneficiary. \
+The asset must be specified in CAIP-19 format. Optionally include agents \
+(VASPs, compliance providers) as a JSON array.
+
+Examples:
+  tap-cli transaction transfer \\
+    --asset eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7 \\
+    --amount 100.0 --originator did:key:z6Mk... --beneficiary did:key:z6Mk...
+
+  # With agents
+  tap-cli transaction transfer --asset eip155:1/slip44:60 --amount 500.0 \\
+    --originator did:key:z6Mk... --beneficiary did:key:z6Mk... \\
+    --agents '[{\"@id\":\"did:key:z6MkAgent...\",\"role\":\"SourceAgent\",\"for\":\"did:key:z6Mk...\"}]'")]
     Transfer {
-        /// CAIP-19 asset identifier
+        /// CAIP-19 asset identifier (e.g., eip155:1/erc20:0x... or eip155:1/slip44:60)
         #[arg(long)]
         asset: String,
         /// Transfer amount
         #[arg(long)]
         amount: String,
-        /// Originator DID
+        /// Originator DID (the sender)
         #[arg(long)]
         originator: String,
-        /// Beneficiary DID
+        /// Beneficiary DID (the receiver)
         #[arg(long)]
         beneficiary: String,
-        /// Agents as JSON array
+        /// Agents as JSON array of objects with @id, role, and for fields
         #[arg(long)]
         agents: Option<String>,
-        /// Optional memo
+        /// Optional memo text
         #[arg(long)]
         memo: Option<String>,
     },
     /// Create a new payment request (TAIP-14)
+    #[command(long_about = "\
+Create a new payment request (TAIP-14).
+
+Initiates a payment from a customer to a merchant. Specify either --asset \
+(CAIP-19) for crypto payments or --currency (ISO 4217) for fiat-denominated payments.
+
+Examples:
+  tap-cli transaction payment --amount 99.99 --merchant did:key:z6Mk... \\
+    --asset eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48
+
+  tap-cli transaction payment --amount 99.99 --merchant did:key:z6Mk... \\
+    --currency USD --memo \"Order #5678\"")]
     Payment {
-        /// Transfer amount
+        /// Payment amount
         #[arg(long)]
         amount: String,
-        /// Merchant DID
+        /// Merchant DID (payment recipient)
         #[arg(long)]
         merchant: String,
         /// CAIP-19 asset identifier (mutually exclusive with --currency)
         #[arg(long, conflicts_with = "currency")]
         asset: Option<String>,
-        /// ISO 4217 currency code (mutually exclusive with --asset)
+        /// ISO 4217 currency code, e.g., USD, EUR (mutually exclusive with --asset)
         #[arg(long, conflicts_with = "asset")]
         currency: Option<String>,
         /// Agents as JSON array
         #[arg(long)]
         agents: Option<String>,
-        /// Optional memo
+        /// Optional memo text
         #[arg(long)]
         memo: Option<String>,
     },
     /// Create a new connection request (TAIP-15)
+    #[command(long_about = "\
+Create a new connection request (TAIP-15).
+
+Establishes a relationship between agents for a party. Used to set up agent \
+relationships before initiating transfers.
+
+Examples:
+  tap-cli transaction connect --recipient did:key:z6Mk... --for did:key:z6Mk... --role SourceAgent")]
     Connect {
-        /// Recipient DID
+        /// Recipient DID (the agent to connect with)
         #[arg(long)]
         recipient: String,
         /// Party DID this connection is for
         #[arg(long, name = "for")]
         for_party: String,
-        /// Role in the connection
+        /// Role in the connection (e.g., SourceAgent, DestinationAgent)
         #[arg(long)]
         role: Option<String>,
-        /// Constraints as JSON
+        /// Connection constraints as JSON (e.g., max_amount, daily_limit)
         #[arg(long)]
         constraints: Option<String>,
     },
     /// Create a new escrow request (TAIP-17)
+    #[command(long_about = "\
+Create a new escrow request (TAIP-17).
+
+Places funds in escrow with an escrow agent. The agents JSON array must \
+include at least one agent with the 'EscrowAgent' role.
+
+Examples:
+  tap-cli transaction escrow --amount 1000.0 \\
+    --originator did:key:z6Mk... --beneficiary did:key:z6Mk... \\
+    --expiry 2026-12-31T23:59:59Z \\
+    --asset eip155:1/erc20:0xdac17f958d2ee523a2206206994597c13d831ec7 \\
+    --agents '[{\"@id\":\"did:key:z6MkEscrow...\",\"role\":\"EscrowAgent\",\"for\":\"did:key:z6Mk...\"}]'")]
     Escrow {
-        /// Transfer amount
+        /// Escrow amount
         #[arg(long)]
         amount: String,
         /// Originator DID
@@ -82,16 +130,16 @@ pub enum TransactionCommands {
         /// Beneficiary DID
         #[arg(long)]
         beneficiary: String,
-        /// Expiry timestamp (ISO 8601)
+        /// Expiry timestamp (ISO 8601, e.g., 2026-12-31T23:59:59Z)
         #[arg(long)]
         expiry: String,
         /// Agents as JSON array (must include one EscrowAgent)
         #[arg(long)]
         agents: String,
-        /// CAIP-19 asset identifier
+        /// CAIP-19 asset identifier (mutually exclusive with --currency)
         #[arg(long, conflicts_with = "currency")]
         asset: Option<String>,
-        /// ISO 4217 currency code
+        /// ISO 4217 currency code (mutually exclusive with --asset)
         #[arg(long, conflicts_with = "asset")]
         currency: Option<String>,
         /// Agreement URL
@@ -99,23 +147,43 @@ pub enum TransactionCommands {
         agreement: Option<String>,
     },
     /// Capture escrowed funds (TAIP-17)
+    #[command(long_about = "\
+Release escrowed funds (TAIP-17).
+
+Captures funds held in escrow. Supports partial capture by specifying an amount \
+less than the escrowed total.
+
+Examples:
+  tap-cli transaction capture --escrow-id <ESCROW_TX_ID>
+  tap-cli transaction capture --escrow-id <ESCROW_TX_ID> --amount 500.0 \\
+    --settlement-address eip155:1:0x742d35Cc...")]
     Capture {
-        /// Escrow transaction ID
+        /// Escrow transaction ID to capture from
         #[arg(long)]
         escrow_id: String,
-        /// Amount to capture (partial capture)
+        /// Amount to capture (for partial capture; omit for full capture)
         #[arg(long)]
         amount: Option<String>,
-        /// Settlement address (CAIP-10)
+        /// Settlement address (CAIP-10 format)
         #[arg(long)]
         settlement_address: Option<String>,
     },
     /// List transactions
+    #[command(long_about = "\
+List transactions stored in the agent's database.
+
+Returns transactions with their type, direction, and status. Supports filtering \
+by message type, thread ID, sender, or recipient.
+
+Examples:
+  tap-cli transaction list
+  tap-cli transaction list --type Transfer --limit 20
+  tap-cli transaction list --thread-id <THREAD_ID>")]
     List {
-        /// Agent DID to list transactions for
+        /// Agent DID to list transactions for (defaults to --agent-did global flag)
         #[arg(long)]
         agent_did: Option<String>,
-        /// Filter by message type
+        /// Filter by message type (e.g., Transfer, Payment, Authorize, Reject)
         #[arg(long, name = "type")]
         msg_type: Option<String>,
         /// Filter by thread ID

@@ -17,6 +17,29 @@ use output::OutputFormat;
 #[command(
     name = "tap-cli",
     about = "Command-line interface for TAP Agent operations",
+    long_about = "\
+Command-line interface for TAP (Transaction Authorization Protocol) Agent operations.
+
+tap-cli wraps a local TapNode with SQLite storage and provides commands for the \
+full TAP transaction lifecycle: creating agents and DIDs, initiating transfers and \
+payments, authorizing or rejecting transactions, settling on-chain, managing customers \
+for Travel Rule compliance, and inspecting the decision log.
+
+All commands output JSON by default (for scripting) or human-readable text with \
+--format text. Data is stored under ~/.tap/ (override with --tap-root).
+
+Typical workflow:
+  1. Create an agent:      tap-cli agent create
+  2. Initiate a transfer:  tap-cli transaction transfer --asset <CAIP-19> --amount <AMT> ...
+  3. Check decisions:       tap-cli decision list --status pending
+  4. Authorize:             tap-cli action authorize --transaction-id <ID>
+  5. Settle on-chain:       tap-cli action settle --transaction-id <ID> --settlement-id <CAIP-220>
+
+Decision support:
+  When used with tap-http in poll mode (--decision-mode poll), decisions accumulate \
+  in the shared SQLite database. Use 'decision list' to see pending decisions and \
+  'decision resolve' or the 'action' commands to act on them. Action commands \
+  (authorize, reject, settle, cancel, revert) automatically resolve matching decisions.",
     version = env!("CARGO_PKG_VERSION")
 )]
 struct Cli {
@@ -42,17 +65,30 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Manage agents
+    /// Manage agents (create, list DIDs)
     Agent {
         #[command(subcommand)]
         cmd: commands::agent::AgentCommands,
     },
-    /// Create and list transactions
+    /// Create transactions (transfer, payment, connect, escrow, capture) and list them
     Transaction {
         #[command(subcommand)]
         cmd: commands::transaction::TransactionCommands,
     },
-    /// Transaction lifecycle actions
+    /// Transaction lifecycle actions (authorize, reject, cancel, settle, revert)
+    #[command(long_about = "\
+Transaction lifecycle actions.
+
+These commands send TAP protocol messages to advance a transaction through its \
+state machine. Each action automatically resolves matching decisions in the \
+decision log (if any exist).
+
+Auto-resolve mapping:
+  authorize  resolves 'authorization_required' decisions
+  reject     expires all pending decisions for the transaction
+  cancel     expires all pending decisions for the transaction
+  settle     resolves 'settlement_required' decisions
+  revert     expires all pending decisions for the transaction")]
     Action {
         #[command(subcommand)]
         cmd: commands::transaction_actions::ActionCommands,
@@ -68,7 +104,7 @@ enum Commands {
         #[command(subcommand)]
         cmd: commands::did::DidCommands,
     },
-    /// Customer management
+    /// Customer management for Travel Rule compliance
     Customer {
         #[command(subcommand)]
         cmd: commands::customer::CustomerCommands,
@@ -82,6 +118,26 @@ enum Commands {
     Received {
         #[command(subcommand)]
         cmd: commands::received::ReceivedCommands,
+    },
+    /// Decision log management (list pending, resolve)
+    #[command(long_about = "\
+Decision log management.
+
+Decisions are created when the TAP node reaches a decision point in the transaction \
+lifecycle. In poll mode, decisions accumulate in the per-agent SQLite database for \
+external systems (AI agents, compliance engines, human operators) to act on.
+
+Use 'decision list' to view pending decisions and 'decision resolve' to mark them \
+as resolved. Alternatively, use the 'action' commands (authorize, reject, settle, \
+cancel, revert) which automatically resolve matching decisions.
+
+Decision types:
+  authorization_required       Transaction needs approval
+  policy_satisfaction_required  Policies must be fulfilled
+  settlement_required          Ready to settle on-chain")]
+    Decision {
+        #[command(subcommand)]
+        cmd: commands::decision::DecisionCommands,
     },
 }
 
@@ -176,6 +232,9 @@ async fn main() {
         }
         Commands::Received { ref cmd } => {
             commands::received::handle(cmd, format, &agent_did, &tap_integration).await
+        }
+        Commands::Decision { ref cmd } => {
+            commands::decision::handle(cmd, format, &agent_did, &tap_integration).await
         }
         Commands::Did { .. } => unreachable!(),
     };
