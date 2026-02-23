@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+#### External Secret Helper for Key Management (tap-agent, tap-cli, tap-http, tap-mcp)
+- Git-like secret helper pattern for retrieving private keys from external stores (HashiCorp Vault, AWS KMS, 1Password)
+- `get_private_key(did)` method on `AgentKeyManager` and `KeyManager` trait
+- `secret_helper` module with `SecretHelperConfig` and `discover_agent_dids`
+- `TapAgent::from_secret_helper()` factory method for external key provisioning
+- `--secret-helper` / `TAP_SECRET_HELPER` flag added to tap-cli, tap-http, and tap-mcp
+
+#### Flattened JWS Serialization for Veramo Compatibility (tap-agent)
+- Default to Flattened JWS serialization for single signatures per RFC 7515
+- Accept both General and Flattened JWS formats on deserialization
+- `base64_decode_flexible()` helper accepting all Base64 variants (standard, URL-safe, padded/unpadded)
+- `did:key` resolution in `resolve_verification_key` for cross-agent signature verification
+
+#### X25519 JWE Anoncrypt Support (tap-agent)
+- X25519 ECDH key agreement via `x25519-dalek` for Veramo JWE interoperability
+- Support X25519 ephemeral public keys in `unwrap_jwe` alongside existing P-256
+- Optional `apv`/`apu` fields in `JweProtected` (Veramo omits them)
+- Match JWE recipients by DID prefix for X25519 key agreement key IDs
+
+### Changed
+- JWS encoding switched from standard Base64 to Base64URL (no padding) per RFC 7515
+
+### Fixed
+- External decision process tool responses now correctly returned to caller
+- Panicking `unwrap` on database deserialization replaced with proper error handling
+- Panic on missing home directory replaced with graceful error
+- Hand-rolled URL encoding replaced with `urlencoding` crate
+
+### Security
+- **Critical**: Fix SQL injection in MCP database tools via table name interpolation
+- **High**: Add `PRAGMA query_only=ON` to prevent SQL read-only filter bypass
+- **High**: Sanitize internal error details leaked to HTTP clients
+- **High**: Add request body size limit to tap-http
+- **High**: Add rate limiting to unbounded agent creation endpoint
+- **High**: Validate NaN/Infinity in financial amount fields (Transfer, Payment, Settle)
+- **Medium**: Fix fail-open authorization validator
+- **Medium**: Prevent DID path traversal
+- **Medium**: Fix LIKE pattern injection in database queries
+- **Low**: Replace hand-rolled URL encoding with `urlencoding` crate
+- Update `happy-dom` to v20 to fix critical VM escape vulnerability (tap-ts)
+
 ## [0.6.0] - 2026-02-22
 
 ### Added

@@ -5,6 +5,20 @@ All notable changes to @taprsvp/agent will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- JWS serialization switched from General to Flattened format for single signatures (Veramo compatibility)
+- JWS encoding switched from standard Base64 to Base64URL (no padding) per RFC 7515
+- Tests updated to expect Flattened JWS format
+
+### Added
+- X25519 JWE anoncrypt support for Veramo interoperability
+- Flexible Base64 decoding accepting standard, URL-safe, padded and unpadded variants
+
+### Security
+- Update `happy-dom` to v20 to fix critical VM escape vulnerability
+
 ## [0.6.0] - 2026-02-22
 
 ### Added
