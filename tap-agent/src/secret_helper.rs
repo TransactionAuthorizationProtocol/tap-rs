@@ -222,8 +222,21 @@ pub fn discover_agent_dids(tap_root: Option<&Path>) -> Result<Vec<String>> {
 mod tests {
     use super::*;
     use crate::key_manager::KeyManager;
-    use std::io::Write;
     use tempfile::TempDir;
+
+    /// Write script content to a file, set it executable, and rename to final path.
+    /// The write-then-rename avoids ETXTBSY ("Text file busy") on Linux, which can
+    /// occur when exec races with the kernel releasing a write file descriptor.
+    #[cfg(unix)]
+    fn write_test_script(dir: &std::path::Path, name: &str, content: &str) -> std::path::PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp_path = dir.join(format!("{}.tmp", name));
+        let final_path = dir.join(name);
+        std::fs::write(&tmp_path, content).unwrap();
+        std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::rename(&tmp_path, &final_path).unwrap();
+        final_path
+    }
 
     #[test]
     fn test_from_command_string_simple() {
@@ -301,9 +314,7 @@ mod tests {
 
     #[test]
     fn test_get_key_with_mock_script() {
-        // Create a temp directory for the script
         let temp_dir = TempDir::new().unwrap();
-        let script_path = temp_dir.path().join("helper.sh");
 
         // Generate a real key to test with
         let km = crate::agent_key_manager::AgentKeyManager::new();
@@ -314,24 +325,14 @@ mod tests {
             .unwrap();
         let hex_key = hex::encode(&key.private_key);
 
-        // Write a mock secret helper script
-        {
-            let mut file = std::fs::File::create(&script_path).unwrap();
-            writeln!(
-                file,
+        let script_path = write_test_script(
+            temp_dir.path(),
+            "helper.sh",
+            &format!(
                 "#!/bin/sh\necho '{{\"private_key\": \"{}\", \"key_type\": \"Ed25519\"}}'",
                 hex_key
-            )
-            .unwrap();
-            file.sync_all().unwrap();
-        }
-
-        // Make it executable
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+            ),
+        );
 
         let config = SecretHelperConfig {
             command: script_path.to_str().unwrap().to_string(),
@@ -345,7 +346,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_secret_helper_roundtrip() {
-        // Generate a key
         let km = crate::agent_key_manager::AgentKeyManager::new();
         let key = km
             .generate_key(crate::did::DIDGenerationOptions {
@@ -354,39 +354,25 @@ mod tests {
             .unwrap();
         let hex_key = hex::encode(&key.private_key);
 
-        // Create mock script
         let temp_dir = TempDir::new().unwrap();
-        let script_path = temp_dir.path().join("helper.sh");
-        {
-            let mut file = std::fs::File::create(&script_path).unwrap();
-            writeln!(
-                file,
+        let script_path = write_test_script(
+            temp_dir.path(),
+            "helper.sh",
+            &format!(
                 "#!/bin/sh\necho '{{\"private_key\": \"{}\", \"key_type\": \"Ed25519\"}}'",
                 hex_key
-            )
-            .unwrap();
-            file.sync_all().unwrap();
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+            ),
+        );
 
         let config = SecretHelperConfig {
             command: script_path.to_str().unwrap().to_string(),
             args: vec![],
         };
 
-        // Get key via secret helper
         let (bytes, key_type) = config.get_key(&key.did).unwrap();
-
-        // Create agent from the key
         let (_agent, new_did) = crate::agent::TapAgent::from_private_key(&bytes, key_type, false)
             .await
             .unwrap();
-
-        // Same DID
         assert_eq!(new_did, key.did);
     }
 
@@ -403,17 +389,7 @@ mod tests {
     #[test]
     fn test_get_key_non_zero_exit() {
         let temp_dir = TempDir::new().unwrap();
-        let script_path = temp_dir.path().join("fail.sh");
-        {
-            let mut file = std::fs::File::create(&script_path).unwrap();
-            writeln!(file, "#!/bin/sh\nexit 1").unwrap();
-            file.sync_all().unwrap();
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        let script_path = write_test_script(temp_dir.path(), "fail.sh", "#!/bin/sh\nexit 1");
 
         let config = SecretHelperConfig {
             command: script_path.to_str().unwrap().to_string(),
@@ -426,17 +402,8 @@ mod tests {
     #[test]
     fn test_get_key_invalid_json() {
         let temp_dir = TempDir::new().unwrap();
-        let script_path = temp_dir.path().join("bad-json.sh");
-        {
-            let mut file = std::fs::File::create(&script_path).unwrap();
-            writeln!(file, "#!/bin/sh\necho 'not json'").unwrap();
-            file.sync_all().unwrap();
-        }
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        }
+        let script_path =
+            write_test_script(temp_dir.path(), "bad-json.sh", "#!/bin/sh\necho 'not json'");
 
         let config = SecretHelperConfig {
             command: script_path.to_str().unwrap().to_string(),
