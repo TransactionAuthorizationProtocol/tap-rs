@@ -31,6 +31,10 @@ struct Args {
     /// Custom TAP root directory [default: ~/.tap]
     #[arg(long)]
     tap_root: Option<String>,
+
+    /// Secret helper command for external key management (replaces keys.json)
+    #[arg(long, env = "TAP_SECRET_HELPER")]
+    secret_helper: Option<String>,
 }
 
 #[tokio::main]
@@ -68,7 +72,33 @@ async fn main() -> Result<()> {
     info!("Starting TAP-MCP server v{}", env!("CARGO_PKG_VERSION"));
 
     // Determine agent - use provided DID or load/create from storage
-    let (agent, agent_did) = if let Some(did) = args.agent_did {
+    let (agent, agent_did) = if let Some(ref helper_cmd) = args.secret_helper {
+        use tap_agent::secret_helper::{self, SecretHelperConfig};
+
+        let config = SecretHelperConfig::from_command_string(helper_cmd)?;
+
+        if let Some(did) = args.agent_did {
+            info!("Using secret helper for DID: {}", did);
+            let (agent, did) = TapAgent::from_secret_helper(&config, &did, args.debug).await?;
+            (Arc::new(agent), did)
+        } else {
+            let tap_root = args.tap_root.as_ref().map(std::path::PathBuf::from);
+            let dids = secret_helper::discover_agent_dids(tap_root.as_deref())?;
+            if let Some(did) = dids.first() {
+                info!(
+                    "Discovered DID {} from tap directory, using secret helper",
+                    did
+                );
+                let (agent, did) = TapAgent::from_secret_helper(&config, did, args.debug).await?;
+                (Arc::new(agent), did)
+            } else {
+                return Err(tap_agent::Error::Storage(
+                    "No agent DIDs found in tap directory for secret helper".to_string(),
+                )
+                .into());
+            }
+        }
+    } else if let Some(did) = args.agent_did {
         info!("Using provided agent DID: {}", did);
         // Try to load the specified agent
         match TapAgent::from_stored_keys(Some(did.clone()), true).await {

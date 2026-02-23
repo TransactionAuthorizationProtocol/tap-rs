@@ -73,6 +73,9 @@ pub trait KeyManager: Send + Sync + std::fmt::Debug + 'static {
     /// Get a list of all DIDs in the key manager
     fn list_keys(&self) -> Result<Vec<String>>;
 
+    /// Get the raw private key bytes and key type for a DID
+    fn get_private_key(&self, did: &str) -> Result<(Vec<u8>, crate::did::KeyType)>;
+
     /// Add a signing key to the key manager
     async fn add_signing_key(&self, key: Arc<dyn SigningKey + Send + Sync>) -> Result<()>;
 
@@ -119,6 +122,45 @@ pub trait KeyManager: Send + Sync + std::fmt::Debug + 'static {
 
     /// Decrypt a JWE
     async fn decrypt_jwe(&self, jwe: &str, expected_kid: Option<&str>) -> Result<Vec<u8>>;
+}
+
+/// Extract private key bytes and key type from a Secret's JWK "d" parameter
+pub fn extract_private_key_from_secret(secret: &Secret) -> Result<(Vec<u8>, crate::did::KeyType)> {
+    match &secret.secret_material {
+        SecretMaterial::JWK { private_key_jwk } => {
+            let d = private_key_jwk
+                .get("d")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    Error::KeyNotFound("Secret JWK missing 'd' parameter".to_string())
+                })?;
+
+            let private_key = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, d)
+                .map_err(|e| {
+                    Error::Cryptography(format!("Failed to decode private key from JWK: {}", e))
+                })?;
+
+            let kty = private_key_jwk.get("kty").and_then(|v| v.as_str());
+            let crv = private_key_jwk.get("crv").and_then(|v| v.as_str());
+
+            let key_type = match (kty, crv) {
+                #[cfg(feature = "crypto-ed25519")]
+                (Some("OKP"), Some("Ed25519")) => crate::did::KeyType::Ed25519,
+                #[cfg(feature = "crypto-p256")]
+                (Some("EC"), Some("P-256")) => crate::did::KeyType::P256,
+                #[cfg(feature = "crypto-secp256k1")]
+                (Some("EC"), Some("secp256k1")) => crate::did::KeyType::Secp256k1,
+                _ => {
+                    return Err(Error::KeyNotFound(format!(
+                        "Unsupported key type: kty={:?}, crv={:?}",
+                        kty, crv
+                    )))
+                }
+            };
+
+            Ok((private_key, key_type))
+        }
+    }
 }
 
 /// A default implementation of the KeyManager trait.
@@ -172,6 +214,22 @@ impl KeyManager for DefaultKeyManager {
     /// Get access to the secrets storage
     fn secrets(&self) -> Arc<RwLock<HashMap<String, Secret>>> {
         Arc::clone(&self.secrets)
+    }
+
+    /// Get the raw private key bytes and key type for a DID
+    fn get_private_key(&self, did: &str) -> Result<(Vec<u8>, crate::did::KeyType)> {
+        if let Ok(secrets) = self.secrets.read() {
+            if let Some(secret) = secrets.get(did) {
+                return extract_private_key_from_secret(secret);
+            }
+        } else {
+            return Err(Error::FailedToAcquireResolverReadLock);
+        }
+
+        Err(Error::KeyNotFound(format!(
+            "Private key not found for DID: {}",
+            did
+        )))
     }
 
     /// Generate a new key with the specified options

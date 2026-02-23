@@ -39,6 +39,7 @@ struct Args {
     decision_exec: Option<String>,
     decision_exec_args: Vec<String>,
     decision_subscribe: String,
+    secret_helper: Option<String>,
 }
 
 impl Args {
@@ -127,6 +128,9 @@ impl Args {
                     env::var("TAP_DECISION_SUBSCRIBE").unwrap_or_else(|_| "decisions".to_string())
                 })
             },
+            secret_helper: args
+                .opt_value_from_str("--secret-helper")?
+                .or_else(|| env::var("TAP_SECRET_HELPER").ok()),
         };
 
         // Check for any remaining arguments (which would be invalid)
@@ -168,6 +172,7 @@ AGENT OPTIONS:
     --tap-root <DIR>               TAP root directory [default: ~/.tap]
     --db-path <PATH>               Database file path (overrides per-agent default)
     --logs-dir <DIR>               Event log directory [default: ~/.tap/logs]
+    --secret-helper <CMD>          Secret helper command for external key management
 
 DECISION OPTIONS:
     -M, --decision-mode <MODE>     Decision handling mode [default: auto]
@@ -196,6 +201,7 @@ ENVIRONMENT VARIABLES:
     TAP_LOGS_DIR                   Event log directory
     TAP_STRUCTURED_LOGS            Enable structured JSON logging (set to any value)
     TAP_ENABLE_WEB_DID             Enable did:web endpoint (set to any value)
+    TAP_SECRET_HELPER               Secret helper command (replaces keys.json)
     TAP_DECISION_MODE              Decision handling: auto, poll, or exec
     TAP_DECISION_EXEC              Path to external decision executable
     TAP_DECISION_EXEC_ARGS         Comma-separated arguments
@@ -313,47 +319,81 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     }
 
-    // Create the actual agent - try to load from storage first, create if none exist
-    let agent = match TapAgent::from_stored_keys(None, true).await {
-        Ok(agent) => {
-            info!("Loaded agent from stored keys");
+    // Create the actual agent
+    // If secret helper is configured, use it instead of keys.json
+    let agent = if let Some(ref helper_cmd) = args.secret_helper {
+        use tap_agent::secret_helper::{self, SecretHelperConfig};
+
+        let config = SecretHelperConfig::from_command_string(helper_cmd)?;
+        let tap_root = args.tap_root.as_ref().map(std::path::PathBuf::from);
+
+        if let Some(ref did) = args.agent_did {
+            info!("Using secret helper for DID: {}", did);
+            let (agent, _) = TapAgent::from_secret_helper(&config, did, args.verbose).await?;
             agent
+        } else {
+            // Discover DIDs from tap directory
+            let dids = secret_helper::discover_agent_dids(tap_root.as_deref())?;
+            if let Some(did) = dids.first() {
+                info!(
+                    "Discovered DID {} from tap directory, using secret helper",
+                    did
+                );
+                let (agent, _) = TapAgent::from_secret_helper(&config, did, args.verbose).await?;
+                agent
+            } else {
+                return Err("No agent DIDs found in tap directory for secret helper".into());
+            }
         }
-        Err(e) => {
-            info!("No stored keys found ({}), creating new agent...", e);
+    } else if args.agent_did.is_some() {
+        // Use specified agent DID from storage
+        match TapAgent::from_stored_keys(args.agent_did.clone(), true).await {
+            Ok(agent) => agent,
+            Err(e) => return Err(format!("Failed to load agent: {}", e).into()),
+        }
+    } else {
+        // Try to load from storage first, create if none exist
+        match TapAgent::from_stored_keys(None, true).await {
+            Ok(agent) => {
+                info!("Loaded agent from stored keys");
+                agent
+            }
+            Err(e) => {
+                info!("No stored keys found ({}), creating new agent...", e);
 
-            // Create a key manager with storage enabled and generate a new key
-            let default_key_path = KeyStorage::default_key_path().ok_or_else(|| {
-                std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "Could not determine default key path",
-                )
-            })?;
-            let key_manager_builder =
-                AgentKeyManagerBuilder::new().load_from_path(default_key_path);
-            let key_manager = key_manager_builder.build()?;
+                // Create a key manager with storage enabled and generate a new key
+                let default_key_path = KeyStorage::default_key_path().ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "Could not determine default key path",
+                    )
+                })?;
+                let key_manager_builder =
+                    AgentKeyManagerBuilder::new().load_from_path(default_key_path);
+                let key_manager = key_manager_builder.build()?;
 
-            // Generate a new key
-            let generated_key = key_manager.generate_key(DIDGenerationOptions {
-                key_type: KeyType::Ed25519,
-            })?;
+                // Generate a new key
+                let generated_key = key_manager.generate_key(DIDGenerationOptions {
+                    key_type: KeyType::Ed25519,
+                })?;
 
-            info!("Generated new agent with DID: {}", generated_key.did);
+                info!("Generated new agent with DID: {}", generated_key.did);
 
-            // Create agent config and build agent
-            let config = AgentConfig::new(generated_key.did.clone()).with_debug(true);
+                // Create agent config and build agent
+                let config = AgentConfig::new(generated_key.did.clone()).with_debug(true);
 
-            #[cfg(all(not(target_arch = "wasm32"), test))]
-            let agent = TapAgent::new(config, Arc::new(key_manager));
+                #[cfg(all(not(target_arch = "wasm32"), test))]
+                let agent = TapAgent::new(config, Arc::new(key_manager));
 
-            #[cfg(all(not(target_arch = "wasm32"), not(test)))]
-            let agent = TapAgent::new(config, Arc::new(key_manager));
+                #[cfg(all(not(target_arch = "wasm32"), not(test)))]
+                let agent = TapAgent::new(config, Arc::new(key_manager));
 
-            #[cfg(target_arch = "wasm32")]
-            let agent = TapAgent::new(config, Arc::new(key_manager));
+                #[cfg(target_arch = "wasm32")]
+                let agent = TapAgent::new(config, Arc::new(key_manager));
 
-            info!("New key saved to storage successfully");
-            agent
+                info!("New key saved to storage successfully");
+                agent
+            }
         }
     };
     let agent_did = agent.get_agent_did().to_string(); // Clone to a String to avoid borrowing issues

@@ -203,21 +203,15 @@ impl WasmTapAgent {
             return Ok(stored_key.clone());
         }
 
-        // Otherwise, try to get it from the key manager
+        // Use get_private_key() which checks both generated_keys and secrets
         let key_manager = self.agent.agent_key_manager();
-
-        // Get the agent's DID
         let did = &self.agent.config.agent_did;
 
-        // Get the generated key from the key manager
-        let generated_key = key_manager
-            .get_generated_key(did)
+        let (private_key_bytes, _key_type) = key_manager
+            .get_private_key(did)
             .map_err(|e| JsValue::from_str(&format!("Failed to get key for DID {}: {}", did, e)))?;
 
-        // Convert private key bytes to hex string
-        let hex_private_key = hex::encode(&generated_key.private_key);
-
-        Ok(hex_private_key)
+        Ok(hex::encode(&private_key_bytes))
     }
 
     /// Export the agent's public key as a hex string

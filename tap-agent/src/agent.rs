@@ -547,6 +547,26 @@ impl TapAgent {
         }
     }
 
+    /// Creates a new TapAgent from a secret helper
+    ///
+    /// Invokes the secret helper to retrieve the private key for the given DID,
+    /// then creates a TapAgent using that key.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The secret helper configuration
+    /// * `did` - The DID to fetch the key for
+    /// * `debug` - Whether to enable debug mode
+    #[cfg(not(target_arch = "wasm32"))]
+    pub async fn from_secret_helper(
+        config: &crate::secret_helper::SecretHelperConfig,
+        did: &str,
+        debug: bool,
+    ) -> Result<(Self, String)> {
+        let (private_key, key_type) = config.get_key(did)?;
+        Self::from_private_key(&private_key, key_type, debug).await
+    }
+
     /// Creates a new TapAgent from an existing private key
     ///
     /// This function creates a new TapAgent using a provided private key,
