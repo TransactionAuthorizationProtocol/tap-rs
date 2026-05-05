@@ -7,8 +7,8 @@ use crate::didcomm::PlainMessage;
 use crate::error::{Error, Result};
 use crate::message::{
     AddAgents, AuthorizationRequired, Authorize, BasicMessage, Cancel, Capture,
-    ConfirmRelationship, Connect, DIDCommPresentation, ErrorBody, Escrow, Exchange, OutOfBand,
-    Payment, Presentation, Quote, Reject, RemoveAgent, ReplaceAgent, RequestPresentation, Revert,
+    ConfirmRelationship, Connect, DIDCommPresentation, ErrorBody, Lock, OutOfBand, Payment,
+    Presentation, Quote, Reject, RemoveAgent, ReplaceAgent, RequestPresentation, Revert, Rfq,
     Settle, Transfer, TrustPing, TrustPingResponse, UpdateParty, UpdatePolicies,
 };
 use serde::{Deserialize, Serialize};
@@ -38,10 +38,12 @@ pub enum TapMessage {
     DIDCommPresentation(DIDCommPresentation),
     /// Error message
     Error(ErrorBody),
-    /// Escrow message (TAIP-17)
-    Escrow(Escrow),
-    /// Exchange message (TAIP-18)
-    Exchange(Exchange),
+    /// Lock message (TAIP-17). Formerly known as Escrow; the `Escrow` type
+    /// alias still resolves to `Lock`.
+    Lock(Lock),
+    /// RFQ message (TAIP-18). Formerly known as Exchange; the `Exchange` type
+    /// alias still resolves to `Rfq`.
+    Rfq(Rfq),
     /// Out of band message (TAIP-2)
     OutOfBand(OutOfBand),
     /// Payment message (TAIP-14)
@@ -176,18 +178,21 @@ impl TapMessage {
                     })?;
                 Ok(TapMessage::Error(msg))
             }
-            "https://tap.rsvp/schema/1.0#Escrow" => {
-                let msg: Escrow = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
-                    Error::SerializationError(format!("Failed to parse Escrow: {}", e))
+            // Both the new `#Lock` URI and the legacy `#Escrow` URI dispatch to
+            // `TapMessage::Lock` — `Escrow` is a type alias for `Lock`.
+            "https://tap.rsvp/schema/1.0#Lock" | "https://tap.rsvp/schema/1.0#Escrow" => {
+                let msg: Lock = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                    Error::SerializationError(format!("Failed to parse Lock: {}", e))
                 })?;
-                Ok(TapMessage::Escrow(msg))
+                Ok(TapMessage::Lock(msg))
             }
-            "https://tap.rsvp/schema/1.0#Exchange" => {
-                let msg: Exchange =
-                    serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
-                        Error::SerializationError(format!("Failed to parse Exchange: {}", e))
-                    })?;
-                Ok(TapMessage::Exchange(msg))
+            // Both the new `#RFQ` URI and the legacy `#Exchange` URI dispatch to
+            // `TapMessage::Rfq` — `Exchange` is a type alias for `Rfq`.
+            "https://tap.rsvp/schema/1.0#RFQ" | "https://tap.rsvp/schema/1.0#Exchange" => {
+                let msg: Rfq = serde_json::from_value(plain_msg.body.clone()).map_err(|e| {
+                    Error::SerializationError(format!("Failed to parse RFQ: {}", e))
+                })?;
+                Ok(TapMessage::Rfq(msg))
             }
             "https://tap.rsvp/schema/1.0#OutOfBand" => {
                 let msg: OutOfBand =
@@ -319,8 +324,8 @@ impl TapMessage {
                 "https://didcomm.org/present-proof/3.0/presentation"
             }
             TapMessage::Error(_) => "https://tap.rsvp/schema/1.0#Error",
-            TapMessage::Escrow(_) => "https://tap.rsvp/schema/1.0#Escrow",
-            TapMessage::Exchange(_) => "https://tap.rsvp/schema/1.0#Exchange",
+            TapMessage::Lock(_) => "https://tap.rsvp/schema/1.0#Lock",
+            TapMessage::Rfq(_) => "https://tap.rsvp/schema/1.0#RFQ",
             TapMessage::OutOfBand(_) => "https://tap.rsvp/schema/1.0#OutOfBand",
             TapMessage::Payment(_) => "https://tap.rsvp/schema/1.0#Payment",
             TapMessage::Quote(_) => "https://tap.rsvp/schema/1.0#Quote",

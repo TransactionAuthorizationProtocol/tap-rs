@@ -1,25 +1,44 @@
 // Import TAP message types from the official TAIPs package
-import type { 
-  TAPMessage, 
+// (TAIP-17 Escrow → Lock and TAIP-18 Exchange → RFQ renames landed in
+// @taprsvp/types v2.0.0; legacy `Escrow` / `Exchange` names are preserved
+// as type aliases below for backward compatibility.)
+import type {
+  TAPMessage,
   DIDCommMessage as TAPDIDCommMessage,
-  Transfer, 
-  Payment, 
-  Authorize, 
-  Reject, 
-  Settle, 
-  Cancel, 
-  Revert, 
-  Connect, 
-  Escrow, 
-  Capture, 
-  AddAgents, 
-  ReplaceAgent, 
-  RemoveAgent, 
-  UpdatePolicies, 
-  UpdateParty, 
-  ConfirmRelationship, 
-  AuthorizationRequired 
+  Transfer,
+  Payment,
+  Authorize,
+  Reject,
+  Settle,
+  Cancel,
+  Revert,
+  Connect,
+  Lock,
+  Capture,
+  RFQ,
+  Quote,
+  AddAgents,
+  ReplaceAgent,
+  RemoveAgent,
+  UpdatePolicies,
+  UpdateParty,
+  ConfirmRelationship,
+  AuthorizationRequired,
 } from '@taprsvp/types';
+
+/**
+ * Backward-compatible alias: TAIP-17 renamed `Escrow` → `Lock` while
+ * keeping the body shape unchanged. Use `Lock` going forward; existing
+ * `Escrow` users keep compiling.
+ */
+export type Escrow = Lock;
+
+/**
+ * Backward-compatible alias: TAIP-18 renamed `Exchange` → `RFQ` while
+ * keeping the body shape unchanged. Use `RFQ` going forward; existing
+ * `Exchange` users keep compiling.
+ */
+export type Exchange = RFQ;
 
 /**
  * Configuration options for creating a TapAgent instance
@@ -252,8 +271,16 @@ export interface TapMessageTypes {
   Cancel: Cancel;
   Revert: Revert;
   Connect: Connect;
+  /** TAIP-17 Lock (renamed from Escrow). */
+  Lock: Lock;
+  /** Backward-compatible alias for `Lock`. */
   Escrow: Escrow;
   Capture: Capture;
+  /** TAIP-18 RFQ (renamed from Exchange). */
+  RFQ: RFQ;
+  /** Backward-compatible alias for `RFQ`. */
+  Exchange: Exchange;
+  Quote: Quote;
   AddAgents: AddAgents;
   ReplaceAgent: ReplaceAgent;
   RemoveAgent: RemoveAgent;
@@ -394,8 +421,10 @@ export function isTAPMessage(message: TAPMessageUnion): message is TAPMessage {
     'https://tap.rsvp/schema/1.0#Cancel',
     'https://tap.rsvp/schema/1.0#Revert',
     'https://tap.rsvp/schema/1.0#Connect',
+    'https://tap.rsvp/schema/1.0#Lock',
     'https://tap.rsvp/schema/1.0#Escrow',
     'https://tap.rsvp/schema/1.0#Capture',
+    'https://tap.rsvp/schema/1.0#RFQ',
     'https://tap.rsvp/schema/1.0#Exchange',
     'https://tap.rsvp/schema/1.0#Quote',
     'https://tap.rsvp/schema/1.0#AddAgents',
@@ -410,10 +439,31 @@ export function isTAPMessage(message: TAPMessageUnion): message is TAPMessage {
   return tapMessageTypes.includes((message as any).type);
 }
 
-// Re-export key types from @taprsvp/types for convenience
-export type { TAPMessage, Transfer, Payment, Authorize, Reject, Settle, Cancel, Revert, 
-  Connect, Escrow, Capture, AddAgents, ReplaceAgent, RemoveAgent, UpdatePolicies, 
-  UpdateParty, ConfirmRelationship, AuthorizationRequired };
+// Re-export key types from @taprsvp/types for convenience.
+// `Escrow` and `Exchange` are local aliases (defined above) for the renamed
+// `Lock` and `RFQ` types.
+export type {
+  TAPMessage,
+  Transfer,
+  Payment,
+  Authorize,
+  Reject,
+  Settle,
+  Cancel,
+  Revert,
+  Connect,
+  Lock,
+  Capture,
+  RFQ,
+  Quote,
+  AddAgents,
+  ReplaceAgent,
+  RemoveAgent,
+  UpdatePolicies,
+  UpdateParty,
+  ConfirmRelationship,
+  AuthorizationRequired,
+};
 
 // Re-export the TAP DIDCommMessage for comparison  
 export type { TAPDIDCommMessage };

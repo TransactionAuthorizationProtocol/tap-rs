@@ -34,7 +34,7 @@ use std::fs;
 use std::path::Path;
 use tap_msg::didcomm::PlainMessage;
 use tap_msg::message::{
-    AuthorizationRequired, Cancel, ConfirmRelationship, Connect, DIDCommPresentation, Escrow,
+    AuthorizationRequired, Cancel, ConfirmRelationship, Connect, DIDCommPresentation, Lock,
     Payment, RemoveAgent, ReplaceAgent, Revert, UpdateParty, UpdatePolicies,
 };
 use tap_msg::{
@@ -298,17 +298,17 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
                     .map_err(|e| format!("Failed to parse AuthorizationRequired: {}", e))?;
             auth_required.validate().map_err(|e| e.to_string())
         }
-        "https://tap.rsvp/schema/1.0#Escrow" => {
-            // Create a more lenient Escrow parsing by fixing agents
+        // TAIP-17 was renamed Escrow → Lock; both URIs dispatch to `Lock`.
+        "https://tap.rsvp/schema/1.0#Lock" | "https://tap.rsvp/schema/1.0#Escrow" => {
+            // Test vectors sometimes omit `for` on the EscrowAgent; default it
+            // to the agent's own DID before parsing.
             let mut clean_body = body_with_thread_id.clone();
             if let Some(obj) = clean_body.as_object_mut() {
-                // Fix agents by adding missing 'for' field if needed
                 if let Some(agents) = obj.get_mut("agents") {
                     if let Some(agents_array) = agents.as_array_mut() {
                         for agent in agents_array.iter_mut() {
                             if let Some(agent_obj) = agent.as_object_mut() {
                                 if !agent_obj.contains_key("for") {
-                                    // For escrow agents, default to acting for themselves
                                     if let Some(agent_id) = agent_obj.get("@id") {
                                         agent_obj.insert("for".to_string(), agent_id.clone());
                                     }
@@ -319,9 +319,9 @@ fn validate_tap_message(message: &PlainMessage) -> Result<(), String> {
                 }
             }
 
-            let escrow: Escrow = serde_json::from_value(clean_body)
-                .map_err(|e| format!("Failed to parse Escrow: {}", e))?;
-            escrow.validate().map_err(|e| e.to_string())
+            let lock: Lock = serde_json::from_value(clean_body)
+                .map_err(|e| format!("Failed to parse Lock: {}", e))?;
+            lock.validate().map_err(|e| e.to_string())
         }
         "https://didcomm.org/out-of-band/2.0/invitation" => {
             // Out-of-band messages must have a goal_code starting with "tap."

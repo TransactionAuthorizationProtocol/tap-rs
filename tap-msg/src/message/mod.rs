@@ -13,9 +13,8 @@ pub mod connection;
 pub mod context;
 pub mod did_presentation;
 pub mod error;
-pub mod escrow;
-pub mod exchange;
 pub mod invoice;
+pub mod lock;
 pub mod party;
 pub mod payment;
 pub mod policy;
@@ -23,6 +22,7 @@ pub mod presentation;
 pub mod reject;
 pub mod relationship;
 pub mod revert;
+pub mod rfq;
 pub mod settle;
 pub mod tap_message_enum;
 pub mod tap_message_trait;
@@ -59,11 +59,13 @@ pub use did_presentation::DIDCommPresentation;
 // Re-export error type
 pub use error::ErrorBody;
 
-// Re-export escrow types
-pub use escrow::{Capture, Escrow};
+// Re-export lock types (TAIP-17). `Escrow` is preserved as a backward-compatible
+// alias for `Lock` so downstream callers keep compiling.
+pub use lock::{Capture, Escrow, Lock};
 
-// Re-export exchange types
-pub use exchange::{Exchange, Quote};
+// Re-export RFQ types (TAIP-18). `Exchange` is preserved as a backward-compatible
+// alias for `Rfq` so downstream callers keep compiling.
+pub use rfq::{Exchange, Quote, Rfq};
 
 // Re-export invoice types
 pub use invoice::{

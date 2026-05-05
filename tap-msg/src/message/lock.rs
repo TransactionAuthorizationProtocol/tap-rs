@@ -1,7 +1,14 @@
-//! Composable Escrow message types (TAIP-17)
+//! Composable Lock and Capture message types (TAIP-17).
 //!
-//! This module implements the Escrow and Capture message types for holding and releasing
-//! funds on behalf of parties, enabling payment guarantees and asset swaps.
+//! TAIP-17 was renamed from "Escrow" to "Lock" in the May 2026 spec advance to
+//! Review. The body shape is unchanged: a Lock requests an agent to hold assets
+//! on behalf of one party for the benefit of another, and Capture authorises
+//! the release of those assets to the beneficiary. The role string `EscrowAgent`
+//! is preserved by the spec and continues to identify the agent holding funds.
+//!
+//! `Escrow` is kept as a type alias for `Lock` to avoid breaking downstream
+//! callers; on-the-wire messages bearing the legacy `#Escrow` type URI are
+//! still accepted by the dispatcher in [`crate::message::tap_message_enum`].
 
 use crate::error::{Error, Result};
 use crate::message::agent::Agent;
@@ -11,49 +18,54 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 
-/// Escrow message for holding assets on behalf of parties
+/// Lock message for holding assets on behalf of parties (TAIP-17).
 ///
-/// The Escrow message allows one agent to request another agent to hold a specified amount
-/// of currency or asset from a party in escrow on behalf of another party.
+/// A Lock allows one agent to request another agent to hold a specified
+/// amount of currency or asset from a party in escrow on behalf of another
+/// party.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct Escrow {
-    /// The specific cryptocurrency asset to be held in escrow (CAIP-19 identifier)
-    /// Either `asset` OR `currency` MUST be present
+pub struct Lock {
+    /// Cryptocurrency asset to be held in escrow (CAIP-19 identifier).
+    /// Either `asset` OR `currency` MUST be present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub asset: Option<String>,
 
-    /// ISO 4217 currency code (e.g. "USD", "EUR") for fiat-denominated escrows
-    /// Either `asset` OR `currency` MUST be present
+    /// ISO 4217 currency code (e.g. "USD", "EUR") for fiat-denominated locks.
+    /// Either `asset` OR `currency` MUST be present.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub currency: Option<String>,
 
-    /// The amount to be held in escrow (string decimal)
+    /// Amount to be held in escrow (decimal string).
     pub amount: String,
 
-    /// The party whose assets will be placed in escrow
+    /// Party whose assets will be placed in escrow.
     pub originator: Party,
 
-    /// The party who will receive the assets when released
+    /// Party who will receive the assets when released.
     pub beneficiary: Party,
 
-    /// Timestamp after which the escrow automatically expires and funds are released back to the originator
+    /// Timestamp after which the lock automatically expires and funds are
+    /// released back to the originator.
     pub expiry: String,
 
-    /// URL or URI referencing the terms and conditions of the escrow
+    /// URL or URI referencing the terms and conditions of the lock.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agreement: Option<String>,
 
-    /// Array of agents involved in the escrow. Exactly one agent MUST have role "EscrowAgent"
+    /// Agents involved in the lock. Exactly one agent MUST have role "EscrowAgent".
     pub agents: Vec<Agent>,
 
-    /// Additional metadata
+    /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, Value>,
 }
 
-impl Escrow {
-    /// Create a new Escrow message for cryptocurrency assets
+/// Backward-compatible alias for the renamed `Lock` message.
+pub type Escrow = Lock;
+
+impl Lock {
+    /// Create a new Lock for cryptocurrency assets.
     pub fn new_with_asset(
         asset: String,
         amount: String,
@@ -75,7 +87,7 @@ impl Escrow {
         }
     }
 
-    /// Create a new Escrow message for fiat currency
+    /// Create a new Lock for fiat currency.
     pub fn new_with_currency(
         currency: String,
         amount: String,
@@ -97,26 +109,27 @@ impl Escrow {
         }
     }
 
-    /// Set the agreement URL
+    /// Set the agreement URL.
     pub fn with_agreement(mut self, agreement: String) -> Self {
         self.agreement = Some(agreement);
         self
     }
 
-    /// Add metadata
+    /// Add metadata.
     pub fn with_metadata(mut self, key: String, value: Value) -> Self {
         self.metadata.insert(key, value);
         self
     }
 
-    /// Find the escrow agent in the agents list
+    /// Find the escrow agent (the agent with `role == "EscrowAgent"`) in the
+    /// agents list.
     pub fn escrow_agent(&self) -> Option<&Agent> {
         self.agents
             .iter()
             .find(|a| a.role == Some("EscrowAgent".to_string()))
     }
 
-    /// Find agents that can authorize release (agents acting for the beneficiary)
+    /// Find agents that can authorise release (agents acting `for` the beneficiary).
     pub fn authorizing_agents(&self) -> Vec<&Agent> {
         self.agents
             .iter()
@@ -125,42 +138,34 @@ impl Escrow {
     }
 }
 
-impl TapMessageBody for Escrow {
+impl TapMessageBody for Lock {
     fn message_type() -> &'static str {
-        "https://tap.rsvp/schema/1.0#Escrow"
+        "https://tap.rsvp/schema/1.0#Lock"
     }
 
     fn validate(&self) -> Result<()> {
-        // Validate that either asset or currency is present, but not both
         match (&self.asset, &self.currency) {
             (Some(_), Some(_)) => {
                 return Err(Error::Validation(
-                    "Escrow cannot have both asset and currency specified".to_string(),
+                    "Lock cannot have both asset and currency specified".to_string(),
                 ));
             }
             (None, None) => {
                 return Err(Error::Validation(
-                    "Escrow must have either asset or currency specified".to_string(),
+                    "Lock must have either asset or currency specified".to_string(),
                 ));
             }
             _ => {}
         }
 
-        // Validate amount is not empty
         if self.amount.is_empty() {
-            return Err(Error::Validation(
-                "Escrow amount cannot be empty".to_string(),
-            ));
+            return Err(Error::Validation("Lock amount cannot be empty".to_string()));
         }
 
-        // Validate expiry is not empty
         if self.expiry.is_empty() {
-            return Err(Error::Validation(
-                "Escrow expiry cannot be empty".to_string(),
-            ));
+            return Err(Error::Validation("Lock expiry cannot be empty".to_string()));
         }
 
-        // Validate exactly one EscrowAgent exists
         let escrow_agent_count = self
             .agents
             .iter()
@@ -169,20 +174,19 @@ impl TapMessageBody for Escrow {
 
         if escrow_agent_count == 0 {
             return Err(Error::Validation(
-                "Escrow must have exactly one agent with role 'EscrowAgent'".to_string(),
+                "Lock must have exactly one agent with role 'EscrowAgent'".to_string(),
             ));
         }
 
         if escrow_agent_count > 1 {
             return Err(Error::Validation(
-                "Escrow cannot have more than one agent with role 'EscrowAgent'".to_string(),
+                "Lock cannot have more than one agent with role 'EscrowAgent'".to_string(),
             ));
         }
 
-        // Validate originator and beneficiary are different
         if self.originator.id == self.beneficiary.id {
             return Err(Error::Validation(
-                "Escrow originator and beneficiary must be different parties".to_string(),
+                "Lock originator and beneficiary must be different parties".to_string(),
             ));
         }
 
@@ -190,29 +194,30 @@ impl TapMessageBody for Escrow {
     }
 }
 
-/// Capture message for releasing escrowed funds
+/// Capture message for releasing locked funds (TAIP-17).
 ///
-/// The Capture message authorizes the release of escrowed funds to the beneficiary.
-/// It can only be sent by agents acting for the beneficiary.
+/// Capture authorises the release of locked funds to the beneficiary. It can
+/// only be sent by agents acting for the beneficiary.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Capture {
-    /// Amount to capture (string decimal). If omitted, captures full escrow amount.
-    /// MUST be less than or equal to original amount
+    /// Amount to capture (decimal string). If omitted, captures the full
+    /// locked amount. MUST be ≤ original amount.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub amount: Option<String>,
 
-    /// Blockchain address for settlement. If omitted, uses address from earlier Authorize
+    /// Blockchain address for settlement. If omitted, uses the address from
+    /// an earlier Authorize.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settlement_address: Option<String>,
 
-    /// Additional metadata
+    /// Additional metadata.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub metadata: HashMap<String, Value>,
 }
 
 impl Capture {
-    /// Create a new Capture message for the full amount
+    /// Create a new Capture for the full locked amount.
     pub fn new() -> Self {
         Self {
             amount: None,
@@ -221,7 +226,7 @@ impl Capture {
         }
     }
 
-    /// Create a new Capture message for a partial amount
+    /// Create a new Capture for a partial amount.
     pub fn with_amount(amount: String) -> Self {
         Self {
             amount: Some(amount),
@@ -230,13 +235,13 @@ impl Capture {
         }
     }
 
-    /// Set the settlement address
+    /// Set the settlement address.
     pub fn with_settlement_address(mut self, address: String) -> Self {
         self.settlement_address = Some(address);
         self
     }
 
-    /// Add metadata
+    /// Add metadata.
     pub fn with_metadata(mut self, key: String, value: Value) -> Self {
         self.metadata.insert(key, value);
         self
@@ -255,7 +260,6 @@ impl TapMessageBody for Capture {
     }
 
     fn validate(&self) -> Result<()> {
-        // Validate amount if present
         if let Some(ref amount) = self.amount {
             if amount.is_empty() {
                 return Err(Error::Validation(
@@ -264,7 +268,6 @@ impl TapMessageBody for Capture {
             }
         }
 
-        // Validate settlement_address if present
         if let Some(ref address) = self.settlement_address {
             if address.is_empty() {
                 return Err(Error::Validation(
@@ -282,7 +285,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_escrow_with_asset() {
+    fn test_lock_with_asset() {
         let originator = Party::new("did:example:alice");
         let beneficiary = Party::new("did:example:bob");
         let agent1 = Agent::new(
@@ -301,7 +304,7 @@ mod tests {
             "did:example:escrow-service",
         );
 
-        let escrow = Escrow::new_with_asset(
+        let lock = Lock::new_with_asset(
             "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
             "100.00".to_string(),
             originator,
@@ -310,16 +313,16 @@ mod tests {
             vec![agent1, agent2, escrow_agent],
         );
 
-        assert!(escrow.validate().is_ok());
-        assert!(escrow.escrow_agent().is_some());
+        assert!(lock.validate().is_ok());
+        assert!(lock.escrow_agent().is_some());
         assert_eq!(
-            escrow.escrow_agent().unwrap().role,
+            lock.escrow_agent().unwrap().role,
             Some("EscrowAgent".to_string())
         );
     }
 
     #[test]
-    fn test_escrow_with_currency() {
+    fn test_lock_with_currency() {
         let originator = Party::new("did:example:buyer");
         let beneficiary = Party::new("did:example:seller");
         let escrow_agent = Agent::new(
@@ -328,7 +331,7 @@ mod tests {
             "did:example:escrow-bank",
         );
 
-        let escrow = Escrow::new_with_currency(
+        let lock = Lock::new_with_currency(
             "USD".to_string(),
             "500.00".to_string(),
             originator,
@@ -338,21 +341,20 @@ mod tests {
         )
         .with_agreement("https://marketplace.example/purchase/98765".to_string());
 
-        assert!(escrow.validate().is_ok());
-        assert_eq!(escrow.currency, Some("USD".to_string()));
+        assert!(lock.validate().is_ok());
+        assert_eq!(lock.currency, Some("USD".to_string()));
         assert_eq!(
-            escrow.agreement,
+            lock.agreement,
             Some("https://marketplace.example/purchase/98765".to_string())
         );
     }
 
     #[test]
-    fn test_escrow_validation_errors() {
+    fn test_lock_validation_errors() {
         let originator = Party::new("did:example:alice");
         let beneficiary = Party::new("did:example:bob");
 
-        // Test missing escrow agent
-        let escrow_no_agent = Escrow::new_with_asset(
+        let lock_no_agent = Lock::new_with_asset(
             "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
             "100.00".to_string(),
             originator.clone(),
@@ -360,10 +362,9 @@ mod tests {
             "2025-06-25T00:00:00Z".to_string(),
             vec![],
         );
-        assert!(escrow_no_agent.validate().is_err());
+        assert!(lock_no_agent.validate().is_err());
 
-        // Test both asset and currency specified
-        let mut escrow_both = Escrow::new_with_asset(
+        let mut lock_both = Lock::new_with_asset(
             "eip155:1/erc20:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string(),
             "100.00".to_string(),
             originator.clone(),
@@ -375,11 +376,10 @@ mod tests {
                 "did:example:escrow",
             )],
         );
-        escrow_both.currency = Some("USD".to_string());
-        assert!(escrow_both.validate().is_err());
+        lock_both.currency = Some("USD".to_string());
+        assert!(lock_both.validate().is_err());
 
-        // Test same originator and beneficiary
-        let escrow_same_party = Escrow::new_with_currency(
+        let lock_same_party = Lock::new_with_currency(
             "USD".to_string(),
             "100.00".to_string(),
             originator.clone(),
@@ -391,7 +391,7 @@ mod tests {
                 "did:example:escrow",
             )],
         );
-        assert!(escrow_same_party.validate().is_err());
+        assert!(lock_same_party.validate().is_err());
     }
 
     #[test]

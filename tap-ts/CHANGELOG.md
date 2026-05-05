@@ -8,11 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- Bumped `@taprsvp/types` from `^1.9.0` to `^2.1.0` (TAIP-17 Escrow→Lock and TAIP-18 Exchange→RFQ landed upstream).
+- `createExchangeMessage` now emits a `#RFQ` envelope (renamed message body type per TAIP-18); function retained as an alias for `createRfqMessage`.
 - JWS serialization switched from General to Flattened format for single signatures (Veramo compatibility)
 - JWS encoding switched from standard Base64 to Base64URL (no padding) per RFC 7515
 - Tests updated to expect Flattened JWS format
 
 ### Added
+- TAIP-17 / TAIP-18 spec catch-up: `Lock` and `RFQ` types exported alongside backward-compatible `Escrow = Lock` and `Exchange = RFQ` aliases.
+- New `createRfqMessage` helper for TAIP-18 Request for Quote messages.
+- `Lock`, `RFQ`, `Quote` listed in `SUPPORTED_MESSAGE_TYPES` and `isTAPMessage` URI checks accept both new and legacy URIs.
 - X25519 JWE anoncrypt support for Veramo interoperability
 - Flexible Base64 decoding accepting standard, URL-safe, padded and unpadded variants
 

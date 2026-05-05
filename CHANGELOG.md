@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### TAIP Spec Catch-Up (tap-msg, tap-ts)
+- TAIP-17 `Lock` message type (renamed from `Escrow`); `Capture` and the `EscrowAgent` role string unchanged. `Escrow` retained as a `pub type` alias for `Lock`.
+- TAIP-18 `Rfq` message type (renamed from `Exchange`); `Quote` unchanged. `Exchange` retained as a `pub type` alias for `Rfq`.
+- TAIP-20 on-chain memo-hash helpers in `tap_msg::utils::memo_hash`: `tap_memo_hash`, `encode_text_memo`, `encode_binary_memo`, `verify_text_memo`, `verify_binary_memo`. Implements the canonical `tap:1:<64-hex>` text profile and 32-byte binary profile per `SHA-256(transfer_id)`.
+- `TapMessage::from_plain_message` now accepts both legacy and new URIs (`#Escrow` and `#Lock` → `TapMessage::Lock`; `#Exchange` and `#RFQ` → `TapMessage::Rfq`).
+- `tap-ts`: bumped `@taprsvp/types` from `^1.9.0` to `^2.1.0`. Added `Lock`/`RFQ` exports alongside `Escrow`/`Exchange` aliases. New `createRfqMessage` helper; `createExchangeMessage` retained as an alias.
+
+### Changed
+- Outgoing `Lock` and `Rfq` messages emit the new canonical URIs (`#Lock` / `#RFQ`).
+- Internal clippy fix: `tap-agent::verification` matches now use match guards instead of nested `if` to satisfy `clippy::collapsible-match` on newer rustc.
+
 #### External Secret Helper for Key Management (tap-agent, tap-cli, tap-http, tap-mcp)
 - Git-like secret helper pattern for retrieving private keys from external stores (HashiCorp Vault, AWS KMS, 1Password)
 - `get_private_key(did)` method on `AgentKeyManager` and `KeyManager` trait

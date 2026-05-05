@@ -2,6 +2,14 @@
 
 This repository contains a Rust implementation of the Transaction Authorization Protocol (TAP), a decentralized protocol for securely authorizing blockchain transactions before they are submitted on-chain. TAP-RS targets payment-related use cases, Travel Rule compliance, and secure transaction coordination.
 
+**New in v0.7.0**:
+- TAIP-17 `Lock` (renamed from `Escrow`) and TAIP-18 `Rfq` (renamed from `Exchange`); old type names retained as aliases and legacy URIs accepted on the wire
+- TAIP-20 on-chain memo-hash helpers (`tap_msg::utils::memo_hash`) for `SHA-256(transfer_id)` settlement correlation
+- `tap-ts` upgraded to `@taprsvp/types` v2.1
+- External secret helper (Vault / AWS KMS / 1Password) for private key retrieval in `tap-agent`, `tap-cli`, `tap-http`, `tap-mcp`
+- Flattened JWS serialization for Veramo compatibility
+- X25519 JWE anoncrypt support
+
 **New in v0.6.0**:
 - External decision executable support for pluggable authorization workflows
 - Poll mode for decision management via MCP tools

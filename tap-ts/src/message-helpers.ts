@@ -305,11 +305,16 @@ export async function createConnectMessage(params: {
 }
 
 /**
- * Create a TAP Exchange message (TAIP-18)
- * @param params Exchange parameters
- * @returns TAP-compliant Exchange message
+ * Create a TAP RFQ (Request for Quote) message (TAIP-18).
+ *
+ * TAIP-18 was renamed from "Exchange" to "RFQ" while keeping the body shape
+ * unchanged. The legacy `createExchangeMessage` export below is preserved as
+ * an alias for this function.
+ *
+ * @param params RFQ parameters
+ * @returns TAP-compliant RFQ message
  */
-export async function createExchangeMessage(params: {
+export async function createRfqMessage(params: {
   from: string;
   to: string[];
   fromAssets: string[];
@@ -324,27 +329,27 @@ export async function createExchangeMessage(params: {
   pthid?: string;
   expires_time?: number;
 }): Promise<DIDCommMessage<unknown>> {
-  const exchangeBody: Record<string, unknown> = {
+  const rfqBody: Record<string, unknown> = {
     '@context': 'https://tap.rsvp/schema/1.0',
-    '@type': 'Exchange',
+    '@type': 'RFQ',
     fromAssets: params.fromAssets,
     toAssets: params.toAssets,
     requester: params.requester,
     agents: params.agents || [],
   };
 
-  if (params.fromAmount !== undefined) exchangeBody.fromAmount = params.fromAmount;
-  if (params.toAmount !== undefined) exchangeBody.toAmount = params.toAmount;
-  if (params.provider !== undefined) exchangeBody.provider = params.provider;
-  if (params.policies !== undefined) exchangeBody.policies = params.policies;
+  if (params.fromAmount !== undefined) rfqBody.fromAmount = params.fromAmount;
+  if (params.toAmount !== undefined) rfqBody.toAmount = params.toAmount;
+  if (params.provider !== undefined) rfqBody.provider = params.provider;
+  if (params.policies !== undefined) rfqBody.policies = params.policies;
 
   const message: any = {
     id: await generateUUID(),
-    type: 'https://tap.rsvp/schema/1.0#Exchange',
+    type: 'https://tap.rsvp/schema/1.0#RFQ',
     from: params.from as DID,
     to: params.to as DID[],
     created_time: Date.now(),
-    body: exchangeBody,
+    body: rfqBody,
   };
 
   if (params.expires_time !== undefined) message.expires_time = params.expires_time;
@@ -353,6 +358,12 @@ export async function createExchangeMessage(params: {
 
   return message;
 }
+
+/**
+ * Backward-compatible alias for {@link createRfqMessage}. Emits a `#RFQ`
+ * envelope per the renamed TAIP-18 spec.
+ */
+export const createExchangeMessage = createRfqMessage;
 
 /**
  * Create a TAP Quote message (TAIP-18)
