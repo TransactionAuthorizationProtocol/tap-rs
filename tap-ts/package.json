@@ -1,6 +1,6 @@
 {
   "name": "@taprsvp/agent",
-  "version": "0.6.0-SNAPSHOT",
+  "version": "0.7.0-SNAPSHOT",
   "type": "module",
   "description": "TypeScript wrapper for TAP WASM Agent - Browser-optimized message packing/unpacking with flexible key management",
   "keywords": [

@@ -162,13 +162,11 @@ fn verify_eddsa(
         } => {
             // Decode the multibase key
             match multibase::decode(public_key_multibase) {
-                Ok((Base::Base58Btc, key_data)) => {
-                    // Skip the multicodec prefix (0xed01 for Ed25519)
-                    if key_data.len() >= 34 && key_data[0] == 0xed && key_data[1] == 0x01 {
-                        key_data[2..].to_vec()
-                    } else {
-                        return false;
-                    }
+                // Skip the multicodec prefix (0xed01 for Ed25519)
+                Ok((Base::Base58Btc, key_data))
+                    if key_data.len() >= 34 && key_data[0] == 0xed && key_data[1] == 0x01 =>
+                {
+                    key_data[2..].to_vec()
                 }
                 _ => return false,
             }
@@ -214,13 +212,11 @@ fn verify_es256(
         } => {
             // Decode the multibase key
             match multibase::decode(public_key_multibase) {
-                Ok((Base::Base58Btc, key_data)) => {
-                    // Skip the multicodec prefix (0x1200 for P-256)
-                    if key_data.len() >= 67 && key_data[0] == 0x12 && key_data[1] == 0x00 {
-                        key_data[2..].to_vec()
-                    } else {
-                        return false;
-                    }
+                // Skip the multicodec prefix (0x1200 for P-256)
+                Ok((Base::Base58Btc, key_data))
+                    if key_data.len() >= 67 && key_data[0] == 0x12 && key_data[1] == 0x00 =>
+                {
+                    key_data[2..].to_vec()
                 }
                 _ => return false,
             }
@@ -265,13 +261,11 @@ fn verify_es256k(
         } => {
             // Decode the multibase key
             match multibase::decode(public_key_multibase) {
-                Ok((Base::Base58Btc, key_data)) => {
-                    // Skip the multicodec prefix (0xe701 for secp256k1)
-                    if key_data.len() >= 67 && key_data[0] == 0xe7 && key_data[1] == 0x01 {
-                        key_data[2..].to_vec()
-                    } else {
-                        return false;
-                    }
+                // Skip the multicodec prefix (0xe701 for secp256k1)
+                Ok((Base::Base58Btc, key_data))
+                    if key_data.len() >= 67 && key_data[0] == 0xe7 && key_data[1] == 0x01 =>
+                {
+                    key_data[2..].to_vec()
                 }
                 _ => return false,
             }
