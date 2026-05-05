@@ -36,8 +36,12 @@ const TAP_MESSAGE_TYPES = new Set<string>([
   'Cancel',
   'Revert',
   'Connect',
+  // TAIP-17: `Lock` is the canonical name; `Escrow` is the legacy alias.
+  'Lock',
   'Escrow',
   'Capture',
+  // TAIP-18: `RFQ` is the canonical name; `Exchange` is the legacy alias.
+  'RFQ',
   'Exchange',
   'Quote',
   'AddAgents',

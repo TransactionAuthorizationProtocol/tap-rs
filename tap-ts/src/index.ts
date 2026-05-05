@@ -80,6 +80,8 @@ export {
   createCancelMessage,
   createSettleMessage,
   createConnectMessage,
+  createRfqMessage,
+  // Legacy alias for `createRfqMessage`; emits a `#RFQ` envelope per TAIP-18.
   createExchangeMessage,
   createQuoteMessage,
   createBasicMessage,
@@ -146,8 +148,12 @@ export const SUPPORTED_MESSAGE_TYPES = [
   'Cancel',
   'Revert',
   'Connect',
+  // TAIP-17: `Lock` is the canonical name; `Escrow` is the legacy alias.
+  'Lock',
   'Escrow',
   'Capture',
+  // TAIP-18: `RFQ` is the canonical name; `Exchange` is the legacy alias.
+  'RFQ',
   'Exchange',
   'Quote',
   'AddAgents',

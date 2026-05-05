@@ -29,7 +29,9 @@ fn test_encode_text_memo_produces_canonical_form() {
     // The hex tail MUST be exactly 64 lowercase hex chars.
     let tail = memo.strip_prefix("tap:1:").unwrap();
     assert_eq!(tail.len(), 64);
-    assert!(tail.chars().all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+    assert!(tail
+        .chars()
+        .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
 }
 
 #[test]

@@ -1,7 +1,13 @@
-//! Exchange and Quote message implementations for the Transaction Authorization Protocol.
+//! RFQ and Quote message implementations (TAIP-18).
 //!
-//! This module defines the Exchange and Quote message types (TAIP-18) for requesting
-//! and executing asset exchanges and price quotations.
+//! TAIP-18 was renamed from "Exchange" to "RFQ" (Request for Quote) in the
+//! May 2026 spec advance to Review. The body shape is unchanged: an RFQ
+//! initiates a request for cross-asset quotes, and a Quote responds with a
+//! firm price.
+//!
+//! `Exchange` is kept as a type alias for `Rfq` to avoid breaking downstream
+//! callers; on-the-wire messages bearing the legacy `#Exchange` type URI are
+//! still accepted by the dispatcher in [`crate::message::tap_message_enum`].
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -12,19 +18,19 @@ use crate::message::tap_message_trait::{TapMessage as TapMessageTrait, TapMessag
 use crate::message::{Agent, Party};
 use crate::TapMessage;
 
-/// Exchange message body (TAIP-18).
+/// RFQ (Request for Quote) message body (TAIP-18).
 ///
-/// Initiates an exchange request for cross-asset quotes. Supports multiple source
-/// and target assets, enabling complex exchange scenarios like cross-currency swaps,
-/// on/off-ramp pricing, and cross-chain bridging.
+/// Initiates a request for cross-asset quotes. Supports multiple source and
+/// target assets, enabling complex exchange scenarios like cross-currency
+/// swaps, on/off-ramp pricing, and cross-chain bridging.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(
-    message_type = "https://tap.rsvp/schema/1.0#Exchange",
+    message_type = "https://tap.rsvp/schema/1.0#RFQ",
     initiator,
     authorizable,
     transactable
 )]
-pub struct Exchange {
+pub struct Rfq {
     /// Available source assets (CAIP-19, DTI, or ISO 4217 currency codes).
     #[serde(rename = "fromAssets")]
     pub from_assets: Vec<String>,
@@ -50,7 +56,7 @@ pub struct Exchange {
     #[tap(participant)]
     pub provider: Option<Party>,
 
-    /// Agents involved in the exchange request.
+    /// Agents involved in the RFQ.
     #[serde(default)]
     #[tap(participant_list)]
     pub agents: Vec<Agent>,
@@ -69,8 +75,11 @@ pub struct Exchange {
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
-impl Exchange {
-    /// Create a new Exchange with from_amount specified.
+/// Backward-compatible alias for the renamed `Rfq` message.
+pub type Exchange = Rfq;
+
+impl Rfq {
+    /// Create a new RFQ with `from_amount` specified.
     pub fn new_from(
         from_assets: Vec<String>,
         to_assets: Vec<String>,
@@ -92,7 +101,7 @@ impl Exchange {
         }
     }
 
-    /// Create a new Exchange with to_amount specified.
+    /// Create a new RFQ with `to_amount` specified.
     pub fn new_to(
         from_assets: Vec<String>,
         to_assets: Vec<String>,
@@ -114,19 +123,19 @@ impl Exchange {
         }
     }
 
-    /// Set the provider for this exchange.
+    /// Set the provider for this RFQ.
     pub fn with_provider(mut self, provider: Party) -> Self {
         self.provider = Some(provider);
         self
     }
 
-    /// Set policies for this exchange.
+    /// Set policies for this RFQ.
     pub fn with_policies(mut self, policies: Vec<serde_json::Value>) -> Self {
         self.policies = Some(policies);
         self
     }
 
-    /// Custom validation for Exchange messages.
+    /// Custom validation for RFQ messages.
     pub fn validate(&self) -> Result<()> {
         if self.from_assets.is_empty() {
             return Err(Error::Validation(
@@ -152,8 +161,8 @@ impl Exchange {
 
 /// Quote message body (TAIP-18).
 ///
-/// Sent by a liquidity provider in response to an Exchange request.
-/// Specifies a specific asset pair with amounts and an expiration time.
+/// Sent by a liquidity provider in response to an RFQ. Specifies a specific
+/// asset pair with amounts and an expiration time.
 #[derive(Debug, Clone, Serialize, Deserialize, TapMessage)]
 #[tap(message_type = "https://tap.rsvp/schema/1.0#Quote")]
 pub struct Quote {
@@ -177,7 +186,7 @@ pub struct Quote {
     #[tap(participant)]
     pub provider: Party,
 
-    /// All agents involved (original Exchange agents + provider agents).
+    /// All agents involved (original RFQ agents + provider agents).
     #[serde(default)]
     #[tap(participant_list)]
     pub agents: Vec<Agent>,
@@ -245,8 +254,8 @@ mod tests {
     use serde_json;
 
     #[test]
-    fn test_exchange_creation() {
-        let exchange = Exchange::new_from(
+    fn test_rfq_creation() {
+        let rfq = Rfq::new_from(
             vec!["eip155:1/erc20:0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string()],
             vec!["eip155:1/erc20:0xB00b00b00b00b00b00b00b00b00b00b00b00b00b".to_string()],
             "1000.00".to_string(),
@@ -258,17 +267,17 @@ mod tests {
         )
         .with_provider(Party::new("did:web:liquidity.provider"));
 
-        assert_eq!(exchange.from_assets.len(), 1);
-        assert_eq!(exchange.to_assets.len(), 1);
-        assert_eq!(exchange.from_amount, Some("1000.00".to_string()));
-        assert!(exchange.to_amount.is_none());
-        assert!(exchange.provider.is_some());
-        assert!(exchange.validate().is_ok());
+        assert_eq!(rfq.from_assets.len(), 1);
+        assert_eq!(rfq.to_assets.len(), 1);
+        assert_eq!(rfq.from_amount, Some("1000.00".to_string()));
+        assert!(rfq.to_amount.is_none());
+        assert!(rfq.provider.is_some());
+        assert!(rfq.validate().is_ok());
     }
 
     #[test]
-    fn test_exchange_serialization() {
-        let exchange = Exchange::new_from(
+    fn test_rfq_serialization() {
+        let rfq = Rfq::new_from(
             vec!["USD".to_string()],
             vec!["eip155:1/erc20:0xA0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".to_string()],
             "1000.00".to_string(),
@@ -279,18 +288,18 @@ mod tests {
             )],
         );
 
-        let json = serde_json::to_value(&exchange).unwrap();
+        let json = serde_json::to_value(&rfq).unwrap();
         assert_eq!(json["fromAssets"][0], "USD");
         assert_eq!(json["fromAmount"], "1000.00");
         assert!(json.get("toAmount").is_none());
 
-        let deserialized: Exchange = serde_json::from_value(json).unwrap();
-        assert_eq!(deserialized.from_assets, exchange.from_assets);
+        let deserialized: Rfq = serde_json::from_value(json).unwrap();
+        assert_eq!(deserialized.from_assets, rfq.from_assets);
     }
 
     #[test]
-    fn test_exchange_validation_no_amount() {
-        let exchange = Exchange {
+    fn test_rfq_validation_no_amount() {
+        let rfq = Rfq {
             from_assets: vec!["USD".to_string()],
             to_assets: vec!["EUR".to_string()],
             from_amount: None,
@@ -303,7 +312,7 @@ mod tests {
             metadata: HashMap::new(),
         };
 
-        let result = exchange.validate();
+        let result = rfq.validate();
         assert!(result.is_err());
         assert!(result
             .unwrap_err()

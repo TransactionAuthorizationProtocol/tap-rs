@@ -230,7 +230,8 @@ fn test_legacy_escrow_uri_dispatches_to_lock() {
             {
                 "@type": "Agent",
                 "@id": "did:example:escrow",
-                "role": "EscrowAgent"
+                "role": "EscrowAgent",
+                "for": "did:example:escrow"
             }
         ]
     });
@@ -282,7 +283,8 @@ fn test_new_lock_uri_dispatches_to_lock() {
             {
                 "@type": "Agent",
                 "@id": "did:example:escrow",
-                "role": "EscrowAgent"
+                "role": "EscrowAgent",
+                "for": "did:example:escrow"
             }
         ]
     });
